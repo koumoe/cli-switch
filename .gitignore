@@ -12,3 +12,6 @@ cliswitch.db
 cliswitch.sqlite
 *.sqlite
 *.sqlite3
+
+# Local docs
+localDocs/
