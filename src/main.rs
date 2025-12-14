@@ -9,7 +9,11 @@ use std::path::{Path, PathBuf};
 use tracing::Level;
 
 #[derive(Parser, Debug)]
-#[command(name = "cliswitch", version, about = "Local CLI proxy + routing + stats")]
+#[command(
+    name = "cliswitch",
+    version,
+    about = "Local CLI proxy + routing + stats"
+)]
 struct Cli {
     #[command(subcommand)]
     command: Option<Command>,
@@ -76,4 +80,3 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 }
-
