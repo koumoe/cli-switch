@@ -1,0 +1,29 @@
+[package]
+name = "cliswitch"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+default = []
+embed-ui = ["dep:rust-embed"]
+
+[dependencies]
+anyhow = "1"
+axum = "0.8.7"
+bytes = "1"
+clap = { version = "4", features = ["derive"] }
+directories = "6"
+futures-util = "0.3"
+http = "1"
+mime_guess = "2"
+rusqlite = { version = "0.37", features = ["bundled"] }
+rust-embed = { version = "8", optional = true }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+time = "0.3"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal"] }
+tower-http = { version = "0.6", features = ["trace", "cors", "fs"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+uuid = { version = "1", features = ["v4", "serde"] }

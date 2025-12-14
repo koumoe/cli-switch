@@ -1,0 +1,14 @@
+target/
+.DS_Store
+.idea/
+
+# Node / UI
+ui/node_modules/
+ui/dist/
+
+# Local data
+.cliswitch/
+cliswitch.db
+cliswitch.sqlite
+*.sqlite
+*.sqlite3
