@@ -1,5 +1,5 @@
 use anyhow::Context as _;
-use rusqlite::{params, Connection};
+use rusqlite::{Connection, params};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
@@ -105,11 +105,11 @@ pub async fn list_channels(db_path: PathBuf) -> anyhow::Result<Vec<Channel>> {
             Ok(Channel {
                 id: row.get(0)?,
                 name: row.get(1)?,
-                protocol: protocol.parse().map_err(|e| {
+                protocol: protocol.parse::<Protocol>().map_err(|e| {
                     rusqlite::Error::FromSqlConversionFailure(
                         2,
                         rusqlite::types::Type::Text,
-                        Box::new(e),
+                        e.into_boxed_dyn_error(),
                     )
                 })?,
                 base_url: row.get(3)?,
@@ -207,11 +207,11 @@ pub async fn update_channel(
                 Ok(Channel {
                     id: row.get(0)?,
                     name: row.get(1)?,
-                    protocol: protocol.parse().map_err(|e| {
+                    protocol: protocol.parse::<Protocol>().map_err(|e| {
                         rusqlite::Error::FromSqlConversionFailure(
                             2,
                             rusqlite::types::Type::Text,
-                            Box::new(e),
+                            e.into_boxed_dyn_error(),
                         )
                     })?,
                     base_url: row.get(3)?,
@@ -271,7 +271,11 @@ pub async fn update_channel(
     .await
 }
 
-pub async fn set_channel_enabled(db_path: PathBuf, channel_id: String, enabled: bool) -> anyhow::Result<()> {
+pub async fn set_channel_enabled(
+    db_path: PathBuf,
+    channel_id: String,
+    enabled: bool,
+) -> anyhow::Result<()> {
     with_conn(db_path, move |conn| {
         let ts = now_ms();
         let updated = conn.execute(
@@ -305,11 +309,11 @@ pub async fn list_routes(db_path: PathBuf) -> anyhow::Result<Vec<Route>> {
             Ok(Route {
                 id: row.get(0)?,
                 name: row.get(1)?,
-                protocol: protocol.parse().map_err(|e| {
+                protocol: protocol.parse::<Protocol>().map_err(|e| {
                     rusqlite::Error::FromSqlConversionFailure(
                         2,
                         rusqlite::types::Type::Text,
-                        Box::new(e),
+                        e.into_boxed_dyn_error(),
                     )
                 })?,
                 match_model: row.get(3)?,
@@ -376,7 +380,11 @@ pub struct UpdateRoute {
     pub enabled: Option<bool>,
 }
 
-pub async fn update_route(db_path: PathBuf, route_id: String, input: UpdateRoute) -> anyhow::Result<()> {
+pub async fn update_route(
+    db_path: PathBuf,
+    route_id: String,
+    input: UpdateRoute,
+) -> anyhow::Result<()> {
     with_conn(db_path, move |conn| {
         let ts = now_ms();
 
@@ -393,11 +401,11 @@ pub async fn update_route(db_path: PathBuf, route_id: String, input: UpdateRoute
                 Ok(Route {
                     id: row.get(0)?,
                     name: row.get(1)?,
-                    protocol: protocol.parse().map_err(|e| {
+                    protocol: protocol.parse::<Protocol>().map_err(|e| {
                         rusqlite::Error::FromSqlConversionFailure(
                             2,
                             rusqlite::types::Type::Text,
-                            Box::new(e),
+                            e.into_boxed_dyn_error(),
                         )
                     })?,
                     match_model: row.get(3)?,

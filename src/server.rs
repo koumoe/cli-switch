@@ -1,15 +1,17 @@
+#[cfg(not(feature = "embed-ui"))]
+use axum::response::Html;
 use axum::{
+    Json, Router,
     extract::State,
     http::StatusCode,
-    response::{Html, IntoResponse},
+    response::IntoResponse,
     routing::{any, get, post, put},
-    Json, Router,
 };
 use serde::Serialize;
 use std::{net::SocketAddr, path::PathBuf, sync::Arc};
-tower_http::trace::TraceLayer;
 #[cfg(not(feature = "embed-ui"))]
 use tower_http::services::ServeDir;
+use tower_http::trace::TraceLayer;
 
 use crate::storage;
 
@@ -27,6 +29,7 @@ async fn health() -> impl IntoResponse {
     Json(HealthResponse { status: "ok" })
 }
 
+#[cfg(not(feature = "embed-ui"))]
 async fn ui_placeholder() -> impl IntoResponse {
     Html(
         r#"<!doctype html>
@@ -43,10 +46,7 @@ async fn ui_placeholder() -> impl IntoResponse {
 }
 
 async fn proxy_placeholder(State(_state): State<AppState>) -> impl IntoResponse {
-    (
-        StatusCode::NOT_IMPLEMENTED,
-        "proxy not implemented yet (design in TDD.md)",
-    )
+    (StatusCode::NOT_IMPLEMENTED, "proxy not implemented yet")
 }
 
 #[cfg(feature = "embed-ui")]
@@ -64,11 +64,7 @@ async fn ui_fallback(uri: axum::extract::OriginalUri) -> impl IntoResponse {
     if let Some(asset) = UiDist::get(&path) {
         let mime = mime_guess::from_path(&path).first_or_octet_stream();
         let body = axum::body::Bytes::from(asset.data.into_owned());
-        return (
-            [(axum::http::header::CONTENT_TYPE, mime.as_ref())],
-            body,
-        )
-            .into_response();
+        return ([(axum::http::header::CONTENT_TYPE, mime.as_ref())], body).into_response();
     }
 
     StatusCode::NOT_FOUND.into_response()
@@ -94,7 +90,10 @@ impl IntoResponse for ApiError {
         let (status, msg) = match &self {
             ApiError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg.clone()),
             ApiError::NotFound(msg) => (StatusCode::NOT_FOUND, msg.clone()),
-            ApiError::Internal(_) => (StatusCode::INTERNAL_SERVER_ERROR, "internal error".to_string()),
+            ApiError::Internal(_) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "internal error".to_string(),
+            ),
         };
         (status, Json(ErrorBody { error: msg })).into_response()
     }
@@ -210,7 +209,8 @@ pub async fn serve(addr: SocketAddr, db_path: PathBuf) -> anyhow::Result<()> {
         if dist.is_dir() {
             app.fallback_service(ServeDir::new(dist).append_index_html_on_directories(true))
         } else {
-            app.route("/", get(ui_placeholder)).fallback(any(ui_placeholder))
+            app.route("/", get(ui_placeholder))
+                .fallback(any(ui_placeholder))
         }
     };
 
