@@ -1,6 +1,7 @@
 # CliSwitch
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
+[![CI](https://github.com/koumoe/cli-switch/actions/workflows/ci.yml/badge.svg)](https://github.com/koumoe/cli-switch/actions/workflows/ci.yml)
 [![Rust](https://img.shields.io/badge/Rust-1.92.0-orange.svg)](https://www.rust-lang.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-25.2.1-green.svg)](https://nodejs.org/)
 
@@ -28,8 +29,8 @@
 
 ```bash
 # 克隆项目
-git clone https://github.com/yourusername/cliswitch.git
-cd cliswitch
+git clone https://github.com/koumoe/cli-switch.git
+cd cli-switch
 
 # 构建前端
 cd ui
@@ -66,6 +67,45 @@ npm run dev
 ```
 
 前端开发服务器已配置 `/api` 代理到 `http://127.0.0.1:3210`。
+
+## 贡献（Fork & PR）
+
+欢迎贡献代码与想法！推荐流程如下：
+
+1. 在 GitHub 上 Fork 本仓库到你的账号
+2. 克隆你 Fork 后的仓库（示例）：
+
+```bash
+git clone https://github.com/<yourname>/cli-switch.git
+cd cli-switch
+```
+
+3. 创建分支（建议使用 `feat/`、`fix/` 等前缀）：
+
+```bash
+git checkout -b feat/your-change
+```
+
+4. 本地自检（按改动范围选择）：
+
+```bash
+# Rust
+cargo fmt
+cargo clippy
+cargo test
+
+# UI（如涉及前端/内嵌资源）
+cd ui
+npm ci
+npm run build
+```
+
+5. 推送并发起 Pull Request：在 PR 描述中说明动机、改动点、验证方式，关联 Issue（如有）
+
+约定：
+
+- 合并到默认分支请走 PR
+- Commit message 建议使用 `feat:` / `fix:` / `docs:` 等前缀
 
 ## API
 
@@ -108,15 +148,8 @@ cliswitch/
 │   ├── src/
 │   └── package.json
 ├── migrations/         # SQLite 迁移脚本
-├── PRD.md              # 产品需求文档
-├── TDD.md              # 技术设计文档
 └── Cargo.toml
 ```
-
-## 文档
-
-- [产品需求文档 (PRD)](./PRD.md)
-- [技术设计文档 (TDD)](./TDD.md)
 
 ## 开发状态
 
