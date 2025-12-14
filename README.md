@@ -1,0 +1,136 @@
+# CliSwitch
+
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
+[![Rust](https://img.shields.io/badge/Rust-1.92.0-orange.svg)](https://www.rust-lang.org/)
+[![Node.js](https://img.shields.io/badge/Node.js-25.2.1-green.svg)](https://nodejs.org/)
+
+本地多渠道 AI CLI 代理服务，支持 Claude Code / Codex CLI / Gemini CLI 的无感接入、故障转移与用量统计。
+
+## 功能特性
+
+- **多 CLI 支持**：统一代理 Claude Code、Codex CLI、Gemini CLI
+- **多渠道管理**：支持同平台多 Key、不同平台混合配置
+- **智能路由**：按优先级自动重试与故障转移
+- **用量统计**：记录 token 使用量，基于 OpenRouter 价格估算费用
+- **可视化界面**：Web UI 管理渠道、路由与统计
+- **单文件分发**：Rust 编译为单可执行文件，内嵌前端资源
+
+## 快速开始
+
+### 环境要求
+
+| 依赖 | 版本 | 说明 |
+|------|------|------|
+| Rust | 1.92.0 | 运行时 |
+| Node.js | 25.2.1 | 仅构建期 |
+
+### 安装
+
+```bash
+# 克隆项目
+git clone https://github.com/yourusername/cliswitch.git
+cd cliswitch
+
+# 构建前端
+cd ui
+npm ci
+npm run build
+cd ..
+
+# 构建后端（单可执行文件）
+cargo build --release --features embed-ui
+```
+
+### 运行
+
+```bash
+./target/release/cliswitch serve --port 3210
+```
+
+访问 http://127.0.0.1:3210 打开管理界面。
+
+## 开发
+
+### 后端开发
+
+```bash
+cargo run -- serve --port 3210
+```
+
+### 前端开发
+
+```bash
+cd ui
+npm install
+npm run dev
+```
+
+前端开发服务器已配置 `/api` 代理到 `http://127.0.0.1:3210`。
+
+## API
+
+### 健康检查
+
+```bash
+curl http://127.0.0.1:3210/api/health
+```
+
+### 管理接口
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/channels` | 获取渠道列表 |
+| POST | `/api/channels` | 创建渠道 |
+| PUT | `/api/channels/:id` | 更新渠道 |
+| POST | `/api/channels/:id/enable` | 启用渠道 |
+| POST | `/api/channels/:id/disable` | 禁用渠道 |
+| GET | `/api/routes` | 获取路由列表 |
+| POST | `/api/routes` | 创建路由 |
+| PUT | `/api/routes/:id` | 更新路由 |
+
+### 代理入口
+
+| 路径 | 协议 |
+|------|------|
+| `/v1/*` | OpenAI 兼容 |
+| `/v1/messages` | Anthropic |
+| `/v1beta/*` | Gemini |
+
+## 项目结构
+
+```
+cliswitch/
+├── src/                # Rust 后端源码
+│   ├── main.rs
+│   ├── server.rs
+│   └── storage.rs
+├── ui/                 # React 前端
+│   ├── src/
+│   └── package.json
+├── migrations/         # SQLite 迁移脚本
+├── PRD.md              # 产品需求文档
+├── TDD.md              # 技术设计文档
+└── Cargo.toml
+```
+
+## 文档
+
+- [产品需求文档 (PRD)](./PRD.md)
+- [技术设计文档 (TDD)](./TDD.md)
+
+## 开发状态
+
+当前为 MVP 开发阶段，已完成：
+
+- [x] 项目骨架搭建
+- [x] SQLite 数据模型
+- [x] 渠道/路由 CRUD API
+- [ ] 代理转发核心逻辑
+- [ ] 价格同步
+- [ ] 用量统计
+- [ ] Web UI 页面
+
+## 许可证
+
+本项目采用 [GNU Affero General Public License v3.0 (AGPL-3.0)](https://www.gnu.org/licenses/agpl-3.0) 许可证。
+详见 [LICENSE](./LICENSE) 文件。
