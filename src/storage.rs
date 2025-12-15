@@ -1,5 +1,5 @@
 use anyhow::Context as _;
-use rusqlite::{Connection, params};
+use rusqlite::{Connection, OptionalExtension as _, params};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
@@ -75,7 +75,7 @@ pub fn init_db(db_path: &Path) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn now_ms() -> i64 {
+pub(crate) fn now_ms() -> i64 {
     use std::time::{SystemTime, UNIX_EPOCH};
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -301,6 +301,60 @@ pub async fn set_channel_enabled(
     .await
 }
 
+pub async fn get_channel(db_path: PathBuf, channel_id: String) -> anyhow::Result<Option<Channel>> {
+    with_conn(db_path, move |conn| {
+        let mut stmt = conn.prepare(
+            r#"
+            SELECT id, name, protocol, base_url, auth_type, auth_ref, enabled, created_at_ms, updated_at_ms
+            FROM channels
+            WHERE id = ?1
+            "#,
+        )?;
+
+        stmt.query_row([channel_id], |row| {
+            let protocol: String = row.get(2)?;
+            Ok(Channel {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                protocol: protocol.parse::<Protocol>().map_err(|e| {
+                    rusqlite::Error::FromSqlConversionFailure(
+                        2,
+                        rusqlite::types::Type::Text,
+                        e.into_boxed_dyn_error(),
+                    )
+                })?,
+                base_url: row.get(3)?,
+                auth_type: row.get(4)?,
+                auth_ref: row.get(5)?,
+                enabled: row.get::<_, i64>(6)? != 0,
+                created_at_ms: row.get(7)?,
+                updated_at_ms: row.get(8)?,
+            })
+        })
+        .optional()
+        .map_err(Into::into)
+    })
+    .await
+}
+
+pub async fn delete_channel(db_path: PathBuf, channel_id: String) -> anyhow::Result<()> {
+    with_conn(db_path, move |conn| {
+        let tx = conn.unchecked_transaction()?;
+        tx.execute(
+            r#"DELETE FROM route_channels WHERE channel_id = ?1"#,
+            params![channel_id],
+        )?;
+        let deleted = tx.execute(r#"DELETE FROM channels WHERE id = ?1"#, params![channel_id])?;
+        tx.commit()?;
+
+        if deleted == 0 {
+            return Err(anyhow::anyhow!("channel not found"));
+        }
+        Ok(())
+    })
+    .await
+}
+
 pub async fn list_routes(db_path: PathBuf) -> anyhow::Result<Vec<Route>> {
     with_conn(db_path, |conn| {
         let mut stmt = conn.prepare(
@@ -457,6 +511,530 @@ pub async fn update_route(
         )?;
 
         Ok(())
+    })
+    .await
+}
+
+pub async fn get_route(db_path: PathBuf, route_id: String) -> anyhow::Result<Option<Route>> {
+    with_conn(db_path, move |conn| {
+        let mut stmt = conn.prepare(
+            r#"
+            SELECT id, name, protocol, match_model, enabled, created_at_ms, updated_at_ms
+            FROM routes
+            WHERE id = ?1
+            "#,
+        )?;
+
+        stmt.query_row([route_id], |row| {
+            let protocol: String = row.get(2)?;
+            Ok(Route {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                protocol: protocol.parse::<Protocol>().map_err(|e| {
+                    rusqlite::Error::FromSqlConversionFailure(
+                        2,
+                        rusqlite::types::Type::Text,
+                        e.into_boxed_dyn_error(),
+                    )
+                })?,
+                match_model: row.get(3)?,
+                enabled: row.get::<_, i64>(4)? != 0,
+                created_at_ms: row.get(5)?,
+                updated_at_ms: row.get(6)?,
+            })
+        })
+        .optional()
+        .map_err(Into::into)
+    })
+    .await
+}
+
+pub async fn delete_route(db_path: PathBuf, route_id: String) -> anyhow::Result<()> {
+    with_conn(db_path, move |conn| {
+        let tx = conn.unchecked_transaction()?;
+        tx.execute(
+            r#"DELETE FROM route_channels WHERE route_id = ?1"#,
+            params![route_id],
+        )?;
+        let deleted = tx.execute(r#"DELETE FROM routes WHERE id = ?1"#, params![route_id])?;
+        tx.commit()?;
+        if deleted == 0 {
+            return Err(anyhow::anyhow!("route not found"));
+        }
+        Ok(())
+    })
+    .await
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RouteChannel {
+    pub route_id: String,
+    pub channel_id: String,
+    pub priority: i64,
+    pub cooldown_until_ms: Option<i64>,
+}
+
+pub async fn list_route_channels(
+    db_path: PathBuf,
+    route_id: String,
+) -> anyhow::Result<Vec<RouteChannel>> {
+    with_conn(db_path, move |conn| {
+        let mut stmt = conn.prepare(
+            r#"
+            SELECT route_id, channel_id, priority, cooldown_until_ms
+            FROM route_channels
+            WHERE route_id = ?1
+            ORDER BY priority ASC
+            "#,
+        )?;
+        let rows = stmt.query_map([route_id], |row| {
+            Ok(RouteChannel {
+                route_id: row.get(0)?,
+                channel_id: row.get(1)?,
+                priority: row.get(2)?,
+                cooldown_until_ms: row.get(3)?,
+            })
+        })?;
+
+        let mut out = Vec::new();
+        for row in rows {
+            out.push(row?);
+        }
+        Ok(out)
+    })
+    .await
+}
+
+pub async fn set_route_channels(
+    db_path: PathBuf,
+    route_id: String,
+    channel_ids_in_priority_order: Vec<String>,
+) -> anyhow::Result<()> {
+    with_conn(db_path, move |conn| {
+        let route_protocol: String = conn
+            .query_row(
+                r#"SELECT protocol FROM routes WHERE id = ?1"#,
+                [&route_id],
+                |row| row.get(0),
+            )
+            .optional()?
+            .ok_or_else(|| anyhow::anyhow!("route not found"))?;
+
+        let tx = conn.unchecked_transaction()?;
+        tx.execute(
+            r#"DELETE FROM route_channels WHERE route_id = ?1"#,
+            params![route_id],
+        )?;
+
+        for (idx, channel_id) in channel_ids_in_priority_order.into_iter().enumerate() {
+            let channel_protocol: String = tx
+                .query_row(
+                    r#"SELECT protocol FROM channels WHERE id = ?1"#,
+                    [&channel_id],
+                    |row| row.get(0),
+                )
+                .optional()?
+                .ok_or_else(|| anyhow::anyhow!("channel not found"))?;
+
+            if channel_protocol != route_protocol {
+                return Err(anyhow::anyhow!(
+                    "channel protocol mismatch: route={route_protocol} channel={channel_protocol}"
+                ));
+            }
+
+            tx.execute(
+                r#"
+                INSERT INTO route_channels (route_id, channel_id, priority, cooldown_until_ms)
+                VALUES (?1, ?2, ?3, NULL)
+                "#,
+                params![route_id, channel_id, idx as i64],
+            )?;
+        }
+
+        tx.commit()?;
+        Ok(())
+    })
+    .await
+}
+
+#[derive(Debug, Clone)]
+pub struct UpsertPricingModel {
+    pub model_id: String,
+    pub prompt_price: Option<String>,
+    pub completion_price: Option<String>,
+    pub request_price: Option<String>,
+    pub raw_json: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PricingModel {
+    pub model_id: String,
+    pub prompt_price: Option<String>,
+    pub completion_price: Option<String>,
+    pub request_price: Option<String>,
+    pub updated_at_ms: i64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct PricingStatus {
+    pub count: i64,
+    pub last_sync_ms: Option<i64>,
+}
+
+pub async fn pricing_status(db_path: PathBuf) -> anyhow::Result<PricingStatus> {
+    with_conn(db_path, |conn| {
+        let count: i64 = conn.query_row(r#"SELECT COUNT(*) FROM pricing_models"#, [], |row| {
+            row.get(0)
+        })?;
+        let last_sync_ms: Option<i64> = conn
+            .query_row(
+                r#"SELECT MAX(updated_at_ms) FROM pricing_models"#,
+                [],
+                |row| row.get(0),
+            )
+            .optional()?
+            .flatten();
+        Ok(PricingStatus {
+            count,
+            last_sync_ms,
+        })
+    })
+    .await
+}
+
+pub async fn upsert_pricing_models(
+    db_path: PathBuf,
+    models: Vec<UpsertPricingModel>,
+    updated_at_ms: i64,
+) -> anyhow::Result<usize> {
+    with_conn(db_path, move |conn| {
+        let tx = conn.unchecked_transaction()?;
+        {
+            let mut stmt = tx.prepare(
+                r#"
+                INSERT INTO pricing_models (model_id, prompt_price, completion_price, request_price, raw_json, updated_at_ms)
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+                ON CONFLICT(model_id) DO UPDATE SET
+                  prompt_price = excluded.prompt_price,
+                  completion_price = excluded.completion_price,
+                  request_price = excluded.request_price,
+                  raw_json = excluded.raw_json,
+                  updated_at_ms = excluded.updated_at_ms
+                "#,
+            )?;
+
+            for m in &models {
+                stmt.execute(params![
+                    m.model_id,
+                    m.prompt_price,
+                    m.completion_price,
+                    m.request_price,
+                    m.raw_json,
+                    updated_at_ms
+                ])?;
+            }
+        }
+
+        tx.commit()?;
+        Ok(models.len())
+    })
+    .await
+}
+
+pub async fn search_pricing_models(
+    db_path: PathBuf,
+    query: Option<String>,
+    limit: i64,
+) -> anyhow::Result<Vec<PricingModel>> {
+    with_conn(db_path, move |conn| {
+        let mut out = Vec::new();
+        if let Some(q) = query.filter(|s| !s.trim().is_empty()) {
+            let like = format!("%{}%", q.trim());
+            let mut stmt = conn.prepare(
+                r#"
+                SELECT model_id, prompt_price, completion_price, request_price, updated_at_ms
+                FROM pricing_models
+                WHERE model_id LIKE ?1
+                ORDER BY model_id ASC
+                LIMIT ?2
+                "#,
+            )?;
+            let rows = stmt.query_map(params![like, limit], |row| {
+                Ok(PricingModel {
+                    model_id: row.get(0)?,
+                    prompt_price: row.get(1)?,
+                    completion_price: row.get(2)?,
+                    request_price: row.get(3)?,
+                    updated_at_ms: row.get(4)?,
+                })
+            })?;
+            for row in rows {
+                out.push(row?);
+            }
+        } else {
+            let mut stmt = conn.prepare(
+                r#"
+                SELECT model_id, prompt_price, completion_price, request_price, updated_at_ms
+                FROM pricing_models
+                ORDER BY model_id ASC
+                LIMIT ?1
+                "#,
+            )?;
+            let rows = stmt.query_map(params![limit], |row| {
+                Ok(PricingModel {
+                    model_id: row.get(0)?,
+                    prompt_price: row.get(1)?,
+                    completion_price: row.get(2)?,
+                    request_price: row.get(3)?,
+                    updated_at_ms: row.get(4)?,
+                })
+            })?;
+            for row in rows {
+                out.push(row?);
+            }
+        }
+        Ok(out)
+    })
+    .await
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UsageEvent {
+    pub id: String,
+    pub ts_ms: i64,
+    pub protocol: Protocol,
+    pub route_id: Option<String>,
+    pub channel_id: String,
+    pub model: Option<String>,
+    pub success: bool,
+    pub http_status: Option<i64>,
+    pub error_kind: Option<String>,
+    pub latency_ms: i64,
+    pub prompt_tokens: Option<i64>,
+    pub completion_tokens: Option<i64>,
+    pub total_tokens: Option<i64>,
+    pub estimated_cost_usd: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct CreateUsageEvent {
+    pub ts_ms: i64,
+    pub protocol: Protocol,
+    pub route_id: Option<String>,
+    pub channel_id: String,
+    pub model: Option<String>,
+    pub success: bool,
+    pub http_status: Option<i64>,
+    pub error_kind: Option<String>,
+    pub latency_ms: i64,
+    pub prompt_tokens: Option<i64>,
+    pub completion_tokens: Option<i64>,
+    pub total_tokens: Option<i64>,
+    pub estimated_cost_usd: Option<String>,
+}
+
+pub async fn insert_usage_event(db_path: PathBuf, input: CreateUsageEvent) -> anyhow::Result<()> {
+    with_conn(db_path, move |conn| {
+        let id = Uuid::new_v4().to_string();
+        conn.execute(
+            r#"
+            INSERT INTO usage_events (
+              id, ts_ms, protocol, route_id, channel_id, model,
+              success, http_status, error_kind, latency_ms,
+              prompt_tokens, completion_tokens, total_tokens, estimated_cost_usd
+            )
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
+            "#,
+            params![
+                id,
+                input.ts_ms,
+                input.protocol.as_str(),
+                input.route_id,
+                input.channel_id,
+                input.model,
+                if input.success { 1 } else { 0 },
+                input.http_status,
+                input.error_kind,
+                input.latency_ms,
+                input.prompt_tokens,
+                input.completion_tokens,
+                input.total_tokens,
+                input.estimated_cost_usd,
+            ],
+        )?;
+        Ok(())
+    })
+    .await
+}
+
+pub async fn list_usage_events_recent(
+    db_path: PathBuf,
+    limit: i64,
+) -> anyhow::Result<Vec<UsageEvent>> {
+    with_conn(db_path, move |conn| {
+        let mut stmt = conn.prepare(
+            r#"
+            SELECT id, ts_ms, protocol, route_id, channel_id, model,
+                   success, http_status, error_kind, latency_ms,
+                   prompt_tokens, completion_tokens, total_tokens, estimated_cost_usd
+            FROM usage_events
+            ORDER BY ts_ms DESC
+            LIMIT ?1
+            "#,
+        )?;
+        let rows = stmt.query_map(params![limit], |row| {
+            let protocol: String = row.get(2)?;
+            Ok(UsageEvent {
+                id: row.get(0)?,
+                ts_ms: row.get(1)?,
+                protocol: protocol.parse::<Protocol>().map_err(|e| {
+                    rusqlite::Error::FromSqlConversionFailure(
+                        2,
+                        rusqlite::types::Type::Text,
+                        e.into_boxed_dyn_error(),
+                    )
+                })?,
+                route_id: row.get(3)?,
+                channel_id: row.get(4)?,
+                model: row.get(5)?,
+                success: row.get::<_, i64>(6)? != 0,
+                http_status: row.get(7)?,
+                error_kind: row.get(8)?,
+                latency_ms: row.get(9)?,
+                prompt_tokens: row.get(10)?,
+                completion_tokens: row.get(11)?,
+                total_tokens: row.get(12)?,
+                estimated_cost_usd: row.get(13)?,
+            })
+        })?;
+        let mut out = Vec::new();
+        for row in rows {
+            out.push(row?);
+        }
+        Ok(out)
+    })
+    .await
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct StatsSummary {
+    pub start_ms: i64,
+    pub requests: i64,
+    pub success: i64,
+    pub failed: i64,
+    pub prompt_tokens: i64,
+    pub completion_tokens: i64,
+    pub total_tokens: i64,
+    pub estimated_cost_usd: Option<String>,
+}
+
+pub async fn stats_summary(db_path: PathBuf, start_ms: i64) -> anyhow::Result<StatsSummary> {
+    with_conn(db_path, move |conn| {
+        let mut stmt = conn.prepare(
+            r#"
+            SELECT
+              COUNT(*) AS requests,
+              SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END) AS success,
+              SUM(CASE WHEN success = 0 THEN 1 ELSE 0 END) AS failed,
+              SUM(COALESCE(prompt_tokens, 0)) AS prompt_tokens,
+              SUM(COALESCE(completion_tokens, 0)) AS completion_tokens,
+              SUM(COALESCE(total_tokens, 0)) AS total_tokens,
+              SUM(COALESCE(CAST(estimated_cost_usd AS REAL), 0.0)) AS estimated_cost
+            FROM usage_events
+            WHERE ts_ms >= ?1
+            "#,
+        )?;
+        let row = stmt.query_row(params![start_ms], |row| {
+            let requests: i64 = row.get(0)?;
+            let success: Option<i64> = row.get(1)?;
+            let failed: Option<i64> = row.get(2)?;
+            let prompt_tokens: Option<i64> = row.get(3)?;
+            let completion_tokens: Option<i64> = row.get(4)?;
+            let total_tokens: Option<i64> = row.get(5)?;
+            let estimated_cost: Option<f64> = row.get(6)?;
+
+            Ok(StatsSummary {
+                start_ms,
+                requests,
+                success: success.unwrap_or(0),
+                failed: failed.unwrap_or(0),
+                prompt_tokens: prompt_tokens.unwrap_or(0),
+                completion_tokens: completion_tokens.unwrap_or(0),
+                total_tokens: total_tokens.unwrap_or(0),
+                estimated_cost_usd: estimated_cost
+                    .filter(|v| *v > 0.0)
+                    .map(|v| format!("{v:.6}")),
+            })
+        })?;
+        Ok(row)
+    })
+    .await
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ChannelStats {
+    pub channel_id: String,
+    pub name: String,
+    pub protocol: Protocol,
+    pub requests: i64,
+    pub success: i64,
+    pub failed: i64,
+    pub avg_latency_ms: Option<f64>,
+    pub total_tokens: i64,
+    pub estimated_cost_usd: Option<String>,
+}
+
+pub async fn stats_channels(db_path: PathBuf, start_ms: i64) -> anyhow::Result<Vec<ChannelStats>> {
+    with_conn(db_path, move |conn| {
+        let mut stmt = conn.prepare(
+            r#"
+            SELECT
+              c.id,
+              c.name,
+              c.protocol,
+              COUNT(u.id) AS requests,
+              SUM(CASE WHEN u.success = 1 THEN 1 ELSE 0 END) AS success,
+              SUM(CASE WHEN u.success = 0 THEN 1 ELSE 0 END) AS failed,
+              AVG(u.latency_ms) AS avg_latency_ms,
+              SUM(COALESCE(u.total_tokens, 0)) AS total_tokens,
+              SUM(COALESCE(CAST(u.estimated_cost_usd AS REAL), 0.0)) AS estimated_cost
+            FROM channels c
+            LEFT JOIN usage_events u
+              ON u.channel_id = c.id
+             AND u.ts_ms >= ?1
+            GROUP BY c.id, c.name, c.protocol
+            ORDER BY c.name ASC
+            "#,
+        )?;
+        let rows = stmt.query_map(params![start_ms], |row| {
+            let protocol: String = row.get(2)?;
+            Ok(ChannelStats {
+                channel_id: row.get(0)?,
+                name: row.get(1)?,
+                protocol: protocol.parse::<Protocol>().map_err(|e| {
+                    rusqlite::Error::FromSqlConversionFailure(
+                        2,
+                        rusqlite::types::Type::Text,
+                        e.into_boxed_dyn_error(),
+                    )
+                })?,
+                requests: row.get(3)?,
+                success: row.get::<_, Option<i64>>(4)?.unwrap_or(0),
+                failed: row.get::<_, Option<i64>>(5)?.unwrap_or(0),
+                avg_latency_ms: row.get(6)?,
+                total_tokens: row.get::<_, Option<i64>>(7)?.unwrap_or(0),
+                estimated_cost_usd: row
+                    .get::<_, Option<f64>>(8)?
+                    .filter(|v| *v > 0.0)
+                    .map(|v| format!("{v:.6}")),
+            })
+        })?;
+
+        let mut out = Vec::new();
+        for row in rows {
+            out.push(row?);
+        }
+        Ok(out)
     })
     .await
 }

@@ -1,0 +1,7 @@
+[alias]
+# 调试：桌面端（默认就会启用 `desktop`）
+gui = "run"
+# 构建：桌面端 release（默认就会启用 `desktop`）
+gui-build = "build --release"
+# 构建：仅 Web 后端（不启用 `desktop`）
+web-build = "build --release --no-default-features -F embed-ui"

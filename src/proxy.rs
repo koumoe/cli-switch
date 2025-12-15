@@ -31,7 +31,7 @@ pub async fn forward(
 ) -> Result<Response<Body>, ProxyError> {
     let started = Instant::now();
 
-    let Some(channel) = pick_enabled_channel(db_path, protocol).await? else {
+    let Some(channel) = pick_enabled_channel(db_path.clone(), protocol).await? else {
         return Err(ProxyError::NoEnabledChannel(protocol));
     };
 
@@ -39,6 +39,8 @@ pub async fn forward(
     let body_bytes = to_bytes(body, MAX_INBOUND_BODY_BYTES)
         .await
         .map_err(|e| ProxyError::ReadBody(e.to_string()))?;
+
+    let model = extract_model_from_body(&parts.headers, &body_bytes);
 
     let mut url = build_upstream_url(&channel.base_url, &parts.uri, protocol_root)?;
 
@@ -54,13 +56,24 @@ pub async fn forward(
         .body(body_bytes)
         .send()
         .await
-        .map_err(|e| ProxyError::Upstream(e.to_string()))?;
+        .map_err(|e| {
+            record_usage_event(
+                db_path.clone(),
+                protocol,
+                &channel,
+                model.clone(),
+                None,
+                started,
+                e.to_string(),
+            );
+            ProxyError::Upstream(e.to_string())
+        })?;
 
     let status = upstream.status();
     let headers = filtered_headers(upstream.headers());
     let stream = upstream
         .bytes_stream()
-        .map(|chunk| chunk.map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e)));
+        .map(|chunk| chunk.map_err(std::io::Error::other));
 
     let mut resp = Response::builder().status(status);
     if let Some(h) = resp.headers_mut() {
@@ -75,6 +88,16 @@ pub async fn forward(
         channel_id = %channel.id,
         latency_ms = started.elapsed().as_millis() as u64,
         "proxy request finished"
+    );
+
+    record_usage_event(
+        db_path,
+        protocol,
+        &channel,
+        model,
+        Some(status.as_u16() as i64),
+        started,
+        String::new(),
     );
 
     resp.body(Body::from_stream(stream))
@@ -125,13 +148,11 @@ fn filtered_headers(src: &HeaderMap) -> HeaderMap {
     let mut out = HeaderMap::new();
 
     let mut connection_tokens = Vec::<String>::new();
-    if let Some(v) = src.get(axum::http::header::CONNECTION) {
-        if let Ok(s) = v.to_str() {
-            for token in s.split(',') {
-                let t = token.trim().to_ascii_lowercase();
-                if !t.is_empty() {
-                    connection_tokens.push(t);
-                }
+    if let Some(v) = src.get(axum::http::header::CONNECTION) && let Ok(s) = v.to_str() {
+        for token in s.split(',') {
+            let t = token.trim().to_ascii_lowercase();
+            if !t.is_empty() {
+                connection_tokens.push(t);
             }
         }
     }
@@ -169,7 +190,7 @@ fn is_hop_by_hop(name: &HeaderName) -> bool {
     )
 }
 
-fn apply_auth(
+pub(crate) fn apply_auth(
     channel: &Channel,
     protocol: Protocol,
     url: &mut Url,
@@ -243,4 +264,88 @@ fn set_query_param(url: &mut Url, name: &str, value: &str) {
         }
         qp.append_pair(name, value);
     }
+}
+
+fn extract_model_from_body(headers: &HeaderMap, body: &[u8]) -> Option<String> {
+    if body.is_empty() {
+        return None;
+    }
+
+    let is_json = headers
+        .get(axum::http::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .map(|v| v.to_ascii_lowercase())
+        .is_some_and(|v| v.starts_with("application/json"));
+
+    if !is_json {
+        return None;
+    }
+
+    let v: serde_json::Value = serde_json::from_slice(body).ok()?;
+    v.get("model")
+        .and_then(|m| m.as_str())
+        .map(|s| s.to_string())
+}
+
+fn record_usage_event(
+    db_path: std::path::PathBuf,
+    protocol: Protocol,
+    channel: &Channel,
+    model: Option<String>,
+    http_status: Option<i64>,
+    started: Instant,
+    error: String,
+) {
+    let ts_ms = storage::now_ms();
+    let latency_ms = started.elapsed().as_millis() as i64;
+    let success = http_status.is_some_and(|s| (200..300).contains(&s));
+
+    let error_kind = if success {
+        None
+    } else if let Some(status) = http_status {
+        Some(format!("upstream_http:{status}"))
+    } else if error.is_empty() {
+        Some("upstream_error".to_string())
+    } else {
+        Some(format!("upstream_error:{}", truncate(&error, 240)))
+    };
+
+    let channel_id = channel.id.clone();
+    tokio::spawn(async move {
+        let _ = storage::insert_usage_event(
+            db_path,
+            storage::CreateUsageEvent {
+                ts_ms,
+                protocol,
+                route_id: None,
+                channel_id,
+                model,
+                success,
+                http_status,
+                error_kind,
+                latency_ms,
+                prompt_tokens: None,
+                completion_tokens: None,
+                total_tokens: None,
+                estimated_cost_usd: None,
+            },
+        )
+        .await;
+    });
+}
+
+fn truncate(s: &str, max_len: usize) -> String {
+    if s.len() <= max_len {
+        return s.to_string();
+    }
+    let mut out = String::with_capacity(max_len + 1);
+    let keep = max_len.saturating_sub(1);
+    for ch in s.chars() {
+        if out.len() + ch.len_utf8() > keep {
+            break;
+        }
+        out.push(ch);
+    }
+    out.push('…');
+    out
 }
