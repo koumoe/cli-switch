@@ -4,6 +4,8 @@ use std::time::Duration;
 
 use cliswitch::{app, server, storage};
 use tao::dpi::LogicalSize;
+#[cfg(target_os = "macos")]
+use tao::platform::macos::WindowBuilderExtMacOS;
 use tao::{
     event::{Event, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
@@ -36,12 +38,15 @@ pub async fn run(port: u16) -> anyhow::Result<()> {
     wait_for_health(&base_url).await?;
 
     let event_loop = EventLoop::new();
-    let window = WindowBuilder::new()
+    let window_builder = WindowBuilder::new()
         .with_title("CliSwitch")
         .with_inner_size(LogicalSize::new(1200.0, 800.0))
-        .with_min_inner_size(LogicalSize::new(900.0, 600.0))
-        .build(&event_loop)
-        .context("创建窗口失败")?;
+        .with_min_inner_size(LogicalSize::new(900.0, 600.0));
+
+    #[cfg(target_os = "macos")]
+    let window_builder = window_builder.with_automatic_window_tabbing(false);
+
+    let window = window_builder.build(&event_loop).context("创建窗口失败")?;
 
     let webview = WebViewBuilder::new()
         .with_url(&base_url)

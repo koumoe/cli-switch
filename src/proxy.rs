@@ -148,7 +148,9 @@ fn filtered_headers(src: &HeaderMap) -> HeaderMap {
     let mut out = HeaderMap::new();
 
     let mut connection_tokens = Vec::<String>::new();
-    if let Some(v) = src.get(axum::http::header::CONNECTION) && let Ok(s) = v.to_str() {
+    if let Some(v) = src.get(axum::http::header::CONNECTION)
+        && let Ok(s) = v.to_str()
+    {
         for token in s.split(',') {
             let t = token.trim().to_ascii_lowercase();
             if !t.is_empty() {
