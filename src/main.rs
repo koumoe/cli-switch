@@ -7,6 +7,20 @@ use tracing::Level;
 #[cfg(feature = "desktop")]
 mod desktop;
 
+fn maybe_disable_macos_debug_system_logs() {
+    #[cfg(target_os = "macos")]
+    {
+        let running_under_debugger = std::env::var_os("OS_ACTIVITY_DT_MODE").is_some();
+        let already_configured = std::env::var_os("OS_ACTIVITY_MODE").is_some();
+
+        if running_under_debugger && !already_configured {
+            unsafe {
+                std::env::set_var("OS_ACTIVITY_MODE", "disable");
+            }
+        }
+    }
+}
+
 #[derive(Parser, Debug)]
 #[command(
     name = "cliswitch",
@@ -47,8 +61,17 @@ enum Command {
     Migrate,
 }
 
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
+fn main() -> anyhow::Result<()> {
+    maybe_disable_macos_debug_system_logs();
+
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .context("初始化 Tokio Runtime 失败")?;
+    runtime.block_on(async_main())
+}
+
+async fn async_main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(
             std::env::var("CLISWITCH_LOG")
