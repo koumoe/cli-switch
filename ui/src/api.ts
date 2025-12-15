@@ -1,6 +1,12 @@
 export type Protocol = "openai" | "anthropic" | "gemini";
 
-export type Health = { status: string };
+export type Health = {
+  status: string;
+  version?: string;
+  listen_addr?: string;
+  data_dir?: string;
+  db_path?: string;
+};
 
 export type Channel = {
   id: string;

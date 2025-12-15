@@ -1,19 +1,51 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
-  createRoute,
-  deleteRoute,
-  listChannels,
-  listRouteChannels,
+  Plus,
+  Pencil,
+  Trash2,
+  ChevronUp,
+  ChevronDown,
+} from "lucide-react";
+import { toast } from "sonner";
+import {
+  Button,
+  Card,
+  CardContent,
+  Badge,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  Input,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  Switch,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui";
+import {
   listRoutes,
-  reorderRouteChannels,
+  listChannels,
+  createRoute,
   updateRoute,
+  deleteRoute,
+  listRouteChannels,
+  reorderRouteChannels,
+  type Route,
   type Channel,
   type CreateRouteInput,
   type Protocol,
-  type Route
 } from "../api";
-import { Badge, Button, Card, Modal } from "../components/ui";
-import { clampStr, formatDateTime } from "../lib";
+import { formatDateTime } from "../lib";
 
 type RouteDraft = CreateRouteInput;
 
@@ -21,16 +53,9 @@ function emptyDraft(): RouteDraft {
   return { name: "", protocol: "openai", match_model: null, enabled: true };
 }
 
-function channelNameById(channels: Channel[]): Map<string, string> {
-  const m = new Map<string, string>();
-  for (const c of channels) m.set(c.id, c.name);
-  return m;
-}
-
 export function RoutesPage() {
   const [routes, setRoutes] = useState<Route[]>([]);
   const [channels, setChannels] = useState<Channel[]>([]);
-  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   const [routeModalOpen, setRouteModalOpen] = useState(false);
@@ -43,24 +68,27 @@ export function RoutesPage() {
   const [assigned, setAssigned] = useState<string[]>([]);
   const [manageLoading, setManageLoading] = useState(false);
 
-  const channelNames = useMemo(() => channelNameById(channels), [channels]);
+  const channelNames = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const c of channels) m.set(c.id, c.name);
+    return m;
+  }, [channels]);
 
   async function refresh() {
     setLoading(true);
-    setError(null);
     try {
       const [rs, cs] = await Promise.all([listRoutes(), listChannels()]);
       setRoutes(rs);
       setChannels(cs);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      toast.error("加载失败", { description: String(e) });
     } finally {
       setLoading(false);
     }
   }
 
   useEffect(() => {
-    void refresh();
+    refresh();
   }, []);
 
   function openCreate() {
@@ -73,35 +101,45 @@ export function RoutesPage() {
   function openEdit(r: Route) {
     setRouteMode("edit");
     setEditRouteId(r.id);
-    setDraft({ name: r.name, protocol: r.protocol, match_model: r.match_model, enabled: r.enabled });
+    setDraft({
+      name: r.name,
+      protocol: r.protocol,
+      match_model: r.match_model,
+      enabled: r.enabled,
+    });
     setRouteModalOpen(true);
   }
 
   async function submitRoute() {
-    setError(null);
     try {
-      if (draft.name.trim().length === 0) throw new Error("name 不能为空");
+      if (!draft.name.trim()) throw new Error("名称不能为空");
       if (routeMode === "create") {
         await createRoute({ ...draft, name: draft.name.trim() });
+        toast.success("路由创建成功");
       } else {
-        if (!editRouteId) throw new Error("missing route id");
-        await updateRoute(editRouteId, { name: draft.name.trim(), match_model: draft.match_model, enabled: draft.enabled });
+        if (!editRouteId) throw new Error("缺少 ID");
+        await updateRoute(editRouteId, {
+          name: draft.name.trim(),
+          match_model: draft.match_model,
+          enabled: draft.enabled,
+        });
+        toast.success("路由更新成功");
       }
       setRouteModalOpen(false);
       await refresh();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      toast.error("操作失败", { description: String(e) });
     }
   }
 
   async function onDelete(r: Route) {
-    if (!confirm(`删除路由 "${r.name}"？`)) return;
-    setError(null);
+    if (!confirm(`确定删除路由 "${r.name}"？`)) return;
     try {
       await deleteRoute(r.id);
+      toast.success(`已删除 ${r.name}`);
       await refresh();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      toast.error("删除失败", { description: String(e) });
     }
   }
 
@@ -109,13 +147,14 @@ export function RoutesPage() {
     setManageOpen(true);
     setManageRoute(r);
     setManageLoading(true);
-    setError(null);
     try {
       const items = await listRouteChannels(r.id);
-      const ordered = [...items].sort((a, b) => a.priority - b.priority).map((i) => i.channel_id);
+      const ordered = [...items]
+        .sort((a, b) => a.priority - b.priority)
+        .map((i) => i.channel_id);
       setAssigned(ordered);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      toast.error("加载失败", { description: String(e) });
     } finally {
       setManageLoading(false);
     }
@@ -144,13 +183,13 @@ export function RoutesPage() {
   async function saveManage() {
     if (!manageRoute) return;
     setManageLoading(true);
-    setError(null);
     try {
       await reorderRouteChannels(manageRoute.id, assigned);
+      toast.success("渠道优先级已保存");
       setManageOpen(false);
       setManageRoute(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      toast.error("保存失败", { description: String(e) });
     } finally {
       setManageLoading(false);
     }
@@ -165,197 +204,287 @@ export function RoutesPage() {
   }, [channels, assigned, manageRoute]);
 
   return (
-    <div className="stack">
-      <div className="row" style={{ justifyContent: "space-between" }}>
+    <div className="space-y-6">
+      {/* 页面标题 */}
+      <div className="flex items-center justify-between">
         <div>
-          <h1 className="page-title">Routes</h1>
-          <p className="page-subtitle">配置路由规则与渠道优先级（按协议）。</p>
+          <h1 className="text-2xl font-semibold tracking-tight">路由</h1>
+          <p className="text-muted-foreground text-sm mt-1">
+            配置请求路由规则和渠道优先级
+          </p>
         </div>
-        <div className="row">
-          <Button onClick={refresh} disabled={loading}>
-            {loading ? "刷新中…" : "刷新"}
-          </Button>
-          <Button variant="primary" onClick={openCreate}>
-            新增路由
-          </Button>
-        </div>
+        <Button onClick={openCreate}>
+          <Plus className="h-4 w-4 mr-2" />
+          新建路由
+        </Button>
       </div>
 
-      {error ? <div className="error">{clampStr(error, 2000)}</div> : null}
-
-      <Card title="Routes List">
-        {routes.length === 0 ? (
-          <div className="muted">暂无路由。先点击“新增路由”。</div>
-        ) : (
-          <table className="table">
-            <thead>
-              <tr>
-                <th style={{ width: 180 }}>Name</th>
-                <th style={{ width: 110 }}>Protocol</th>
-                <th>Match Model</th>
-                <th style={{ width: 100 }}>Enabled</th>
-                <th style={{ width: 220 }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {routes.map((r) => (
-                <tr key={r.id}>
-                  <td>
-                    <div style={{ fontWeight: 700 }}>{r.name}</div>
-                    <div className="muted">{formatDateTime(r.updated_at_ms)}</div>
-                  </td>
-                  <td>
-                    <Badge>{r.protocol}</Badge>
-                  </td>
-                  <td className="muted">{r.match_model ?? "-"}</td>
-                  <td>{r.enabled ? <Badge kind="ok">ON</Badge> : <Badge kind="bad">OFF</Badge>}</td>
-                  <td>
-                    <div className="row">
-                      <Button onClick={() => openEdit(r)}>编辑</Button>
-                      <Button onClick={() => openManage(r)}>渠道优先级</Button>
-                      <Button variant="danger" onClick={() => onDelete(r)}>
-                        删除
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+      {/* 路由表格 */}
+      <Card>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>名称</TableHead>
+                <TableHead>协议</TableHead>
+                <TableHead>模型匹配</TableHead>
+                <TableHead>状态</TableHead>
+                <TableHead>更新时间</TableHead>
+                <TableHead className="w-[120px]">操作</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {routes.length === 0 ? (
+                <TableRow>
+                  <TableCell
+                    colSpan={6}
+                    className="text-center text-muted-foreground py-8"
+                  >
+                    暂无路由，点击「新建路由」添加
+                  </TableCell>
+                </TableRow>
+              ) : (
+                routes.map((r) => (
+                  <TableRow key={r.id}>
+                    <TableCell>
+                      <div className="font-medium">{r.name}</div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline">{r.protocol}</Badge>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {r.match_model ?? "-"}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={r.enabled ? "success" : "secondary"}>
+                        {r.enabled ? "启用" : "禁用"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground text-sm">
+                      {formatDateTime(r.updated_at_ms)}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => openManage(r)}
+                        >
+                          渠道
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => openEdit(r)}
+                          title="编辑"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => onDelete(r)}
+                          title="删除"
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
       </Card>
 
-      <Modal
-        open={routeModalOpen}
-        title={routeMode === "create" ? "新增路由" : "编辑路由"}
-        onClose={() => setRouteModalOpen(false)}
-      >
-        <div className="stack">
-          <div className="grid-2">
-            <div className="field">
-              <label>name</label>
-              <input className="input" value={draft.name} onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))} />
+      {/* 新建/编辑路由弹窗 */}
+      <Dialog open={routeModalOpen} onOpenChange={setRouteModalOpen}>
+        <DialogContent className="sm:max-w-[450px]">
+          <DialogHeader>
+            <DialogTitle>
+              {routeMode === "create" ? "新建路由" : "编辑路由"}
+            </DialogTitle>
+            <DialogDescription>配置路由规则</DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">名称</label>
+                <Input
+                  value={draft.name}
+                  onChange={(e) =>
+                    setDraft((d) => ({ ...d, name: e.target.value }))
+                  }
+                  placeholder="default-openai"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">协议</label>
+                <Select
+                  value={draft.protocol}
+                  onValueChange={(v) =>
+                    setDraft((d) => ({ ...d, protocol: v as Protocol }))
+                  }
+                  disabled={routeMode === "edit"}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="openai">OpenAI</SelectItem>
+                    <SelectItem value="anthropic">Anthropic</SelectItem>
+                    <SelectItem value="gemini">Gemini</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-            <div className="field">
-              <label>protocol</label>
-              <select
-                className="select"
-                value={draft.protocol}
-                onChange={(e) => setDraft((d) => ({ ...d, protocol: e.target.value as Protocol }))}
-                disabled={routeMode === "edit"}
-                title={routeMode === "edit" ? "当前版本暂不支持修改 protocol" : undefined}
-              >
-                <option value="openai">openai</option>
-                <option value="anthropic">anthropic</option>
-                <option value="gemini">gemini</option>
-              </select>
-            </div>
-            <div className="field" style={{ gridColumn: "1 / -1" }}>
-              <label>match_model（可选）</label>
-              <input
-                className="input"
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">模型匹配（可选）</label>
+              <Input
                 value={draft.match_model ?? ""}
-                onChange={(e) => setDraft((d) => ({ ...d, match_model: e.target.value.trim() ? e.target.value : null }))}
-                placeholder="例如：gpt-4o / claude-3-5-sonnet"
+                onChange={(e) =>
+                  setDraft((d) => ({
+                    ...d,
+                    match_model: e.target.value.trim() || null,
+                  }))
+                }
+                placeholder="gpt-4o / claude-3-5-sonnet"
+              />
+              <p className="text-xs text-muted-foreground">
+                留空则匹配该协议的所有模型
+              </p>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium">启用</label>
+              <Switch
+                checked={draft.enabled}
+                onCheckedChange={(v) => setDraft((d) => ({ ...d, enabled: v }))}
               />
             </div>
-            <div className="field">
-              <label>enabled</label>
-              <select className="select" value={draft.enabled ? "true" : "false"} onChange={(e) => setDraft((d) => ({ ...d, enabled: e.target.value === "true" }))}>
-                <option value="true">true</option>
-                <option value="false">false</option>
-              </select>
-            </div>
           </div>
 
-          <div className="row" style={{ justifyContent: "flex-end" }}>
-            <Button variant="ghost" onClick={() => setRouteModalOpen(false)}>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRouteModalOpen(false)}>
               取消
             </Button>
-            <Button variant="primary" onClick={submitRoute}>
+            <Button onClick={submitRoute}>保存</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 渠道优先级管理弹窗 */}
+      <Dialog open={manageOpen} onOpenChange={setManageOpen}>
+        <DialogContent className="sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle>渠道优先级：{manageRoute?.name}</DialogTitle>
+            <DialogDescription>
+              拖拽或使用按钮调整渠道优先级，从上到下依次尝试
+            </DialogDescription>
+          </DialogHeader>
+
+          {manageLoading ? (
+            <div className="py-8 text-center text-muted-foreground">
+              加载中...
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-4 py-4">
+              {/* 已绑定 */}
+              <div>
+                <h4 className="text-sm font-medium mb-3">已绑定渠道</h4>
+                {assigned.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    暂无绑定渠道
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {assigned.map((id, idx) => (
+                      <div
+                        key={id}
+                        className="flex items-center justify-between p-2 rounded border bg-card"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-muted-foreground w-4">
+                            {idx + 1}
+                          </span>
+                          <span className="text-sm font-medium">
+                            {channelNames.get(id) ?? id}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => move(id, -1)}
+                            disabled={idx === 0}
+                          >
+                            <ChevronUp className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => move(id, 1)}
+                            disabled={idx === assigned.length - 1}
+                          >
+                            <ChevronDown className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => remove(id)}
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* 可添加 */}
+              <div>
+                <h4 className="text-sm font-medium mb-3">可添加渠道</h4>
+                {available.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    无可添加渠道
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {available.map((c) => (
+                      <div
+                        key={c.id}
+                        className="flex items-center justify-between p-2 rounded border"
+                      >
+                        <span className="text-sm">{c.name}</span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => add(c.id)}
+                        >
+                          添加
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setManageOpen(false)}>
+              取消
+            </Button>
+            <Button onClick={saveManage} disabled={manageLoading}>
               保存
             </Button>
-          </div>
-        </div>
-      </Modal>
-
-      <Modal open={manageOpen} title={`渠道优先级：${manageRoute?.name ?? ""}`} onClose={() => setManageOpen(false)}>
-        {manageLoading ? (
-          <div className="muted">加载中…</div>
-        ) : !manageRoute ? (
-          <div className="muted">未选择 route。</div>
-        ) : (
-          <div className="stack">
-            <div className="grid-2">
-              <div>
-                <div className="muted" style={{ fontSize: 12 }}>
-                  已绑定（从上到下优先级递减）
-                </div>
-                <div style={{ marginTop: 8 }} className="stack">
-                  {assigned.length === 0 ? (
-                    <div className="muted">暂无绑定渠道。</div>
-                  ) : (
-                    assigned.map((id, idx) => (
-                      <div key={id} className="row" style={{ justifyContent: "space-between" }}>
-                        <div>
-                          <div style={{ fontWeight: 700 }}>
-                            {idx + 1}. {channelNames.get(id) ?? id}
-                          </div>
-                          <div className="muted">
-                            <code>{id}</code>
-                          </div>
-                        </div>
-                        <div className="row">
-                          <Button onClick={() => move(id, -1)} disabled={idx === 0}>
-                            ↑
-                          </Button>
-                          <Button onClick={() => move(id, 1)} disabled={idx === assigned.length - 1}>
-                            ↓
-                          </Button>
-                          <Button variant="danger" onClick={() => remove(id)}>
-                            移除
-                          </Button>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-              <div>
-                <div className="muted" style={{ fontSize: 12 }}>
-                  可添加（仅显示与 route 协议一致的渠道）
-                </div>
-                <div style={{ marginTop: 8 }} className="stack">
-                  {available.length === 0 ? (
-                    <div className="muted">暂无可添加渠道。</div>
-                  ) : (
-                    available.map((c) => (
-                      <div key={c.id} className="row" style={{ justifyContent: "space-between" }}>
-                        <div>
-                          <div style={{ fontWeight: 700 }}>{c.name}</div>
-                          <div className="muted">
-                            <code>{clampStr(c.base_url, 46)}</code>
-                          </div>
-                        </div>
-                        <Button onClick={() => add(c.id)}>添加</Button>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <div className="row" style={{ justifyContent: "flex-end" }}>
-              <Button variant="ghost" onClick={() => setManageOpen(false)}>
-                取消
-              </Button>
-              <Button variant="primary" onClick={saveManage} disabled={manageLoading}>
-                保存
-              </Button>
-            </div>
-          </div>
-        )}
-      </Modal>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

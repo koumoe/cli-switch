@@ -1,35 +1,47 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { DashboardPage } from "./pages/DashboardPage";
-import { ChannelsPage } from "./pages/ChannelsPage";
-import { LogsPage } from "./pages/LogsPage";
-import { PricingPage } from "./pages/PricingPage";
-import { RoutesPage } from "./pages/RoutesPage";
+import {
+  LayoutGrid,
+  Radio,
+  GitBranch,
+  Activity,
+  Settings,
+  Sun,
+  Moon,
+  Monitor,
+  Zap,
+} from "lucide-react";
+import { useTheme, type Theme } from "@/lib/theme";
+import { Button } from "@/components/ui";
 import { getHealth } from "./api";
 
-type AppRoute = "dashboard" | "channels" | "routes" | "pricing" | "logs";
+import { OverviewPage } from "./pages/OverviewPage";
+import { ChannelsPage } from "./pages/ChannelsPage";
+import { RoutesPage } from "./pages/RoutesPage";
+import { MonitorPage } from "./pages/MonitorPage";
+import { SettingsPage } from "./pages/SettingsPage";
+
+type AppRoute = "overview" | "channels" | "routes" | "monitor" | "settings";
+
+const NAV_ITEMS: { route: AppRoute; label: string; icon: React.ElementType }[] = [
+  { route: "overview", label: "概览", icon: LayoutGrid },
+  { route: "channels", label: "渠道", icon: Radio },
+  { route: "routes", label: "路由", icon: GitBranch },
+  { route: "monitor", label: "监控", icon: Activity },
+  { route: "settings", label: "设置", icon: Settings },
+];
 
 function routeFromPath(pathname: string): AppRoute {
-  if (pathname === "/") return "dashboard";
+  if (pathname === "/") return "overview";
   if (pathname.startsWith("/channels")) return "channels";
   if (pathname.startsWith("/routes")) return "routes";
-  if (pathname.startsWith("/pricing")) return "pricing";
-  if (pathname.startsWith("/logs")) return "logs";
-  return "dashboard";
+  if (pathname.startsWith("/monitor")) return "monitor";
+  if (pathname.startsWith("/settings")) return "settings";
+  return "overview";
 }
 
 function hrefFor(route: AppRoute): string {
-  switch (route) {
-    case "dashboard":
-      return "/";
-    case "channels":
-      return "/channels";
-    case "routes":
-      return "/routes";
-    case "pricing":
-      return "/pricing";
-    case "logs":
-      return "/logs";
-  }
+  if (route === "overview") return "/";
+  return `/${route}`;
 }
 
 function navigate(to: string) {
@@ -41,32 +53,75 @@ function navigate(to: string) {
 function NavLink({
   route,
   current,
-  label
+  label,
+  icon: Icon,
 }: {
   route: AppRoute;
   current: AppRoute;
   label: string;
+  icon: React.ElementType;
 }) {
   const href = hrefFor(route);
   const active = current === route;
   return (
     <a
-      className={active ? "nav-item nav-item-active" : "nav-item"}
+      className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
+        active
+          ? "bg-accent text-accent-foreground font-medium"
+          : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+      }`}
       href={href}
       onClick={(e) => {
         e.preventDefault();
         navigate(href);
       }}
     >
+      <Icon className="h-4 w-4" />
       {label}
     </a>
+  );
+}
+
+function ThemeToggle() {
+  const { theme, setTheme } = useTheme();
+
+  const cycleTheme = () => {
+    const next: Record<Theme, Theme> = {
+      light: "dark",
+      dark: "system",
+      system: "light",
+    };
+    setTheme(next[theme]);
+  };
+
+  const Icon = theme === "light" ? Sun : theme === "dark" ? Moon : Monitor;
+  const title = theme === "light" ? "浅色" : theme === "dark" ? "深色" : "跟随系统";
+
+  return (
+    <Button variant="ghost" size="icon" onClick={cycleTheme} title={title}>
+      <Icon className="h-4 w-4" />
+    </Button>
+  );
+}
+
+function StatusIndicator({ status }: { status: string }) {
+  const isOk = status === "ok";
+  return (
+    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+      <span
+        className={`h-2 w-2 rounded-full ${
+          isOk ? "bg-success" : "bg-destructive"
+        }`}
+      />
+      {isOk ? "运行中" : status}
+    </div>
   );
 }
 
 export default function App() {
   const [pathname, setPathname] = useState(() => window.location.pathname);
   const route = useMemo(() => routeFromPath(pathname), [pathname]);
-  const [health, setHealth] = useState<string>("检查中…");
+  const [health, setHealth] = useState<string>("...");
 
   useEffect(() => {
     const onPop = () => setPathname(window.location.pathname);
@@ -81,7 +136,7 @@ export default function App() {
         if (!cancelled) setHealth(h.status);
       })
       .catch(() => {
-        if (!cancelled) setHealth("unreachable");
+        if (!cancelled) setHealth("离线");
       });
     return () => {
       cancelled = true;
@@ -89,36 +144,53 @@ export default function App() {
   }, []);
 
   return (
-    <div className="app">
-      <aside className="sidebar">
-        <div className="brand">
-          <div className="brand-title">CliSwitch</div>
-          <div className="brand-sub">本地多渠道 CLI 代理</div>
+    <div className="flex h-full">
+      {/* 侧边栏 */}
+      <aside className="w-56 flex-shrink-0 border-r bg-sidebar flex flex-col">
+        {/* Logo */}
+        <div className="h-14 flex items-center gap-2 px-4 border-b">
+          <Zap className="h-5 w-5 text-foreground" />
+          <span className="font-semibold">CliSwitch</span>
         </div>
-        <nav className="nav">
-          <NavLink route="dashboard" current={route} label="Dashboard" />
-          <NavLink route="channels" current={route} label="Channels" />
-          <NavLink route="routes" current={route} label="Routes" />
-          <NavLink route="pricing" current={route} label="Pricing" />
-          <NavLink route="logs" current={route} label="Logs" />
+
+        {/* 导航 */}
+        <nav className="flex-1 p-3 space-y-1">
+          {NAV_ITEMS.map((item) => (
+            <NavLink
+              key={item.route}
+              route={item.route}
+              current={route}
+              label={item.label}
+              icon={item.icon}
+            />
+          ))}
         </nav>
-        <div className="sidebar-footer">
-          <div className="muted">Health: {health}</div>
+
+        {/* 底部 */}
+        <div className="p-3 border-t space-y-3">
+          <StatusIndicator status={health} />
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-muted-foreground">v0.1.0</span>
+            <ThemeToggle />
+          </div>
         </div>
       </aside>
 
-      <main className="main">
-        {route === "dashboard" ? (
-          <DashboardPage />
-        ) : route === "channels" ? (
-          <ChannelsPage />
-        ) : route === "routes" ? (
-          <RoutesPage />
-        ) : route === "pricing" ? (
-          <PricingPage />
-        ) : (
-          <LogsPage />
-        )}
+      {/* 主内容 */}
+      <main className="flex-1 overflow-auto">
+        <div className="p-6 max-w-6xl mx-auto">
+          {route === "overview" ? (
+            <OverviewPage />
+          ) : route === "channels" ? (
+            <ChannelsPage />
+          ) : route === "routes" ? (
+            <RoutesPage />
+          ) : route === "monitor" ? (
+            <MonitorPage />
+          ) : (
+            <SettingsPage />
+          )}
+        </div>
       </main>
     </div>
   );
