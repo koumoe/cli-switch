@@ -19,17 +19,33 @@ use crate::{proxy, proxy::ProxyError};
 
 #[derive(Clone)]
 pub struct AppState {
+    pub listen_addr: SocketAddr,
     pub db_path: Arc<PathBuf>,
     pub http_client: reqwest::Client,
 }
 
 #[derive(Serialize)]
-struct HealthResponse<'a> {
-    status: &'a str,
+struct HealthResponse {
+    status: &'static str,
+    version: &'static str,
+    listen_addr: String,
+    data_dir: String,
+    db_path: String,
 }
 
-async fn health() -> impl IntoResponse {
-    Json(HealthResponse { status: "ok" })
+async fn health(State(state): State<AppState>) -> impl IntoResponse {
+    let data_dir = state
+        .db_path
+        .parent()
+        .map(|p| p.display().to_string())
+        .unwrap_or_else(|| "-".to_string());
+    Json(HealthResponse {
+        status: "ok",
+        version: env!("CARGO_PKG_VERSION"),
+        listen_addr: state.listen_addr.to_string(),
+        data_dir,
+        db_path: state.db_path.display().to_string(),
+    })
 }
 
 #[cfg(not(feature = "embed-ui"))]
@@ -714,6 +730,7 @@ pub async fn serve_with_listener(
 ) -> anyhow::Result<()> {
     let addr = listener.local_addr()?;
     let state = AppState {
+        listen_addr: addr,
         db_path: Arc::new(db_path),
         http_client: reqwest::Client::builder().build()?,
     };
