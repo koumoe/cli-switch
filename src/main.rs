@@ -1,13 +1,11 @@
-mod proxy;
-mod server;
-mod storage;
-
 use anyhow::Context as _;
 use clap::{Parser, Subcommand};
-use directories::ProjectDirs;
+use cliswitch::{app, server, storage};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use std::path::{Path, PathBuf};
 use tracing::Level;
+
+#[cfg(feature = "desktop")]
+mod desktop;
 
 #[derive(Parser, Debug)]
 #[command(
@@ -20,23 +18,33 @@ struct Cli {
     command: Option<Command>,
 }
 
+#[cfg(feature = "desktop")]
+fn default_command() -> Command {
+    Command::Desktop { port: 3210 }
+}
+
+#[cfg(not(feature = "desktop"))]
+fn default_command() -> Command {
+    Command::Serve {
+        port: 3210,
+        open: true,
+    }
+}
+
 #[derive(Subcommand, Debug)]
 enum Command {
     Serve {
         #[arg(long, default_value_t = 3210)]
         port: u16,
+        #[arg(long = "no-open", action = clap::ArgAction::SetFalse, default_value_t = true)]
+        open: bool,
+    },
+    #[cfg(feature = "desktop")]
+    Desktop {
+        #[arg(long, default_value_t = 3210)]
+        port: u16,
     },
     Migrate,
-}
-
-fn default_data_dir() -> anyhow::Result<PathBuf> {
-    let proj = ProjectDirs::from("com", "cliswitch", "CliSwitch")
-        .context("无法定位用户数据目录（ProjectDirs）")?;
-    Ok(proj.data_dir().to_path_buf())
-}
-
-fn db_path(data_dir: &Path) -> PathBuf {
-    data_dir.join("cliswitch.sqlite3")
 }
 
 #[tokio::main]
@@ -51,13 +59,13 @@ async fn main() -> anyhow::Result<()> {
 
     let cli = Cli::parse();
 
-    match cli.command.unwrap_or(Command::Serve { port: 3210 }) {
-        Command::Serve { port } => {
-            let data_dir = default_data_dir()?;
+    match cli.command.unwrap_or_else(default_command) {
+        Command::Serve { port, open } => {
+            let data_dir = app::default_data_dir()?;
             std::fs::create_dir_all(&data_dir)
                 .with_context(|| format!("创建数据目录失败：{}", data_dir.display()))?;
 
-            let db_path = db_path(&data_dir);
+            let db_path = app::db_path(&data_dir);
             storage::init_db(&db_path).with_context(|| "初始化 SQLite 失败")?;
 
             let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), port);
@@ -68,13 +76,15 @@ async fn main() -> anyhow::Result<()> {
                 "cliswitch listening"
             );
 
-            server::serve(addr, db_path).await
+            server::serve(addr, db_path, open).await
         }
+        #[cfg(feature = "desktop")]
+        Command::Desktop { port } => desktop::run(port).await,
         Command::Migrate => {
-            let data_dir = default_data_dir()?;
+            let data_dir = app::default_data_dir()?;
             std::fs::create_dir_all(&data_dir)
                 .with_context(|| format!("创建数据目录失败：{}", data_dir.display()))?;
-            let db_path = db_path(&data_dir);
+            let db_path = app::db_path(&data_dir);
             storage::init_db(&db_path).with_context(|| "初始化 SQLite 失败")?;
             println!("ok: {}", db_path.display());
             Ok(())
