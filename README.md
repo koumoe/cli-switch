@@ -38,24 +38,40 @@ npm ci
 npm run build
 cd ..
 
-# 构建后端（单可执行文件）
-cargo build --release --features embed-ui
+# 构建桌面端（单可执行文件，默认启用 `desktop`）
+cargo build --release
+
+# 更短的命令（见 `.cargo/config.toml`）
+# cargo gui-build
 ```
 
 ### 运行
 
 ```bash
-./target/release/cliswitch serve --port 3210
+# 桌面端（构建时启用了 `desktop` feature）：直接运行即可（默认端口 3210）
+./target/release/cliswitch
+
+# Web 管理界面（serve，默认端口 3210，会打开浏览器）
+./target/release/cliswitch serve
+
+# 如需改端口
+./target/release/cliswitch serve --port 4000
+./target/release/cliswitch desktop --port 4000
 ```
 
-访问 http://127.0.0.1:3210 打开管理界面。
+桌面端会在窗口里打开管理界面；Web 模式访问 http://127.0.0.1:3210。
+`serve` 默认会自动打开浏览器；如不需要可加 `--no-open`。
 
 ## 开发
 
 ### 后端开发
 
 ```bash
-cargo run -- serve --port 3210
+# 桌面端（默认，端口 3210）
+cargo run
+
+# 或用更短的别名
+cargo gui
 ```
 
 ### 前端开发
