@@ -308,13 +308,21 @@ struct ChannelTestResponse {
     error: Option<String>,
 }
 
-fn append_models_path(mut url: reqwest::Url) -> reqwest::Url {
+fn build_models_url(mut url: reqwest::Url, protocol: storage::Protocol) -> reqwest::Url {
     let base_path = url.path().trim_end_matches('/');
-    let path = if base_path.is_empty() {
-        "/models".to_string()
-    } else {
-        format!("{base_path}/models")
+    let root = match protocol {
+        storage::Protocol::Openai | storage::Protocol::Anthropic => "/v1",
+        storage::Protocol::Gemini => "/v1beta",
     };
+
+    let path = if base_path.is_empty() {
+        format!("{root}/models")
+    } else if base_path.ends_with(root) {
+        format!("{base_path}/models")
+    } else {
+        format!("{base_path}{root}/models")
+    };
+
     url.set_path(&path);
     url
 }
@@ -330,7 +338,7 @@ async fn test_channel(
     let base_url = reqwest::Url::parse(&channel.base_url)
         .map_err(|e| ApiError::BadRequest(format!("base_url 无效：{e}")))?;
 
-    let mut url = append_models_path(base_url);
+    let mut url = build_models_url(base_url, channel.protocol);
     let mut headers = axum::http::HeaderMap::new();
     proxy::apply_auth(&channel, channel.protocol, &mut url, &mut headers)
         .map_err(|e| ApiError::BadGateway(e.to_string()))?;

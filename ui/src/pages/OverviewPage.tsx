@@ -17,7 +17,7 @@ import {
   type UsageEvent,
   type StatsSummary,
 } from "../api";
-import { formatDateTime, formatDuration } from "../lib";
+import { formatDateTime, formatDuration, terminalLabel } from "../lib";
 
 export function OverviewPage() {
   const [channels, setChannels] = useState<Channel[]>([]);
@@ -130,7 +130,7 @@ export function OverviewPage() {
                     <div>
                       <div className="font-medium text-sm">{c.name}</div>
                       <div className="text-xs text-muted-foreground">
-                        {c.protocol}
+                        {terminalLabel(c.protocol)}
                       </div>
                     </div>
                   </div>
@@ -173,7 +173,7 @@ export function OverviewPage() {
                     )}
                     <div>
                       <div className="text-sm font-medium">
-                        {e.model ?? e.protocol}
+                        {e.model ?? terminalLabel(e.protocol)}
                       </div>
                       <div className="text-xs text-muted-foreground">
                         {formatDateTime(e.ts_ms)}
@@ -181,7 +181,7 @@ export function OverviewPage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-4">
-                    <Badge variant="outline">{e.protocol}</Badge>
+                    <Badge variant="outline">{terminalLabel(e.protocol)}</Badge>
                     <div className="flex items-center gap-1 text-xs text-muted-foreground">
                       <Clock className="h-3 w-3" />
                       {formatDuration(e.latency_ms)}

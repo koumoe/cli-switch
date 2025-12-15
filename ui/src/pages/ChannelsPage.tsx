@@ -45,7 +45,7 @@ import {
   type CreateChannelInput,
   type Protocol,
 } from "../api";
-import { formatDateTime, clampStr } from "../lib";
+import { formatDateTime, clampStr, terminalLabel } from "../lib";
 
 type ChannelDraft = CreateChannelInput;
 
@@ -53,11 +53,22 @@ function emptyDraft(): ChannelDraft {
   return {
     name: "",
     protocol: "openai",
-    base_url: "https://api.openai.com/v1",
-    auth_type: "bearer",
+    base_url: "https://api.openai.com",
+    auth_type: "auto",
     auth_ref: "",
     enabled: true,
   };
+}
+
+function defaultBaseUrl(protocol: Protocol): string {
+  switch (protocol) {
+    case "openai":
+      return "https://api.openai.com";
+    case "anthropic":
+      return "https://api.anthropic.com";
+    case "gemini":
+      return "https://generativelanguage.googleapis.com";
+  }
 }
 
 export function ChannelsPage() {
@@ -100,7 +111,7 @@ export function ChannelsPage() {
       name: c.name,
       protocol: c.protocol,
       base_url: c.base_url,
-      auth_type: c.auth_type,
+      auth_type: "auto",
       auth_ref: c.auth_ref,
       enabled: c.enabled,
     });
@@ -120,7 +131,7 @@ export function ChannelsPage() {
         await updateChannel(editId, {
           name: draft.name.trim(),
           base_url: draft.base_url.trim(),
-          auth_type: draft.auth_type,
+          auth_type: "auto",
           auth_ref: draft.auth_ref,
           enabled: draft.enabled,
         });
@@ -206,7 +217,7 @@ export function ChannelsPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>名称</TableHead>
-                <TableHead>协议</TableHead>
+                <TableHead>终端</TableHead>
                 <TableHead>Base URL</TableHead>
                 <TableHead>状态</TableHead>
                 <TableHead>更新时间</TableHead>
@@ -227,7 +238,7 @@ export function ChannelsPage() {
                       <div className="font-medium">{c.name}</div>
                     </TableCell>
                     <TableCell>
-                      <Badge variant="outline">{c.protocol}</Badge>
+                      <Badge variant="outline">{terminalLabel(c.protocol)}</Badge>
                     </TableCell>
                     <TableCell>
                       <code className="text-xs text-muted-foreground">
@@ -314,19 +325,39 @@ export function ChannelsPage() {
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">协议</label>
+                <label className="text-sm font-medium">终端</label>
                 <Select
                   value={draft.protocol}
-                  onValueChange={(v) => setDraft((d) => ({ ...d, protocol: v as Protocol }))}
+                  onValueChange={(v) =>
+                    setDraft((d) => {
+                      const nextProtocol = v as Protocol;
+                      const prevDefault = defaultBaseUrl(d.protocol);
+                      const nextDefault = defaultBaseUrl(nextProtocol);
+                      const shouldUpdateBase =
+                        !d.base_url.trim() || d.base_url.trim() === prevDefault;
+                      return {
+                        ...d,
+                        protocol: nextProtocol,
+                        auth_type: "auto",
+                        base_url: shouldUpdateBase ? nextDefault : d.base_url,
+                      };
+                    })
+                  }
                   disabled={modalMode === "edit"}
                 >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="openai">OpenAI</SelectItem>
-                    <SelectItem value="anthropic">Anthropic</SelectItem>
-                    <SelectItem value="gemini">Gemini</SelectItem>
+                    <SelectItem value="anthropic">
+                      Claude Code
+                    </SelectItem>
+                    <SelectItem value="openai">
+                      Codex
+                    </SelectItem>
+                    <SelectItem value="gemini">
+                      Gemini
+                    </SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -337,37 +368,8 @@ export function ChannelsPage() {
               <Input
                 value={draft.base_url}
                 onChange={(e) => setDraft((d) => ({ ...d, base_url: e.target.value }))}
-                placeholder="https://api.openai.com/v1"
+                placeholder="https://api.openai.com"
               />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">认证类型</label>
-                <Select
-                  value={draft.auth_type}
-                  onValueChange={(v) => setDraft((d) => ({ ...d, auth_type: v }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="bearer">Bearer Token</SelectItem>
-                    <SelectItem value="x-api-key">X-API-Key</SelectItem>
-                    <SelectItem value="x-goog-api-key">X-Goog-API-Key</SelectItem>
-                    <SelectItem value="query">Query Parameter</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">启用</label>
-                <div className="flex items-center h-9">
-                  <Switch
-                    checked={draft.enabled}
-                    onCheckedChange={(v) => setDraft((d) => ({ ...d, enabled: v }))}
-                  />
-                </div>
-              </div>
             </div>
 
             <div className="space-y-2">
@@ -377,6 +379,14 @@ export function ChannelsPage() {
                 value={draft.auth_ref}
                 onChange={(e) => setDraft((d) => ({ ...d, auth_ref: e.target.value }))}
                 placeholder="sk-..."
+              />
+            </div>
+
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium">启用</label>
+              <Switch
+                checked={draft.enabled}
+                onCheckedChange={(v) => setDraft((d) => ({ ...d, enabled: v }))}
               />
             </div>
           </div>

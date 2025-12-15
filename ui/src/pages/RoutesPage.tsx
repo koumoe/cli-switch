@@ -45,7 +45,7 @@ import {
   type CreateRouteInput,
   type Protocol,
 } from "../api";
-import { formatDateTime } from "../lib";
+import { formatDateTime, terminalLabel } from "../lib";
 
 type RouteDraft = CreateRouteInput;
 
@@ -226,7 +226,7 @@ export function RoutesPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>名称</TableHead>
-                <TableHead>协议</TableHead>
+                <TableHead>终端</TableHead>
                 <TableHead>模型匹配</TableHead>
                 <TableHead>状态</TableHead>
                 <TableHead>更新时间</TableHead>
@@ -250,7 +250,7 @@ export function RoutesPage() {
                       <div className="font-medium">{r.name}</div>
                     </TableCell>
                     <TableCell>
-                      <Badge variant="outline">{r.protocol}</Badge>
+                      <Badge variant="outline">{terminalLabel(r.protocol)}</Badge>
                     </TableCell>
                     <TableCell className="text-muted-foreground">
                       {r.match_model ?? "-"}
@@ -321,7 +321,7 @@ export function RoutesPage() {
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">协议</label>
+                <label className="text-sm font-medium">终端</label>
                 <Select
                   value={draft.protocol}
                   onValueChange={(v) =>
@@ -333,9 +333,15 @@ export function RoutesPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="openai">OpenAI</SelectItem>
-                    <SelectItem value="anthropic">Anthropic</SelectItem>
-                    <SelectItem value="gemini">Gemini</SelectItem>
+                    <SelectItem value="anthropic">
+                      Claude Code
+                    </SelectItem>
+                    <SelectItem value="openai">
+                      Codex
+                    </SelectItem>
+                    <SelectItem value="gemini">
+                      Gemini
+                    </SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -354,7 +360,7 @@ export function RoutesPage() {
                 placeholder="gpt-4o / claude-3-5-sonnet"
               />
               <p className="text-xs text-muted-foreground">
-                留空则匹配该协议的所有模型
+                留空则匹配该终端入口的所有模型
               </p>
             </div>
 
