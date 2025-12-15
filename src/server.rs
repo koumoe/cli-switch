@@ -2,6 +2,7 @@
 use axum::response::Html;
 use axum::{
     Json, Router,
+    body::Body,
     extract::State,
     http::StatusCode,
     response::IntoResponse,
@@ -14,10 +15,12 @@ use tower_http::services::ServeDir;
 use tower_http::trace::TraceLayer;
 
 use crate::storage;
+use crate::{proxy, proxy::ProxyError};
 
 #[derive(Clone)]
 pub struct AppState {
     pub db_path: Arc<PathBuf>,
+    pub http_client: reqwest::Client,
 }
 
 #[derive(Serialize)]
@@ -45,8 +48,49 @@ async fn ui_placeholder() -> impl IntoResponse {
     )
 }
 
-async fn proxy_placeholder(State(_state): State<AppState>) -> impl IntoResponse {
-    (StatusCode::NOT_IMPLEMENTED, "proxy not implemented yet")
+async fn proxy_openai(
+    State(state): State<AppState>,
+    req: axum::http::Request<Body>,
+) -> Result<axum::response::Response, ApiError> {
+    proxy::forward(
+        &state.http_client,
+        (*state.db_path).clone(),
+        storage::Protocol::Openai,
+        "/v1",
+        req,
+    )
+    .await
+    .map_err(map_proxy_error)
+}
+
+async fn proxy_anthropic(
+    State(state): State<AppState>,
+    req: axum::http::Request<Body>,
+) -> Result<axum::response::Response, ApiError> {
+    proxy::forward(
+        &state.http_client,
+        (*state.db_path).clone(),
+        storage::Protocol::Anthropic,
+        "/v1",
+        req,
+    )
+    .await
+    .map_err(map_proxy_error)
+}
+
+async fn proxy_gemini(
+    State(state): State<AppState>,
+    req: axum::http::Request<Body>,
+) -> Result<axum::response::Response, ApiError> {
+    proxy::forward(
+        &state.http_client,
+        (*state.db_path).clone(),
+        storage::Protocol::Gemini,
+        "/v1beta",
+        req,
+    )
+    .await
+    .map_err(map_proxy_error)
 }
 
 #[cfg(feature = "embed-ui")]
@@ -81,6 +125,10 @@ enum ApiError {
     BadRequest(String),
     #[error("{0}")]
     NotFound(String),
+    #[error("{0}")]
+    BadGateway(String),
+    #[error("{0}")]
+    Unavailable(String),
     #[error(transparent)]
     Internal(#[from] anyhow::Error),
 }
@@ -90,12 +138,26 @@ impl IntoResponse for ApiError {
         let (status, msg) = match &self {
             ApiError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg.clone()),
             ApiError::NotFound(msg) => (StatusCode::NOT_FOUND, msg.clone()),
+            ApiError::BadGateway(msg) => (StatusCode::BAD_GATEWAY, msg.clone()),
+            ApiError::Unavailable(msg) => (StatusCode::SERVICE_UNAVAILABLE, msg.clone()),
             ApiError::Internal(_) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "internal error".to_string(),
             ),
         };
         (status, Json(ErrorBody { error: msg })).into_response()
+    }
+}
+
+fn map_proxy_error(e: ProxyError) -> ApiError {
+    match e {
+        ProxyError::NoEnabledChannel(p) => {
+            ApiError::Unavailable(format!("未配置启用的 {} 渠道", p.as_str()))
+        }
+        ProxyError::InvalidBaseUrl(msg) => ApiError::Internal(anyhow::anyhow!(msg)),
+        ProxyError::ReadBody(msg) => ApiError::BadRequest(msg),
+        ProxyError::Upstream(msg) => ApiError::BadGateway(msg),
+        ProxyError::Storage(e) => ApiError::Internal(e),
     }
 }
 
@@ -184,19 +246,21 @@ async fn update_route(
 pub async fn serve(addr: SocketAddr, db_path: PathBuf) -> anyhow::Result<()> {
     let state = AppState {
         db_path: Arc::new(db_path),
+        http_client: reqwest::Client::builder().build()?,
     };
 
     let app = Router::new()
         .route("/api/health", get(health))
         .route("/api/channels", get(list_channels).post(create_channel))
-        .route("/api/channels/:id", put(update_channel))
-        .route("/api/channels/:id/enable", post(enable_channel))
-        .route("/api/channels/:id/disable", post(disable_channel))
+        .route("/api/channels/{id}", put(update_channel))
+        .route("/api/channels/{id}/enable", post(enable_channel))
+        .route("/api/channels/{id}/disable", post(disable_channel))
         .route("/api/routes", get(list_routes).post(create_route))
-        .route("/api/routes/:id", put(update_route))
-        .route("/v1/*path", any(proxy_placeholder))
-        .route("/anthropic/*path", any(proxy_placeholder))
-        .route("/gemini/*path", any(proxy_placeholder))
+        .route("/api/routes/{id}", put(update_route))
+        .route("/v1/messages", any(proxy_anthropic))
+        .route("/v1/messages/{*path}", any(proxy_anthropic))
+        .route("/v1beta/{*path}", any(proxy_gemini))
+        .route("/v1/{*path}", any(proxy_openai))
         .with_state(state)
         .layer(TraceLayer::new_for_http());
 

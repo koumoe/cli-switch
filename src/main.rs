@@ -1,3 +1,4 @@
+mod proxy;
 mod server;
 mod storage;
 
