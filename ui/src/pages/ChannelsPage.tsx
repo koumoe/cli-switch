@@ -80,6 +80,9 @@ export function ChannelsPage() {
   const [editId, setEditId] = useState<string | null>(null);
   const [draft, setDraft] = useState<ChannelDraft>(emptyDraft());
   const [testing, setTesting] = useState<Record<string, boolean>>({});
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Channel | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   async function refresh() {
     setLoading(true);
@@ -160,13 +163,23 @@ export function ChannelsPage() {
   }
 
   async function onDelete(c: Channel) {
-    if (!confirm(`确定删除渠道 "${c.name}"？此操作不可恢复。`)) return;
+    setDeleteTarget(c);
+    setDeleteOpen(true);
+  }
+
+  async function confirmDelete() {
+    if (!deleteTarget) return;
+    setDeleting(true);
     try {
-      await deleteChannel(c.id);
-      toast.success(`已删除 ${c.name}`);
+      await deleteChannel(deleteTarget.id);
+      toast.success(`已删除 ${deleteTarget.name}`);
+      setDeleteOpen(false);
+      setDeleteTarget(null);
       await refresh();
     } catch (e) {
       toast.error("删除失败", { description: String(e) });
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -396,6 +409,41 @@ export function ChannelsPage() {
               取消
             </Button>
             <Button onClick={submit}>保存</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 删除确认弹窗 */}
+      <Dialog
+        open={deleteOpen}
+        onOpenChange={(v) => {
+          setDeleteOpen(v);
+          if (!v) setDeleteTarget(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle>删除渠道</DialogTitle>
+            <DialogDescription>
+              {deleteTarget
+                ? `确定删除渠道 "${deleteTarget.name}"？此操作不可恢复。`
+                : "确定删除该渠道？此操作不可恢复。"}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setDeleteOpen(false);
+                setDeleteTarget(null);
+              }}
+              disabled={deleting}
+            >
+              取消
+            </Button>
+            <Button variant="destructive" onClick={confirmDelete} disabled={deleting || !deleteTarget}>
+              删除
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

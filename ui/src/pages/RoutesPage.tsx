@@ -67,6 +67,9 @@ export function RoutesPage() {
   const [manageRoute, setManageRoute] = useState<Route | null>(null);
   const [assigned, setAssigned] = useState<string[]>([]);
   const [manageLoading, setManageLoading] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Route | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const channelNames = useMemo(() => {
     const m = new Map<string, string>();
@@ -133,13 +136,23 @@ export function RoutesPage() {
   }
 
   async function onDelete(r: Route) {
-    if (!confirm(`确定删除路由 "${r.name}"？`)) return;
+    setDeleteTarget(r);
+    setDeleteOpen(true);
+  }
+
+  async function confirmDelete() {
+    if (!deleteTarget) return;
+    setDeleting(true);
     try {
-      await deleteRoute(r.id);
-      toast.success(`已删除 ${r.name}`);
+      await deleteRoute(deleteTarget.id);
+      toast.success(`已删除 ${deleteTarget.name}`);
+      setDeleteOpen(false);
+      setDeleteTarget(null);
       await refresh();
     } catch (e) {
       toast.error("删除失败", { description: String(e) });
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -378,6 +391,45 @@ export function RoutesPage() {
               取消
             </Button>
             <Button onClick={submitRoute}>保存</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 删除确认弹窗 */}
+      <Dialog
+        open={deleteOpen}
+        onOpenChange={(v) => {
+          setDeleteOpen(v);
+          if (!v) setDeleteTarget(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle>删除路由</DialogTitle>
+            <DialogDescription>
+              {deleteTarget
+                ? `确定删除路由 "${deleteTarget.name}"？此操作不可恢复。`
+                : "确定删除该路由？此操作不可恢复。"}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setDeleteOpen(false);
+                setDeleteTarget(null);
+              }}
+              disabled={deleting}
+            >
+              取消
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={confirmDelete}
+              disabled={deleting || !deleteTarget}
+            >
+              删除
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
