@@ -198,43 +198,13 @@ pub(crate) fn apply_auth(
     url: &mut Url,
     headers: &mut HeaderMap,
 ) -> Result<(), ProxyError> {
-    let auth_type = channel.auth_type.trim().to_ascii_lowercase();
     let token = channel.auth_ref.trim();
 
-    match auth_type.as_str() {
-        "bearer" => {
-            let v = format!("Bearer {token}");
-            headers.insert(
-                axum::http::header::AUTHORIZATION,
-                v.parse()
-                    .map_err(|e| ProxyError::Upstream(format!("bad bearer: {e}")))?,
-            );
-        }
-        "x-api-key" => {
-            headers.insert(
-                HeaderName::from_static("x-api-key"),
-                token
-                    .parse()
-                    .map_err(|e| ProxyError::Upstream(format!("bad x-api-key: {e}")))?,
-            );
-        }
-        "x-goog-api-key" => {
-            headers.insert(
-                HeaderName::from_static("x-goog-api-key"),
-                token
-                    .parse()
-                    .map_err(|e| ProxyError::Upstream(format!("bad x-goog-api-key: {e}")))?,
-            );
-        }
-        "query" => {
-            set_query_param(url, "key", token);
-        }
-        other => {
-            return Err(ProxyError::Upstream(format!(
-                "unsupported auth_type: {other}"
-            )));
-        }
-    }
+    let detected = detect_request_auth_kind(protocol, headers, url);
+    let auth_kind = resolve_auth_kind(protocol, detected);
+
+    clear_auth(protocol, headers, url);
+    apply_auth_kind(auth_kind, token, headers, url)?;
 
     if protocol == Protocol::Anthropic
         && !headers.contains_key(HeaderName::from_static("anthropic-version"))
@@ -247,6 +217,110 @@ pub(crate) fn apply_auth(
         );
     }
 
+    Ok(())
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AuthKind {
+    Bearer,
+    XApiKey,
+    XGoogApiKey,
+    QueryKey,
+}
+
+fn detect_request_auth_kind(
+    protocol: Protocol,
+    headers: &HeaderMap,
+    url: &Url,
+) -> Option<AuthKind> {
+    match protocol {
+        Protocol::Openai => headers
+            .contains_key(axum::http::header::AUTHORIZATION)
+            .then_some(AuthKind::Bearer),
+        Protocol::Anthropic => headers
+            .contains_key(HeaderName::from_static("x-api-key"))
+            .then_some(AuthKind::XApiKey),
+        Protocol::Gemini => {
+            if headers.contains_key(HeaderName::from_static("x-goog-api-key")) {
+                Some(AuthKind::XGoogApiKey)
+            } else if url.query_pairs().any(|(k, _)| k == "key") {
+                Some(AuthKind::QueryKey)
+            } else {
+                None
+            }
+        }
+    }
+}
+
+fn resolve_auth_kind(protocol: Protocol, detected: Option<AuthKind>) -> AuthKind {
+    if let Some(kind) = detected
+        && auth_kind_allowed_for_protocol(protocol, kind)
+    {
+        return kind;
+    }
+    default_auth_kind_for_protocol(protocol)
+}
+
+fn default_auth_kind_for_protocol(protocol: Protocol) -> AuthKind {
+    match protocol {
+        Protocol::Openai => AuthKind::Bearer,
+        Protocol::Anthropic => AuthKind::XApiKey,
+        Protocol::Gemini => AuthKind::QueryKey,
+    }
+}
+
+fn auth_kind_allowed_for_protocol(protocol: Protocol, kind: AuthKind) -> bool {
+    match protocol {
+        Protocol::Openai => kind == AuthKind::Bearer,
+        Protocol::Anthropic => kind == AuthKind::XApiKey,
+        Protocol::Gemini => matches!(kind, AuthKind::QueryKey | AuthKind::XGoogApiKey),
+    }
+}
+
+fn clear_auth(protocol: Protocol, headers: &mut HeaderMap, url: &mut Url) {
+    headers.remove(axum::http::header::AUTHORIZATION);
+    headers.remove(HeaderName::from_static("x-api-key"));
+    headers.remove(HeaderName::from_static("x-goog-api-key"));
+    if protocol == Protocol::Gemini {
+        remove_query_param(url, "key");
+    }
+}
+
+fn apply_auth_kind(
+    kind: AuthKind,
+    token: &str,
+    headers: &mut HeaderMap,
+    url: &mut Url,
+) -> Result<(), ProxyError> {
+    match kind {
+        AuthKind::Bearer => {
+            let v = format!("Bearer {token}");
+            headers.insert(
+                axum::http::header::AUTHORIZATION,
+                v.parse()
+                    .map_err(|e| ProxyError::Upstream(format!("bad bearer: {e}")))?,
+            );
+        }
+        AuthKind::XApiKey => {
+            headers.insert(
+                HeaderName::from_static("x-api-key"),
+                token
+                    .parse()
+                    .map_err(|e| ProxyError::Upstream(format!("bad x-api-key: {e}")))?,
+            );
+        }
+        AuthKind::XGoogApiKey => {
+            headers.insert(
+                HeaderName::from_static("x-goog-api-key"),
+                token
+                    .parse()
+                    .map_err(|e| ProxyError::Upstream(format!("bad x-goog-api-key: {e}")))?,
+            );
+        }
+        AuthKind::QueryKey => {
+            set_query_param(url, "key", token);
+        }
+    }
     Ok(())
 }
 
@@ -265,6 +339,21 @@ fn set_query_param(url: &mut Url, name: &str, value: &str) {
             }
         }
         qp.append_pair(name, value);
+    }
+}
+
+fn remove_query_param(url: &mut Url, name: &str) {
+    let existing: Vec<(String, String)> = url
+        .query_pairs()
+        .filter_map(|(k, v)| (k != name).then(|| (k.to_string(), v.to_string())))
+        .collect();
+
+    url.set_query(None);
+    {
+        let mut qp = url.query_pairs_mut();
+        for (k, v) in existing {
+            qp.append_pair(&k, &v);
+        }
     }
 }
 

@@ -1,8 +1,21 @@
+import type { Protocol } from "./api";
+
 export function formatDateTime(ms: number | null | undefined): string {
   if (!ms) return "-";
   const d = new Date(ms);
   if (Number.isNaN(d.getTime())) return "-";
   return d.toLocaleString();
+}
+
+export function terminalLabel(protocol: Protocol): string {
+  switch (protocol) {
+    case "openai":
+      return "Codex";
+    case "anthropic":
+      return "Claude Code";
+    case "gemini":
+      return "Gemini";
+  }
 }
 
 export function formatDuration(ms: number | null | undefined): string {

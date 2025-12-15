@@ -41,6 +41,46 @@ impl std::str::FromStr for Protocol {
     }
 }
 
+fn protocol_root(protocol: Protocol) -> &'static str {
+    match protocol {
+        Protocol::Openai | Protocol::Anthropic => "/v1",
+        Protocol::Gemini => "/v1beta",
+    }
+}
+
+fn normalize_base_url(protocol: Protocol, base_url: &str) -> String {
+    let base_url = base_url.trim();
+    let (without_fragment, fragment) = match base_url.split_once('#') {
+        Some((a, b)) => (a, Some(b)),
+        None => (base_url, None),
+    };
+    let (without_query, query) = match without_fragment.split_once('?') {
+        Some((a, b)) => (a, Some(b)),
+        None => (without_fragment, None),
+    };
+
+    let root = protocol_root(protocol);
+    let without_query = without_query.trim_end_matches('/');
+    let normalized = if without_query.ends_with(root) {
+        without_query[..without_query.len().saturating_sub(root.len())]
+            .trim_end_matches('/')
+            .to_string()
+    } else {
+        without_query.to_string()
+    };
+
+    let mut out = normalized;
+    if let Some(q) = query {
+        out.push('?');
+        out.push_str(q);
+    }
+    if let Some(f) = fragment {
+        out.push('#');
+        out.push_str(f);
+    }
+    out
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Channel {
     pub id: String,
@@ -108,17 +148,19 @@ pub async fn list_channels(db_path: PathBuf) -> anyhow::Result<Vec<Channel>> {
         )?;
         let rows = stmt.query_map([], |row| {
             let protocol: String = row.get(2)?;
+            let protocol = protocol.parse::<Protocol>().map_err(|e| {
+                rusqlite::Error::FromSqlConversionFailure(
+                    2,
+                    rusqlite::types::Type::Text,
+                    e.into_boxed_dyn_error(),
+                )
+            })?;
+            let base_url: String = row.get(3)?;
             Ok(Channel {
                 id: row.get(0)?,
                 name: row.get(1)?,
-                protocol: protocol.parse::<Protocol>().map_err(|e| {
-                    rusqlite::Error::FromSqlConversionFailure(
-                        2,
-                        rusqlite::types::Type::Text,
-                        e.into_boxed_dyn_error(),
-                    )
-                })?,
-                base_url: row.get(3)?,
+                protocol,
+                base_url: normalize_base_url(protocol, &base_url),
                 auth_type: row.get(4)?,
                 auth_ref: row.get(5)?,
                 enabled: row.get::<_, i64>(6)? != 0,
@@ -141,7 +183,7 @@ pub struct CreateChannel {
     pub name: String,
     pub protocol: Protocol,
     pub base_url: String,
-    pub auth_type: String,
+    pub auth_type: Option<String>,
     pub auth_ref: String,
     pub enabled: bool,
 }
@@ -150,6 +192,12 @@ pub async fn create_channel(db_path: PathBuf, input: CreateChannel) -> anyhow::R
     with_conn(db_path, move |conn| {
         let ts = now_ms();
         let id = Uuid::new_v4().to_string();
+        let auth_type = input
+            .auth_type
+            .unwrap_or_else(|| "auto".to_string())
+            .trim()
+            .to_string();
+        let base_url = normalize_base_url(input.protocol, &input.base_url);
         conn.execute(
             r#"
             INSERT INTO channels (id, name, protocol, base_url, auth_type, auth_ref, enabled, created_at_ms, updated_at_ms)
@@ -159,8 +207,8 @@ pub async fn create_channel(db_path: PathBuf, input: CreateChannel) -> anyhow::R
                 id,
                 input.name,
                 input.protocol.as_str(),
-                input.base_url,
-                input.auth_type,
+                base_url,
+                auth_type,
                 input.auth_ref,
                 if input.enabled { 1 } else { 0 },
                 ts,
@@ -172,8 +220,8 @@ pub async fn create_channel(db_path: PathBuf, input: CreateChannel) -> anyhow::R
             id,
             name: input.name,
             protocol: input.protocol,
-            base_url: input.base_url,
-            auth_type: input.auth_type,
+            base_url,
+            auth_type,
             auth_ref: input.auth_ref,
             enabled: input.enabled,
             created_at_ms: ts,
@@ -210,17 +258,19 @@ pub async fn update_channel(
             )?;
             let row = stmt.query_row([&channel_id], |row| {
                 let protocol: String = row.get(2)?;
+                let protocol = protocol.parse::<Protocol>().map_err(|e| {
+                    rusqlite::Error::FromSqlConversionFailure(
+                        2,
+                        rusqlite::types::Type::Text,
+                        e.into_boxed_dyn_error(),
+                    )
+                })?;
+                let base_url: String = row.get(3)?;
                 Ok(Channel {
                     id: row.get(0)?,
                     name: row.get(1)?,
-                    protocol: protocol.parse::<Protocol>().map_err(|e| {
-                        rusqlite::Error::FromSqlConversionFailure(
-                            2,
-                            rusqlite::types::Type::Text,
-                            e.into_boxed_dyn_error(),
-                        )
-                    })?,
-                    base_url: row.get(3)?,
+                    protocol,
+                    base_url: normalize_base_url(protocol, &base_url),
                     auth_type: row.get(4)?,
                     auth_ref: row.get(5)?,
                     enabled: row.get::<_, i64>(6)? != 0,
@@ -242,7 +292,7 @@ pub async fn update_channel(
             channel.name = v;
         }
         if let Some(v) = input.base_url {
-            channel.base_url = v;
+            channel.base_url = normalize_base_url(channel.protocol, &v);
         }
         if let Some(v) = input.auth_type {
             channel.auth_type = v;
@@ -313,17 +363,19 @@ pub async fn get_channel(db_path: PathBuf, channel_id: String) -> anyhow::Result
 
         stmt.query_row([channel_id], |row| {
             let protocol: String = row.get(2)?;
+            let protocol = protocol.parse::<Protocol>().map_err(|e| {
+                rusqlite::Error::FromSqlConversionFailure(
+                    2,
+                    rusqlite::types::Type::Text,
+                    e.into_boxed_dyn_error(),
+                )
+            })?;
+            let base_url: String = row.get(3)?;
             Ok(Channel {
                 id: row.get(0)?,
                 name: row.get(1)?,
-                protocol: protocol.parse::<Protocol>().map_err(|e| {
-                    rusqlite::Error::FromSqlConversionFailure(
-                        2,
-                        rusqlite::types::Type::Text,
-                        e.into_boxed_dyn_error(),
-                    )
-                })?,
-                base_url: row.get(3)?,
+                protocol,
+                base_url: normalize_base_url(protocol, &base_url),
                 auth_type: row.get(4)?,
                 auth_ref: row.get(5)?,
                 enabled: row.get::<_, i64>(6)? != 0,

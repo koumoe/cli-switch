@@ -32,7 +32,7 @@ import {
   type StatsSummary,
   type ChannelStats,
 } from "../api";
-import { formatDateTime, formatDuration, clampStr } from "../lib";
+import { formatDateTime, formatDuration, clampStr, terminalLabel } from "../lib";
 
 export function MonitorPage() {
   const [events, setEvents] = useState<UsageEvent[]>([]);
@@ -169,7 +169,7 @@ export function MonitorPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>渠道</TableHead>
-                  <TableHead>协议</TableHead>
+                  <TableHead>终端</TableHead>
                   <TableHead className="text-right">请求</TableHead>
                   <TableHead className="text-right">成功</TableHead>
                   <TableHead className="text-right">失败</TableHead>
@@ -181,7 +181,7 @@ export function MonitorPage() {
                   <TableRow key={cs.channel_id}>
                     <TableCell className="font-medium">{cs.name}</TableCell>
                     <TableCell>
-                      <Badge variant="outline">{cs.protocol}</Badge>
+                      <Badge variant="outline">{terminalLabel(cs.protocol)}</Badge>
                     </TableCell>
                     <TableCell className="text-right">{cs.requests}</TableCell>
                     <TableCell className="text-right text-success">
@@ -222,13 +222,13 @@ export function MonitorPage() {
         <CardContent className="p-0">
           <Table>
             <TableHeader>
-              <TableRow>
-                <TableHead className="w-[160px]">时间</TableHead>
-                <TableHead>协议</TableHead>
-                <TableHead>渠道</TableHead>
-                <TableHead>模型</TableHead>
-                <TableHead>状态</TableHead>
-                <TableHead className="text-right">延迟</TableHead>
+                <TableRow>
+                  <TableHead className="w-[160px]">时间</TableHead>
+                  <TableHead>终端</TableHead>
+                  <TableHead>渠道</TableHead>
+                  <TableHead>模型</TableHead>
+                  <TableHead>状态</TableHead>
+                  <TableHead className="text-right">延迟</TableHead>
                 <TableHead>错误</TableHead>
               </TableRow>
             </TableHeader>
@@ -249,7 +249,7 @@ export function MonitorPage() {
                       {formatDateTime(e.ts_ms)}
                     </TableCell>
                     <TableCell>
-                      <Badge variant="outline">{e.protocol}</Badge>
+                      <Badge variant="outline">{terminalLabel(e.protocol)}</Badge>
                     </TableCell>
                     <TableCell className="text-sm">
                       {channelNames.get(e.channel_id) ?? "-"}

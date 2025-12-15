@@ -213,7 +213,7 @@ export function SettingsPage() {
           <div className="mt-6 p-4 rounded-lg bg-muted/50">
             <p className="text-sm text-muted-foreground">
               CliSwitch 是一个本地多渠道 CLI 代理工具，用于管理和切换多个 AI API
-              服务。支持 OpenAI、Anthropic、Gemini 等协议，提供高可用性和自动故障转移。
+              服务。支持 Claude Code、Codex、Gemini 等终端入口，提供高可用性和自动故障转移。
             </p>
           </div>
         </CardContent>
