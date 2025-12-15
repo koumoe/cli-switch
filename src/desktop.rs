@@ -3,6 +3,7 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::time::Duration;
 
 use cliswitch::{app, server, storage};
+use muda::{Menu, PredefinedMenuItem, Submenu};
 use tao::dpi::LogicalSize;
 #[cfg(target_os = "macos")]
 use tao::platform::macos::WindowBuilderExtMacOS;
@@ -37,6 +38,25 @@ pub async fn run(port: u16) -> anyhow::Result<()> {
 
     wait_for_health(&base_url).await?;
 
+    // 创建菜单
+    let menu = Menu::new();
+    let edit_menu = Submenu::new("Edit", true);
+    edit_menu
+        .append_items(&[
+            &PredefinedMenuItem::undo(None),
+            &PredefinedMenuItem::redo(None),
+            &PredefinedMenuItem::separator(),
+            &PredefinedMenuItem::cut(None),
+            &PredefinedMenuItem::copy(None),
+            &PredefinedMenuItem::paste(None),
+            &PredefinedMenuItem::select_all(None),
+        ])
+        .ok();
+    menu.append(&edit_menu).ok();
+
+    #[cfg(target_os = "macos")]
+    menu.init_for_nsapp();
+
     let event_loop = EventLoop::new();
     let window_builder = WindowBuilder::new()
         .with_title("CliSwitch")
@@ -66,6 +86,7 @@ pub async fn run(port: u16) -> anyhow::Result<()> {
         }
 
         let _ = &webview;
+        let _ = &menu;
     })
 }
 
