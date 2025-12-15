@@ -115,18 +115,80 @@ npm run build
 curl http://127.0.0.1:3210/api/health
 ```
 
+### 代理配置示例（MVP）
+
+当前代理逻辑：按 `protocol` 选择**第一个启用的**渠道（按 `name` 排序），并将请求原样透传到该渠道的 `base_url`。
+
+支持的 `auth_type`：
+
+- `bearer`：注入 `Authorization: Bearer <auth_ref>`
+- `x-api-key`：注入 `x-api-key: <auth_ref>`（Anthropic 常用）
+- `x-goog-api-key`：注入 `x-goog-api-key: <auth_ref>`（Gemini 可用）
+- `query`：在 URL query 里追加 `key=<auth_ref>`（Gemini 常用）
+
+创建 OpenAI 渠道（示例）：
+
+```bash
+curl -X POST http://127.0.0.1:3210/api/channels \
+  -H 'content-type: application/json' \
+  -d '{
+    "name": "openai-main",
+    "protocol": "openai",
+    "base_url": "https://api.openai.com/v1",
+    "auth_type": "bearer",
+    "auth_ref": "<OPENAI_API_KEY>",
+    "enabled": true
+  }'
+```
+
+创建 Anthropic 渠道（示例）：
+
+```bash
+curl -X POST http://127.0.0.1:3210/api/channels \
+  -H 'content-type: application/json' \
+  -d '{
+    "name": "anthropic-main",
+    "protocol": "anthropic",
+    "base_url": "https://api.anthropic.com/v1",
+    "auth_type": "x-api-key",
+    "auth_ref": "<ANTHROPIC_API_KEY>",
+    "enabled": true
+  }'
+```
+
+创建 Gemini 渠道（示例）：
+
+```bash
+curl -X POST http://127.0.0.1:3210/api/channels \
+  -H 'content-type: application/json' \
+  -d '{
+    "name": "gemini-main",
+    "protocol": "gemini",
+    "base_url": "https://generativelanguage.googleapis.com/v1beta",
+    "auth_type": "query",
+    "auth_ref": "<GEMINI_API_KEY>",
+    "enabled": true
+  }'
+```
+
+配置好渠道后，即可直接把 CLI 的 Base URL 指向 `http://127.0.0.1:3210`，并按原协议路径发起请求：
+
+- OpenAI：`/v1/*`
+- Anthropic：`/v1/messages`
+- Gemini：`/v1beta/*`
+
 ### 管理接口
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET | `/api/channels` | 获取渠道列表 |
 | POST | `/api/channels` | 创建渠道 |
-| PUT | `/api/channels/:id` | 更新渠道 |
-| POST | `/api/channels/:id/enable` | 启用渠道 |
-| POST | `/api/channels/:id/disable` | 禁用渠道 |
+| PUT | `/api/channels/{id}` | 更新渠道 |
+| POST | `/api/channels/{id}/enable` | 启用渠道 |
+| POST | `/api/channels/{id}/disable` | 禁用渠道 |
 | GET | `/api/routes` | 获取路由列表 |
 | POST | `/api/routes` | 创建路由 |
-| PUT | `/api/routes/:id` | 更新路由 |
+| PUT | `/api/routes/{id}` | 更新路由 |
 
 ### 代理入口
 
