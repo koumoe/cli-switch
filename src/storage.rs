@@ -112,6 +112,32 @@ pub fn init_db(db_path: &Path) -> anyhow::Result<()> {
     conn.execute_batch(migration)
         .with_context(|| "执行 migrations/001_init.sql 失败")?;
 
+    ensure_usage_events_schema(&conn)?;
+
+    Ok(())
+}
+
+fn ensure_usage_events_schema(conn: &Connection) -> anyhow::Result<()> {
+    ensure_column(conn, "usage_events", "ttft_ms", "INTEGER NULL")?;
+    Ok(())
+}
+
+fn ensure_column(conn: &Connection, table: &str, column: &str, column_def: &str) -> anyhow::Result<()> {
+    let mut stmt = conn.prepare(&format!("PRAGMA table_info({table})"))?;
+    let mut rows = stmt.query([])?;
+    while let Some(row) = rows.next()? {
+        let name: String = row.get(1)?;
+        if name == column {
+            return Ok(());
+        }
+    }
+
+    conn.execute(
+        &format!("ALTER TABLE {table} ADD COLUMN {column} {column_def}"),
+        [],
+    )
+    .with_context(|| format!("为 {table} 添加字段 {column} 失败"))?;
+
     Ok(())
 }
 
@@ -862,6 +888,7 @@ pub struct UsageEvent {
     pub http_status: Option<i64>,
     pub error_kind: Option<String>,
     pub latency_ms: i64,
+    pub ttft_ms: Option<i64>,
     pub prompt_tokens: Option<i64>,
     pub completion_tokens: Option<i64>,
     pub total_tokens: Option<i64>,
@@ -879,6 +906,7 @@ pub struct CreateUsageEvent {
     pub http_status: Option<i64>,
     pub error_kind: Option<String>,
     pub latency_ms: i64,
+    pub ttft_ms: Option<i64>,
     pub prompt_tokens: Option<i64>,
     pub completion_tokens: Option<i64>,
     pub total_tokens: Option<i64>,
@@ -893,9 +921,9 @@ pub async fn insert_usage_event(db_path: PathBuf, input: CreateUsageEvent) -> an
             INSERT INTO usage_events (
               id, ts_ms, protocol, route_id, channel_id, model,
               success, http_status, error_kind, latency_ms,
-              prompt_tokens, completion_tokens, total_tokens, estimated_cost_usd
+              ttft_ms, prompt_tokens, completion_tokens, total_tokens, estimated_cost_usd
             )
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
             "#,
             params![
                 id,
@@ -908,6 +936,7 @@ pub async fn insert_usage_event(db_path: PathBuf, input: CreateUsageEvent) -> an
                 input.http_status,
                 input.error_kind,
                 input.latency_ms,
+                input.ttft_ms,
                 input.prompt_tokens,
                 input.completion_tokens,
                 input.total_tokens,
@@ -928,7 +957,7 @@ pub async fn list_usage_events_recent(
             r#"
             SELECT id, ts_ms, protocol, route_id, channel_id, model,
                    success, http_status, error_kind, latency_ms,
-                   prompt_tokens, completion_tokens, total_tokens, estimated_cost_usd
+                   ttft_ms, prompt_tokens, completion_tokens, total_tokens, estimated_cost_usd
             FROM usage_events
             ORDER BY ts_ms DESC
             LIMIT ?1
@@ -953,10 +982,11 @@ pub async fn list_usage_events_recent(
                 http_status: row.get(7)?,
                 error_kind: row.get(8)?,
                 latency_ms: row.get(9)?,
-                prompt_tokens: row.get(10)?,
-                completion_tokens: row.get(11)?,
-                total_tokens: row.get(12)?,
-                estimated_cost_usd: row.get(13)?,
+                ttft_ms: row.get(10)?,
+                prompt_tokens: row.get(11)?,
+                completion_tokens: row.get(12)?,
+                total_tokens: row.get(13)?,
+                estimated_cost_usd: row.get(14)?,
             })
         })?;
         let mut out = Vec::new();

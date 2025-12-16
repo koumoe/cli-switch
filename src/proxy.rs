@@ -1,7 +1,10 @@
 use axum::body::{Body, to_bytes};
 use axum::http::{HeaderMap, HeaderName, Request, Response};
+use bytes::Bytes;
 use futures_util::StreamExt as _;
 use reqwest::Url;
+use std::pin::Pin;
+use std::task::{Context, Poll};
 use std::time::Instant;
 
 use crate::storage::{self, Channel, Protocol};
@@ -57,23 +60,35 @@ pub async fn forward(
         .send()
         .await
         .map_err(|e| {
-            record_usage_event(
-                db_path.clone(),
+            spawn_usage_event(storage::CreateUsageEvent {
+                ts_ms: storage::now_ms(),
                 protocol,
-                &channel,
-                model.clone(),
-                None,
-                started,
-                e.to_string(),
-            );
+                route_id: None,
+                channel_id: channel.id.clone(),
+                model: model.clone(),
+                success: false,
+                http_status: None,
+                error_kind: Some(format!("upstream_error:{}", truncate(&e.to_string(), 240))),
+                latency_ms: started.elapsed().as_millis() as i64,
+                ttft_ms: None,
+                prompt_tokens: None,
+                completion_tokens: None,
+                total_tokens: None,
+                estimated_cost_usd: None,
+            }, db_path.clone());
             ProxyError::Upstream(e.to_string())
         })?;
 
     let status = upstream.status();
     let headers = filtered_headers(upstream.headers());
-    let stream = upstream
-        .bytes_stream()
-        .map(|chunk| chunk.map_err(std::io::Error::other));
+    let content_type = upstream
+        .headers()
+        .get(axum::http::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    let is_sse = content_type.starts_with("text/event-stream");
+    let is_json = content_type.contains("application/json") || content_type.contains("+json");
 
     let mut resp = Response::builder().status(status);
     if let Some(h) = resp.headers_mut() {
@@ -82,22 +97,57 @@ pub async fn forward(
         }
     }
 
-    tracing::event!(
-        tracing::Level::DEBUG,
-        protocol = protocol.as_str(),
-        channel_id = %channel.id,
-        latency_ms = started.elapsed().as_millis() as u64,
-        "proxy request finished"
-    );
+    if !is_sse && is_json && upstream.content_length().unwrap_or(0) <= 8 * 1024 * 1024 {
+        let bytes = upstream
+            .bytes()
+            .await
+            .map_err(|e| ProxyError::Upstream(e.to_string()))?;
 
-    record_usage_event(
-        db_path,
-        protocol,
-        &channel,
-        model,
-        Some(status.as_u16() as i64),
-        started,
-        String::new(),
+        let duration_ms = started.elapsed().as_millis() as i64;
+        let usage = parse_usage_from_json(protocol, &bytes);
+        let (prompt_tokens, completion_tokens, total_tokens) = usage.as_tuple();
+
+        let http_status = Some(status.as_u16() as i64);
+        let success = status.is_success();
+        let error_kind = (!success).then(|| format!("upstream_http:{}", status.as_u16()));
+
+        spawn_usage_event(
+            storage::CreateUsageEvent {
+                ts_ms: storage::now_ms(),
+                protocol,
+                route_id: None,
+                channel_id: channel.id.clone(),
+                model,
+                success,
+                http_status,
+                error_kind,
+                latency_ms: duration_ms,
+                ttft_ms: None,
+                prompt_tokens,
+                completion_tokens,
+                total_tokens,
+                estimated_cost_usd: None,
+            },
+            db_path,
+        );
+
+        return resp
+            .body(Body::from(bytes))
+            .map_err(|e| ProxyError::Upstream(e.to_string()));
+    }
+
+    let stream = InstrumentedStream::new(
+        upstream.bytes_stream().boxed(),
+        StreamRecordContext {
+            db_path,
+            protocol,
+            channel_id: channel.id.clone(),
+            model,
+            http_status: status.as_u16() as i64,
+            status_is_success: status.is_success(),
+            started,
+            parse_sse: is_sse,
+        },
     );
 
     resp.body(Body::from_stream(stream))
@@ -378,51 +428,260 @@ fn extract_model_from_body(headers: &HeaderMap, body: &[u8]) -> Option<String> {
         .map(|s| s.to_string())
 }
 
-fn record_usage_event(
+#[derive(Debug, Default, Clone, Copy)]
+struct TokenUsage {
+    prompt_tokens: Option<i64>,
+    completion_tokens: Option<i64>,
+    total_tokens: Option<i64>,
+}
+
+impl TokenUsage {
+    fn as_tuple(self) -> (Option<i64>, Option<i64>, Option<i64>) {
+        let total = match (self.total_tokens, self.prompt_tokens, self.completion_tokens) {
+            (Some(t), _, _) => Some(t),
+            (None, Some(p), Some(c)) => Some(p + c),
+            _ => None,
+        };
+        (self.prompt_tokens, self.completion_tokens, total)
+    }
+
+    fn merge(&mut self, other: TokenUsage) {
+        if other.prompt_tokens.is_some() {
+            self.prompt_tokens = other.prompt_tokens;
+        }
+        if other.completion_tokens.is_some() {
+            self.completion_tokens = other.completion_tokens;
+        }
+        if other.total_tokens.is_some() {
+            self.total_tokens = other.total_tokens;
+        }
+    }
+}
+
+fn parse_usage_from_json(protocol: Protocol, bytes: &[u8]) -> TokenUsage {
+    let Ok(v) = serde_json::from_slice::<serde_json::Value>(bytes) else {
+        return TokenUsage::default();
+    };
+    extract_usage_from_value(protocol, &v)
+}
+
+fn extract_usage_from_value(protocol: Protocol, v: &serde_json::Value) -> TokenUsage {
+    match protocol {
+        Protocol::Openai => extract_openai_usage(v),
+        Protocol::Anthropic => extract_anthropic_usage(v),
+        Protocol::Gemini => extract_gemini_usage(v),
+    }
+}
+
+fn extract_openai_usage(v: &serde_json::Value) -> TokenUsage {
+    // /v1/chat/completions /v1/completions: usage.prompt_tokens / usage.completion_tokens
+    // /v1/responses: usage.input_tokens / usage.output_tokens
+    let usage = v.get("usage").or_else(|| v.get("response").and_then(|r| r.get("usage")));
+    if let Some(u) = usage {
+        let prompt_tokens = u
+            .get("prompt_tokens")
+            .or_else(|| u.get("input_tokens"))
+            .and_then(|n| n.as_i64());
+        let completion_tokens = u
+            .get("completion_tokens")
+            .or_else(|| u.get("output_tokens"))
+            .and_then(|n| n.as_i64());
+        let total_tokens = u.get("total_tokens").and_then(|n| n.as_i64());
+        return TokenUsage {
+            prompt_tokens,
+            completion_tokens,
+            total_tokens,
+        };
+    }
+    TokenUsage::default()
+}
+
+fn extract_anthropic_usage(v: &serde_json::Value) -> TokenUsage {
+    let usage = v
+        .get("usage")
+        .or_else(|| v.get("message").and_then(|m| m.get("usage")));
+    if let Some(u) = usage {
+        let prompt_tokens = u.get("input_tokens").and_then(|n| n.as_i64());
+        let completion_tokens = u.get("output_tokens").and_then(|n| n.as_i64());
+        return TokenUsage {
+            prompt_tokens,
+            completion_tokens,
+            total_tokens: None,
+        };
+    }
+    TokenUsage::default()
+}
+
+fn extract_gemini_usage(v: &serde_json::Value) -> TokenUsage {
+    // Gemini returns usageMetadata.promptTokenCount / candidatesTokenCount / totalTokenCount
+    let usage = v.get("usageMetadata");
+    if let Some(u) = usage {
+        let prompt_tokens = u.get("promptTokenCount").and_then(|n| n.as_i64());
+        let completion_tokens = u.get("candidatesTokenCount").and_then(|n| n.as_i64());
+        let total_tokens = u.get("totalTokenCount").and_then(|n| n.as_i64());
+        return TokenUsage {
+            prompt_tokens,
+            completion_tokens,
+            total_tokens,
+        };
+    }
+    TokenUsage::default()
+}
+
+fn spawn_usage_event(input: storage::CreateUsageEvent, db_path: std::path::PathBuf) {
+    tokio::spawn(async move {
+        let _ = storage::insert_usage_event(db_path, input).await;
+    });
+}
+
+#[derive(Clone)]
+struct StreamRecordContext {
     db_path: std::path::PathBuf,
     protocol: Protocol,
-    channel: &Channel,
+    channel_id: String,
     model: Option<String>,
-    http_status: Option<i64>,
+    http_status: i64,
+    status_is_success: bool,
     started: Instant,
-    error: String,
-) {
-    let ts_ms = storage::now_ms();
-    let latency_ms = started.elapsed().as_millis() as i64;
-    let success = http_status.is_some_and(|s| (200..300).contains(&s));
+    parse_sse: bool,
+}
 
-    let error_kind = if success {
-        None
-    } else if let Some(status) = http_status {
-        Some(format!("upstream_http:{status}"))
-    } else if error.is_empty() {
-        Some("upstream_error".to_string())
-    } else {
-        Some(format!("upstream_error:{}", truncate(&error, 240)))
-    };
+struct InstrumentedStream {
+    inner: futures_util::stream::BoxStream<'static, Result<Bytes, reqwest::Error>>,
+    ctx: StreamRecordContext,
+    finalized: bool,
+    ttft_ms: Option<i64>,
+    usage: TokenUsage,
+    sse_buf: Vec<u8>,
+    stream_error: Option<String>,
+}
 
-    let channel_id = channel.id.clone();
-    tokio::spawn(async move {
-        let _ = storage::insert_usage_event(
-            db_path,
+impl InstrumentedStream {
+    fn new(
+        inner: futures_util::stream::BoxStream<'static, Result<Bytes, reqwest::Error>>,
+        ctx: StreamRecordContext,
+    ) -> Self {
+        Self {
+            inner,
+            ctx,
+            finalized: false,
+            ttft_ms: None,
+            usage: TokenUsage::default(),
+            sse_buf: Vec::new(),
+            stream_error: None,
+        }
+    }
+
+    fn on_chunk(&mut self, bytes: &Bytes) {
+        if self.ttft_ms.is_none() {
+            self.ttft_ms = Some(self.ctx.started.elapsed().as_millis() as i64);
+        }
+        if self.ctx.parse_sse {
+            self.consume_sse(bytes);
+        }
+    }
+
+    fn consume_sse(&mut self, bytes: &Bytes) {
+        const MAX_SSE_BUF: usize = 256 * 1024;
+        if self.sse_buf.len() < MAX_SSE_BUF {
+            let remain = MAX_SSE_BUF - self.sse_buf.len();
+            self.sse_buf
+                .extend_from_slice(&bytes[..bytes.len().min(remain)]);
+        }
+
+        while let Some(nl) = self.sse_buf.iter().position(|b| *b == b'\n') {
+            let line = self.sse_buf.drain(..=nl).collect::<Vec<u8>>();
+            let Ok(mut s) = std::str::from_utf8(&line) else {
+                continue;
+            };
+            s = s.trim();
+            if !s.starts_with("data:") {
+                continue;
+            }
+            let data = s["data:".len()..].trim();
+            if data.is_empty() || data == "[DONE]" {
+                continue;
+            }
+            let Ok(v) = serde_json::from_str::<serde_json::Value>(data) else {
+                continue;
+            };
+            self.usage.merge(extract_usage_from_value(self.ctx.protocol, &v));
+        }
+    }
+
+    fn finalize(&mut self) {
+        if self.finalized {
+            return;
+        }
+        self.finalized = true;
+
+        let duration_ms = self.ctx.started.elapsed().as_millis() as i64;
+        let (prompt_tokens, completion_tokens, total_tokens) = self.usage.as_tuple();
+
+        let success = self.ctx.status_is_success && self.stream_error.is_none();
+        let error_kind = if success {
+            None
+        } else if !self.ctx.status_is_success {
+            Some(format!("upstream_http:{}", self.ctx.http_status))
+        } else if let Some(err) = self.stream_error.as_deref() {
+            Some(format!("stream_error:{}", truncate(err, 240)))
+        } else {
+            Some("upstream_error".to_string())
+        };
+
+        tracing::event!(
+            tracing::Level::DEBUG,
+            protocol = self.ctx.protocol.as_str(),
+            channel_id = %self.ctx.channel_id,
+            http_status = self.ctx.http_status,
+            ttft_ms = self.ttft_ms.unwrap_or(-1),
+            duration_ms,
+            "proxy request finished"
+        );
+
+        spawn_usage_event(
             storage::CreateUsageEvent {
-                ts_ms,
-                protocol,
+                ts_ms: storage::now_ms(),
+                protocol: self.ctx.protocol,
                 route_id: None,
-                channel_id,
-                model,
+                channel_id: self.ctx.channel_id.clone(),
+                model: self.ctx.model.clone(),
                 success,
-                http_status,
+                http_status: Some(self.ctx.http_status),
                 error_kind,
-                latency_ms,
-                prompt_tokens: None,
-                completion_tokens: None,
-                total_tokens: None,
+                latency_ms: duration_ms,
+                ttft_ms: self.ttft_ms,
+                prompt_tokens,
+                completion_tokens,
+                total_tokens,
                 estimated_cost_usd: None,
             },
-        )
-        .await;
-    });
+            self.ctx.db_path.clone(),
+        );
+    }
+}
+
+impl futures_util::Stream for InstrumentedStream {
+    type Item = Result<Bytes, std::io::Error>;
+
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        let polled = self.inner.as_mut().poll_next(cx);
+        match polled {
+            Poll::Ready(Some(Ok(bytes))) => {
+                self.on_chunk(&bytes);
+                Poll::Ready(Some(Ok(bytes)))
+            }
+            Poll::Ready(Some(Err(e))) => {
+                self.stream_error = Some(e.to_string());
+                Poll::Ready(Some(Err(std::io::Error::other(e))))
+            }
+            Poll::Ready(None) => {
+                self.finalize();
+                Poll::Ready(None)
+            }
+            Poll::Pending => Poll::Pending,
+        }
+    }
 }
 
 fn truncate(s: &str, max_len: usize) -> String {
