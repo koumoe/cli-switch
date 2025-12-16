@@ -62,47 +62,10 @@ jobs:
           fi
 
   ci_gate:
-    name: CI Gate (fmt/clippy/test)
+    name: CI Gate
     needs: validate
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "25.2.1"
-          cache: npm
-          cache-dependency-path: ui/package-lock.json
-
-      - name: Install UI dependencies
-        working-directory: ui
-        run: npm ci
-
-      - name: Build UI
-        working-directory: ui
-        run: npm run build
-
-      - name: Setup Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: "1.92.0"
-          components: rustfmt, clippy
-
-      - name: Rust cache
-        uses: Swatinem/rust-cache@v2
-
-      - name: Rust fmt (check)
-        run: cargo fmt --all -- --check
-
-      - name: Rust clippy
-        run: cargo clippy --no-default-features --features embed-ui --all-targets -- -D warnings
-
-      - name: Rust test
-        run: cargo test --no-default-features --features embed-ui
+    uses: ./.github/workflows/ci.yml
+    secrets: inherit
 
   linux_desktop_amd64:
     name: Linux Desktop (x86_64)
@@ -153,8 +116,7 @@ jobs:
         run: |
           set -euo pipefail
           version="${{ needs.validate.outputs.version }}"
-          target="$(rustc -vV | sed -n 's/^host: //p')"
-          pkg="cliswitch-${version}-${target}-desktop"
+          pkg="cliswitch-${version}-linux-x64"
 
           rm -rf dist
           mkdir -p "dist/${pkg}"
@@ -162,12 +124,7 @@ jobs:
           cp README.md LICENSE "dist/${pkg}/"
 
           tar -C dist -czf "dist/${pkg}.tar.gz" "${pkg}"
-          python - <<PY
-          import hashlib, pathlib
-          p = pathlib.Path("dist/${pkg}.tar.gz")
-          h = hashlib.sha256(p.read_bytes()).hexdigest()
-          pathlib.Path(str(p) + ".sha256").write_text(f"{h}  {p.name}\\n", encoding="utf-8")
-          PY
+          sha256sum "dist/${pkg}.tar.gz" | cut -d' ' -f1 > "dist/${pkg}.tar.gz.sha256"
 
       - name: Upload dist artifacts
         uses: actions/upload-artifact@v4
@@ -177,9 +134,8 @@ jobs:
 
   linux_desktop_arm64:
     name: Linux Desktop (aarch64)
-    if: vars.RELEASE_LINUX_DESKTOP_ARM64 == 'true'
     needs: [validate, ci_gate]
-    runs-on: [self-hosted, Linux, ARM64]
+    runs-on: ubuntu-24.04-arm
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -225,8 +181,7 @@ jobs:
         run: |
           set -euo pipefail
           version="${{ needs.validate.outputs.version }}"
-          target="$(rustc -vV | sed -n 's/^host: //p')"
-          pkg="cliswitch-${version}-${target}-desktop"
+          pkg="cliswitch-${version}-linux-arm64"
 
           rm -rf dist
           mkdir -p "dist/${pkg}"
@@ -234,12 +189,7 @@ jobs:
           cp README.md LICENSE "dist/${pkg}/"
 
           tar -C dist -czf "dist/${pkg}.tar.gz" "${pkg}"
-          python - <<PY
-          import hashlib, pathlib
-          p = pathlib.Path("dist/${pkg}.tar.gz")
-          h = hashlib.sha256(p.read_bytes()).hexdigest()
-          pathlib.Path(str(p) + ".sha256").write_text(f"{h}  {p.name}\\n", encoding="utf-8")
-          PY
+          sha256sum "dist/${pkg}.tar.gz" | cut -d' ' -f1 > "dist/${pkg}.tar.gz.sha256"
 
       - name: Upload dist artifacts
         uses: actions/upload-artifact@v4
@@ -254,9 +204,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runs_on:
-          - macos-14
-          - macos-15-intel
+        include:
+          - runs_on: macos-14
+            arch: arm64
+          - runs_on: macos-15-intel
+            arch: x64
 
     steps:
       - name: Checkout
@@ -293,8 +245,7 @@ jobs:
         run: |
           set -euo pipefail
           version="${{ needs.validate.outputs.version }}"
-          target="$(rustc -vV | sed -n 's/^host: //p')"
-          pkg="cliswitch-${version}-${target}-desktop"
+          pkg="cliswitch-${version}-macos-${{ matrix.arch }}"
 
           rm -rf dist
           mkdir -p "dist/${pkg}"
@@ -302,17 +253,12 @@ jobs:
           cp README.md LICENSE "dist/${pkg}/"
 
           tar -C dist -czf "dist/${pkg}.tar.gz" "${pkg}"
-          python - <<PY
-          import hashlib, pathlib
-          p = pathlib.Path("dist/${pkg}.tar.gz")
-          h = hashlib.sha256(p.read_bytes()).hexdigest()
-          pathlib.Path(str(p) + ".sha256").write_text(f"{h}  {p.name}\\n", encoding="utf-8")
-          PY
+          shasum -a 256 "dist/${pkg}.tar.gz" | cut -d' ' -f1 > "dist/${pkg}.tar.gz.sha256"
 
       - name: Upload dist artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: dist-macos-${{ matrix.runs_on }}
+          name: dist-macos-${{ matrix.arch }}
           path: dist/*.*
 
   windows_desktop_amd64:
@@ -357,22 +303,21 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $version = "${{ needs.validate.outputs.version }}"
-          $target = "x86_64-pc-windows-msvc"
-          $pkg = "cliswitch-$version-$target-desktop"
+          $pkg = "cliswitch-$version-windows-x64"
 
           if (Test-Path dist) { Remove-Item -Recurse -Force dist }
           New-Item -ItemType Directory -Path "dist\\$pkg" | Out-Null
-          Copy-Item "target\\$target\\release\\cliswitch.exe" "dist\\$pkg\\cliswitch.exe"
+          Copy-Item "target\\x86_64-pc-windows-msvc\\release\\cliswitch.exe" "dist\\$pkg\\cliswitch.exe"
           Copy-Item "README.md","LICENSE" "dist\\$pkg\\"
 
           Compress-Archive -Path "dist\\$pkg" -DestinationPath "dist\\$pkg.zip" -Force
           $hash = (Get-FileHash -Algorithm SHA256 "dist\\$pkg.zip").Hash.ToLower()
-          "$hash  $pkg.zip" | Out-File -FilePath "dist\\$pkg.zip.sha256" -Encoding utf8
+          $hash | Out-File -FilePath "dist\\$pkg.zip.sha256" -Encoding utf8 -NoNewline
 
       - name: Upload dist artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: dist-windows-x86_64
+          name: dist-windows-x64
           path: dist/*.*
 
   windows_desktop_arm64:
@@ -417,22 +362,21 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $version = "${{ needs.validate.outputs.version }}"
-          $target = "aarch64-pc-windows-msvc"
-          $pkg = "cliswitch-$version-$target-desktop"
+          $pkg = "cliswitch-$version-windows-arm64"
 
           if (Test-Path dist) { Remove-Item -Recurse -Force dist }
           New-Item -ItemType Directory -Path "dist\\$pkg" | Out-Null
-          Copy-Item "target\\$target\\release\\cliswitch.exe" "dist\\$pkg\\cliswitch.exe"
+          Copy-Item "target\\aarch64-pc-windows-msvc\\release\\cliswitch.exe" "dist\\$pkg\\cliswitch.exe"
           Copy-Item "README.md","LICENSE" "dist\\$pkg\\"
 
           Compress-Archive -Path "dist\\$pkg" -DestinationPath "dist\\$pkg.zip" -Force
           $hash = (Get-FileHash -Algorithm SHA256 "dist\\$pkg.zip").Hash.ToLower()
-          "$hash  $pkg.zip" | Out-File -FilePath "dist\\$pkg.zip.sha256" -Encoding utf8
+          $hash | Out-File -FilePath "dist\\$pkg.zip.sha256" -Encoding utf8 -NoNewline
 
       - name: Upload dist artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: dist-windows-aarch64
+          name: dist-windows-arm64
           path: dist/*.*
 
   publish:
@@ -443,10 +387,10 @@ jobs:
         needs.validate.result == 'success' &&
         needs.ci_gate.result == 'success' &&
         needs.linux_desktop_amd64.result == 'success' &&
+        needs.linux_desktop_arm64.result == 'success' &&
         needs.macos_desktop.result == 'success' &&
-        (needs.linux_desktop_arm64.result == 'success' || needs.linux_desktop_arm64.result == 'skipped') &&
-        needs.windows_desktop_arm64.result == 'success' &&
-        needs.windows_desktop_amd64.result == 'success'
+        needs.windows_desktop_amd64.result == 'success' &&
+        needs.windows_desktop_arm64.result == 'success'
       }}
     needs:
       - validate
