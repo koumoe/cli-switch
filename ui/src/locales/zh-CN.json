@@ -1,0 +1,256 @@
+{
+  "language": {
+    "zhCN": "简体中文",
+    "enUS": "English"
+  },
+  "nav": {
+    "overview": "概览",
+    "channels": "渠道",
+    "routes": "路由",
+    "monitor": "监控",
+    "settings": "设置"
+  },
+  "theme": {
+    "light": "浅色",
+    "dark": "深色",
+    "system": "跟随系统"
+  },
+  "status": {
+    "running": "运行中",
+    "offline": "离线",
+    "checking": "检测中..."
+  },
+  "common": {
+    "loading": "加载中...",
+    "refresh": "刷新",
+    "cancel": "取消",
+    "save": "保存",
+    "delete": "删除",
+    "add": "添加",
+    "open": "打开",
+    "enabled": "启用",
+    "disabled": "禁用",
+    "actions": "操作",
+    "channel": "渠道",
+    "route": "路由"
+  },
+  "overview": {
+    "title": "概览",
+    "subtitle": "服务状态、渠道健康与最近请求",
+    "cards": {
+      "activeChannels": "活跃渠道",
+      "todayRequests": "今日请求",
+      "successRate": "成功率",
+      "totalTokens": "总 Token"
+    },
+    "channelStatus": {
+      "title": "渠道状态",
+      "subtitle": "已配置渠道的启用状态",
+      "empty": "暂无渠道"
+    },
+    "recent": {
+      "title": "最近请求",
+      "subtitle": "最近 10 条请求记录",
+      "empty": "暂无请求"
+    },
+    "toast": {
+      "loadFail": "加载失败"
+    }
+  },
+  "channels": {
+    "title": "渠道",
+    "subtitle": "管理上游 API 渠道的配置和连接",
+    "new": "新建渠道",
+    "table": {
+      "name": "名称",
+      "terminal": "终端",
+      "baseUrl": "Base URL",
+      "status": "状态",
+      "updatedAt": "更新时间",
+      "empty": "暂无渠道，点击「新建渠道」添加"
+    },
+    "actions": {
+      "test": "测试连接",
+      "edit": "编辑",
+      "delete": "删除",
+      "enable": "启用",
+      "disable": "禁用"
+    },
+    "modal": {
+      "createTitle": "新建渠道",
+      "editTitle": "编辑渠道",
+      "description": "配置 API 渠道的连接信息",
+      "name": "名称",
+      "terminal": "终端",
+      "baseUrl": "Base URL",
+      "apiKey": "API Key / Token",
+      "enabled": "启用"
+    },
+    "deleteDialog": {
+      "title": "删除渠道",
+      "confirmWithName": "确定删除渠道 \"{{name}}\"？此操作不可恢复。",
+      "confirm": "确定删除该渠道？此操作不可恢复。"
+    },
+    "toast": {
+      "loadFail": "加载渠道失败",
+      "createOk": "渠道创建成功",
+      "updateOk": "渠道更新成功",
+      "actionFail": "操作失败",
+      "missingId": "缺少 ID",
+      "disabledOk": "已禁用 {{name}}",
+      "enabledOk": "已启用 {{name}}",
+      "deletedOk": "已删除 {{name}}",
+      "deleteFail": "删除失败",
+      "testFail": "测试失败",
+      "nameRequired": "名称不能为空",
+      "baseUrlRequired": "Base URL 不能为空",
+      "testReachableOkTitle": "{{name}} 连通正常",
+      "testReachableOkDesc": "状态: {{status}}, 延迟: {{latency}}ms",
+      "testReachableBadTitle": "{{name}} 可达但返回异常",
+      "testUnreachableTitle": "{{name}} 无法连接",
+      "testTimeout": "连接超时"
+    }
+  },
+  "routes": {
+    "title": "路由",
+    "subtitle": "配置请求路由规则和渠道优先级",
+    "new": "新建路由",
+    "table": {
+      "name": "名称",
+      "terminal": "终端",
+      "modelMatch": "模型匹配",
+      "status": "状态",
+      "updatedAt": "更新时间",
+      "empty": "暂无路由，点击「新建路由」添加"
+    },
+    "actions": {
+      "channels": "渠道",
+      "edit": "编辑",
+      "delete": "删除"
+    },
+    "modal": {
+      "createTitle": "新建路由",
+      "editTitle": "编辑路由",
+      "description": "配置路由规则",
+      "name": "名称",
+      "terminal": "终端",
+      "modelMatchOptional": "模型匹配（可选）",
+      "modelMatchHint": "留空则匹配该终端入口的所有模型",
+      "enabled": "启用"
+    },
+    "deleteDialog": {
+      "title": "删除路由",
+      "confirmWithName": "确定删除路由 \"{{name}}\"？此操作不可恢复。",
+      "confirm": "确定删除该路由？此操作不可恢复。"
+    },
+    "manage": {
+      "title": "渠道优先级：{{name}}",
+      "description": "拖拽或使用按钮调整渠道优先级，从上到下依次尝试",
+      "assignedTitle": "已绑定渠道",
+      "assignedEmpty": "暂无绑定渠道",
+      "availableTitle": "可添加渠道",
+      "availableEmpty": "无可添加渠道"
+    },
+    "toast": {
+      "loadFail": "加载失败",
+      "createOk": "路由创建成功",
+      "updateOk": "路由更新成功",
+      "actionFail": "操作失败",
+      "saveFail": "保存失败",
+      "prioritySaved": "渠道优先级已保存",
+      "deletedOk": "已删除 {{name}}",
+      "deleteFail": "删除失败",
+      "nameRequired": "名称不能为空",
+      "missingId": "缺少 ID"
+    }
+  },
+  "monitor": {
+    "title": "监控",
+    "subtitle": "请求日志、统计和渠道性能",
+    "range": {
+      "today": "今天",
+      "month": "本月"
+    },
+    "cards": {
+      "totalRequests": "总请求",
+      "successRate": "成功率",
+      "failed": "失败数",
+      "estimatedCost": "预估成本"
+    },
+    "channelStats": {
+      "title": "渠道统计",
+      "subtitle": "各渠道的请求量和性能",
+      "headers": {
+        "channel": "渠道",
+        "terminal": "终端",
+        "requests": "请求",
+        "success": "成功",
+        "failed": "失败",
+        "avgLatency": "平均延迟"
+      }
+    },
+    "log": {
+      "title": "请求日志",
+      "subtitle": "最近 100 条请求记录",
+      "onlyFailures": "仅失败",
+      "headers": {
+        "time": "时间",
+        "terminal": "终端",
+        "channel": "渠道",
+        "model": "模型",
+        "status": "状态",
+        "latency": "延迟",
+        "error": "错误"
+      },
+      "empty": "暂无请求记录"
+    },
+    "toast": {
+      "loadFail": "加载失败"
+    }
+  },
+  "settings": {
+    "title": "设置",
+    "subtitle": "应用配置和系统信息",
+    "appearance": {
+      "title": "外观",
+      "subtitle": "自定义应用的视觉风格",
+      "theme": "主题",
+      "themeHint": "选择浅色、深色或跟随系统设置"
+    },
+    "language": {
+      "title": "语言",
+      "subtitle": "切换界面显示语言",
+      "label": "界面语言"
+    },
+    "proxy": {
+      "title": "代理配置",
+      "subtitle": "配置 CLI 的 API 端点地址",
+      "host": "服务地址",
+      "hostHint": "CLI 应连接到的主机名 / IP",
+      "port": "服务端口",
+      "portHint": "CLI 应连接到的端口号",
+      "endpoint": "API 端点：",
+      "endpointHint": "将此地址配置为你的 AI 工具的 API 端点即可使用。",
+      "backendListen": "后端监听："
+    },
+    "storage": {
+      "title": "数据存储",
+      "subtitle": "应用数据和配置文件位置",
+      "dataDir": "数据目录",
+      "dataDirHint": "存放数据库、日志和配置文件",
+      "dbFile": "数据库文件",
+      "openInDevTitle": "功能开发中",
+      "openInDevDesc": "打开文件夹功能将在后续版本中提供"
+    },
+    "about": {
+      "title": "关于",
+      "subtitle": "应用版本和系统信息",
+      "appName": "应用名称",
+      "version": "版本",
+      "backendStatus": "后端状态",
+      "description": "描述",
+      "descText": "通用 AI CLI 配置管理平台",
+      "intro": "CliSwitch 是一个本地多渠道 CLI 代理工具，用于管理和切换多个 AI API 服务。支持 Claude Code、Codex、Gemini 等终端入口，提供高可用性和自动故障转移。"
+    }
+  }
+}

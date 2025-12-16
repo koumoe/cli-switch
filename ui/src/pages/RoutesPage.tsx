@@ -32,6 +32,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui";
+import { useI18n } from "@/lib/i18n";
 import {
   listRoutes,
   listChannels,
@@ -54,6 +55,7 @@ function emptyDraft(): RouteDraft {
 }
 
 export function RoutesPage() {
+  const { t } = useI18n();
   const [routes, setRoutes] = useState<Route[]>([]);
   const [channels, setChannels] = useState<Channel[]>([]);
   const [loading, setLoading] = useState(false);
@@ -84,7 +86,7 @@ export function RoutesPage() {
       setRoutes(rs);
       setChannels(cs);
     } catch (e) {
-      toast.error("加载失败", { description: String(e) });
+      toast.error(t("routes.toast.loadFail"), { description: String(e) });
     } finally {
       setLoading(false);
     }
@@ -115,23 +117,23 @@ export function RoutesPage() {
 
   async function submitRoute() {
     try {
-      if (!draft.name.trim()) throw new Error("名称不能为空");
+      if (!draft.name.trim()) throw new Error(t("routes.toast.nameRequired"));
       if (routeMode === "create") {
         await createRoute({ ...draft, name: draft.name.trim() });
-        toast.success("路由创建成功");
+        toast.success(t("routes.toast.createOk"));
       } else {
-        if (!editRouteId) throw new Error("缺少 ID");
+        if (!editRouteId) throw new Error(t("routes.toast.missingId"));
         await updateRoute(editRouteId, {
           name: draft.name.trim(),
           match_model: draft.match_model,
           enabled: draft.enabled,
         });
-        toast.success("路由更新成功");
+        toast.success(t("routes.toast.updateOk"));
       }
       setRouteModalOpen(false);
       await refresh();
     } catch (e) {
-      toast.error("操作失败", { description: String(e) });
+      toast.error(t("routes.toast.actionFail"), { description: String(e) });
     }
   }
 
@@ -145,12 +147,12 @@ export function RoutesPage() {
     setDeleting(true);
     try {
       await deleteRoute(deleteTarget.id);
-      toast.success(`已删除 ${deleteTarget.name}`);
+      toast.success(t("routes.toast.deletedOk", { name: deleteTarget.name }));
       setDeleteOpen(false);
       setDeleteTarget(null);
       await refresh();
     } catch (e) {
-      toast.error("删除失败", { description: String(e) });
+      toast.error(t("routes.toast.deleteFail"), { description: String(e) });
     } finally {
       setDeleting(false);
     }
@@ -167,7 +169,7 @@ export function RoutesPage() {
         .map((i) => i.channel_id);
       setAssigned(ordered);
     } catch (e) {
-      toast.error("加载失败", { description: String(e) });
+      toast.error(t("routes.toast.loadFail"), { description: String(e) });
     } finally {
       setManageLoading(false);
     }
@@ -198,11 +200,11 @@ export function RoutesPage() {
     setManageLoading(true);
     try {
       await reorderRouteChannels(manageRoute.id, assigned);
-      toast.success("渠道优先级已保存");
+      toast.success(t("routes.toast.prioritySaved"));
       setManageOpen(false);
       setManageRoute(null);
     } catch (e) {
-      toast.error("保存失败", { description: String(e) });
+      toast.error(t("routes.toast.saveFail"), { description: String(e) });
     } finally {
       setManageLoading(false);
     }
@@ -221,14 +223,14 @@ export function RoutesPage() {
       {/* 页面标题 */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">路由</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">{t("routes.title")}</h1>
           <p className="text-muted-foreground text-sm mt-1">
-            配置请求路由规则和渠道优先级
+            {t("routes.subtitle")}
           </p>
         </div>
         <Button onClick={openCreate}>
           <Plus className="h-4 w-4 mr-2" />
-          新建路由
+          {t("routes.new")}
         </Button>
       </div>
 
@@ -238,12 +240,12 @@ export function RoutesPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>名称</TableHead>
-                <TableHead>终端</TableHead>
-                <TableHead>模型匹配</TableHead>
-                <TableHead>状态</TableHead>
-                <TableHead>更新时间</TableHead>
-                <TableHead className="w-[120px]">操作</TableHead>
+                <TableHead>{t("routes.table.name")}</TableHead>
+                <TableHead>{t("routes.table.terminal")}</TableHead>
+                <TableHead>{t("routes.table.modelMatch")}</TableHead>
+                <TableHead>{t("routes.table.status")}</TableHead>
+                <TableHead>{t("routes.table.updatedAt")}</TableHead>
+                <TableHead className="w-[120px]">{t("common.actions")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -253,7 +255,7 @@ export function RoutesPage() {
                     colSpan={6}
                     className="text-center text-muted-foreground py-8"
                   >
-                    暂无路由，点击「新建路由」添加
+                    {t("routes.table.empty")}
                   </TableCell>
                 </TableRow>
               ) : (
@@ -270,7 +272,7 @@ export function RoutesPage() {
                     </TableCell>
                     <TableCell>
                       <Badge variant={r.enabled ? "success" : "secondary"}>
-                        {r.enabled ? "启用" : "禁用"}
+                        {r.enabled ? t("common.enabled") : t("common.disabled")}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-muted-foreground text-sm">
@@ -283,13 +285,13 @@ export function RoutesPage() {
                           size="sm"
                           onClick={() => openManage(r)}
                         >
-                          渠道
+                          {t("routes.actions.channels")}
                         </Button>
                         <Button
                           variant="ghost"
                           size="icon"
                           onClick={() => openEdit(r)}
-                          title="编辑"
+                          title={t("routes.actions.edit")}
                         >
                           <Pencil className="h-4 w-4" />
                         </Button>
@@ -297,7 +299,7 @@ export function RoutesPage() {
                           variant="ghost"
                           size="icon"
                           onClick={() => onDelete(r)}
-                          title="删除"
+                          title={t("routes.actions.delete")}
                         >
                           <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
@@ -316,15 +318,15 @@ export function RoutesPage() {
         <DialogContent className="sm:max-w-[450px]">
           <DialogHeader>
             <DialogTitle>
-              {routeMode === "create" ? "新建路由" : "编辑路由"}
+              {routeMode === "create" ? t("routes.modal.createTitle") : t("routes.modal.editTitle")}
             </DialogTitle>
-            <DialogDescription>配置路由规则</DialogDescription>
+            <DialogDescription>{t("routes.modal.description")}</DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <label className="text-sm font-medium">名称</label>
+                <label className="text-sm font-medium">{t("routes.modal.name")}</label>
                 <Input
                   value={draft.name}
                   onChange={(e) =>
@@ -334,7 +336,7 @@ export function RoutesPage() {
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">终端</label>
+                <label className="text-sm font-medium">{t("routes.modal.terminal")}</label>
                 <Select
                   value={draft.protocol}
                   onValueChange={(v) =>
@@ -361,7 +363,7 @@ export function RoutesPage() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium">模型匹配（可选）</label>
+              <label className="text-sm font-medium">{t("routes.modal.modelMatchOptional")}</label>
               <Input
                 value={draft.match_model ?? ""}
                 onChange={(e) =>
@@ -373,12 +375,12 @@ export function RoutesPage() {
                 placeholder="gpt-4o / claude-3-5-sonnet"
               />
               <p className="text-xs text-muted-foreground">
-                留空则匹配该终端入口的所有模型
+                {t("routes.modal.modelMatchHint")}
               </p>
             </div>
 
             <div className="flex items-center justify-between">
-              <label className="text-sm font-medium">启用</label>
+              <label className="text-sm font-medium">{t("routes.modal.enabled")}</label>
               <Switch
                 checked={draft.enabled}
                 onCheckedChange={(v) => setDraft((d) => ({ ...d, enabled: v }))}
@@ -388,9 +390,9 @@ export function RoutesPage() {
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setRouteModalOpen(false)}>
-              取消
+              {t("common.cancel")}
             </Button>
-            <Button onClick={submitRoute}>保存</Button>
+            <Button onClick={submitRoute}>{t("common.save")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -405,11 +407,11 @@ export function RoutesPage() {
       >
         <DialogContent className="sm:max-w-[420px]">
           <DialogHeader>
-            <DialogTitle>删除路由</DialogTitle>
+            <DialogTitle>{t("routes.deleteDialog.title")}</DialogTitle>
             <DialogDescription>
               {deleteTarget
-                ? `确定删除路由 "${deleteTarget.name}"？此操作不可恢复。`
-                : "确定删除该路由？此操作不可恢复。"}
+                ? t("routes.deleteDialog.confirmWithName", { name: deleteTarget.name })
+                : t("routes.deleteDialog.confirm")}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -421,14 +423,14 @@ export function RoutesPage() {
               }}
               disabled={deleting}
             >
-              取消
+              {t("common.cancel")}
             </Button>
             <Button
               variant="destructive"
               onClick={confirmDelete}
               disabled={deleting || !deleteTarget}
             >
-              删除
+              {t("common.delete")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -438,24 +440,26 @@ export function RoutesPage() {
       <Dialog open={manageOpen} onOpenChange={setManageOpen}>
         <DialogContent className="sm:max-w-[600px]">
           <DialogHeader>
-            <DialogTitle>渠道优先级：{manageRoute?.name}</DialogTitle>
+            <DialogTitle>
+              {t("routes.manage.title", { name: manageRoute?.name ?? "-" })}
+            </DialogTitle>
             <DialogDescription>
-              拖拽或使用按钮调整渠道优先级，从上到下依次尝试
+              {t("routes.manage.description")}
             </DialogDescription>
           </DialogHeader>
 
           {manageLoading ? (
             <div className="py-8 text-center text-muted-foreground">
-              加载中...
+              {t("common.loading")}
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-4 py-4">
               {/* 已绑定 */}
               <div>
-                <h4 className="text-sm font-medium mb-3">已绑定渠道</h4>
+                <h4 className="text-sm font-medium mb-3">{t("routes.manage.assignedTitle")}</h4>
                 {assigned.length === 0 ? (
                   <p className="text-sm text-muted-foreground">
-                    暂无绑定渠道
+                    {t("routes.manage.assignedEmpty")}
                   </p>
                 ) : (
                   <div className="space-y-2">
@@ -505,10 +509,10 @@ export function RoutesPage() {
 
               {/* 可添加 */}
               <div>
-                <h4 className="text-sm font-medium mb-3">可添加渠道</h4>
+                <h4 className="text-sm font-medium mb-3">{t("routes.manage.availableTitle")}</h4>
                 {available.length === 0 ? (
                   <p className="text-sm text-muted-foreground">
-                    无可添加渠道
+                    {t("routes.manage.availableEmpty")}
                   </p>
                 ) : (
                   <div className="space-y-2">
@@ -523,7 +527,7 @@ export function RoutesPage() {
                           size="sm"
                           onClick={() => add(c.id)}
                         >
-                          添加
+                          {t("common.add")}
                         </Button>
                       </div>
                     ))}
@@ -535,10 +539,10 @@ export function RoutesPage() {
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setManageOpen(false)}>
-              取消
+              {t("common.cancel")}
             </Button>
             <Button onClick={saveManage} disabled={manageLoading}>
-              保存
+              {t("common.save")}
             </Button>
           </DialogFooter>
         </DialogContent>

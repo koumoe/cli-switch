@@ -33,6 +33,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui";
+import { useI18n } from "@/lib/i18n";
 import {
   listChannels,
   createChannel,
@@ -72,6 +73,7 @@ function defaultBaseUrl(protocol: Protocol): string {
 }
 
 export function ChannelsPage() {
+  const { t } = useI18n();
   const [channels, setChannels] = useState<Channel[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -90,7 +92,7 @@ export function ChannelsPage() {
       const cs = await listChannels();
       setChannels(cs);
     } catch (e) {
-      toast.error("加载渠道失败", { description: String(e) });
+      toast.error(t("channels.toast.loadFail"), { description: String(e) });
     } finally {
       setLoading(false);
     }
@@ -123,14 +125,14 @@ export function ChannelsPage() {
 
   async function submit() {
     try {
-      if (!draft.name.trim()) throw new Error("名称不能为空");
-      if (!draft.base_url.trim()) throw new Error("Base URL 不能为空");
+      if (!draft.name.trim()) throw new Error(t("channels.toast.nameRequired"));
+      if (!draft.base_url.trim()) throw new Error(t("channels.toast.baseUrlRequired"));
 
       if (modalMode === "create") {
         await createChannel({ ...draft, name: draft.name.trim(), base_url: draft.base_url.trim() });
-        toast.success("渠道创建成功");
+        toast.success(t("channels.toast.createOk"));
       } else {
-        if (!editId) throw new Error("缺少 ID");
+        if (!editId) throw new Error(t("channels.toast.missingId"));
         await updateChannel(editId, {
           name: draft.name.trim(),
           base_url: draft.base_url.trim(),
@@ -138,12 +140,12 @@ export function ChannelsPage() {
           auth_ref: draft.auth_ref,
           enabled: draft.enabled,
         });
-        toast.success("渠道更新成功");
+        toast.success(t("channels.toast.updateOk"));
       }
       setModalOpen(false);
       await refresh();
     } catch (e) {
-      toast.error("操作失败", { description: String(e) });
+      toast.error(t("channels.toast.actionFail"), { description: String(e) });
     }
   }
 
@@ -151,14 +153,14 @@ export function ChannelsPage() {
     try {
       if (c.enabled) {
         await disableChannel(c.id);
-        toast.success(`已禁用 ${c.name}`);
+        toast.success(t("channels.toast.disabledOk", { name: c.name }));
       } else {
         await enableChannel(c.id);
-        toast.success(`已启用 ${c.name}`);
+        toast.success(t("channels.toast.enabledOk", { name: c.name }));
       }
       await refresh();
     } catch (e) {
-      toast.error("操作失败", { description: String(e) });
+      toast.error(t("channels.toast.actionFail"), { description: String(e) });
     }
   }
 
@@ -172,12 +174,12 @@ export function ChannelsPage() {
     setDeleting(true);
     try {
       await deleteChannel(deleteTarget.id);
-      toast.success(`已删除 ${deleteTarget.name}`);
+      toast.success(t("channels.toast.deletedOk", { name: deleteTarget.name }));
       setDeleteOpen(false);
       setDeleteTarget(null);
       await refresh();
     } catch (e) {
-      toast.error("删除失败", { description: String(e) });
+      toast.error(t("channels.toast.deleteFail"), { description: String(e) });
     } finally {
       setDeleting(false);
     }
@@ -188,20 +190,26 @@ export function ChannelsPage() {
     try {
       const r = await testChannel(c.id);
       if (r.reachable && r.ok) {
-        toast.success(`${c.name} 连通正常`, {
-          description: `状态: ${r.status}, 延迟: ${r.latency_ms}ms`,
+        toast.success(t("channels.toast.testReachableOkTitle", { name: c.name }), {
+          description: t("channels.toast.testReachableOkDesc", {
+            status: r.status ?? "-",
+            latency: r.latency_ms,
+          }),
         });
       } else if (r.reachable) {
-        toast.warning(`${c.name} 可达但返回异常`, {
-          description: `状态: ${r.status}, 延迟: ${r.latency_ms}ms`,
+        toast.warning(t("channels.toast.testReachableBadTitle", { name: c.name }), {
+          description: t("channels.toast.testReachableOkDesc", {
+            status: r.status ?? "-",
+            latency: r.latency_ms,
+          }),
         });
       } else {
-        toast.error(`${c.name} 无法连接`, {
-          description: r.error ?? "连接超时",
+        toast.error(t("channels.toast.testUnreachableTitle", { name: c.name }), {
+          description: r.error ?? t("channels.toast.testTimeout"),
         });
       }
     } catch (e) {
-      toast.error("测试失败", { description: String(e) });
+      toast.error(t("channels.toast.testFail"), { description: String(e) });
     } finally {
       setTesting((m) => ({ ...m, [c.id]: false }));
     }
@@ -212,14 +220,14 @@ export function ChannelsPage() {
       {/* 页面标题 */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">渠道</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">{t("channels.title")}</h1>
           <p className="text-muted-foreground text-sm mt-1">
-            管理上游 API 渠道的配置和连接
+            {t("channels.subtitle")}
           </p>
         </div>
         <Button onClick={openCreate}>
           <Plus className="h-4 w-4 mr-2" />
-          新建渠道
+          {t("channels.new")}
         </Button>
       </div>
 
@@ -229,19 +237,19 @@ export function ChannelsPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>名称</TableHead>
-                <TableHead>终端</TableHead>
-                <TableHead>Base URL</TableHead>
-                <TableHead>状态</TableHead>
-                <TableHead>更新时间</TableHead>
-                <TableHead className="w-[100px]">操作</TableHead>
+                <TableHead>{t("channels.table.name")}</TableHead>
+                <TableHead>{t("channels.table.terminal")}</TableHead>
+                <TableHead>{t("channels.table.baseUrl")}</TableHead>
+                <TableHead>{t("channels.table.status")}</TableHead>
+                <TableHead>{t("channels.table.updatedAt")}</TableHead>
+                <TableHead className="w-[100px]">{t("common.actions")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {channels.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
-                    暂无渠道，点击「新建渠道」添加
+                    {t("channels.table.empty")}
                   </TableCell>
                 </TableRow>
               ) : (
@@ -260,7 +268,7 @@ export function ChannelsPage() {
                     </TableCell>
                     <TableCell>
                       <Badge variant={c.enabled ? "success" : "secondary"}>
-                        {c.enabled ? "启用" : "禁用"}
+                        {c.enabled ? t("common.enabled") : t("common.disabled")}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-muted-foreground text-sm">
@@ -273,7 +281,7 @@ export function ChannelsPage() {
                           size="icon"
                           onClick={() => onTest(c)}
                           disabled={testing[c.id]}
-                          title="测试连接"
+                          title={t("channels.actions.test")}
                         >
                           <TestTube className="h-4 w-4" />
                         </Button>
@@ -281,7 +289,7 @@ export function ChannelsPage() {
                           variant="ghost"
                           size="icon"
                           onClick={() => toggleEnabled(c)}
-                          title={c.enabled ? "禁用" : "启用"}
+                          title={c.enabled ? t("channels.actions.disable") : t("channels.actions.enable")}
                         >
                           {c.enabled ? (
                             <PowerOff className="h-4 w-4" />
@@ -293,7 +301,7 @@ export function ChannelsPage() {
                           variant="ghost"
                           size="icon"
                           onClick={() => openEdit(c)}
-                          title="编辑"
+                          title={t("channels.actions.edit")}
                         >
                           <Pencil className="h-4 w-4" />
                         </Button>
@@ -301,7 +309,7 @@ export function ChannelsPage() {
                           variant="ghost"
                           size="icon"
                           onClick={() => onDelete(c)}
-                          title="删除"
+                          title={t("channels.actions.delete")}
                         >
                           <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
@@ -320,17 +328,17 @@ export function ChannelsPage() {
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
             <DialogTitle>
-              {modalMode === "create" ? "新建渠道" : "编辑渠道"}
+              {modalMode === "create" ? t("channels.modal.createTitle") : t("channels.modal.editTitle")}
             </DialogTitle>
             <DialogDescription>
-              配置 API 渠道的连接信息
+              {t("channels.modal.description")}
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <label className="text-sm font-medium">名称</label>
+                <label className="text-sm font-medium">{t("channels.modal.name")}</label>
                 <Input
                   value={draft.name}
                   onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
@@ -338,7 +346,7 @@ export function ChannelsPage() {
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">终端</label>
+                <label className="text-sm font-medium">{t("channels.modal.terminal")}</label>
                 <Select
                   value={draft.protocol}
                   onValueChange={(v) =>
@@ -377,7 +385,7 @@ export function ChannelsPage() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium">Base URL</label>
+              <label className="text-sm font-medium">{t("channels.modal.baseUrl")}</label>
               <Input
                 value={draft.base_url}
                 onChange={(e) => setDraft((d) => ({ ...d, base_url: e.target.value }))}
@@ -386,7 +394,7 @@ export function ChannelsPage() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium">API Key / Token</label>
+              <label className="text-sm font-medium">{t("channels.modal.apiKey")}</label>
               <Input
                 type="password"
                 value={draft.auth_ref}
@@ -396,7 +404,7 @@ export function ChannelsPage() {
             </div>
 
             <div className="flex items-center justify-between">
-              <label className="text-sm font-medium">启用</label>
+              <label className="text-sm font-medium">{t("channels.modal.enabled")}</label>
               <Switch
                 checked={draft.enabled}
                 onCheckedChange={(v) => setDraft((d) => ({ ...d, enabled: v }))}
@@ -406,9 +414,9 @@ export function ChannelsPage() {
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setModalOpen(false)}>
-              取消
+              {t("common.cancel")}
             </Button>
-            <Button onClick={submit}>保存</Button>
+            <Button onClick={submit}>{t("common.save")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -423,11 +431,11 @@ export function ChannelsPage() {
       >
         <DialogContent className="sm:max-w-[420px]">
           <DialogHeader>
-            <DialogTitle>删除渠道</DialogTitle>
+            <DialogTitle>{t("channels.deleteDialog.title")}</DialogTitle>
             <DialogDescription>
               {deleteTarget
-                ? `确定删除渠道 "${deleteTarget.name}"？此操作不可恢复。`
-                : "确定删除该渠道？此操作不可恢复。"}
+                ? t("channels.deleteDialog.confirmWithName", { name: deleteTarget.name })
+                : t("channels.deleteDialog.confirm")}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -439,10 +447,10 @@ export function ChannelsPage() {
               }}
               disabled={deleting}
             >
-              取消
+              {t("common.cancel")}
             </Button>
             <Button variant="destructive" onClick={confirmDelete} disabled={deleting || !deleteTarget}>
-              删除
+              {t("common.delete")}
             </Button>
           </DialogFooter>
         </DialogContent>

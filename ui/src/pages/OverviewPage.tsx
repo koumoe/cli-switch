@@ -9,6 +9,7 @@ import {
   CardTitle,
   Badge,
 } from "@/components/ui";
+import { useI18n } from "@/lib/i18n";
 import {
   listChannels,
   usageRecent,
@@ -20,6 +21,7 @@ import {
 import { formatDateTime, formatDuration, terminalLabel } from "../lib";
 
 export function OverviewPage() {
+  const { t } = useI18n();
   const [channels, setChannels] = useState<Channel[]>([]);
   const [recent, setRecent] = useState<UsageEvent[]>([]);
   const [stats, setStats] = useState<StatsSummary | null>(null);
@@ -33,7 +35,7 @@ export function OverviewPage() {
         setStats(st);
       })
       .catch((e) => {
-        toast.error("加载失败", { description: String(e) });
+        toast.error(t("overview.toast.loadFail"), { description: String(e) });
       })
       .finally(() => setLoading(false));
   }, []);
@@ -48,9 +50,9 @@ export function OverviewPage() {
     <div className="space-y-6">
       {/* 页面标题 */}
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">概览</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">{t("overview.title")}</h1>
         <p className="text-muted-foreground text-sm mt-1">
-          服务状态、渠道健康与最近请求
+          {t("overview.subtitle")}
         </p>
       </div>
 
@@ -58,7 +60,7 @@ export function OverviewPage() {
       <div className="grid gap-4 md:grid-cols-4">
         <Card>
           <CardHeader className="pb-2">
-            <CardDescription>活跃渠道</CardDescription>
+            <CardDescription>{t("overview.cards.activeChannels")}</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
@@ -72,7 +74,7 @@ export function OverviewPage() {
 
         <Card>
           <CardHeader className="pb-2">
-            <CardDescription>今日请求</CardDescription>
+            <CardDescription>{t("overview.cards.todayRequests")}</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{stats?.requests ?? "-"}</div>
@@ -81,7 +83,7 @@ export function OverviewPage() {
 
         <Card>
           <CardHeader className="pb-2">
-            <CardDescription>成功率</CardDescription>
+            <CardDescription>{t("overview.cards.successRate")}</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{successRate}%</div>
@@ -90,7 +92,7 @@ export function OverviewPage() {
 
         <Card>
           <CardHeader className="pb-2">
-            <CardDescription>总 Token</CardDescription>
+            <CardDescription>{t("overview.cards.totalTokens")}</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
@@ -105,15 +107,15 @@ export function OverviewPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Radio className="h-4 w-4" />
-            渠道状态
+            {t("overview.channelStatus.title")}
           </CardTitle>
-          <CardDescription>已配置渠道的启用状态</CardDescription>
+          <CardDescription>{t("overview.channelStatus.subtitle")}</CardDescription>
         </CardHeader>
         <CardContent>
           {loading ? (
-            <p className="text-muted-foreground text-sm">加载中...</p>
+            <p className="text-muted-foreground text-sm">{t("common.loading")}</p>
           ) : channels.length === 0 ? (
-            <p className="text-muted-foreground text-sm">暂无渠道</p>
+            <p className="text-muted-foreground text-sm">{t("overview.channelStatus.empty")}</p>
           ) : (
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
               {channels.map((c) => (
@@ -149,15 +151,15 @@ export function OverviewPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Activity className="h-4 w-4" />
-            最近请求
+            {t("overview.recent.title")}
           </CardTitle>
-          <CardDescription>最近 10 条请求记录</CardDescription>
+          <CardDescription>{t("overview.recent.subtitle")}</CardDescription>
         </CardHeader>
         <CardContent>
           {loading ? (
-            <p className="text-muted-foreground text-sm">加载中...</p>
+            <p className="text-muted-foreground text-sm">{t("common.loading")}</p>
           ) : recent.length === 0 ? (
-            <p className="text-muted-foreground text-sm">暂无请求</p>
+            <p className="text-muted-foreground text-sm">{t("overview.recent.empty")}</p>
           ) : (
             <div className="space-y-2">
               {recent.map((e) => (
