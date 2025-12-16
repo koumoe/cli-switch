@@ -1,0 +1,426 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    name: Validate Version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      prerelease: ${{ steps.meta.outputs.prerelease }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Compute release metadata
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          if [[ "${GITHUB_REF_NAME}" == *-* ]]; then
+            prerelease="true"
+          else
+            prerelease="false"
+          fi
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "prerelease=${prerelease}" >> "$GITHUB_OUTPUT"
+
+      - name: Validate tag version matches manifests
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+
+          cargo_version="$(python - <<'PY'
+          import tomllib
+          print(tomllib.load(open("Cargo.toml","rb"))["package"]["version"])
+          PY
+          )"
+
+          ui_version="$(python - <<'PY'
+          import json
+          print(json.load(open("ui/package.json","r",encoding="utf-8"))["version"])
+          PY
+          )"
+
+          if [[ "${cargo_version}" != "${version}" ]]; then
+            echo "Cargo.toml version (${cargo_version}) != tag version (${version})" >&2
+            exit 1
+          fi
+          if [[ "${ui_version}" != "${version}" ]]; then
+            echo "ui/package.json version (${ui_version}) != tag version (${version})" >&2
+            exit 1
+          fi
+
+  linux_desktop_amd64:
+    name: Linux Desktop (x86_64)
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Linux desktop dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libayatana-appindicator3-dev
+          if ! sudo apt-get install -y libwebkit2gtk-4.1-dev; then
+            sudo apt-get install -y libwebkit2gtk-4.0-dev
+          fi
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "25.2.1"
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+
+      - name: Install UI dependencies
+        working-directory: ui
+        run: npm ci
+
+      - name: Build UI
+        working-directory: ui
+        run: npm run build
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.92.0"
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build (desktop default)
+        run: cargo build --release
+
+      - name: Package
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${{ needs.validate.outputs.version }}"
+          target="$(rustc -vV | sed -n 's/^host: //p')"
+          pkg="cliswitch-${version}-${target}-desktop"
+
+          rm -rf dist
+          mkdir -p "dist/${pkg}"
+          cp "target/release/cliswitch" "dist/${pkg}/cliswitch"
+          cp README.md LICENSE "dist/${pkg}/"
+
+          tar -C dist -czf "dist/${pkg}.tar.gz" "${pkg}"
+          python - <<PY
+          import hashlib, pathlib
+          p = pathlib.Path("dist/${pkg}.tar.gz")
+          h = hashlib.sha256(p.read_bytes()).hexdigest()
+          pathlib.Path(str(p) + ".sha256").write_text(f"{h}  {p.name}\\n", encoding="utf-8")
+          PY
+
+      - name: Upload dist artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-linux-desktop-x86_64
+          path: dist/*.*
+
+  linux_desktop_arm64:
+    name: Linux Desktop (aarch64)
+    needs: validate
+    runs-on: ubuntu-24.04-arm64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Linux desktop dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libayatana-appindicator3-dev
+          if ! sudo apt-get install -y libwebkit2gtk-4.1-dev; then
+            sudo apt-get install -y libwebkit2gtk-4.0-dev
+          fi
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "25.2.1"
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+
+      - name: Install UI dependencies
+        working-directory: ui
+        run: npm ci
+
+      - name: Build UI
+        working-directory: ui
+        run: npm run build
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.92.0"
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build (desktop default)
+        run: cargo build --release
+
+      - name: Package
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${{ needs.validate.outputs.version }}"
+          target="$(rustc -vV | sed -n 's/^host: //p')"
+          pkg="cliswitch-${version}-${target}-desktop"
+
+          rm -rf dist
+          mkdir -p "dist/${pkg}"
+          cp "target/release/cliswitch" "dist/${pkg}/cliswitch"
+          cp README.md LICENSE "dist/${pkg}/"
+
+          tar -C dist -czf "dist/${pkg}.tar.gz" "${pkg}"
+          python - <<PY
+          import hashlib, pathlib
+          p = pathlib.Path("dist/${pkg}.tar.gz")
+          h = hashlib.sha256(p.read_bytes()).hexdigest()
+          pathlib.Path(str(p) + ".sha256").write_text(f"{h}  {p.name}\\n", encoding="utf-8")
+          PY
+
+      - name: Upload dist artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-linux-desktop-aarch64
+          path: dist/*.*
+
+  macos_desktop:
+    name: macOS Desktop (${{ matrix.runs_on }})
+    needs: validate
+    runs-on: ${{ matrix.runs_on }}
+    strategy:
+      fail-fast: false
+      matrix:
+        runs_on:
+          - macos-13
+          - macos-14
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "25.2.1"
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+
+      - name: Install UI dependencies
+        working-directory: ui
+        run: npm ci
+
+      - name: Build UI
+        working-directory: ui
+        run: npm run build
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.92.0"
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build (desktop default)
+        run: cargo build --release
+
+      - name: Package
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${{ needs.validate.outputs.version }}"
+          target="$(rustc -vV | sed -n 's/^host: //p')"
+          pkg="cliswitch-${version}-${target}-desktop"
+
+          rm -rf dist
+          mkdir -p "dist/${pkg}"
+          cp "target/release/cliswitch" "dist/${pkg}/cliswitch"
+          cp README.md LICENSE "dist/${pkg}/"
+
+          tar -C dist -czf "dist/${pkg}.tar.gz" "${pkg}"
+          python - <<PY
+          import hashlib, pathlib
+          p = pathlib.Path("dist/${pkg}.tar.gz")
+          h = hashlib.sha256(p.read_bytes()).hexdigest()
+          pathlib.Path(str(p) + ".sha256").write_text(f"{h}  {p.name}\\n", encoding="utf-8")
+          PY
+
+      - name: Upload dist artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-macos-${{ matrix.runs_on }}
+          path: dist/*.*
+
+  windows_desktop_amd64:
+    name: Windows Desktop (x86_64)
+    needs: validate
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "25.2.1"
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+
+      - name: Install UI dependencies
+        working-directory: ui
+        run: npm ci
+
+      - name: Build UI
+        working-directory: ui
+        run: npm run build
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.92.0"
+          targets: x86_64-pc-windows-msvc
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build (desktop default)
+        shell: pwsh
+        run: |
+          cargo build --release --target "x86_64-pc-windows-msvc"
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $version = "${{ needs.validate.outputs.version }}"
+          $target = "x86_64-pc-windows-msvc"
+          $pkg = "cliswitch-$version-$target-desktop"
+
+          if (Test-Path dist) { Remove-Item -Recurse -Force dist }
+          New-Item -ItemType Directory -Path "dist\\$pkg" | Out-Null
+          Copy-Item "target\\$target\\release\\cliswitch.exe" "dist\\$pkg\\cliswitch.exe"
+          Copy-Item "README.md","LICENSE" "dist\\$pkg\\"
+
+          Compress-Archive -Path "dist\\$pkg" -DestinationPath "dist\\$pkg.zip" -Force
+          $hash = (Get-FileHash -Algorithm SHA256 "dist\\$pkg.zip").Hash.ToLower()
+          "$hash  $pkg.zip" | Out-File -FilePath "dist\\$pkg.zip.sha256" -Encoding utf8
+
+      - name: Upload dist artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-windows-x86_64
+          path: dist/*.*
+
+  windows_desktop_arm64:
+    name: Windows Desktop (aarch64)
+    needs: validate
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "25.2.1"
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+
+      - name: Install UI dependencies
+        working-directory: ui
+        run: npm ci
+
+      - name: Build UI
+        working-directory: ui
+        run: npm run build
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.92.0"
+          targets: aarch64-pc-windows-msvc
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build (desktop, aarch64)
+        shell: pwsh
+        run: |
+          cargo build --release --target "aarch64-pc-windows-msvc"
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $version = "${{ needs.validate.outputs.version }}"
+          $target = "aarch64-pc-windows-msvc"
+          $pkg = "cliswitch-$version-$target-desktop"
+
+          if (Test-Path dist) { Remove-Item -Recurse -Force dist }
+          New-Item -ItemType Directory -Path "dist\\$pkg" | Out-Null
+          Copy-Item "target\\$target\\release\\cliswitch.exe" "dist\\$pkg\\cliswitch.exe"
+          Copy-Item "README.md","LICENSE" "dist\\$pkg\\"
+
+          Compress-Archive -Path "dist\\$pkg" -DestinationPath "dist\\$pkg.zip" -Force
+          $hash = (Get-FileHash -Algorithm SHA256 "dist\\$pkg.zip").Hash.ToLower()
+          "$hash  $pkg.zip" | Out-File -FilePath "dist\\$pkg.zip.sha256" -Encoding utf8
+
+      - name: Upload dist artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-windows-aarch64
+          path: dist/*.*
+
+  publish:
+    name: Publish GitHub Release
+    if: >-
+      ${{
+        always() &&
+        needs.validate.result == 'success' &&
+        needs.linux_desktop_amd64.result == 'success' &&
+        needs.macos_desktop.result == 'success' &&
+        needs.linux_desktop_arm64.result == 'success' &&
+        needs.windows_desktop_arm64.result == 'success' &&
+        needs.windows_desktop_amd64.result == 'success'
+      }}
+    needs:
+      - validate
+      - linux_desktop_amd64
+      - linux_desktop_arm64
+      - macos_desktop
+      - windows_desktop_amd64
+      - windows_desktop_arm64
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download dist artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Create GitHub Release and upload assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
+          prerelease: ${{ needs.validate.outputs.prerelease }}
