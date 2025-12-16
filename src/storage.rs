@@ -122,7 +122,12 @@ fn ensure_usage_events_schema(conn: &Connection) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn ensure_column(conn: &Connection, table: &str, column: &str, column_def: &str) -> anyhow::Result<()> {
+fn ensure_column(
+    conn: &Connection,
+    table: &str,
+    column: &str,
+    column_def: &str,
+) -> anyhow::Result<()> {
     let mut stmt = conn.prepare(&format!("PRAGMA table_info({table})"))?;
     let mut rows = stmt.query([])?;
     while let Some(row) = rows.next()? {

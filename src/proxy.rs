@@ -60,22 +60,25 @@ pub async fn forward(
         .send()
         .await
         .map_err(|e| {
-            spawn_usage_event(storage::CreateUsageEvent {
-                ts_ms: storage::now_ms(),
-                protocol,
-                route_id: None,
-                channel_id: channel.id.clone(),
-                model: model.clone(),
-                success: false,
-                http_status: None,
-                error_kind: Some(format!("upstream_error:{}", truncate(&e.to_string(), 240))),
-                latency_ms: started.elapsed().as_millis() as i64,
-                ttft_ms: None,
-                prompt_tokens: None,
-                completion_tokens: None,
-                total_tokens: None,
-                estimated_cost_usd: None,
-            }, db_path.clone());
+            spawn_usage_event(
+                storage::CreateUsageEvent {
+                    ts_ms: storage::now_ms(),
+                    protocol,
+                    route_id: None,
+                    channel_id: channel.id.clone(),
+                    model: model.clone(),
+                    success: false,
+                    http_status: None,
+                    error_kind: Some(format!("upstream_error:{}", truncate(&e.to_string(), 240))),
+                    latency_ms: started.elapsed().as_millis() as i64,
+                    ttft_ms: None,
+                    prompt_tokens: None,
+                    completion_tokens: None,
+                    total_tokens: None,
+                    estimated_cost_usd: None,
+                },
+                db_path.clone(),
+            );
             ProxyError::Upstream(e.to_string())
         })?;
 
@@ -437,7 +440,11 @@ struct TokenUsage {
 
 impl TokenUsage {
     fn as_tuple(self) -> (Option<i64>, Option<i64>, Option<i64>) {
-        let total = match (self.total_tokens, self.prompt_tokens, self.completion_tokens) {
+        let total = match (
+            self.total_tokens,
+            self.prompt_tokens,
+            self.completion_tokens,
+        ) {
             (Some(t), _, _) => Some(t),
             (None, Some(p), Some(c)) => Some(p + c),
             _ => None,
@@ -476,7 +483,9 @@ fn extract_usage_from_value(protocol: Protocol, v: &serde_json::Value) -> TokenU
 fn extract_openai_usage(v: &serde_json::Value) -> TokenUsage {
     // /v1/chat/completions /v1/completions: usage.prompt_tokens / usage.completion_tokens
     // /v1/responses: usage.input_tokens / usage.output_tokens
-    let usage = v.get("usage").or_else(|| v.get("response").and_then(|r| r.get("usage")));
+    let usage = v
+        .get("usage")
+        .or_else(|| v.get("response").and_then(|r| r.get("usage")));
     if let Some(u) = usage {
         let prompt_tokens = u
             .get("prompt_tokens")
@@ -605,7 +614,8 @@ impl InstrumentedStream {
             let Ok(v) = serde_json::from_str::<serde_json::Value>(data) else {
                 continue;
             };
-            self.usage.merge(extract_usage_from_value(self.ctx.protocol, &v));
+            self.usage
+                .merge(extract_usage_from_value(self.ctx.protocol, &v));
         }
     }
 
