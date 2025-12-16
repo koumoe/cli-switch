@@ -8,6 +8,7 @@
     "channels": "Channels",
     "routes": "Routes",
     "monitor": "Monitor",
+    "logs": "Logs",
     "settings": "Settings"
   },
   "theme": {
@@ -166,7 +167,7 @@
   },
   "monitor": {
     "title": "Monitor",
-    "subtitle": "Request logs, statistics, and channel performance",
+    "subtitle": "Statistics and channel performance",
     "range": {
       "today": "Today",
       "month": "This Month"
@@ -186,7 +187,7 @@
         "requests": "Requests",
         "success": "Success",
         "failed": "Failed",
-        "avgLatency": "Avg Latency"
+        "avgLatency": "Avg Duration"
       }
     },
     "log": {
@@ -204,6 +205,31 @@
       },
       "empty": "No request records"
     },
+    "toast": {
+      "loadFail": "Failed to load"
+    }
+  },
+  "logs": {
+    "title": "Logs",
+    "subtitle": "Request details with duration / tokens",
+    "table": {
+      "title": "Request Logs",
+      "subtitle": "Latest 100 request records"
+    },
+    "onlyFailures": "Failures only",
+    "headers": {
+      "time": "Time",
+      "terminal": "Terminal",
+      "channel": "Channel",
+      "model": "Model",
+      "status": "Status",
+      "ttft": "TTFT",
+      "duration": "Duration",
+      "inputTokens": "Input",
+      "outputTokens": "Output",
+      "error": "Error"
+    },
+    "empty": "No request records",
     "toast": {
       "loadFail": "Failed to load"
     }

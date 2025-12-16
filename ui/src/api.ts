@@ -134,6 +134,7 @@ export type UsageEvent = {
   http_status: number | null;
   error_kind: string | null;
   latency_ms: number;
+  ttft_ms: number | null;
   prompt_tokens: number | null;
   completion_tokens: number | null;
   total_tokens: number | null;

@@ -2,8 +2,8 @@ import React, { useEffect, useMemo, useState } from "react";
 import {
   LayoutGrid,
   Radio,
-  GitBranch,
   Activity,
+  ScrollText,
   Settings,
   Sun,
   Moon,
@@ -17,25 +17,25 @@ import { getHealth } from "./api";
 
 import { OverviewPage } from "./pages/OverviewPage";
 import { ChannelsPage } from "./pages/ChannelsPage";
-import { RoutesPage } from "./pages/RoutesPage";
 import { MonitorPage } from "./pages/MonitorPage";
+import { LogsPage } from "./pages/LogsPage";
 import { SettingsPage } from "./pages/SettingsPage";
 
-type AppRoute = "overview" | "channels" | "routes" | "monitor" | "settings";
+type AppRoute = "overview" | "channels" | "monitor" | "logs" | "settings";
 
 const NAV_ITEMS: { route: AppRoute; labelKey: string; icon: React.ElementType }[] = [
   { route: "overview", labelKey: "nav.overview", icon: LayoutGrid },
   { route: "channels", labelKey: "nav.channels", icon: Radio },
-  { route: "routes", labelKey: "nav.routes", icon: GitBranch },
   { route: "monitor", labelKey: "nav.monitor", icon: Activity },
+  { route: "logs", labelKey: "nav.logs", icon: ScrollText },
   { route: "settings", labelKey: "nav.settings", icon: Settings },
 ];
 
 function routeFromPath(pathname: string): AppRoute {
   if (pathname === "/") return "overview";
   if (pathname.startsWith("/channels")) return "channels";
-  if (pathname.startsWith("/routes")) return "routes";
   if (pathname.startsWith("/monitor")) return "monitor";
+  if (pathname.startsWith("/logs")) return "logs";
   if (pathname.startsWith("/settings")) return "settings";
   return "overview";
 }
@@ -196,10 +196,10 @@ export default function App() {
             <OverviewPage />
           ) : route === "channels" ? (
             <ChannelsPage />
-          ) : route === "routes" ? (
-            <RoutesPage />
           ) : route === "monitor" ? (
             <MonitorPage />
+          ) : route === "logs" ? (
+            <LogsPage />
           ) : (
             <SettingsPage />
           )}
