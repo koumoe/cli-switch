@@ -5,14 +5,14 @@ import {
   Activity,
   ScrollText,
   Settings,
-  Sun,
-  Moon,
-  Monitor,
   Zap,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react";
-import { useTheme, type Theme } from "@/lib/theme";
 import { useI18n } from "@/lib/i18n";
-import { Button } from "@/components/ui";
+import { useTheme } from "@/lib/theme";
+import { cn } from "@/lib/utils";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui";
 import { getHealth } from "./api";
 
 import { OverviewPage } from "./pages/OverviewPage";
@@ -30,6 +30,8 @@ const NAV_ITEMS: { route: AppRoute; labelKey: string; icon: React.ElementType }[
   { route: "logs", labelKey: "nav.logs", icon: ScrollText },
   { route: "settings", labelKey: "nav.settings", icon: Settings },
 ];
+
+const SIDEBAR_KEY = "cliswitch-sidebar-collapsed";
 
 function routeFromPath(pathname: string): AppRoute {
   if (pathname === "/") return "overview";
@@ -51,65 +53,66 @@ function navigate(to: string) {
   window.dispatchEvent(new PopStateEvent("popstate"));
 }
 
-function NavLink({
+function NavTab({
   route,
   current,
   label,
   icon: Icon,
+  collapsed,
 }: {
   route: AppRoute;
   current: AppRoute;
   label: string;
   icon: React.ElementType;
+  collapsed: boolean;
 }) {
   const href = hrefFor(route);
   const active = current === route;
-  return (
+
+  const link = (
     <a
-      className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
+      aria-current={active ? "page" : undefined}
+      className={cn(
+        "group flex items-center rounded-md transition-colors select-none",
+        collapsed ? "justify-center p-2" : "gap-2 px-2.5 py-1.5",
         active
-          ? "bg-accent text-accent-foreground font-medium"
-          : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-      }`}
+          ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+          : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/60"
+      )}
       href={href}
       onClick={(e) => {
         e.preventDefault();
         navigate(href);
       }}
     >
-      <Icon className="h-4 w-4" />
-      {label}
+      <Icon
+        className={cn(
+          "h-4 w-4 flex-shrink-0",
+          active ? "text-sidebar-accent-foreground" : "text-muted-foreground group-hover:text-sidebar-foreground"
+        )}
+      />
+      {!collapsed && <span className="text-[13px]">{label}</span>}
     </a>
   );
+
+  if (collapsed) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>{link}</TooltipTrigger>
+        <TooltipContent side="right" sideOffset={8}>
+          {label}
+        </TooltipContent>
+      </Tooltip>
+    );
+  }
+
+  return link;
 }
 
-function ThemeToggle() {
-  const { theme, setTheme } = useTheme();
-  const { t } = useI18n();
-
-  const cycleTheme = () => {
-    const next: Record<Theme, Theme> = {
-      light: "dark",
-      dark: "system",
-      system: "light",
-    };
-    setTheme(next[theme]);
-  };
-
-  const Icon = theme === "light" ? Sun : theme === "dark" ? Moon : Monitor;
-  const title =
-    theme === "light" ? t("theme.light") : theme === "dark" ? t("theme.dark") : t("theme.system");
-
-  return (
-    <Button variant="ghost" size="icon" onClick={cycleTheme} title={title}>
-      <Icon className="h-4 w-4" />
-    </Button>
-  );
-}
-
-function StatusIndicator({ status }: { status: string }) {
+function StatusIndicator({ status, collapsed }: { status: string; collapsed: boolean }) {
   const { t } = useI18n();
   const isOk = status === "ok";
+  const isChecking = status === "...";
   const label =
     status === "..."
       ? t("status.checking")
@@ -118,13 +121,32 @@ function StatusIndicator({ status }: { status: string }) {
         : status === "离线"
           ? t("status.offline")
           : status;
+
+  const dot = (
+    <span
+      className={cn(
+        "h-1.5 w-1.5 rounded-full flex-shrink-0",
+        isOk ? "bg-success" : isChecking ? "bg-muted-foreground" : "bg-destructive"
+      )}
+    />
+  );
+
+  if (collapsed) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div className="p-1.5 flex items-center justify-center">{dot}</div>
+        </TooltipTrigger>
+        <TooltipContent side="right" sideOffset={8}>
+          {label}
+        </TooltipContent>
+      </Tooltip>
+    );
+  }
+
   return (
-    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-      <span
-        className={`h-2 w-2 rounded-full ${
-          isOk ? "bg-success" : "bg-destructive"
-        }`}
-      />
+    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+      {dot}
       {label}
     </div>
   );
@@ -134,7 +156,22 @@ export default function App() {
   const [pathname, setPathname] = useState(() => window.location.pathname);
   const route = useMemo(() => routeFromPath(pathname), [pathname]);
   const [health, setHealth] = useState<string>("...");
+  const [collapsed, setCollapsed] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem(SIDEBAR_KEY) === "true";
+  });
   const { t } = useI18n();
+
+  // 确保主题在应用启动时被应用
+  useTheme();
+
+  const toggleCollapsed = () => {
+    setCollapsed((prev) => {
+      const next = !prev;
+      localStorage.setItem(SIDEBAR_KEY, String(next));
+      return next;
+    });
+  };
 
   useEffect(() => {
     const onPop = () => setPathname(window.location.pathname);
@@ -157,54 +194,82 @@ export default function App() {
   }, []);
 
   return (
-    <div className="flex h-full">
-      {/* 侧边栏 */}
-      <aside className="w-56 flex-shrink-0 border-r bg-sidebar flex flex-col">
-        {/* Logo */}
-        <div className="h-14 flex items-center gap-2 px-4 border-b">
-          <Zap className="h-5 w-5 text-foreground" />
-          <span className="font-semibold">CliSwitch</span>
+    <div className="flex h-full bg-background text-foreground">
+      {/* 侧边栏导航 */}
+      <aside
+        className={cn(
+          "flex-shrink-0 border-r border-sidebar-border bg-sidebar flex flex-col transition-all duration-200",
+          collapsed ? "w-12" : "w-44"
+        )}
+      >
+        <div
+          className={cn(
+            "h-11 flex items-center border-b border-sidebar-border",
+            collapsed ? "justify-center" : "justify-center gap-1.5"
+          )}
+        >
+          <Zap className="h-4 w-4 text-foreground flex-shrink-0" />
+          {!collapsed && <span className="font-semibold text-sm">CliSwitch</span>}
         </div>
 
-        {/* 导航 */}
-        <nav className="flex-1 p-3 space-y-1">
+        <nav className={cn("flex-1 py-2 space-y-0.5", collapsed ? "px-1" : "px-1.5")}>
           {NAV_ITEMS.map((item) => (
-            <NavLink
+            <NavTab
               key={item.route}
               route={item.route}
               current={route}
               label={t(item.labelKey)}
               icon={item.icon}
+              collapsed={collapsed}
             />
           ))}
         </nav>
 
-        {/* 底部 */}
-        <div className="p-3 border-t space-y-3">
-          <StatusIndicator status={health} />
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-muted-foreground">v0.1.0</span>
-            <ThemeToggle />
-          </div>
+        <div
+          className={cn(
+            "py-2 border-t border-sidebar-border flex items-center",
+            collapsed ? "flex-col gap-1 px-1" : "justify-between px-2"
+          )}
+        >
+          <StatusIndicator status={health} collapsed={collapsed} />
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors"
+                onClick={toggleCollapsed}
+              >
+                {collapsed ? (
+                  <PanelLeftOpen className="h-4 w-4" />
+                ) : (
+                  <PanelLeftClose className="h-4 w-4" />
+                )}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="right" sideOffset={8}>
+              {collapsed ? t("sidebar.expand") : t("sidebar.collapse")}
+            </TooltipContent>
+          </Tooltip>
         </div>
       </aside>
 
-      {/* 主内容 */}
-      <main className="flex-1 overflow-auto">
-        <div className="p-6 max-w-6xl mx-auto">
-          {route === "overview" ? (
-            <OverviewPage />
-          ) : route === "channels" ? (
-            <ChannelsPage />
-          ) : route === "monitor" ? (
-            <MonitorPage />
-          ) : route === "logs" ? (
-            <LogsPage />
-          ) : (
-            <SettingsPage />
-          )}
-        </div>
-      </main>
+      {/* 内容区 */}
+      <div className="flex-1 min-w-0 flex flex-col">
+        <main className="flex-1 overflow-auto bg-muted/30">
+          <div className="mx-auto w-full max-w-7xl p-5">
+            {route === "overview" ? (
+              <OverviewPage />
+            ) : route === "channels" ? (
+              <ChannelsPage />
+            ) : route === "monitor" ? (
+              <MonitorPage />
+            ) : route === "logs" ? (
+              <LogsPage />
+            ) : (
+              <SettingsPage />
+            )}
+          </div>
+        </main>
+      </div>
     </div>
   );
 }

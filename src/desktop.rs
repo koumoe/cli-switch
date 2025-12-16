@@ -60,8 +60,11 @@ pub async fn run(port: u16) -> anyhow::Result<()> {
     let event_loop = EventLoop::new();
     let window_builder = WindowBuilder::new()
         .with_title("CliSwitch")
-        .with_inner_size(LogicalSize::new(1200.0, 800.0))
-        .with_min_inner_size(LogicalSize::new(900.0, 600.0));
+        .with_inner_size(LogicalSize::new(1000.0, 680.0))
+        .with_min_inner_size(LogicalSize::new(820.0, 560.0))
+        .with_resizable(true)
+        .with_maximizable(true)
+        .with_minimizable(true);
 
     #[cfg(target_os = "macos")]
     let window_builder = window_builder.with_automatic_window_tabbing(false);
