@@ -1,0 +1,256 @@
+{
+  "language": {
+    "zhCN": "Chinese (Simplified)",
+    "enUS": "English"
+  },
+  "nav": {
+    "overview": "Overview",
+    "channels": "Channels",
+    "routes": "Routes",
+    "monitor": "Monitor",
+    "settings": "Settings"
+  },
+  "theme": {
+    "light": "Light",
+    "dark": "Dark",
+    "system": "System"
+  },
+  "status": {
+    "running": "Running",
+    "offline": "Offline",
+    "checking": "Checking..."
+  },
+  "common": {
+    "loading": "Loading...",
+    "refresh": "Refresh",
+    "cancel": "Cancel",
+    "save": "Save",
+    "delete": "Delete",
+    "add": "Add",
+    "open": "Open",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "actions": "Actions",
+    "channel": "Channel",
+    "route": "Route"
+  },
+  "overview": {
+    "title": "Overview",
+    "subtitle": "Service status, channel health, and recent requests",
+    "cards": {
+      "activeChannels": "Active Channels",
+      "todayRequests": "Requests Today",
+      "successRate": "Success Rate",
+      "totalTokens": "Total Tokens"
+    },
+    "channelStatus": {
+      "title": "Channel Status",
+      "subtitle": "Enabled status of configured channels",
+      "empty": "No channels"
+    },
+    "recent": {
+      "title": "Recent Requests",
+      "subtitle": "Latest 10 request records",
+      "empty": "No requests"
+    },
+    "toast": {
+      "loadFail": "Failed to load"
+    }
+  },
+  "channels": {
+    "title": "Channels",
+    "subtitle": "Manage upstream API channel configuration and connectivity",
+    "new": "New Channel",
+    "table": {
+      "name": "Name",
+      "terminal": "Terminal",
+      "baseUrl": "Base URL",
+      "status": "Status",
+      "updatedAt": "Updated At",
+      "empty": "No channels. Click “New Channel” to add one."
+    },
+    "actions": {
+      "test": "Test Connection",
+      "edit": "Edit",
+      "delete": "Delete",
+      "enable": "Enable",
+      "disable": "Disable"
+    },
+    "modal": {
+      "createTitle": "New Channel",
+      "editTitle": "Edit Channel",
+      "description": "Configure API channel connection details",
+      "name": "Name",
+      "terminal": "Terminal",
+      "baseUrl": "Base URL",
+      "apiKey": "API Key / Token",
+      "enabled": "Enabled"
+    },
+    "deleteDialog": {
+      "title": "Delete Channel",
+      "confirmWithName": "Delete channel \"{{name}}\"? This action cannot be undone.",
+      "confirm": "Delete this channel? This action cannot be undone."
+    },
+    "toast": {
+      "loadFail": "Failed to load channels",
+      "createOk": "Channel created",
+      "updateOk": "Channel updated",
+      "actionFail": "Operation failed",
+      "missingId": "Missing ID",
+      "disabledOk": "Disabled {{name}}",
+      "enabledOk": "Enabled {{name}}",
+      "deletedOk": "Deleted {{name}}",
+      "deleteFail": "Delete failed",
+      "testFail": "Test failed",
+      "nameRequired": "Name is required",
+      "baseUrlRequired": "Base URL is required",
+      "testReachableOkTitle": "{{name}} is reachable",
+      "testReachableOkDesc": "Status: {{status}}, Latency: {{latency}}ms",
+      "testReachableBadTitle": "{{name}} reachable but returned an error",
+      "testUnreachableTitle": "Cannot reach {{name}}",
+      "testTimeout": "Connection timed out"
+    }
+  },
+  "routes": {
+    "title": "Routes",
+    "subtitle": "Configure routing rules and channel priority",
+    "new": "New Route",
+    "table": {
+      "name": "Name",
+      "terminal": "Terminal",
+      "modelMatch": "Model Match",
+      "status": "Status",
+      "updatedAt": "Updated At",
+      "empty": "No routes. Click “New Route” to add one."
+    },
+    "actions": {
+      "channels": "Channels",
+      "edit": "Edit",
+      "delete": "Delete"
+    },
+    "modal": {
+      "createTitle": "New Route",
+      "editTitle": "Edit Route",
+      "description": "Configure routing rules",
+      "name": "Name",
+      "terminal": "Terminal",
+      "modelMatchOptional": "Model match (optional)",
+      "modelMatchHint": "Leave empty to match all models for this terminal",
+      "enabled": "Enabled"
+    },
+    "deleteDialog": {
+      "title": "Delete Route",
+      "confirmWithName": "Delete route \"{{name}}\"? This action cannot be undone.",
+      "confirm": "Delete this route? This action cannot be undone."
+    },
+    "manage": {
+      "title": "Channel Priority: {{name}}",
+      "description": "Reorder channels to set priority (top to bottom)",
+      "assignedTitle": "Assigned Channels",
+      "assignedEmpty": "No assigned channels",
+      "availableTitle": "Available Channels",
+      "availableEmpty": "No channels to add"
+    },
+    "toast": {
+      "loadFail": "Failed to load",
+      "createOk": "Route created",
+      "updateOk": "Route updated",
+      "actionFail": "Operation failed",
+      "saveFail": "Save failed",
+      "prioritySaved": "Channel priority saved",
+      "deletedOk": "Deleted {{name}}",
+      "deleteFail": "Delete failed",
+      "nameRequired": "Name is required",
+      "missingId": "Missing ID"
+    }
+  },
+  "monitor": {
+    "title": "Monitor",
+    "subtitle": "Request logs, statistics, and channel performance",
+    "range": {
+      "today": "Today",
+      "month": "This Month"
+    },
+    "cards": {
+      "totalRequests": "Total Requests",
+      "successRate": "Success Rate",
+      "failed": "Failures",
+      "estimatedCost": "Estimated Cost"
+    },
+    "channelStats": {
+      "title": "Channel Stats",
+      "subtitle": "Requests and performance by channel",
+      "headers": {
+        "channel": "Channel",
+        "terminal": "Terminal",
+        "requests": "Requests",
+        "success": "Success",
+        "failed": "Failed",
+        "avgLatency": "Avg Latency"
+      }
+    },
+    "log": {
+      "title": "Request Logs",
+      "subtitle": "Latest 100 request records",
+      "onlyFailures": "Failures only",
+      "headers": {
+        "time": "Time",
+        "terminal": "Terminal",
+        "channel": "Channel",
+        "model": "Model",
+        "status": "Status",
+        "latency": "Latency",
+        "error": "Error"
+      },
+      "empty": "No request records"
+    },
+    "toast": {
+      "loadFail": "Failed to load"
+    }
+  },
+  "settings": {
+    "title": "Settings",
+    "subtitle": "App configuration and system information",
+    "appearance": {
+      "title": "Appearance",
+      "subtitle": "Customize the look and feel",
+      "theme": "Theme",
+      "themeHint": "Choose light, dark, or follow system"
+    },
+    "language": {
+      "title": "Language",
+      "subtitle": "Switch UI language",
+      "label": "UI language"
+    },
+    "proxy": {
+      "title": "Proxy Settings",
+      "subtitle": "Configure the CLI API endpoint",
+      "host": "Host",
+      "hostHint": "Hostname / IP the CLI connects to",
+      "port": "Port",
+      "portHint": "Port number the CLI connects to",
+      "endpoint": "API Endpoint:",
+      "endpointHint": "Use this as the API endpoint in your AI tools.",
+      "backendListen": "Backend listen:"
+    },
+    "storage": {
+      "title": "Storage",
+      "subtitle": "App data and config file locations",
+      "dataDir": "Data directory",
+      "dataDirHint": "Stores database, logs, and config files",
+      "dbFile": "Database file",
+      "openInDevTitle": "In development",
+      "openInDevDesc": "Open-folder support will be available in a future version"
+    },
+    "about": {
+      "title": "About",
+      "subtitle": "App version and system info",
+      "appName": "App name",
+      "version": "Version",
+      "backendStatus": "Backend status",
+      "description": "Description",
+      "descText": "Universal AI CLI configuration manager",
+      "intro": "CliSwitch is a local multi-channel CLI proxy to manage and switch between multiple AI API services. It supports Claude Code, Codex, Gemini, and more, with high availability and automatic failover."
+    }
+  }
+}

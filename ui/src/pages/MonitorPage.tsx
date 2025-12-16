@@ -22,6 +22,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui";
+import { useI18n } from "@/lib/i18n";
 import {
   listChannels,
   usageRecent,
@@ -35,6 +36,7 @@ import {
 import { formatDateTime, formatDuration, clampStr, terminalLabel } from "../lib";
 
 export function MonitorPage() {
+  const { t } = useI18n();
   const [events, setEvents] = useState<UsageEvent[]>([]);
   const [channels, setChannels] = useState<Channel[]>([]);
   const [stats, setStats] = useState<StatsSummary | null>(null);
@@ -69,7 +71,7 @@ export function MonitorPage() {
       setStats(st);
       setChannelStats(cst.items);
     } catch (e) {
-      toast.error("加载失败", { description: String(e) });
+      toast.error(t("monitor.toast.loadFail"), { description: String(e) });
     } finally {
       setLoading(false);
     }
@@ -89,9 +91,9 @@ export function MonitorPage() {
       {/* 页面标题 */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">监控</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">{t("monitor.title")}</h1>
           <p className="text-muted-foreground text-sm mt-1">
-            请求日志、统计和渠道性能
+            {t("monitor.subtitle")}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -103,13 +105,13 @@ export function MonitorPage() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="today">今天</SelectItem>
-              <SelectItem value="month">本月</SelectItem>
+              <SelectItem value="today">{t("monitor.range.today")}</SelectItem>
+              <SelectItem value="month">{t("monitor.range.month")}</SelectItem>
             </SelectContent>
           </Select>
           <Button variant="outline" onClick={refresh} disabled={loading}>
             <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
-            刷新
+            {t("common.refresh")}
           </Button>
         </div>
       </div>
@@ -118,7 +120,7 @@ export function MonitorPage() {
       <div className="grid gap-4 md:grid-cols-4">
         <Card>
           <CardHeader className="pb-2">
-            <CardDescription>总请求</CardDescription>
+            <CardDescription>{t("monitor.cards.totalRequests")}</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{stats?.requests ?? "-"}</div>
@@ -127,7 +129,7 @@ export function MonitorPage() {
 
         <Card>
           <CardHeader className="pb-2">
-            <CardDescription>成功率</CardDescription>
+            <CardDescription>{t("monitor.cards.successRate")}</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{successRate}%</div>
@@ -136,7 +138,7 @@ export function MonitorPage() {
 
         <Card>
           <CardHeader className="pb-2">
-            <CardDescription>失败数</CardDescription>
+            <CardDescription>{t("monitor.cards.failed")}</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-destructive">
@@ -147,7 +149,7 @@ export function MonitorPage() {
 
         <Card>
           <CardHeader className="pb-2">
-            <CardDescription>预估成本</CardDescription>
+            <CardDescription>{t("monitor.cards.estimatedCost")}</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
@@ -161,19 +163,19 @@ export function MonitorPage() {
       {channelStats.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>渠道统计</CardTitle>
-            <CardDescription>各渠道的请求量和性能</CardDescription>
+            <CardTitle>{t("monitor.channelStats.title")}</CardTitle>
+            <CardDescription>{t("monitor.channelStats.subtitle")}</CardDescription>
           </CardHeader>
           <CardContent className="p-0">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>渠道</TableHead>
-                  <TableHead>终端</TableHead>
-                  <TableHead className="text-right">请求</TableHead>
-                  <TableHead className="text-right">成功</TableHead>
-                  <TableHead className="text-right">失败</TableHead>
-                  <TableHead className="text-right">平均延迟</TableHead>
+                  <TableHead>{t("monitor.channelStats.headers.channel")}</TableHead>
+                  <TableHead>{t("monitor.channelStats.headers.terminal")}</TableHead>
+                  <TableHead className="text-right">{t("monitor.channelStats.headers.requests")}</TableHead>
+                  <TableHead className="text-right">{t("monitor.channelStats.headers.success")}</TableHead>
+                  <TableHead className="text-right">{t("monitor.channelStats.headers.failed")}</TableHead>
+                  <TableHead className="text-right">{t("monitor.channelStats.headers.avgLatency")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -208,13 +210,13 @@ export function MonitorPage() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle>请求日志</CardTitle>
-              <CardDescription>最近 100 条请求记录</CardDescription>
+              <CardTitle>{t("monitor.log.title")}</CardTitle>
+              <CardDescription>{t("monitor.log.subtitle")}</CardDescription>
             </div>
             <div className="flex items-center gap-2">
               <label className="flex items-center gap-2 text-sm">
                 <Switch checked={onlyFailures} onCheckedChange={setOnlyFailures} />
-                仅失败
+                {t("monitor.log.onlyFailures")}
               </label>
             </div>
           </div>
@@ -223,13 +225,13 @@ export function MonitorPage() {
           <Table>
             <TableHeader>
                 <TableRow>
-                  <TableHead className="w-[160px]">时间</TableHead>
-                  <TableHead>终端</TableHead>
-                  <TableHead>渠道</TableHead>
-                  <TableHead>模型</TableHead>
-                  <TableHead>状态</TableHead>
-                  <TableHead className="text-right">延迟</TableHead>
-                <TableHead>错误</TableHead>
+                  <TableHead className="w-[160px]">{t("monitor.log.headers.time")}</TableHead>
+                  <TableHead>{t("monitor.log.headers.terminal")}</TableHead>
+                  <TableHead>{t("monitor.log.headers.channel")}</TableHead>
+                  <TableHead>{t("monitor.log.headers.model")}</TableHead>
+                  <TableHead>{t("monitor.log.headers.status")}</TableHead>
+                  <TableHead className="text-right">{t("monitor.log.headers.latency")}</TableHead>
+                <TableHead>{t("monitor.log.headers.error")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -239,7 +241,7 @@ export function MonitorPage() {
                     colSpan={7}
                     className="text-center text-muted-foreground py-8"
                   >
-                    暂无请求记录
+                    {t("monitor.log.empty")}
                   </TableCell>
                 </TableRow>
               ) : (

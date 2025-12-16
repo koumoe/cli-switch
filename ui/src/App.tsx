@@ -11,6 +11,7 @@ import {
   Zap,
 } from "lucide-react";
 import { useTheme, type Theme } from "@/lib/theme";
+import { useI18n } from "@/lib/i18n";
 import { Button } from "@/components/ui";
 import { getHealth } from "./api";
 
@@ -22,12 +23,12 @@ import { SettingsPage } from "./pages/SettingsPage";
 
 type AppRoute = "overview" | "channels" | "routes" | "monitor" | "settings";
 
-const NAV_ITEMS: { route: AppRoute; label: string; icon: React.ElementType }[] = [
-  { route: "overview", label: "概览", icon: LayoutGrid },
-  { route: "channels", label: "渠道", icon: Radio },
-  { route: "routes", label: "路由", icon: GitBranch },
-  { route: "monitor", label: "监控", icon: Activity },
-  { route: "settings", label: "设置", icon: Settings },
+const NAV_ITEMS: { route: AppRoute; labelKey: string; icon: React.ElementType }[] = [
+  { route: "overview", labelKey: "nav.overview", icon: LayoutGrid },
+  { route: "channels", labelKey: "nav.channels", icon: Radio },
+  { route: "routes", labelKey: "nav.routes", icon: GitBranch },
+  { route: "monitor", labelKey: "nav.monitor", icon: Activity },
+  { route: "settings", labelKey: "nav.settings", icon: Settings },
 ];
 
 function routeFromPath(pathname: string): AppRoute {
@@ -84,6 +85,7 @@ function NavLink({
 
 function ThemeToggle() {
   const { theme, setTheme } = useTheme();
+  const { t } = useI18n();
 
   const cycleTheme = () => {
     const next: Record<Theme, Theme> = {
@@ -95,7 +97,8 @@ function ThemeToggle() {
   };
 
   const Icon = theme === "light" ? Sun : theme === "dark" ? Moon : Monitor;
-  const title = theme === "light" ? "浅色" : theme === "dark" ? "深色" : "跟随系统";
+  const title =
+    theme === "light" ? t("theme.light") : theme === "dark" ? t("theme.dark") : t("theme.system");
 
   return (
     <Button variant="ghost" size="icon" onClick={cycleTheme} title={title}>
@@ -105,7 +108,16 @@ function ThemeToggle() {
 }
 
 function StatusIndicator({ status }: { status: string }) {
+  const { t } = useI18n();
   const isOk = status === "ok";
+  const label =
+    status === "..."
+      ? t("status.checking")
+      : status === "ok"
+        ? t("status.running")
+        : status === "离线"
+          ? t("status.offline")
+          : status;
   return (
     <div className="flex items-center gap-2 text-xs text-muted-foreground">
       <span
@@ -113,7 +125,7 @@ function StatusIndicator({ status }: { status: string }) {
           isOk ? "bg-success" : "bg-destructive"
         }`}
       />
-      {isOk ? "运行中" : status}
+      {label}
     </div>
   );
 }
@@ -122,6 +134,7 @@ export default function App() {
   const [pathname, setPathname] = useState(() => window.location.pathname);
   const route = useMemo(() => routeFromPath(pathname), [pathname]);
   const [health, setHealth] = useState<string>("...");
+  const { t } = useI18n();
 
   useEffect(() => {
     const onPop = () => setPathname(window.location.pathname);
@@ -160,7 +173,7 @@ export default function App() {
               key={item.route}
               route={item.route}
               current={route}
-              label={item.label}
+              label={t(item.labelKey)}
               icon={item.icon}
             />
           ))}

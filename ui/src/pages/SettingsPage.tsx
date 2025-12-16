@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Sun, Moon, Monitor, FolderOpen, Info, Database } from "lucide-react";
+import { Sun, Moon, Monitor, FolderOpen, Info, Database, Languages } from "lucide-react";
 import { toast } from "sonner";
 import {
   Button,
@@ -10,12 +10,19 @@ import {
   CardTitle,
   Badge,
   Input,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from "@/components/ui";
 import { useTheme, type Theme } from "@/lib/theme";
+import { type Locale, useI18n } from "@/lib/i18n";
 import { getHealth, type Health } from "../api";
 
 export function SettingsPage() {
   const { theme, setTheme } = useTheme();
+  const { locale, setLocale, locales, t } = useI18n();
   const [health, setHealth] = useState<Health | null>(null);
 
   useEffect(() => {
@@ -42,18 +49,25 @@ export function SettingsPage() {
   }
 
   const themeOptions: { value: Theme; label: string; icon: React.ElementType }[] = [
-    { value: "light", label: "浅色", icon: Sun },
-    { value: "dark", label: "深色", icon: Moon },
-    { value: "system", label: "跟随系统", icon: Monitor },
+    { value: "light", label: t("theme.light"), icon: Sun },
+    { value: "dark", label: t("theme.dark"), icon: Moon },
+    { value: "system", label: t("theme.system"), icon: Monitor },
   ];
+
+  const backendStatusLabel =
+    health?.status === "ok"
+      ? t("status.running")
+      : health?.status === "离线"
+        ? t("status.offline")
+        : health?.status ?? t("status.checking");
 
   return (
     <div className="space-y-6">
       {/* 页面标题 */}
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">设置</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">{t("settings.title")}</h1>
         <p className="text-muted-foreground text-sm mt-1">
-          应用配置和系统信息
+          {t("settings.subtitle")}
         </p>
       </div>
 
@@ -62,16 +76,16 @@ export function SettingsPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Sun className="h-4 w-4" />
-            外观
+            {t("settings.appearance.title")}
           </CardTitle>
-          <CardDescription>自定义应用的视觉风格</CardDescription>
+          <CardDescription>{t("settings.appearance.subtitle")}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <div className="font-medium text-sm">主题</div>
+              <div className="font-medium text-sm">{t("settings.appearance.theme")}</div>
               <div className="text-xs text-muted-foreground">
-                选择浅色、深色或跟随系统设置
+                {t("settings.appearance.themeHint")}
               </div>
             </div>
             <div className="flex gap-2">
@@ -96,40 +110,70 @@ export function SettingsPage() {
         </CardContent>
       </Card>
 
+      {/* 语言设置 */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Languages className="h-4 w-4" />
+            {t("settings.language.title")}
+          </CardTitle>
+          <CardDescription>{t("settings.language.subtitle")}</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between gap-4">
+            <div className="font-medium text-sm">{t("settings.language.label")}</div>
+            <div className="w-[220px]">
+              <Select value={locale} onValueChange={(v) => setLocale(v as Locale)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {locales.map((l) => (
+                    <SelectItem key={l.value} value={l.value}>
+                      {l.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* 代理配置 */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Database className="h-4 w-4" />
-            代理配置
+            {t("settings.proxy.title")}
           </CardTitle>
-          <CardDescription>配置 CLI 的 API 端点地址</CardDescription>
+          <CardDescription>{t("settings.proxy.subtitle")}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <label className="text-sm font-medium">服务地址</label>
+              <label className="text-sm font-medium">{t("settings.proxy.host")}</label>
               <Input value={apiHost} disabled />
               <p className="text-xs text-muted-foreground">
-                CLI 应连接到的主机名 / IP
+                {t("settings.proxy.hostHint")}
               </p>
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium">服务端口</label>
+              <label className="text-sm font-medium">{t("settings.proxy.port")}</label>
               <Input value={apiPort} disabled />
               <p className="text-xs text-muted-foreground">
-                CLI 应连接到的端口号
+                {t("settings.proxy.portHint")}
               </p>
             </div>
           </div>
           <div className="p-3 rounded-lg bg-muted/50 text-sm text-muted-foreground">
-            API 端点：<code className="font-mono">{apiEndpoint}</code>
+            {t("settings.proxy.endpoint")}<code className="font-mono">{apiEndpoint}</code>
             <br />
-            将此地址配置为你的 AI 工具的 API 端点即可使用。
+            {t("settings.proxy.endpointHint")}
           </div>
           {health?.listen_addr && (
             <div className="text-xs text-muted-foreground">
-              后端监听：<code className="font-mono">{health.listen_addr}</code>
+              {t("settings.proxy.backendListen")}<code className="font-mono">{health.listen_addr}</code>
             </div>
           )}
         </CardContent>
@@ -140,13 +184,13 @@ export function SettingsPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <FolderOpen className="h-4 w-4" />
-            数据存储
+            {t("settings.storage.title")}
           </CardTitle>
-          <CardDescription>应用数据和配置文件位置</CardDescription>
+          <CardDescription>{t("settings.storage.subtitle")}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <label className="text-sm font-medium">数据目录</label>
+            <label className="text-sm font-medium">{t("settings.storage.dataDir")}</label>
             <div className="flex gap-2">
               <Input
                 value={health?.data_dir ?? "-"}
@@ -156,20 +200,20 @@ export function SettingsPage() {
               <Button
                 variant="outline"
                 onClick={() => {
-                  toast.info("功能开发中", {
-                    description: "打开文件夹功能将在后续版本中提供",
+                  toast.info(t("settings.storage.openInDevTitle"), {
+                    description: t("settings.storage.openInDevDesc"),
                   });
                 }}
               >
-                打开
+                {t("common.open")}
               </Button>
             </div>
             <p className="text-xs text-muted-foreground">
-              存放数据库、日志和配置文件
+              {t("settings.storage.dataDirHint")}
             </p>
           </div>
           <div className="space-y-2">
-            <label className="text-sm font-medium">数据库文件</label>
+            <label className="text-sm font-medium">{t("settings.storage.dbFile")}</label>
             <Input value={health?.db_path ?? "-"} disabled className="font-mono text-sm" />
           </div>
         </CardContent>
@@ -180,40 +224,39 @@ export function SettingsPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Info className="h-4 w-4" />
-            关于
+            {t("settings.about.title")}
           </CardTitle>
-          <CardDescription>应用版本和系统信息</CardDescription>
+          <CardDescription>{t("settings.about.subtitle")}</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
             <div className="flex items-center justify-between py-2 border-b">
-              <span className="text-sm text-muted-foreground">应用名称</span>
+              <span className="text-sm text-muted-foreground">{t("settings.about.appName")}</span>
               <span className="text-sm font-medium">CliSwitch</span>
             </div>
             <div className="flex items-center justify-between py-2 border-b">
-              <span className="text-sm text-muted-foreground">版本</span>
+              <span className="text-sm text-muted-foreground">{t("settings.about.version")}</span>
               <span className="text-sm font-mono">
                 {health?.version ? `v${health.version}` : "-"}
               </span>
             </div>
             <div className="flex items-center justify-between py-2 border-b">
-              <span className="text-sm text-muted-foreground">后端状态</span>
+              <span className="text-sm text-muted-foreground">{t("settings.about.backendStatus")}</span>
               <Badge variant={health?.status === "ok" ? "success" : "destructive"}>
-                {health?.status === "ok" ? "运行中" : health?.status ?? "检测中..."}
+                {backendStatusLabel}
               </Badge>
             </div>
             <div className="flex items-center justify-between py-2">
-              <span className="text-sm text-muted-foreground">描述</span>
+              <span className="text-sm text-muted-foreground">{t("settings.about.description")}</span>
               <span className="text-sm text-right max-w-[300px]">
-                通用 AI CLI 配置管理平台
+                {t("settings.about.descText")}
               </span>
             </div>
           </div>
 
           <div className="mt-6 p-4 rounded-lg bg-muted/50">
             <p className="text-sm text-muted-foreground">
-              CliSwitch 是一个本地多渠道 CLI 代理工具，用于管理和切换多个 AI API
-              服务。支持 Claude Code、Codex、Gemini 等终端入口，提供高可用性和自动故障转移。
+              {t("settings.about.intro")}
             </p>
           </div>
         </CardContent>
