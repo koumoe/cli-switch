@@ -177,8 +177,9 @@ jobs:
 
   linux_desktop_arm64:
     name: Linux Desktop (aarch64)
+    if: vars.RELEASE_LINUX_DESKTOP_ARM64 == 'true'
     needs: [validate, ci_gate]
-    runs-on: ubuntu-24.04-arm64
+    runs-on: [self-hosted, Linux, ARM64]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -443,7 +444,7 @@ jobs:
         needs.ci_gate.result == 'success' &&
         needs.linux_desktop_amd64.result == 'success' &&
         needs.macos_desktop.result == 'success' &&
-        needs.linux_desktop_arm64.result == 'success' &&
+        (needs.linux_desktop_arm64.result == 'success' || needs.linux_desktop_arm64.result == 'skipped') &&
         needs.windows_desktop_arm64.result == 'success' &&
         needs.windows_desktop_amd64.result == 'success'
       }}
