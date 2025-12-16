@@ -61,12 +61,12 @@ export function MonitorPage() {
       : 0;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* 页面标题 */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">{t("monitor.title")}</h1>
-          <p className="text-muted-foreground text-sm mt-1">
+          <h1 className="text-lg font-semibold">{t("monitor.title")}</h1>
+          <p className="text-muted-foreground text-xs mt-0.5">
             {t("monitor.subtitle")}
           </p>
         </div>
@@ -75,7 +75,7 @@ export function MonitorPage() {
             value={range}
             onValueChange={(v) => setRange(v as "today" | "month")}
           >
-            <SelectTrigger className="w-[100px]">
+            <SelectTrigger className="w-[110px] h-8">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -83,7 +83,7 @@ export function MonitorPage() {
               <SelectItem value="month">{t("monitor.range.month")}</SelectItem>
             </SelectContent>
           </Select>
-          <Button variant="outline" onClick={refresh} disabled={loading}>
+          <Button size="sm" variant="outline" onClick={refresh} disabled={loading}>
             <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
             {t("common.refresh")}
           </Button>
@@ -91,13 +91,13 @@ export function MonitorPage() {
       </div>
 
       {/* 统计卡片 */}
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-3 md:grid-cols-4">
         <Card>
           <CardHeader className="pb-2">
             <CardDescription>{t("monitor.cards.totalRequests")}</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats?.requests ?? "-"}</div>
+            <div className="text-xl font-semibold">{stats?.requests ?? "-"}</div>
           </CardContent>
         </Card>
 
@@ -106,7 +106,7 @@ export function MonitorPage() {
             <CardDescription>{t("monitor.cards.successRate")}</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{successRate}%</div>
+            <div className="text-xl font-semibold">{successRate}%</div>
           </CardContent>
         </Card>
 
@@ -115,7 +115,7 @@ export function MonitorPage() {
             <CardDescription>{t("monitor.cards.failed")}</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-destructive">
+            <div className="text-xl font-semibold text-destructive">
               {stats?.failed ?? "-"}
             </div>
           </CardContent>
@@ -126,7 +126,7 @@ export function MonitorPage() {
             <CardDescription>{t("monitor.cards.estimatedCost")}</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
+            <div className="text-xl font-semibold">
               ${stats?.estimated_cost_usd ?? "-"}
             </div>
           </CardContent>

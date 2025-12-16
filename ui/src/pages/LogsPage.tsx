@@ -57,13 +57,13 @@ export function LogsPage() {
   }, []);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">{t("logs.title")}</h1>
-          <p className="text-muted-foreground text-sm mt-1">{t("logs.subtitle")}</p>
+          <h1 className="text-lg font-semibold">{t("logs.title")}</h1>
+          <p className="text-muted-foreground text-xs mt-0.5">{t("logs.subtitle")}</p>
         </div>
-        <Button variant="outline" onClick={refresh} disabled={loading}>
+        <Button size="sm" variant="outline" onClick={refresh} disabled={loading}>
           <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
           {t("common.refresh")}
         </Button>
@@ -159,4 +159,3 @@ export function LogsPage() {
     </div>
   );
 }
-

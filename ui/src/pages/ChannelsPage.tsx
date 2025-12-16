@@ -216,16 +216,16 @@ export function ChannelsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* 页面标题 */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">{t("channels.title")}</h1>
-          <p className="text-muted-foreground text-sm mt-1">
+          <h1 className="text-lg font-semibold">{t("channels.title")}</h1>
+          <p className="text-muted-foreground text-xs mt-0.5">
             {t("channels.subtitle")}
           </p>
         </div>
-        <Button onClick={openCreate}>
+        <Button size="sm" onClick={openCreate}>
           <Plus className="h-4 w-4 mr-2" />
           {t("channels.new")}
         </Button>
@@ -240,7 +240,7 @@ export function ChannelsPage() {
                 <TableHead>{t("channels.table.name")}</TableHead>
                 <TableHead>{t("channels.table.terminal")}</TableHead>
                 <TableHead>{t("channels.table.baseUrl")}</TableHead>
-                <TableHead>{t("channels.table.status")}</TableHead>
+                <TableHead className="w-[70px] text-center">{t("channels.table.status")}</TableHead>
                 <TableHead>{t("channels.table.updatedAt")}</TableHead>
                 <TableHead className="w-[100px]">{t("common.actions")}</TableHead>
               </TableRow>
@@ -266,7 +266,7 @@ export function ChannelsPage() {
                         {clampStr(c.base_url, 40)}
                       </code>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="text-center">
                       <Badge variant={c.enabled ? "success" : "secondary"}>
                         {c.enabled ? t("common.enabled") : t("common.disabled")}
                       </Badge>

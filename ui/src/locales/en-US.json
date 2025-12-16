@@ -17,9 +17,13 @@
     "system": "System"
   },
   "status": {
-    "running": "Running",
+    "running": "Service Running",
     "offline": "Offline",
     "checking": "Checking..."
+  },
+  "sidebar": {
+    "expand": "Expand sidebar",
+    "collapse": "Collapse sidebar"
   },
   "common": {
     "loading": "Loading...",
@@ -37,22 +41,27 @@
   },
   "overview": {
     "title": "Overview",
-    "subtitle": "Service status, channel health, and recent requests",
+    "subtitle": "Today's stats, request trends, and channel distribution",
     "cards": {
-      "activeChannels": "Active Channels",
       "todayRequests": "Requests Today",
-      "successRate": "Success Rate",
-      "totalTokens": "Total Tokens"
+      "totalTokens": "Total Tokens",
+      "estimatedCost": "Est. Cost",
+      "avgLatency": "Avg Latency"
     },
-    "channelStatus": {
-      "title": "Channel Status",
-      "subtitle": "Enabled status of configured channels",
-      "empty": "No channels"
+    "trend": {
+      "title": "Request Trend",
+      "subtitle": "Hourly request distribution",
+      "barTooltip": "{{hour}}:00 - {{count}} requests"
     },
-    "recent": {
-      "title": "Recent Requests",
-      "subtitle": "Latest 10 request records",
-      "empty": "No requests"
+    "distribution": {
+      "title": "Channel Usage",
+      "subtitle": "Request share by channel",
+      "empty": "No request data"
+    },
+    "activeChannels": {
+      "title": "Active Channels",
+      "subtitle": "Currently enabled channels",
+      "empty": "No channels enabled"
     },
     "toast": {
       "loadFail": "Failed to load"

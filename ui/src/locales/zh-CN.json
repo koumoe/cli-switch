@@ -17,9 +17,13 @@
     "system": "跟随系统"
   },
   "status": {
-    "running": "运行中",
+    "running": "服务运行中",
     "offline": "离线",
     "checking": "检测中..."
+  },
+  "sidebar": {
+    "expand": "展开侧边栏",
+    "collapse": "收起侧边栏"
   },
   "common": {
     "loading": "加载中...",
@@ -37,22 +41,27 @@
   },
   "overview": {
     "title": "概览",
-    "subtitle": "服务状态、渠道健康与最近请求",
+    "subtitle": "今日统计、请求趋势与渠道分布",
     "cards": {
-      "activeChannels": "活跃渠道",
       "todayRequests": "今日请求",
-      "successRate": "成功率",
-      "totalTokens": "总 Token"
+      "totalTokens": "总 Token",
+      "estimatedCost": "预估费用",
+      "avgLatency": "平均延迟"
     },
-    "channelStatus": {
-      "title": "渠道状态",
-      "subtitle": "已配置渠道的启用状态",
-      "empty": "暂无渠道"
+    "trend": {
+      "title": "今日请求趋势",
+      "subtitle": "按小时统计的请求量分布",
+      "barTooltip": "{{hour}}:00 - {{count}} 次"
     },
-    "recent": {
-      "title": "最近请求",
-      "subtitle": "最近 10 条请求记录",
-      "empty": "暂无请求"
+    "distribution": {
+      "title": "渠道使用分布",
+      "subtitle": "今日各渠道请求占比",
+      "empty": "暂无请求数据"
+    },
+    "activeChannels": {
+      "title": "活跃渠道",
+      "subtitle": "当前启用的渠道列表",
+      "empty": "暂无启用渠道"
     },
     "toast": {
       "loadFail": "加载失败"

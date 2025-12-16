@@ -62,11 +62,11 @@ export function SettingsPage() {
         : health?.status ?? t("status.checking");
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* 页面标题 */}
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">{t("settings.title")}</h1>
-        <p className="text-muted-foreground text-sm mt-1">
+        <h1 className="text-lg font-semibold">{t("settings.title")}</h1>
+        <p className="text-muted-foreground text-xs mt-0.5">
           {t("settings.subtitle")}
         </p>
       </div>
