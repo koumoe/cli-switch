@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -14,7 +14,6 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-  Switch,
   Table,
   TableBody,
   TableCell,
@@ -24,50 +23,25 @@ import {
 } from "@/components/ui";
 import { useI18n } from "@/lib/i18n";
 import {
-  listChannels,
-  usageRecent,
   statsSummary,
   statsChannels,
-  type Channel,
-  type UsageEvent,
   type StatsSummary,
   type ChannelStats,
 } from "../api";
-import { formatDateTime, formatDuration, clampStr, terminalLabel } from "../lib";
+import { terminalLabel } from "../lib";
 
 export function MonitorPage() {
   const { t } = useI18n();
-  const [events, setEvents] = useState<UsageEvent[]>([]);
-  const [channels, setChannels] = useState<Channel[]>([]);
   const [stats, setStats] = useState<StatsSummary | null>(null);
   const [channelStats, setChannelStats] = useState<ChannelStats[]>([]);
   const [loading, setLoading] = useState(false);
 
-  const [onlyFailures, setOnlyFailures] = useState(false);
   const [range, setRange] = useState<"today" | "month">("today");
-
-  const channelNames = useMemo(() => {
-    const m = new Map<string, string>();
-    for (const c of channels) m.set(c.id, c.name);
-    return m;
-  }, [channels]);
-
-  const filtered = useMemo(() => {
-    if (!onlyFailures) return events;
-    return events.filter((e) => !e.success);
-  }, [events, onlyFailures]);
 
   async function refresh() {
     setLoading(true);
     try {
-      const [cs, es, st, cst] = await Promise.all([
-        listChannels(),
-        usageRecent(100),
-        statsSummary(range),
-        statsChannels(range),
-      ]);
-      setChannels(cs);
-      setEvents(es);
+      const [st, cst] = await Promise.all([statsSummary(range), statsChannels(range)]);
       setStats(st);
       setChannelStats(cst.items);
     } catch (e) {
@@ -204,85 +178,6 @@ export function MonitorPage() {
           </CardContent>
         </Card>
       )}
-
-      {/* 请求日志 */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>{t("monitor.log.title")}</CardTitle>
-              <CardDescription>{t("monitor.log.subtitle")}</CardDescription>
-            </div>
-            <div className="flex items-center gap-2">
-              <label className="flex items-center gap-2 text-sm">
-                <Switch checked={onlyFailures} onCheckedChange={setOnlyFailures} />
-                {t("monitor.log.onlyFailures")}
-              </label>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[160px]">{t("monitor.log.headers.time")}</TableHead>
-                  <TableHead>{t("monitor.log.headers.terminal")}</TableHead>
-                  <TableHead>{t("monitor.log.headers.channel")}</TableHead>
-                  <TableHead>{t("monitor.log.headers.model")}</TableHead>
-                  <TableHead>{t("monitor.log.headers.status")}</TableHead>
-                  <TableHead className="text-right">{t("monitor.log.headers.latency")}</TableHead>
-                <TableHead>{t("monitor.log.headers.error")}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filtered.length === 0 ? (
-                <TableRow>
-                  <TableCell
-                    colSpan={7}
-                    className="text-center text-muted-foreground py-8"
-                  >
-                    {t("monitor.log.empty")}
-                  </TableCell>
-                </TableRow>
-              ) : (
-                filtered.map((e) => (
-                  <TableRow key={e.id}>
-                    <TableCell className="text-muted-foreground text-sm">
-                      {formatDateTime(e.ts_ms)}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline">{terminalLabel(e.protocol)}</Badge>
-                    </TableCell>
-                    <TableCell className="text-sm">
-                      {channelNames.get(e.channel_id) ?? "-"}
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {e.model ?? "-"}
-                    </TableCell>
-                    <TableCell>
-                      {e.success ? (
-                        <Badge variant="success">
-                          {e.http_status ?? 200}
-                        </Badge>
-                      ) : (
-                        <Badge variant="destructive">
-                          {e.http_status ?? "ERR"}
-                        </Badge>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right text-muted-foreground">
-                      {formatDuration(e.latency_ms)}
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {e.error_kind ? clampStr(e.error_kind, 30) : "-"}
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
     </div>
   );
 }
