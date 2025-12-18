@@ -227,6 +227,12 @@ export function LogsPage() {
                   <div>{t("logs.cell.input")}: {detailEvent.prompt_tokens?.toLocaleString() ?? "-"}</div>
                   <div>{t("logs.cell.output")}: {detailEvent.completion_tokens?.toLocaleString() ?? "-"}</div>
                   <div>{t("logs.cell.total")}: {detailEvent.total_tokens?.toLocaleString() ?? "-"}</div>
+                  {detailEvent.cache_read_tokens != null && (
+                    <div>{t("logs.cell.cacheRead")}: {detailEvent.cache_read_tokens.toLocaleString()}</div>
+                  )}
+                  {detailEvent.cache_write_tokens != null && (
+                    <div>{t("logs.cell.cacheWrite")}: {detailEvent.cache_write_tokens.toLocaleString()}</div>
+                  )}
                 </div>
               </div>
               <div className="grid grid-cols-[120px_1fr] gap-2">

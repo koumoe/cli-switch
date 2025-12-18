@@ -275,7 +275,9 @@
       "ttft": "首字",
       "input": "输入",
       "output": "输出",
-      "total": "总计"
+      "total": "总计",
+      "cacheRead": "缓存读",
+      "cacheWrite": "缓存写"
     },
     "details": {
       "id": "ID",
@@ -292,7 +294,7 @@
   "pricing": {
     "onboarding": {
       "title": "更新价格表",
-      "description": "首次使用建议先同步 OpenRouter 模型价格，用于计算日志金额与成本统计。",
+      "description": "首次使用建议先同步 llm-metadata 价格数据，用于计算日志金额与成本统计。",
       "sync": "立即更新",
       "syncing": "更新中...",
       "skip": "稍后",
@@ -343,7 +345,7 @@
       "syncOk": "价格表同步成功",
       "syncFail": "价格表同步失败",
       "autoUpdate": "定时更新价格",
-      "autoUpdateHint": "开启后按周期自动同步 OpenRouter 价格表",
+      "autoUpdateHint": "开启后按周期自动从 llm-metadata 同步价格表",
       "intervalHours": "更新周期（小时）",
       "intervalHoursHint": "1~8760 小时",
       "intervalInvalid": "更新周期不合法",

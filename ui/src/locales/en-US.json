@@ -275,7 +275,9 @@
       "ttft": "TTFT",
       "input": "In",
       "output": "Out",
-      "total": "Total"
+      "total": "Total",
+      "cacheRead": "Cache read",
+      "cacheWrite": "Cache write"
     },
     "details": {
       "id": "ID",
@@ -292,7 +294,7 @@
   "pricing": {
     "onboarding": {
       "title": "Sync pricing",
-      "description": "Sync OpenRouter model pricing to enable per-log cost calculation and cost stats.",
+      "description": "Sync model pricing from llm-metadata to enable per-log cost calculation and cost stats.",
       "sync": "Sync now",
       "syncing": "Syncing...",
       "skip": "Later",
@@ -343,7 +345,7 @@
       "syncOk": "Pricing synced",
       "syncFail": "Failed to sync pricing",
       "autoUpdate": "Scheduled pricing sync",
-      "autoUpdateHint": "When enabled, periodically sync OpenRouter pricing",
+      "autoUpdateHint": "When enabled, periodically sync pricing from llm-metadata",
       "intervalHours": "Interval (hours)",
       "intervalHoursHint": "1–8760 hours",
       "intervalInvalid": "Invalid interval",
