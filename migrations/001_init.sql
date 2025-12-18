@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS channels (
   auth_ref TEXT NOT NULL,
   priority INTEGER NOT NULL DEFAULT 0,
   enabled INTEGER NOT NULL,
+  auto_disabled_until_ms INTEGER NOT NULL DEFAULT 0,
   created_at_ms INTEGER NOT NULL,
   updated_at_ms INTEGER NOT NULL
 );
@@ -68,6 +69,14 @@ CREATE TABLE IF NOT EXISTS usage_events (
 CREATE INDEX IF NOT EXISTS idx_usage_ts ON usage_events(ts_ms);
 CREATE INDEX IF NOT EXISTS idx_usage_channel_ts ON usage_events(channel_id, ts_ms);
 CREATE INDEX IF NOT EXISTS idx_usage_success_ts ON usage_events(success, ts_ms);
+
+CREATE TABLE IF NOT EXISTS channel_failures (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  channel_id TEXT NOT NULL,
+  at_ms INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_channel_failures_channel_ts ON channel_failures(channel_id, at_ms);
 
 CREATE TABLE IF NOT EXISTS app_settings (
   key TEXT PRIMARY KEY,

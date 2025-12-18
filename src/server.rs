@@ -230,6 +230,9 @@ fn map_proxy_error(e: ProxyError) -> ApiError {
         ProxyError::NoEnabledChannel(p) => {
             ApiError::Unavailable(format!("未配置启用的 {} 渠道", p.as_str()))
         }
+        ProxyError::NoAvailableChannel(p) => {
+            ApiError::Unavailable(format!("无可用的 {} 渠道（可能被自动禁用）", p.as_str()))
+        }
         ProxyError::InvalidBaseUrl(msg) => ApiError::Internal(anyhow::anyhow!(msg)),
         ProxyError::ReadBody(msg) => ApiError::BadRequest(msg),
         ProxyError::Upstream(msg) => ApiError::BadGateway(msg),
@@ -972,6 +975,10 @@ struct UpdateSettingsInput {
     pricing_auto_update_enabled: Option<bool>,
     pricing_auto_update_interval_hours: Option<i64>,
     close_behavior: Option<storage::CloseBehavior>,
+    auto_disable_enabled: Option<bool>,
+    auto_disable_window_minutes: Option<i64>,
+    auto_disable_failure_times: Option<i64>,
+    auto_disable_disable_minutes: Option<i64>,
 }
 
 async fn update_settings(
@@ -985,6 +992,27 @@ async fn update_settings(
             ));
         }
     }
+    if let Some(v) = input.auto_disable_window_minutes {
+        if v < 1 {
+            return Err(ApiError::BadRequest(
+                "auto_disable_window_minutes 必须 >= 1".to_string(),
+            ));
+        }
+    }
+    if let Some(v) = input.auto_disable_failure_times {
+        if v < 1 {
+            return Err(ApiError::BadRequest(
+                "auto_disable_failure_times 必须 >= 1".to_string(),
+            ));
+        }
+    }
+    if let Some(v) = input.auto_disable_disable_minutes {
+        if v < 1 {
+            return Err(ApiError::BadRequest(
+                "auto_disable_disable_minutes 必须 >= 1".to_string(),
+            ));
+        }
+    }
 
     let settings = storage::update_app_settings(
         (*state.db_path).clone(),
@@ -992,6 +1020,10 @@ async fn update_settings(
             pricing_auto_update_enabled: input.pricing_auto_update_enabled,
             pricing_auto_update_interval_hours: input.pricing_auto_update_interval_hours,
             close_behavior: input.close_behavior,
+            auto_disable_enabled: input.auto_disable_enabled,
+            auto_disable_window_minutes: input.auto_disable_window_minutes,
+            auto_disable_failure_times: input.auto_disable_failure_times,
+            auto_disable_disable_minutes: input.auto_disable_disable_minutes,
         },
     )
     .await?;

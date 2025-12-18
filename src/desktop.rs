@@ -238,11 +238,10 @@ fn handle_user_event(
                                     let _ = storage::update_app_settings(
                                         db_path,
                                         storage::AppSettingsPatch {
-                                            pricing_auto_update_enabled: None,
-                                            pricing_auto_update_interval_hours: None,
                                             close_behavior: Some(
                                                 storage::CloseBehavior::MinimizeToTray,
                                             ),
+                                            ..Default::default()
                                         },
                                     )
                                     .await;

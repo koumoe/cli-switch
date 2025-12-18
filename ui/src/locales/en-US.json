@@ -95,6 +95,9 @@
       "enable": "Enable",
       "disable": "Disable"
     },
+    "status": {
+      "autoDisabled": "Auto disabled: {{minutes}}m"
+    },
     "modal": {
       "createTitle": "New Channel",
       "editTitle": "Edit Channel",
@@ -349,6 +352,21 @@
       "intervalHours": "Interval (hours)",
       "intervalHoursHint": "1–8760 hours",
       "intervalInvalid": "Invalid interval",
+      "saved": "Saved",
+      "saveFail": "Save failed"
+    },
+    "autoDisable": {
+      "title": "Auto Disable",
+      "subtitle": "Temporarily disable a channel after repeated failures",
+      "enable": "Enable auto disable",
+      "enableHint": "When triggered, the channel will be skipped temporarily",
+      "windowMinutes": "Window (minutes)",
+      "windowMinutesHint": "Count failures within X minutes",
+      "failureTimes": "Failures",
+      "failureTimesHint": "Disable after Y failures",
+      "disableMinutes": "Disable duration (minutes)",
+      "disableMinutesHint": "Re-enable automatically after Z minutes",
+      "invalid": "Invalid auto disable parameters",
       "saved": "Saved",
       "saveFail": "Save failed"
     },

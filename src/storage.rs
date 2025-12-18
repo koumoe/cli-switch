@@ -92,6 +92,7 @@ pub struct Channel {
     pub auth_ref: String,
     pub priority: i64,
     pub enabled: bool,
+    pub auto_disabled_until_ms: i64,
     pub created_at_ms: i64,
     pub updated_at_ms: i64,
 }
@@ -115,6 +116,7 @@ pub fn init_db(db_path: &Path) -> anyhow::Result<()> {
         .with_context(|| "执行 migrations/001_init.sql 失败")?;
 
     ensure_channels_schema(&conn)?;
+    ensure_channel_failures_schema(&conn)?;
     ensure_app_settings_schema(&conn)?;
     ensure_pricing_models_schema(&conn)?;
     ensure_usage_events_schema(&conn)?;
@@ -124,6 +126,30 @@ pub fn init_db(db_path: &Path) -> anyhow::Result<()> {
 
 fn ensure_channels_schema(conn: &Connection) -> anyhow::Result<()> {
     ensure_column(conn, "channels", "priority", "INTEGER NOT NULL DEFAULT 0")?;
+    ensure_column(
+        conn,
+        "channels",
+        "auto_disabled_until_ms",
+        "INTEGER NOT NULL DEFAULT 0",
+    )?;
+    Ok(())
+}
+
+fn ensure_channel_failures_schema(conn: &Connection) -> anyhow::Result<()> {
+    conn.execute(
+        r#"
+        CREATE TABLE IF NOT EXISTS channel_failures (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          channel_id TEXT NOT NULL,
+          at_ms INTEGER NOT NULL
+        )
+        "#,
+        [],
+    )?;
+    conn.execute(
+        r#"CREATE INDEX IF NOT EXISTS idx_channel_failures_channel_ts ON channel_failures(channel_id, at_ms)"#,
+        [],
+    )?;
     Ok(())
 }
 
@@ -195,6 +221,10 @@ pub(crate) fn now_ms() -> i64 {
 const KEY_PRICING_AUTO_UPDATE_ENABLED: &str = "pricing_auto_update_enabled";
 const KEY_PRICING_AUTO_UPDATE_INTERVAL_HOURS: &str = "pricing_auto_update_interval_hours";
 const KEY_CLOSE_BEHAVIOR: &str = "close_behavior";
+const KEY_AUTO_DISABLE_ENABLED: &str = "auto_disable_enabled";
+const KEY_AUTO_DISABLE_WINDOW_MINUTES: &str = "auto_disable_window_minutes";
+const KEY_AUTO_DISABLE_FAILURE_TIMES: &str = "auto_disable_failure_times";
+const KEY_AUTO_DISABLE_DISABLE_MINUTES: &str = "auto_disable_disable_minutes";
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -219,6 +249,10 @@ pub struct AppSettings {
     pub pricing_auto_update_enabled: bool,
     pub pricing_auto_update_interval_hours: i64,
     pub close_behavior: CloseBehavior,
+    pub auto_disable_enabled: bool,
+    pub auto_disable_window_minutes: i64,
+    pub auto_disable_failure_times: i64,
+    pub auto_disable_disable_minutes: i64,
 }
 
 impl Default for AppSettings {
@@ -227,6 +261,10 @@ impl Default for AppSettings {
             pricing_auto_update_enabled: false,
             pricing_auto_update_interval_hours: 24,
             close_behavior: CloseBehavior::Ask,
+            auto_disable_enabled: false,
+            auto_disable_window_minutes: 3,
+            auto_disable_failure_times: 5,
+            auto_disable_disable_minutes: 30,
         }
     }
 }
@@ -236,6 +274,10 @@ pub struct AppSettingsPatch {
     pub pricing_auto_update_enabled: Option<bool>,
     pub pricing_auto_update_interval_hours: Option<i64>,
     pub close_behavior: Option<CloseBehavior>,
+    pub auto_disable_enabled: Option<bool>,
+    pub auto_disable_window_minutes: Option<i64>,
+    pub auto_disable_failure_times: Option<i64>,
+    pub auto_disable_disable_minutes: Option<i64>,
 }
 
 fn get_setting(conn: &Connection, key: &str) -> rusqlite::Result<Option<String>> {
@@ -286,6 +328,24 @@ pub async fn get_app_settings(db_path: PathBuf) -> anyhow::Result<AppSettings> {
                 _ => {}
             }
         }
+        if let Some(v) = get_setting(conn, KEY_AUTO_DISABLE_ENABLED)? {
+            out.auto_disable_enabled = matches!(v.trim(), "1" | "true" | "TRUE" | "True");
+        }
+        if let Some(v) = get_setting(conn, KEY_AUTO_DISABLE_WINDOW_MINUTES)? {
+            if let Ok(n) = v.trim().parse::<i64>() {
+                out.auto_disable_window_minutes = n;
+            }
+        }
+        if let Some(v) = get_setting(conn, KEY_AUTO_DISABLE_FAILURE_TIMES)? {
+            if let Ok(n) = v.trim().parse::<i64>() {
+                out.auto_disable_failure_times = n;
+            }
+        }
+        if let Some(v) = get_setting(conn, KEY_AUTO_DISABLE_DISABLE_MINUTES)? {
+            if let Ok(n) = v.trim().parse::<i64>() {
+                out.auto_disable_disable_minutes = n;
+            }
+        }
 
         Ok(out)
     })
@@ -318,11 +378,117 @@ pub async fn update_app_settings(
         if let Some(v) = patch.close_behavior {
             set_setting(conn, KEY_CLOSE_BEHAVIOR, v.as_str(), updated_at_ms)?;
         }
+        if let Some(v) = patch.auto_disable_enabled {
+            set_setting(
+                conn,
+                KEY_AUTO_DISABLE_ENABLED,
+                if v { "true" } else { "false" },
+                updated_at_ms,
+            )?;
+        }
+        if let Some(v) = patch.auto_disable_window_minutes {
+            set_setting(
+                conn,
+                KEY_AUTO_DISABLE_WINDOW_MINUTES,
+                &v.to_string(),
+                updated_at_ms,
+            )?;
+        }
+        if let Some(v) = patch.auto_disable_failure_times {
+            set_setting(
+                conn,
+                KEY_AUTO_DISABLE_FAILURE_TIMES,
+                &v.to_string(),
+                updated_at_ms,
+            )?;
+        }
+        if let Some(v) = patch.auto_disable_disable_minutes {
+            set_setting(
+                conn,
+                KEY_AUTO_DISABLE_DISABLE_MINUTES,
+                &v.to_string(),
+                updated_at_ms,
+            )?;
+        }
         Ok(())
     })
     .await?;
 
     get_app_settings(db_path).await
+}
+
+pub fn channel_is_auto_disabled(channel: &Channel, now_ms: i64) -> bool {
+    channel.auto_disabled_until_ms > now_ms
+}
+
+pub async fn record_channel_failure_and_maybe_disable(
+    db_path: PathBuf,
+    channel_id: String,
+    now_ms: i64,
+    window_minutes: i64,
+    failure_times: i64,
+    disable_minutes: i64,
+) -> anyhow::Result<Option<i64>> {
+    if window_minutes < 1 || disable_minutes < 1 || failure_times < 1 {
+        anyhow::bail!(
+            "auto_disable 配置非法：window_minutes={window_minutes}, failure_times={failure_times}, disable_minutes={disable_minutes}"
+        );
+    }
+    let window_ms = window_minutes.saturating_mul(60_000);
+    let disable_ms = disable_minutes.saturating_mul(60_000);
+
+    with_conn(db_path, move |conn| {
+        let tx = conn.unchecked_transaction()?;
+        let cutoff_ms = now_ms.saturating_sub(window_ms);
+
+        tx.execute(
+            r#"DELETE FROM channel_failures WHERE channel_id = ?1 AND at_ms < ?2"#,
+            params![channel_id, cutoff_ms],
+        )?;
+        tx.execute(
+            r#"INSERT INTO channel_failures (channel_id, at_ms) VALUES (?1, ?2)"#,
+            params![channel_id, now_ms],
+        )?;
+
+        let cnt: i64 = tx.query_row(
+            r#"SELECT COUNT(*) FROM channel_failures WHERE channel_id = ?1 AND at_ms >= ?2"#,
+            params![channel_id, cutoff_ms],
+            |row| row.get(0),
+        )?;
+
+        if cnt < failure_times {
+            tx.commit()?;
+            return Ok(None);
+        }
+
+        let disabled_until_ms = now_ms.saturating_add(disable_ms);
+        tx.execute(
+            r#"
+            UPDATE channels
+            SET auto_disabled_until_ms = ?2, updated_at_ms = ?3
+            WHERE id = ?1
+            "#,
+            params![channel_id, disabled_until_ms, now_ms],
+        )?;
+        tx.execute(
+            r#"DELETE FROM channel_failures WHERE channel_id = ?1"#,
+            params![channel_id],
+        )?;
+        tx.commit()?;
+        Ok(Some(disabled_until_ms))
+    })
+    .await
+}
+
+pub async fn clear_channel_failures(db_path: PathBuf, channel_id: String) -> anyhow::Result<()> {
+    with_conn(db_path, move |conn| {
+        conn.execute(
+            r#"DELETE FROM channel_failures WHERE channel_id = ?1"#,
+            params![channel_id],
+        )?;
+        Ok(())
+    })
+    .await
 }
 
 async fn with_conn<T, F>(db_path: PathBuf, f: F) -> anyhow::Result<T>
@@ -343,7 +509,7 @@ pub async fn list_channels(db_path: PathBuf) -> anyhow::Result<Vec<Channel>> {
     with_conn(db_path, |conn| {
         let mut stmt = conn.prepare(
             r#"
-            SELECT id, name, protocol, base_url, auth_type, auth_ref, priority, enabled, created_at_ms, updated_at_ms
+            SELECT id, name, protocol, base_url, auth_type, auth_ref, priority, enabled, auto_disabled_until_ms, created_at_ms, updated_at_ms
             FROM channels
             ORDER BY CASE protocol
               WHEN 'openai' THEN 0
@@ -372,8 +538,9 @@ pub async fn list_channels(db_path: PathBuf) -> anyhow::Result<Vec<Channel>> {
                 auth_ref: row.get(5)?,
                 priority: row.get(6)?,
                 enabled: row.get::<_, i64>(7)? != 0,
-                created_at_ms: row.get(8)?,
-                updated_at_ms: row.get(9)?,
+                auto_disabled_until_ms: row.get::<_, Option<i64>>(8)?.unwrap_or(0),
+                created_at_ms: row.get(9)?,
+                updated_at_ms: row.get(10)?,
             })
         })?;
 
@@ -436,6 +603,7 @@ pub async fn create_channel(db_path: PathBuf, input: CreateChannel) -> anyhow::R
             auth_ref: input.auth_ref,
             priority: input.priority,
             enabled: input.enabled,
+            auto_disabled_until_ms: 0,
             created_at_ms: ts,
             updated_at_ms: ts,
         })
@@ -460,11 +628,12 @@ pub async fn update_channel(
 ) -> anyhow::Result<()> {
     with_conn(db_path, move |conn| {
         let ts = now_ms();
+        let clear_failures = input.enabled == Some(true);
 
         let mut channel: Channel = {
             let mut stmt = conn.prepare(
                 r#"
-                SELECT id, name, protocol, base_url, auth_type, auth_ref, priority, enabled, created_at_ms, updated_at_ms
+                SELECT id, name, protocol, base_url, auth_type, auth_ref, priority, enabled, auto_disabled_until_ms, created_at_ms, updated_at_ms
                 FROM channels
                 WHERE id = ?1
                 "#,
@@ -488,8 +657,9 @@ pub async fn update_channel(
                     auth_ref: row.get(5)?,
                     priority: row.get(6)?,
                     enabled: row.get::<_, i64>(7)? != 0,
-                    created_at_ms: row.get(8)?,
-                    updated_at_ms: row.get(9)?,
+                    auto_disabled_until_ms: row.get::<_, Option<i64>>(8)?.unwrap_or(0),
+                    created_at_ms: row.get(9)?,
+                    updated_at_ms: row.get(10)?,
                 })
             });
 
@@ -519,13 +689,17 @@ pub async fn update_channel(
         }
         if let Some(v) = input.enabled {
             channel.enabled = v;
+            if v {
+                channel.auto_disabled_until_ms = 0;
+            }
         }
         channel.updated_at_ms = ts;
 
-        conn.execute(
+        let tx = conn.unchecked_transaction()?;
+        tx.execute(
             r#"
             UPDATE channels
-            SET name = ?2, base_url = ?3, auth_type = ?4, auth_ref = ?5, priority = ?6, enabled = ?7, updated_at_ms = ?8
+            SET name = ?2, base_url = ?3, auth_type = ?4, auth_ref = ?5, priority = ?6, enabled = ?7, auto_disabled_until_ms = ?8, updated_at_ms = ?9
             WHERE id = ?1
             "#,
             params![
@@ -536,9 +710,17 @@ pub async fn update_channel(
                 channel.auth_ref,
                 channel.priority,
                 if channel.enabled { 1 } else { 0 },
+                channel.auto_disabled_until_ms,
                 channel.updated_at_ms,
             ],
         )?;
+        if clear_failures {
+            tx.execute(
+                r#"DELETE FROM channel_failures WHERE channel_id = ?1"#,
+                params![channel.id],
+            )?;
+        }
+        tx.commit()?;
 
         Ok(())
     })
@@ -552,14 +734,33 @@ pub async fn set_channel_enabled(
 ) -> anyhow::Result<()> {
     with_conn(db_path, move |conn| {
         let ts = now_ms();
-        let updated = conn.execute(
-            r#"
-            UPDATE channels
-            SET enabled = ?2, updated_at_ms = ?3
-            WHERE id = ?1
-            "#,
-            params![channel_id, if enabled { 1 } else { 0 }, ts],
-        )?;
+        let tx = conn.unchecked_transaction()?;
+        let updated = if enabled {
+            tx.execute(
+                r#"
+                UPDATE channels
+                SET enabled = ?2, auto_disabled_until_ms = 0, updated_at_ms = ?3
+                WHERE id = ?1
+                "#,
+                params![channel_id, 1i64, ts],
+            )?
+        } else {
+            tx.execute(
+                r#"
+                UPDATE channels
+                SET enabled = ?2, updated_at_ms = ?3
+                WHERE id = ?1
+                "#,
+                params![channel_id, 0i64, ts],
+            )?
+        };
+        if enabled {
+            tx.execute(
+                r#"DELETE FROM channel_failures WHERE channel_id = ?1"#,
+                params![channel_id],
+            )?;
+        }
+        tx.commit()?;
 
         if updated == 0 {
             return Err(anyhow::anyhow!("channel not found"));
@@ -573,7 +774,7 @@ pub async fn get_channel(db_path: PathBuf, channel_id: String) -> anyhow::Result
     with_conn(db_path, move |conn| {
         let mut stmt = conn.prepare(
             r#"
-            SELECT id, name, protocol, base_url, auth_type, auth_ref, priority, enabled, created_at_ms, updated_at_ms
+            SELECT id, name, protocol, base_url, auth_type, auth_ref, priority, enabled, auto_disabled_until_ms, created_at_ms, updated_at_ms
             FROM channels
             WHERE id = ?1
             "#,
@@ -598,8 +799,9 @@ pub async fn get_channel(db_path: PathBuf, channel_id: String) -> anyhow::Result
                 auth_ref: row.get(5)?,
                 priority: row.get(6)?,
                 enabled: row.get::<_, i64>(7)? != 0,
-                created_at_ms: row.get(8)?,
-                updated_at_ms: row.get(9)?,
+                auto_disabled_until_ms: row.get::<_, Option<i64>>(8)?.unwrap_or(0),
+                created_at_ms: row.get(9)?,
+                updated_at_ms: row.get(10)?,
             })
         })
         .optional()

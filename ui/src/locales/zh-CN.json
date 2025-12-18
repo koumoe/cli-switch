@@ -95,6 +95,9 @@
       "enable": "启用",
       "disable": "禁用"
     },
+    "status": {
+      "autoDisabled": "自动禁用：{{minutes}} 分"
+    },
     "modal": {
       "createTitle": "新建渠道",
       "editTitle": "编辑渠道",
@@ -349,6 +352,21 @@
       "intervalHours": "更新周期（小时）",
       "intervalHoursHint": "1~8760 小时",
       "intervalInvalid": "更新周期不合法",
+      "saved": "设置已保存",
+      "saveFail": "保存失败"
+    },
+    "autoDisable": {
+      "title": "自动禁用",
+      "subtitle": "在短时间内连续失败时，临时禁用渠道",
+      "enable": "开启自动禁用",
+      "enableHint": "满足条件后将临时跳过该渠道",
+      "windowMinutes": "统计窗口（分钟）",
+      "windowMinutesHint": "X 分钟内统计失败次数",
+      "failureTimes": "失败次数（次）",
+      "failureTimesHint": "Y 次失败触发禁用",
+      "disableMinutes": "禁用时长（分钟）",
+      "disableMinutesHint": "禁用 Z 分钟后自动恢复",
+      "invalid": "自动禁用参数不合法",
       "saved": "设置已保存",
       "saveFail": "保存失败"
     },

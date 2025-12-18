@@ -87,6 +87,7 @@ export function ChannelsPage() {
   >({ openai: [], anthropic: [], gemini: [] });
   const [reordering, setReordering] = useState(false);
   const [dragId, setDragId] = useState<string | null>(null);
+  const renderNowMs = Date.now();
 
   const [modalOpen, setModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<"create" | "edit">("create");
@@ -167,7 +168,9 @@ export function ChannelsPage() {
 
   async function toggleEnabled(c: Channel) {
     try {
-      if (c.enabled) {
+      const nowMs = Date.now();
+      const isAutoDisabled = c.enabled && (c.auto_disabled_until_ms ?? 0) > nowMs;
+      if (c.enabled && !isAutoDisabled) {
         await disableChannel(c.id);
         toast.success(t("channels.toast.disabledOk", { name: c.name }));
       } else {
@@ -320,19 +323,28 @@ export function ChannelsPage() {
                   </TableCell>
                 </TableRow>
               ) : (
-                tabChannels.map((c) => (
-                  <TableRow
-                    key={c.id}
-                    onDragOver={(e) => e.preventDefault()}
-                    onDrop={(e) => {
-                      e.stopPropagation();
-                      e.preventDefault();
-                      const fromId = e.dataTransfer.getData("text/plain");
-                      if (fromId) moveByDrop(protocol, fromId, c.id);
-                      setDragId(null);
-                    }}
-                    className={dragId === c.id ? "bg-accent/30" : undefined}
-                  >
+                tabChannels.map((c) => {
+                  const isAutoDisabled =
+                    c.enabled && (c.auto_disabled_until_ms ?? 0) > renderNowMs;
+                  const effectiveEnabled = c.enabled && !isAutoDisabled;
+                  const autoDisabledMinutes = Math.max(
+                    1,
+                    Math.ceil(((c.auto_disabled_until_ms ?? 0) - renderNowMs) / 60000)
+                  );
+
+                  return (
+                    <TableRow
+                      key={c.id}
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={(e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        const fromId = e.dataTransfer.getData("text/plain");
+                        if (fromId) moveByDrop(protocol, fromId, c.id);
+                        setDragId(null);
+                      }}
+                      className={dragId === c.id ? "bg-accent/30" : undefined}
+                    >
                     <TableCell>
                       <button
                         className="text-muted-foreground hover:text-foreground cursor-grab active:cursor-grabbing"
@@ -355,9 +367,15 @@ export function ChannelsPage() {
                       {c.priority}
                     </TableCell>
                     <TableCell>
-                      <Badge variant={c.enabled ? "success" : "secondary"}>
-                        {c.enabled ? t("common.enabled") : t("common.disabled")}
-                      </Badge>
+                      {isAutoDisabled ? (
+                        <Badge variant="warning">
+                          {t("channels.status.autoDisabled", { minutes: autoDisabledMinutes })}
+                        </Badge>
+                      ) : (
+                        <Badge variant={c.enabled ? "success" : "secondary"}>
+                          {c.enabled ? t("common.enabled") : t("common.disabled")}
+                        </Badge>
+                      )}
                     </TableCell>
                     <TableCell className="text-muted-foreground text-sm">
                       {formatDateTime(c.updated_at_ms)}
@@ -378,12 +396,12 @@ export function ChannelsPage() {
                           size="icon"
                           onClick={() => toggleEnabled(c)}
                           title={
-                            c.enabled
+                            effectiveEnabled
                               ? t("channels.actions.disable")
                               : t("channels.actions.enable")
                           }
                         >
-                          {c.enabled ? (
+                          {effectiveEnabled ? (
                             <PowerOff className="h-4 w-4" />
                           ) : (
                             <Power className="h-4 w-4" />
@@ -407,8 +425,9 @@ export function ChannelsPage() {
                         </Button>
                       </div>
                     </TableCell>
-                  </TableRow>
-                ))
+                    </TableRow>
+                  );
+                })
               )}
             </TableBody>
           </Table>

@@ -16,6 +16,10 @@ export type AppSettings = {
   pricing_auto_update_enabled: boolean;
   pricing_auto_update_interval_hours: number;
   close_behavior: CloseBehavior;
+  auto_disable_enabled: boolean;
+  auto_disable_window_minutes: number;
+  auto_disable_failure_times: number;
+  auto_disable_disable_minutes: number;
 };
 
 export type Channel = {
@@ -27,6 +31,7 @@ export type Channel = {
   auth_ref: string;
   priority: number;
   enabled: boolean;
+  auto_disabled_until_ms: number;
   created_at_ms: number;
   updated_at_ms: number;
 };

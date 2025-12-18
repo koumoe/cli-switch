@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Sun, Moon, Monitor, FolderOpen, Info, Database, Languages, DollarSign, RefreshCw } from "lucide-react";
+import { Sun, Moon, Monitor, FolderOpen, Info, Database, Languages, DollarSign, RefreshCw, Shield } from "lucide-react";
 import { toast } from "sonner";
 import {
   Button,
@@ -29,6 +29,7 @@ export function SettingsPage() {
   const [pricing, setPricing] = useState<PricingStatus | null>(null);
   const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
   const [saving, setSaving] = useState(false);
+  const [autoDisableSaving, setAutoDisableSaving] = useState(false);
   const [closeSaving, setCloseSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
 
@@ -308,6 +309,142 @@ export function SettingsPage() {
                 }
               }}
               disabled={!appSettings || saving}
+            >
+              {t("common.save")}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* 自动禁用 */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Shield className="h-4 w-4" />
+            {t("settings.autoDisable.title")}
+          </CardTitle>
+          <CardDescription>{t("settings.autoDisable.subtitle")}</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <div className="font-medium text-sm">{t("settings.autoDisable.enable")}</div>
+              <div className="text-xs text-muted-foreground">{t("settings.autoDisable.enableHint")}</div>
+            </div>
+            <Switch
+              checked={appSettings?.auto_disable_enabled ?? false}
+              onCheckedChange={(v) => {
+                setAppSettings((prev) => (prev ? { ...prev, auto_disable_enabled: v } : prev));
+              }}
+              disabled={!appSettings}
+            />
+          </div>
+
+          <div className="grid grid-cols-3 gap-3">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">{t("settings.autoDisable.windowMinutes")}</label>
+              <Input
+                type="number"
+                min={1}
+                value={appSettings?.auto_disable_window_minutes ?? 3}
+                onChange={(e) => {
+                  const n = Number(e.target.value);
+                  setAppSettings((prev) =>
+                    prev
+                      ? {
+                          ...prev,
+                          auto_disable_window_minutes: Number.isFinite(n) ? Math.floor(n) : 3,
+                        }
+                      : prev
+                  );
+                }}
+                className="h-8"
+                disabled={!appSettings || !(appSettings?.auto_disable_enabled ?? false)}
+              />
+              <p className="text-xs text-muted-foreground">{t("settings.autoDisable.windowMinutesHint")}</p>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">{t("settings.autoDisable.failureTimes")}</label>
+              <Input
+                type="number"
+                min={1}
+                value={appSettings?.auto_disable_failure_times ?? 5}
+                onChange={(e) => {
+                  const n = Number(e.target.value);
+                  setAppSettings((prev) =>
+                    prev
+                      ? {
+                          ...prev,
+                          auto_disable_failure_times: Number.isFinite(n) ? Math.floor(n) : 5,
+                        }
+                      : prev
+                  );
+                }}
+                className="h-8"
+                disabled={!appSettings || !(appSettings?.auto_disable_enabled ?? false)}
+              />
+              <p className="text-xs text-muted-foreground">{t("settings.autoDisable.failureTimesHint")}</p>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">{t("settings.autoDisable.disableMinutes")}</label>
+              <Input
+                type="number"
+                min={1}
+                value={appSettings?.auto_disable_disable_minutes ?? 30}
+                onChange={(e) => {
+                  const n = Number(e.target.value);
+                  setAppSettings((prev) =>
+                    prev
+                      ? {
+                          ...prev,
+                          auto_disable_disable_minutes: Number.isFinite(n) ? Math.floor(n) : 30,
+                        }
+                      : prev
+                  );
+                }}
+                className="h-8"
+                disabled={!appSettings || !(appSettings?.auto_disable_enabled ?? false)}
+              />
+              <p className="text-xs text-muted-foreground">{t("settings.autoDisable.disableMinutesHint")}</p>
+            </div>
+          </div>
+
+          <div className="flex justify-end">
+            <Button
+              size="sm"
+              onClick={async () => {
+                if (!appSettings) return;
+                const win = appSettings.auto_disable_window_minutes;
+                const times = appSettings.auto_disable_failure_times;
+                const mins = appSettings.auto_disable_disable_minutes;
+                if (
+                  !Number.isFinite(win) ||
+                  !Number.isFinite(times) ||
+                  !Number.isFinite(mins) ||
+                  win < 1 ||
+                  times < 1 ||
+                  mins < 1
+                ) {
+                  toast.error(t("settings.autoDisable.invalid"));
+                  return;
+                }
+                setAutoDisableSaving(true);
+                try {
+                  const next = await updateSettings({
+                    auto_disable_enabled: appSettings.auto_disable_enabled,
+                    auto_disable_window_minutes: win,
+                    auto_disable_failure_times: times,
+                    auto_disable_disable_minutes: mins,
+                  });
+                  setAppSettings(next);
+                  toast.success(t("settings.autoDisable.saved"));
+                } catch (e) {
+                  toast.error(t("settings.autoDisable.saveFail"), { description: String(e) });
+                } finally {
+                  setAutoDisableSaving(false);
+                }
+              }}
+              disabled={!appSettings || autoDisableSaving}
             >
               {t("common.save")}
             </Button>

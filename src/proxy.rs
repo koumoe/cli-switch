@@ -17,6 +17,8 @@ const MAX_INBOUND_BODY_BYTES: usize = 64 * 1024 * 1024;
 pub enum ProxyError {
     #[error("未配置可用渠道：{0}")]
     NoEnabledChannel(Protocol),
+    #[error("无可用渠道（可能被自动禁用）：{0}")]
+    NoAvailableChannel(Protocol),
     #[error("渠道 base_url 无效：{0}")]
     InvalidBaseUrl(String),
     #[error("读取请求体失败：{0}")]
@@ -35,10 +37,9 @@ pub async fn forward(
     req: Request<Body>,
 ) -> Result<Response<Body>, ProxyError> {
     let request_id: Arc<str> = Arc::from(Uuid::new_v4().to_string());
-    let channels = list_enabled_channels(db_path.clone(), protocol).await?;
-    if channels.is_empty() {
-        return Err(ProxyError::NoEnabledChannel(protocol));
-    }
+    let settings = storage::get_app_settings(db_path.clone()).await?;
+    let now_ms = storage::now_ms();
+    let channels = list_available_channels(db_path.clone(), protocol, now_ms, &settings).await?;
     let total_channels = channels.len();
 
     let (parts, body) = req.into_parts();
@@ -56,6 +57,28 @@ pub async fn forward(
     for (idx, channel) in channels.into_iter().enumerate() {
         let is_last = idx + 1 >= total_channels;
         let started = Instant::now();
+
+        macro_rules! fail_attempt {
+            ($err:expr, $msg:literal) => {{
+                let err = $err;
+                maybe_record_failure(db_path.clone(), &settings, &channel.id).await;
+                tracing::event!(
+                    tracing::Level::WARN,
+                    protocol = protocol.as_str(),
+                    channel_id = %channel.id,
+                    attempt = idx + 1,
+                    total = total_channels,
+                    err = %err,
+                    $msg
+                );
+                last_err = Some(err);
+                if is_last {
+                    break;
+                }
+                continue;
+            }};
+        }
+
         tracing::event!(
             tracing::Level::DEBUG,
             protocol = protocol.as_str(),
@@ -67,40 +90,12 @@ pub async fn forward(
 
         let mut url = match build_upstream_url(&channel.base_url, &parts.uri, protocol_root) {
             Ok(v) => v,
-            Err(e) => {
-                tracing::event!(
-                    tracing::Level::WARN,
-                    protocol = protocol.as_str(),
-                    channel_id = %channel.id,
-                    attempt = idx + 1,
-                    total = total_channels,
-                    err = %e,
-                    "proxy attempt failed (build url)"
-                );
-                last_err = Some(e);
-                if is_last {
-                    break;
-                }
-                continue;
-            }
+            Err(e) => fail_attempt!(e, "proxy attempt failed (build url)"),
         };
 
         let mut out_headers = filtered_headers(&parts.headers);
         if let Err(e) = apply_auth(&channel, protocol, &mut url, &mut out_headers) {
-            tracing::event!(
-                tracing::Level::WARN,
-                protocol = protocol.as_str(),
-                channel_id = %channel.id,
-                attempt = idx + 1,
-                total = total_channels,
-                err = %e,
-                "proxy attempt failed (apply auth)"
-            );
-            last_err = Some(e);
-            if is_last {
-                break;
-            }
-            continue;
+            fail_attempt!(e, "proxy attempt failed (apply auth)");
         }
 
         let upstream = match client
@@ -112,6 +107,7 @@ pub async fn forward(
         {
             Ok(r) => r,
             Err(e) => {
+                maybe_record_failure(db_path.clone(), &settings, &channel.id).await;
                 tracing::event!(
                     tracing::Level::WARN,
                     protocol = protocol.as_str(),
@@ -158,6 +154,9 @@ pub async fn forward(
         };
 
         let status = upstream.status();
+        if !status.is_success() {
+            maybe_record_failure(db_path.clone(), &settings, &channel.id).await;
+        }
         if !status.is_success() && !is_last {
             tracing::event!(
                 tracing::Level::WARN,
@@ -202,6 +201,19 @@ pub async fn forward(
             continue;
         }
 
+        if status.is_success() {
+            if let Err(e) =
+                storage::clear_channel_failures(db_path.clone(), channel.id.clone()).await
+            {
+                tracing::event!(
+                    tracing::Level::WARN,
+                    channel_id = %channel.id,
+                    err = %e,
+                    "clear channel failures failed"
+                );
+            }
+        }
+
         return proxy_upstream_response(
             upstream,
             StreamRecordContext {
@@ -222,15 +234,75 @@ pub async fn forward(
     Err(last_err.unwrap_or_else(|| ProxyError::Upstream("all channels failed".to_string())))
 }
 
-async fn list_enabled_channels(
+async fn list_available_channels(
     db_path: std::path::PathBuf,
     protocol: Protocol,
-) -> Result<Vec<Channel>, anyhow::Error> {
+    now_ms: i64,
+    settings: &storage::AppSettings,
+) -> Result<Vec<Channel>, ProxyError> {
     let channels = storage::list_channels(db_path).await?;
-    Ok(channels
+    let enabled: Vec<Channel> = channels
         .into_iter()
         .filter(|c| c.enabled && c.protocol == protocol)
-        .collect())
+        .collect();
+    if enabled.is_empty() {
+        return Err(ProxyError::NoEnabledChannel(protocol));
+    }
+
+    if !settings.auto_disable_enabled {
+        return Ok(enabled);
+    }
+
+    let mut out = Vec::new();
+    for c in enabled {
+        if storage::channel_is_auto_disabled(&c, now_ms) {
+            continue;
+        }
+        out.push(c);
+    }
+    if out.is_empty() {
+        return Err(ProxyError::NoAvailableChannel(protocol));
+    }
+    Ok(out)
+}
+
+async fn maybe_record_failure(
+    db_path: std::path::PathBuf,
+    settings: &storage::AppSettings,
+    channel_id: &str,
+) {
+    if !settings.auto_disable_enabled {
+        return;
+    }
+    let now_ms = storage::now_ms();
+    match storage::record_channel_failure_and_maybe_disable(
+        db_path,
+        channel_id.to_string(),
+        now_ms,
+        settings.auto_disable_window_minutes,
+        settings.auto_disable_failure_times,
+        settings.auto_disable_disable_minutes,
+    )
+    .await
+    {
+        Ok(Some(until_ms)) => {
+            tracing::event!(
+                tracing::Level::WARN,
+                channel_id = channel_id,
+                disabled_until_ms = until_ms,
+                "channel auto disabled"
+            );
+        }
+        Ok(None) => {}
+        Err(e) => {
+            tracing::event!(
+                tracing::Level::WARN,
+                channel_id = channel_id,
+                err = %e,
+                "record channel failure failed"
+            );
+        }
+    }
 }
 
 async fn proxy_upstream_response(
