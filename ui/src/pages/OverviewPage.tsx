@@ -328,7 +328,7 @@ export function OverviewPage() {
   const protocolLabelText = (protocol: Protocol) => protocolLabel(t, protocol);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 pb-4">
       {/* 页面标题 */}
       <div>
         <h1 className="text-lg font-semibold">{t("overview.title")}</h1>

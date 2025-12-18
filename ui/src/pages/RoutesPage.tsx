@@ -219,7 +219,7 @@ export function RoutesPage() {
   }, [channels, assigned, manageRoute]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-4">
       {/* 页面标题 */}
       <div className="flex items-center justify-between">
         <div>

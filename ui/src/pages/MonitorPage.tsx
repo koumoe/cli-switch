@@ -79,7 +79,7 @@ export function MonitorPage() {
       : 0;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 pb-4">
       {/* 页面标题 */}
       <div className="flex items-center justify-between">
         <div>
