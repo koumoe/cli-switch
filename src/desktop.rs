@@ -58,12 +58,14 @@ pub async fn run(port: u16) -> anyhow::Result<()> {
     menu.init_for_nsapp();
 
     let event_loop = EventLoop::new();
+    let fixed_size = LogicalSize::new(1000.0, 680.0);
     let window_builder = WindowBuilder::new()
         .with_title("CliSwitch")
-        .with_inner_size(LogicalSize::new(1000.0, 680.0))
-        .with_min_inner_size(LogicalSize::new(820.0, 560.0))
-        .with_resizable(true)
-        .with_maximizable(true)
+        .with_inner_size(fixed_size)
+        .with_min_inner_size(fixed_size)
+        .with_max_inner_size(fixed_size)
+        .with_resizable(false)
+        .with_maximizable(false)
         .with_minimizable(true);
 
     #[cfg(target_os = "macos")]
