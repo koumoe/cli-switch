@@ -28,7 +28,7 @@ import {
   type StatsSummary,
   type ChannelStats,
 } from "../api";
-import { terminalLabel } from "../lib";
+import { protocolLabel } from "../lib";
 
 export function MonitorPage() {
   const { t } = useI18n();
@@ -157,7 +157,7 @@ export function MonitorPage() {
                   <TableRow key={cs.channel_id}>
                     <TableCell className="font-medium">{cs.name}</TableCell>
                     <TableCell>
-                      <Badge variant="outline">{terminalLabel(cs.protocol)}</Badge>
+                      <Badge variant="outline">{protocolLabel(t, cs.protocol)}</Badge>
                     </TableCell>
                     <TableCell className="text-right">{cs.requests}</TableCell>
                     <TableCell className="text-right text-success">

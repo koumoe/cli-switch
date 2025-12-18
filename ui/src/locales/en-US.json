@@ -73,7 +73,7 @@
     "new": "New Channel",
     "tabs": {
       "codex": "Codex",
-      "claude": "Claude Code",
+      "claude": "Claude",
       "gemini": "Gemini"
     },
     "table": {
@@ -345,7 +345,7 @@
       "backendStatus": "Backend status",
       "description": "Description",
       "descText": "Universal AI CLI configuration manager",
-      "intro": "CliSwitch is a local multi-channel CLI proxy to manage and switch between multiple AI API services. It supports Claude Code, Codex, Gemini, and more, with high availability and automatic failover."
+      "intro": "CliSwitch is a local multi-channel CLI proxy to manage and switch between multiple AI API services. It supports Claude, Codex, Gemini, and more, with high availability and automatic failover."
     }
   }
 }

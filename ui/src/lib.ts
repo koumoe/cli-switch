@@ -1,5 +1,7 @@
 import type { Protocol } from "./api";
 
+export type Translator = (key: string, vars?: Record<string, string | number>) => string;
+
 export function formatDateTime(ms: number | null | undefined): string {
   if (!ms) return "-";
   const d = new Date(ms);
@@ -7,15 +9,19 @@ export function formatDateTime(ms: number | null | undefined): string {
   return d.toLocaleString();
 }
 
-export function terminalLabel(protocol: Protocol): string {
+export function protocolLabelKey(protocol: Protocol): string {
   switch (protocol) {
     case "openai":
-      return "Codex";
+      return "channels.tabs.codex";
     case "anthropic":
-      return "Claude Code";
+      return "channels.tabs.claude";
     case "gemini":
-      return "Gemini";
+      return "channels.tabs.gemini";
   }
+}
+
+export function protocolLabel(t: Translator, protocol: Protocol): string {
+  return t(protocolLabelKey(protocol));
 }
 
 export function formatDuration(ms: number | null | undefined): string {

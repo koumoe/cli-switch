@@ -33,7 +33,7 @@ import {
   type Protocol,
   type UsageEvent,
 } from "../api";
-import { clampStr, formatDateTime, formatDuration, terminalLabel } from "../lib";
+import { clampStr, formatDateTime, formatDuration, protocolLabel, protocolLabelKey } from "../lib";
 
 function parseLocalDateStartMs(s: string): number | undefined {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s.trim());
@@ -193,9 +193,9 @@ export function LogsPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">{t("logs.filters.all")}</SelectItem>
-                  <SelectItem value="openai">{terminalLabel("openai")}</SelectItem>
-                  <SelectItem value="anthropic">{terminalLabel("anthropic")}</SelectItem>
-                  <SelectItem value="gemini">{terminalLabel("gemini")}</SelectItem>
+                  <SelectItem value="openai">{protocolLabel(t, "openai")}</SelectItem>
+                  <SelectItem value="anthropic">{protocolLabel(t, "anthropic")}</SelectItem>
+                  <SelectItem value="gemini">{protocolLabel(t, "gemini")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -207,11 +207,23 @@ export function LogsPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">{t("logs.filters.all")}</SelectItem>
-                  {channels.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.name}
-                    </SelectItem>
-                  ))}
+                  {channels.map((c) => {
+                    const endpoint = protocolLabel(t, c.protocol);
+                    return (
+                      <SelectItem
+                        key={c.id}
+                        value={c.id}
+                        textValue={`${c.name} ${endpoint}`}
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Badge variant="outline" className="text-[10px] px-1 py-0">
+                            {endpoint}
+                          </Badge>
+                          <span className="truncate">{c.name}</span>
+                        </div>
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
             </div>
@@ -315,7 +327,7 @@ export function LogsPage() {
                         {formatDateTime(e.ts_ms)}
                       </TableCell>
                       <TableCell>
-                        <Badge variant="outline">{terminalLabel(e.protocol)}</Badge>
+                        <Badge variant="outline">{protocolLabel(t, e.protocol)}</Badge>
                       </TableCell>
                       <TableCell className="text-sm">
                         {channelNames.get(e.channel_id) ?? "-"}

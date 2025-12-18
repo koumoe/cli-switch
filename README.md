@@ -5,11 +5,11 @@
 [![Rust](https://img.shields.io/badge/Rust-1.92.0-orange.svg)](https://www.rust-lang.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-25.2.1-green.svg)](https://nodejs.org/)
 
-本地多渠道 AI CLI 代理服务，支持 Claude Code / Codex CLI / Gemini CLI 的无感接入、故障转移与用量统计。
+本地多渠道 AI CLI 代理服务，支持 Claude / Codex CLI / Gemini CLI 的无感接入、故障转移与用量统计。
 
 ## 功能特性
 
-- **多 CLI 支持**：统一代理 Claude Code、Codex CLI、Gemini CLI
+- **多 CLI 支持**：统一代理 Claude、Codex CLI、Gemini CLI
 - **多渠道管理**：支持同平台多 Key、不同平台混合配置
 - **智能路由**：按优先级自动重试与故障转移
 - **用量统计**：记录 token 使用量，基于 OpenRouter 价格估算费用

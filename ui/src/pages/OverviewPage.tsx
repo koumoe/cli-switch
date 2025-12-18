@@ -21,12 +21,13 @@ import {
   type ChannelStats,
   type TrendPoint,
 } from "../api";
-import { terminalLabel } from "../lib";
+import { protocolLabel, protocolLabelKey } from "../lib";
 
 type TrendDay = { key: string; label: string };
 type TrendSeries = {
   channel_id: string;
   name: string;
+  protocol: Protocol | null;
   color: string;
   values: number[];
 };
@@ -52,7 +53,15 @@ function buildMonthDays(startMs: number, end: Date): TrendDay[] {
   return out;
 }
 
-function MultiLineTrendChart({ days, series }: { days: TrendDay[]; series: TrendSeries[] }) {
+function MultiLineTrendChart({
+  days,
+  series,
+  protocolLabel,
+}: {
+  days: TrendDay[];
+  series: TrendSeries[];
+  protocolLabel: (protocol: Protocol) => string;
+}) {
   const width = 640;
   const height = 240;
   const padLeft = 34;
@@ -149,8 +158,16 @@ function MultiLineTrendChart({ days, series }: { days: TrendDay[]; series: Trend
       {series.length > 0 && (
         <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-muted-foreground">
           {series.map((s) => (
-            <div key={s.channel_id} className="flex items-center gap-1.5">
-              <span className="inline-block h-2 w-2 rounded-sm" style={{ background: s.color }} />
+            <div key={s.channel_id} className="flex items-center gap-1.5 min-w-0">
+              {s.protocol && (
+                <Badge variant="outline" className="text-[10px] px-1 py-0">
+                  {protocolLabel(s.protocol)}
+                </Badge>
+              )}
+              <span
+                className="inline-block h-2 w-2 rounded-sm shrink-0"
+                style={{ background: s.color }}
+              />
               <span className="max-w-[160px] truncate">{s.name}</span>
             </div>
           ))}
@@ -160,7 +177,13 @@ function MultiLineTrendChart({ days, series }: { days: TrendDay[]; series: Trend
   );
 }
 
-function ChannelDistribution({ stats }: { stats: ChannelStats[] }) {
+function ChannelDistribution({
+  stats,
+  protocolLabel,
+}: {
+  stats: ChannelStats[];
+  protocolLabel: (protocol: Protocol) => string;
+}) {
   const total = stats.reduce((sum, s) => sum + s.success, 0);
   if (total === 0) return null;
 
@@ -173,7 +196,12 @@ function ChannelDistribution({ stats }: { stats: ChannelStats[] }) {
         return (
           <div key={s.channel_id} className="space-y-1">
             <div className="flex items-center justify-between text-xs">
-              <span className="font-medium truncate">{s.name}</span>
+              <div className="min-w-0 flex items-center gap-2 font-medium">
+                <Badge variant="outline" className="text-[10px] px-1 py-0">
+                  {protocolLabel(s.protocol)}
+                </Badge>
+                <span className="truncate">{s.name}</span>
+              </div>
               <span className="text-muted-foreground ml-2">
                 {percent}% ({s.success})
               </span>
@@ -279,6 +307,9 @@ export function OverviewPage() {
       });
     }
 
+    const protocolById = new Map<string, Protocol>();
+    for (const c of channels) protocolById.set(c.id, c.protocol);
+
     const used = [...totals.entries()]
       .filter(([, v]) => v.total > 0)
       .sort((a, b) => b[1].total - a[1].total || a[1].name.localeCompare(b[1].name));
@@ -286,12 +317,15 @@ export function OverviewPage() {
     const series: TrendSeries[] = used.map(([channel_id, meta], idx) => ({
       channel_id,
       name: meta.name,
+      protocol: protocolById.get(channel_id) ?? null,
       color: palette[idx % palette.length]!,
       values: days.map((d) => byDayChannel.get(`${d.key}|${channel_id}`) ?? 0),
     }));
 
     return { days, series };
-  }, [trendItems, stats?.start_ms]);
+  }, [trendItems, stats?.start_ms, channels]);
+
+  const protocolLabelText = (protocol: Protocol) => protocolLabel(t, protocol);
 
   return (
     <div className="space-y-4">
@@ -376,7 +410,11 @@ export function OverviewPage() {
                 {t("overview.trend.empty")}
               </p>
             ) : (
-              <MultiLineTrendChart days={monthTrend.days} series={monthTrend.series} />
+              <MultiLineTrendChart
+                days={monthTrend.days}
+                series={monthTrend.series}
+                protocolLabel={protocolLabelText}
+              />
             )}
           </CardContent>
         </Card>
@@ -400,7 +438,7 @@ export function OverviewPage() {
               </p>
             ) : (
               <div className="max-h-72 overflow-y-auto pr-1">
-                <ChannelDistribution stats={channelStatsUsed} />
+                <ChannelDistribution stats={channelStatsUsed} protocolLabel={protocolLabelText} />
               </div>
             )}
           </CardContent>
@@ -432,7 +470,7 @@ export function OverviewPage() {
                     <div key={p} className="space-y-2">
                       <div className="flex items-center gap-2">
                         <Badge variant="outline" className="text-[10px] px-2 py-0.5">
-                          {terminalLabel(p)}
+                          {protocolLabel(t, p)}
                         </Badge>
                       </div>
                       <div className="flex flex-wrap items-center gap-2">

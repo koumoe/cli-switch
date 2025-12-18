@@ -46,7 +46,7 @@ import {
   type CreateRouteInput,
   type Protocol,
 } from "../api";
-import { formatDateTime, terminalLabel } from "../lib";
+import { formatDateTime, protocolLabel, protocolLabelKey } from "../lib";
 
 type RouteDraft = CreateRouteInput;
 
@@ -265,7 +265,7 @@ export function RoutesPage() {
                       <div className="font-medium">{r.name}</div>
                     </TableCell>
                     <TableCell>
-                      <Badge variant="outline">{terminalLabel(r.protocol)}</Badge>
+                      <Badge variant="outline">{protocolLabel(t, r.protocol)}</Badge>
                     </TableCell>
                     <TableCell className="text-muted-foreground">
                       {r.match_model ?? "-"}
@@ -349,13 +349,13 @@ export function RoutesPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="anthropic">
-                      Claude Code
+                      {protocolLabel(t, "anthropic")}
                     </SelectItem>
                     <SelectItem value="openai">
-                      Codex
+                      {protocolLabel(t, "openai")}
                     </SelectItem>
                     <SelectItem value="gemini">
-                      Gemini
+                      {protocolLabel(t, "gemini")}
                     </SelectItem>
                   </SelectContent>
                 </Select>
