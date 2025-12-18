@@ -167,11 +167,11 @@ pub async fn forward(
                 "proxy attempt got non-2xx, retry next channel"
             );
             let error_detail = match upstream.content_length().unwrap_or(0) {
-                1..=65_536 => upstream
-                    .bytes()
-                    .await
-                    .ok()
-                    .map(|b| truncate(&String::from_utf8_lossy(&b), 2000)),
+                1..=262_144 => upstream.bytes().await.ok().map(|b| {
+                    let msg = parse_error_message(protocol, &b)
+                        .unwrap_or_else(|| String::from_utf8_lossy(&b).to_string());
+                    truncate(&msg, 2000)
+                }),
                 _ => None,
             };
             spawn_usage_event(
@@ -269,8 +269,11 @@ async fn proxy_upstream_response(
         let http_status = Some(status.as_u16() as i64);
         let success = status.is_success();
         let error_kind = (!success).then(|| format!("upstream_http:{}", status.as_u16()));
-        let error_detail =
-            (!success).then(|| truncate(&String::from_utf8_lossy(&bytes), 2000));
+        let error_detail = (!success).then(|| {
+            let msg = parse_error_message(ctx.protocol, &bytes)
+                .unwrap_or_else(|| String::from_utf8_lossy(&bytes).to_string());
+            truncate(&msg, 2000)
+        });
 
         spawn_usage_event(
             storage::CreateUsageEvent {
@@ -610,6 +613,78 @@ fn parse_usage_from_json(protocol: Protocol, bytes: &[u8]) -> TokenUsage {
     extract_usage_from_value(protocol, &v)
 }
 
+fn parse_error_message(_protocol: Protocol, bytes: &[u8]) -> Option<String> {
+    let v: serde_json::Value = serde_json::from_slice(bytes).ok()?;
+    let message = get_error_message(&v)?;
+
+    let mut extras: Vec<String> = Vec::new();
+
+    if let Some(t) = get_str_path(&v, &["error", "type"]) {
+        extras.push(format!("type={t}"));
+    }
+    if let Some(code) = get_any_path(&v, &["error", "code"]) {
+        extras.push(format!("code={code}"));
+    }
+    if let Some(status) = get_any_path(&v, &["error", "status"]) {
+        extras.push(format!("status={status}"));
+    }
+
+    if extras.is_empty() {
+        Some(message)
+    } else {
+        Some(format!("{message} ({})", extras.join(", ")))
+    }
+}
+
+fn get_error_message(v: &serde_json::Value) -> Option<String> {
+    // 覆盖常见上游错误格式：
+    // - OpenAI: { error: { message, type, code } }
+    // - Anthropic: { error: { message, type } } 或 { type: "error", error: { message } }
+    // - Gemini: { error: { message, status, code } }
+    let msg = get_str_path(v, &["error", "message"])
+        .or_else(|| get_str_path(v, &["error", "error", "message"]))
+        .or_else(|| get_str_path(v, &["message"]))
+        .or_else(|| get_str_path(v, &["detail"]))
+        .or_else(|| get_str_path(v, &["error"]))
+        .or_else(|| get_str_path(v, &["error", "details", "0", "message"]));
+    msg.map(|s| s.to_string())
+}
+
+fn get_str_path<'a>(v: &'a serde_json::Value, path: &[&str]) -> Option<&'a str> {
+    let mut cur = v;
+    for key in path {
+        cur = match cur {
+            serde_json::Value::Object(m) => m.get(*key)?,
+            serde_json::Value::Array(a) => {
+                let idx: usize = key.parse().ok()?;
+                a.get(idx)?
+            }
+            _ => return None,
+        };
+    }
+    cur.as_str()
+}
+
+fn get_any_path(v: &serde_json::Value, path: &[&str]) -> Option<String> {
+    let mut cur = v;
+    for key in path {
+        cur = match cur {
+            serde_json::Value::Object(m) => m.get(*key)?,
+            serde_json::Value::Array(a) => {
+                let idx: usize = key.parse().ok()?;
+                a.get(idx)?
+            }
+            _ => return None,
+        };
+    }
+    match cur {
+        serde_json::Value::String(s) => Some(s.clone()),
+        serde_json::Value::Number(n) => Some(n.to_string()),
+        serde_json::Value::Bool(b) => Some(b.to_string()),
+        _ => None,
+    }
+}
+
 fn extract_usage_from_value(protocol: Protocol, v: &serde_json::Value) -> TokenUsage {
     match protocol {
         Protocol::Openai => extract_openai_usage(v),
@@ -701,6 +776,7 @@ struct InstrumentedStream {
     ttft_ms: Option<i64>,
     usage: TokenUsage,
     sse_buf: Vec<u8>,
+    err_body_buf: Vec<u8>,
     stream_error: Option<String>,
 }
 
@@ -716,13 +792,20 @@ impl InstrumentedStream {
             ttft_ms: None,
             usage: TokenUsage::default(),
             sse_buf: Vec::new(),
+            err_body_buf: Vec::new(),
             stream_error: None,
         }
     }
 
     fn on_chunk(&mut self, bytes: &Bytes) {
+        const MAX_ERR_BODY_BUF: usize = 256 * 1024;
         if self.ttft_ms.is_none() {
             self.ttft_ms = Some(self.ctx.started.elapsed().as_millis() as i64);
+        }
+        if !self.ctx.status_is_success && self.err_body_buf.len() < MAX_ERR_BODY_BUF {
+            let remain = MAX_ERR_BODY_BUF - self.err_body_buf.len();
+            self.err_body_buf
+                .extend_from_slice(&bytes[..bytes.len().min(remain)]);
         }
         if self.ctx.parse_sse {
             self.consume_sse(bytes);
@@ -777,10 +860,17 @@ impl InstrumentedStream {
         } else {
             Some("upstream_error".to_string())
         };
-        let error_detail = self
-            .stream_error
-            .as_deref()
-            .map(|e| truncate(e, 2000));
+        let error_detail = if success {
+            None
+        } else if let Some(err) = self.stream_error.as_deref() {
+            Some(truncate(err, 2000))
+        } else if !self.ctx.status_is_success && !self.err_body_buf.is_empty() {
+            let msg = parse_error_message(self.ctx.protocol, &self.err_body_buf)
+                .unwrap_or_else(|| String::from_utf8_lossy(&self.err_body_buf).to_string());
+            Some(truncate(&msg, 2000))
+        } else {
+            None
+        };
 
         tracing::event!(
             tracing::Level::DEBUG,
