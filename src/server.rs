@@ -642,6 +642,11 @@ fn start_ms_for_range(range: StatsRange) -> i64 {
         / 1_000_000) as i64
 }
 
+fn current_local_offset_ms() -> i64 {
+    let offset = time::UtcOffset::current_local_offset().unwrap_or(time::UtcOffset::UTC);
+    (offset.whole_seconds() as i64) * 1000
+}
+
 #[derive(Debug, Deserialize)]
 struct StatsQuery {
     range: Option<String>,
@@ -698,6 +703,47 @@ async fn stats_channels(
     }))
 }
 
+#[derive(Serialize)]
+struct StatsTrendResponse {
+    range: String,
+    start_ms: i64,
+    unit: String,
+    items: Vec<storage::TrendPoint>,
+}
+
+async fn stats_trend(
+    State(state): State<AppState>,
+    Query(q): Query<StatsQuery>,
+) -> Result<impl IntoResponse, ApiError> {
+    let range = q
+        .range
+        .as_deref()
+        .unwrap_or("today")
+        .parse::<StatsRange>()
+        .map_err(ApiError::BadRequest)?;
+
+    match range {
+        StatsRange::Month => {
+            let start_ms = start_ms_for_range(range);
+            let items = storage::stats_trend_by_day_channel(
+                (*state.db_path).clone(),
+                start_ms,
+                current_local_offset_ms(),
+            )
+            .await?;
+            Ok(Json(StatsTrendResponse {
+                range: range.as_str().to_string(),
+                start_ms,
+                unit: "day".to_string(),
+                items,
+            }))
+        }
+        StatsRange::Today => Err(ApiError::BadRequest(
+            "trend 仅支持 range=month".to_string(),
+        )),
+    }
+}
+
 #[derive(Debug, Deserialize)]
 struct UsageRecentQuery {
     limit: Option<i64>,
@@ -736,6 +782,7 @@ fn build_app(state: AppState) -> Router {
         .route("/api/pricing/sync", post(pricing_sync))
         .route("/api/stats/summary", get(stats_summary))
         .route("/api/stats/channels", get(stats_channels))
+        .route("/api/stats/trend", get(stats_trend))
         .route("/api/usage/recent", get(usage_recent))
         .route("/v1/messages", any(proxy_anthropic))
         .route("/v1/messages/{*path}", any(proxy_anthropic))

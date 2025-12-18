@@ -12,90 +12,170 @@ import {
 import { useI18n } from "@/lib/i18n";
 import {
   listChannels,
-  usageRecent,
   statsSummary,
   statsChannels,
+  statsTrend,
   type Channel,
   type Protocol,
-  type UsageEvent,
   type StatsSummary,
   type ChannelStats,
+  type TrendPoint,
 } from "../api";
 import { terminalLabel } from "../lib";
 
-type HourlyData = { hour: number; count: number };
+type TrendDay = { key: string; label: string };
+type TrendSeries = {
+  channel_id: string;
+  name: string;
+  color: string;
+  values: number[];
+};
 
-function getTodayStartMs(now = new Date()): number {
-  return new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+function localDateKey(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
-function aggregateByHour(events: UsageEvent[], startMs: number): HourlyData[] {
-  const counts: HourlyData[] = Array.from({ length: 24 }, (_, hour) => ({ hour, count: 0 }));
+function buildMonthDays(startMs: number, end: Date): TrendDay[] {
+  const out: TrendDay[] = [];
+  const cur = new Date(startMs);
+  cur.setHours(0, 0, 0, 0);
+  const endLocal = new Date(end);
+  endLocal.setHours(0, 0, 0, 0);
 
-  for (const e of events) {
-    if (e.ts_ms >= startMs) {
-      const hour = new Date(e.ts_ms).getHours();
-      counts[hour] = { hour, count: counts[hour]!.count + 1 };
-    }
+  while (cur.getTime() <= endLocal.getTime()) {
+    out.push({ key: localDateKey(cur), label: String(cur.getDate()) });
+    cur.setDate(cur.getDate() + 1);
   }
-
-  return counts;
+  return out;
 }
 
-function TrendChart({
-  data,
-  getTitle,
-}: {
-  data: HourlyData[];
-  getTitle: (hour: number, count: number) => string;
-}) {
-  const maxCount = Math.max(...data.map((d) => d.count), 1);
-  const currentHour = new Date().getHours();
+function MultiLineTrendChart({ days, series }: { days: TrendDay[]; series: TrendSeries[] }) {
+  const width = 640;
+  const height = 240;
+  const padLeft = 34;
+  const padRight = 10;
+  const padTop = 10;
+  const padBottom = 24;
+  const plotW = width - padLeft - padRight;
+  const plotH = height - padTop - padBottom;
+
+  const maxCount = Math.max(1, ...series.flatMap((s) => s.values));
+  const yTicks = [0, Math.round(maxCount / 2), maxCount].filter((v, idx, arr) => arr.indexOf(v) === idx);
+
+  const labelIndices =
+    days.length <= 10
+      ? new Set(days.map((_, idx) => idx))
+      : new Set([0, Math.floor((days.length - 1) / 2), days.length - 1]);
+
+  const xFor = (idx: number) => {
+    if (days.length <= 1) return padLeft;
+    return padLeft + (idx / (days.length - 1)) * plotW;
+  };
+  const yFor = (v: number) => padTop + plotH - (v / maxCount) * plotH;
 
   return (
-    <div className="flex items-end gap-[2px] h-16">
-      {data.map((d) => {
-        const height = (d.count / maxCount) * 100;
-        const isCurrent = d.hour === currentHour;
-        return (
-          <div
-            key={d.hour}
-            className="flex-1 group relative"
-            title={getTitle(d.hour, d.count)}
-          >
-            <div
-              className={`w-full rounded-sm transition-all ${
-                isCurrent
-                  ? "bg-primary"
-                  : d.count > 0
-                  ? "bg-primary/40"
-                  : "bg-muted"
-              }`}
-              style={{ height: `${Math.max(height, 4)}%` }}
-            />
-          </div>
-        );
-      })}
+    <div className="space-y-2 h-full flex flex-col">
+      <div className="w-full flex-1 min-h-[220px]">
+        <svg className="w-full h-full" viewBox={`0 0 ${width} ${height}`}>
+          {/* grid + y axis */}
+          {yTicks.map((v) => {
+            const y = yFor(v);
+            return (
+              <g key={v}>
+                <line
+                  x1={padLeft}
+                  y1={y}
+                  x2={width - padRight}
+                  y2={y}
+                  stroke="hsl(var(--border))"
+                  strokeWidth="1"
+                />
+                <text
+                  x={padLeft - 6}
+                  y={y}
+                  textAnchor="end"
+                  dominantBaseline="middle"
+                  fontSize="10"
+                  fill="hsl(var(--muted-foreground))"
+                >
+                  {v}
+                </text>
+              </g>
+            );
+          })}
+
+          {/* x labels */}
+          {days.map((d, idx) => {
+            if (!labelIndices.has(idx)) return null;
+            const x = xFor(idx);
+            return (
+              <text
+                key={d.key}
+                x={x}
+                y={height - 8}
+                textAnchor="middle"
+                fontSize="10"
+                fill="hsl(var(--muted-foreground))"
+              >
+                {d.label}
+              </text>
+            );
+          })}
+
+          {/* series */}
+          {series.map((s) => {
+            const d = s.values
+              .map((v, idx) => `${idx === 0 ? "M" : "L"} ${xFor(idx)} ${yFor(v)}`)
+              .join(" ");
+            return (
+              <g key={s.channel_id}>
+                <path
+                  d={d}
+                  fill="none"
+                  stroke={s.color}
+                  strokeWidth="2"
+                  strokeLinejoin="round"
+                  strokeLinecap="round"
+                />
+              </g>
+            );
+          })}
+        </svg>
+      </div>
+
+      {series.length > 0 && (
+        <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-muted-foreground">
+          {series.map((s) => (
+            <div key={s.channel_id} className="flex items-center gap-1.5">
+              <span className="inline-block h-2 w-2 rounded-sm" style={{ background: s.color }} />
+              <span className="max-w-[160px] truncate">{s.name}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
 function ChannelDistribution({ stats }: { stats: ChannelStats[] }) {
-  const total = stats.reduce((sum, s) => sum + s.requests, 0);
+  const total = stats.reduce((sum, s) => sum + s.success, 0);
   if (total === 0) return null;
 
-  const sorted = [...stats].sort((a, b) => b.requests - a.requests);
+  const sorted = [...stats].sort((a, b) => b.success - a.success);
 
   return (
     <div className="space-y-2">
       {sorted.map((s) => {
-        const percent = Math.round((s.requests / total) * 100);
+        const percent = Math.round((s.success / total) * 100);
         return (
           <div key={s.channel_id} className="space-y-1">
             <div className="flex items-center justify-between text-xs">
               <span className="font-medium truncate">{s.name}</span>
               <span className="text-muted-foreground ml-2">
-                {percent}% ({s.requests})
+                {percent}% ({s.success})
               </span>
             </div>
             <div className="h-2 bg-muted rounded-full overflow-hidden">
@@ -114,23 +194,23 @@ function ChannelDistribution({ stats }: { stats: ChannelStats[] }) {
 export function OverviewPage() {
   const { t } = useI18n();
   const [channels, setChannels] = useState<Channel[]>([]);
-  const [recent, setRecent] = useState<UsageEvent[]>([]);
   const [stats, setStats] = useState<StatsSummary | null>(null);
   const [channelStats, setChannelStats] = useState<ChannelStats[]>([]);
+  const [trendItems, setTrendItems] = useState<TrendPoint[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     Promise.all([
       listChannels(),
-      usageRecent(200),
-      statsSummary("today"),
-      statsChannels("today"),
+      statsSummary("month"),
+      statsChannels("month"),
+      statsTrend("month"),
     ])
-      .then(([cs, rs, st, cst]) => {
+      .then(([cs, st, cst, tr]) => {
         setChannels(cs);
-        setRecent(rs);
         setStats(st);
         setChannelStats(cst.items);
+        setTrendItems(tr.items);
       })
       .catch((e) => {
         toast.error(t("overview.toast.loadFail"), { description: String(e) });
@@ -157,25 +237,61 @@ export function OverviewPage() {
     [enabledByProtocol],
   );
 
-  const rangeStartMs = stats?.start_ms ?? getTodayStartMs();
-  const todayEvents = useMemo(
-    () => recent.filter((e) => e.ts_ms >= rangeStartMs),
-    [recent, rangeStartMs]
-  );
-  const hourlyData = useMemo(() => aggregateByHour(todayEvents, rangeStartMs), [todayEvents, rangeStartMs]);
-
-  const avgLatency = useMemo(() => {
-    const validEvents = todayEvents.filter((e) => e.latency_ms > 0);
-    if (validEvents.length === 0) return null;
-    const sum = validEvents.reduce((acc, e) => acc + e.latency_ms, 0);
-    return Math.round(sum / validEvents.length);
-  }, [todayEvents]);
+  const avgLatency = stats?.avg_latency_ms ? Math.round(stats.avg_latency_ms) : null;
 
   const formatLatency = (ms: number | null) => {
     if (ms === null) return "-";
     if (ms < 1000) return `${ms}ms`;
     return `${(ms / 1000).toFixed(1)}s`;
   };
+
+  const channelStatsUsed = useMemo(
+    () => channelStats.filter((s) => s.success > 0),
+    [channelStats],
+  );
+
+  const monthTrend = useMemo(() => {
+    const palette = [
+      "hsl(var(--primary))",
+      "hsl(var(--success))",
+      "hsl(var(--warning))",
+      "hsl(var(--destructive))",
+      "hsl(190 80% 45%)",
+      "hsl(260 60% 60%)",
+      "hsl(330 70% 55%)",
+      "hsl(30 90% 55%)",
+    ];
+
+    const startMs = stats?.start_ms ?? Date.now();
+    const days = buildMonthDays(startMs, new Date());
+    const byDayChannel = new Map<string, number>();
+    for (const it of trendItems) {
+      const k = `${localDateKey(new Date(it.bucket_start_ms))}|${it.channel_id}`;
+      byDayChannel.set(k, (byDayChannel.get(k) ?? 0) + it.success);
+    }
+
+    const totals = new Map<string, { name: string; total: number }>();
+    for (const it of trendItems) {
+      const cur = totals.get(it.channel_id);
+      totals.set(it.channel_id, {
+        name: it.name,
+        total: (cur?.total ?? 0) + it.success,
+      });
+    }
+
+    const used = [...totals.entries()]
+      .filter(([, v]) => v.total > 0)
+      .sort((a, b) => b[1].total - a[1].total || a[1].name.localeCompare(b[1].name));
+
+    const series: TrendSeries[] = used.map(([channel_id, meta], idx) => ({
+      channel_id,
+      name: meta.name,
+      color: palette[idx % palette.length]!,
+      values: days.map((d) => byDayChannel.get(`${d.key}|${channel_id}`) ?? 0),
+    }));
+
+    return { days, series };
+  }, [trendItems, stats?.start_ms]);
 
   return (
     <div className="space-y-4">
@@ -244,42 +360,29 @@ export function OverviewPage() {
 
       {/* 趋势图 + 渠道分布 */}
       <div className="grid gap-3 md:grid-cols-2">
-        {/* 今日请求趋势 */}
-        <Card>
+        {/* 本月请求趋势 */}
+        <Card className="flex flex-col">
           <CardHeader className="py-3 px-3">
             <CardTitle className="text-sm">{t("overview.trend.title")}</CardTitle>
             <CardDescription className="text-xs">
               {t("overview.trend.subtitle")}
             </CardDescription>
           </CardHeader>
-          <CardContent className="px-3 pb-3">
+          <CardContent className="px-3 pb-3 flex-1 flex flex-col">
             {loading ? (
               <p className="text-muted-foreground text-xs">{t("common.loading")}</p>
+            ) : monthTrend.series.length === 0 ? (
+              <p className="text-muted-foreground text-xs">
+                {t("overview.trend.empty")}
+              </p>
             ) : (
-              <div className="space-y-2">
-                <TrendChart
-                  data={hourlyData}
-                  getTitle={(hour, count) =>
-                    t("overview.trend.barTooltip", {
-                      hour: String(hour).padStart(2, "0"),
-                      count,
-                    })
-                  }
-                />
-                <div className="flex justify-between text-[10px] text-muted-foreground">
-                  <span>00:00</span>
-                  <span>06:00</span>
-                  <span>12:00</span>
-                  <span>18:00</span>
-                  <span>24:00</span>
-                </div>
-              </div>
+              <MultiLineTrendChart days={monthTrend.days} series={monthTrend.series} />
             )}
           </CardContent>
         </Card>
 
         {/* 渠道使用分布 */}
-        <Card>
+        <Card className="flex flex-col">
           <CardHeader className="py-3 px-3">
             <CardTitle className="text-sm">
               {t("overview.distribution.title")}
@@ -291,12 +394,14 @@ export function OverviewPage() {
           <CardContent className="px-3 pb-3">
             {loading ? (
               <p className="text-muted-foreground text-xs">{t("common.loading")}</p>
-            ) : channelStats.length === 0 ? (
+            ) : channelStatsUsed.length === 0 ? (
               <p className="text-muted-foreground text-xs">
                 {t("overview.distribution.empty")}
               </p>
             ) : (
-              <ChannelDistribution stats={channelStats} />
+              <div className="max-h-72 overflow-y-auto pr-1">
+                <ChannelDistribution stats={channelStatsUsed} />
+              </div>
             )}
           </CardContent>
         </Card>

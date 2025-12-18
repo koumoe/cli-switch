@@ -102,6 +102,7 @@ export type StatsSummary = {
   requests: number;
   success: number;
   failed: number;
+  avg_latency_ms: number | null;
   prompt_tokens: number;
   completion_tokens: number;
   total_tokens: number;
@@ -142,6 +143,20 @@ export type UsageEvent = {
   completion_tokens: number | null;
   total_tokens: number | null;
   estimated_cost_usd: string | null;
+};
+
+export type TrendPoint = {
+  bucket_start_ms: number;
+  channel_id: string;
+  name: string;
+  success: number;
+};
+
+export type StatsTrend = {
+  range: string;
+  start_ms: number;
+  unit: "day";
+  items: TrendPoint[];
 };
 
 async function http<T>(method: string, path: string, body?: unknown): Promise<T> {
@@ -244,6 +259,10 @@ export function statsSummary(range: "today" | "month"): Promise<StatsSummary> {
 
 export function statsChannels(range: "today" | "month"): Promise<StatsChannels> {
   return http<StatsChannels>("GET", `/api/stats/channels?range=${encodeURIComponent(range)}`);
+}
+
+export function statsTrend(range: "month"): Promise<StatsTrend> {
+  return http<StatsTrend>("GET", `/api/stats/trend?range=${encodeURIComponent(range)}`);
 }
 
 export function usageRecent(limit = 200): Promise<UsageEvent[]> {

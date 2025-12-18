@@ -41,21 +41,21 @@
   },
   "overview": {
     "title": "概览",
-    "subtitle": "今日统计、请求趋势与渠道分布",
+    "subtitle": "本月统计、请求趋势与渠道分布",
     "cards": {
-      "todayRequests": "今日请求",
-      "totalTokens": "总 Token",
+      "todayRequests": "本月请求",
+      "totalTokens": "本月 Token",
       "estimatedCost": "预估费用",
       "avgLatency": "平均延迟"
     },
     "trend": {
-      "title": "今日请求趋势",
-      "subtitle": "按小时统计的请求量分布",
-      "barTooltip": "{{hour}}:00 - {{count}} 次"
+      "title": "本月请求趋势",
+      "subtitle": "按日统计，不同折线代表不同渠道",
+      "empty": "暂无趋势数据"
     },
     "distribution": {
       "title": "渠道使用分布",
-      "subtitle": "今日各渠道请求占比",
+      "subtitle": "本月各渠道成功请求占比",
       "empty": "暂无请求数据"
     },
     "activeChannels": {

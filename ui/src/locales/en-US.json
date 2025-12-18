@@ -41,21 +41,21 @@
   },
   "overview": {
     "title": "Overview",
-    "subtitle": "Today's stats, request trends, and channel distribution",
+    "subtitle": "This month's stats, request trends, and channel distribution",
     "cards": {
-      "todayRequests": "Requests Today",
-      "totalTokens": "Total Tokens",
+      "todayRequests": "This Month Requests",
+      "totalTokens": "This Month Tokens",
       "estimatedCost": "Est. Cost",
       "avgLatency": "Avg Latency"
     },
     "trend": {
-      "title": "Request Trend",
-      "subtitle": "Hourly request distribution",
-      "barTooltip": "{{hour}}:00 - {{count}} requests"
+      "title": "This Month Request Trend",
+      "subtitle": "Daily requests, one line per channel",
+      "empty": "No trend data"
     },
     "distribution": {
       "title": "Channel Usage",
-      "subtitle": "Request share by channel",
+      "subtitle": "This month's successful request share by channel",
       "empty": "No request data"
     },
     "activeChannels": {
