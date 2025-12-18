@@ -171,7 +171,9 @@ export default function App() {
   const [health, setHealth] = useState<string>("...");
   const [collapsed, setCollapsed] = useState(() => {
     if (typeof window === "undefined") return false;
-    return localStorage.getItem(SIDEBAR_KEY) === "true";
+    const v = localStorage.getItem(SIDEBAR_KEY);
+    if (v === null) return true;
+    return v === "true";
   });
   const { t } = useI18n();
   const [pricingOnboardingOpen, setPricingOnboardingOpen] = useState(false);
@@ -321,7 +323,7 @@ export default function App() {
       {/* 内容区 */}
       <div className="flex-1 min-w-0 flex flex-col">
         <main className="flex-1 overflow-auto bg-muted/30">
-          <div className="mx-auto w-full max-w-7xl p-5">
+          <div className="mx-auto w-full max-w-7xl p-5 h-full min-h-0 flex flex-col">
             {route === "overview" ? (
               <OverviewPage />
             ) : route === "channels" ? (

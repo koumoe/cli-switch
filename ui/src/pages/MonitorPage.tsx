@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -35,24 +35,42 @@ export function MonitorPage() {
   const [stats, setStats] = useState<StatsSummary | null>(null);
   const [channelStats, setChannelStats] = useState<ChannelStats[]>([]);
   const [loading, setLoading] = useState(false);
+  const loadingRef = useRef(false);
 
   const [range, setRange] = useState<"today" | "month">("today");
 
   async function refresh() {
     setLoading(true);
     try {
+      loadingRef.current = true;
       const [st, cst] = await Promise.all([statsSummary(range), statsChannels(range)]);
       setStats(st);
-      setChannelStats(cst.items);
+      setChannelStats(
+        [...cst.items].sort((a, b) => {
+          if (b.success !== a.success) return b.success - a.success;
+          if (b.requests !== a.requests) return b.requests - a.requests;
+          return a.name.localeCompare(b.name);
+        })
+      );
     } catch (e) {
       toast.error(t("monitor.toast.loadFail"), { description: String(e) });
     } finally {
       setLoading(false);
+      loadingRef.current = false;
     }
   }
 
   useEffect(() => {
     refresh();
+  }, [range]);
+
+  // 自动刷新：每分钟一次（保留手动刷新按钮）
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      if (loadingRef.current) return;
+      void refresh();
+    }, 60_000);
+    return () => window.clearInterval(id);
   }, [range]);
 
   const successRate =
@@ -70,23 +88,26 @@ export function MonitorPage() {
             {t("monitor.subtitle")}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Select
-            value={range}
-            onValueChange={(v) => setRange(v as "today" | "month")}
-          >
-            <SelectTrigger className="w-[110px] h-8">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="today">{t("monitor.range.today")}</SelectItem>
-              <SelectItem value="month">{t("monitor.range.month")}</SelectItem>
-            </SelectContent>
-          </Select>
-          <Button size="sm" variant="outline" onClick={refresh} disabled={loading}>
-            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
-            {t("common.refresh")}
-          </Button>
+        <div className="flex flex-col items-end gap-1">
+          <div className="flex items-center gap-2">
+            <Select
+              value={range}
+              onValueChange={(v) => setRange(v as "today" | "month")}
+            >
+              <SelectTrigger className="w-[110px] h-8">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="today">{t("monitor.range.today")}</SelectItem>
+                <SelectItem value="month">{t("monitor.range.month")}</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button size="sm" variant="outline" onClick={refresh} disabled={loading}>
+              <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
+              {t("common.refresh")}
+            </Button>
+          </div>
+          <div className="text-xs text-muted-foreground">{t("common.autoRefresh1m")}</div>
         </div>
       </div>
 

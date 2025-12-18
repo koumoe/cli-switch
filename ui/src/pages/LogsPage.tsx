@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -18,6 +18,11 @@ import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
   Table,
   TableBody,
   TableCell,
@@ -25,6 +30,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui";
+import { humanizeErrorText } from "@/lib/error";
 import { useI18n } from "@/lib/i18n";
 import {
   listChannels,
@@ -57,7 +63,10 @@ export function LogsPage() {
   const [events, setEvents] = useState<UsageEvent[]>([]);
   const [channels, setChannels] = useState<Channel[]>([]);
   const [loading, setLoading] = useState(false);
+  const loadingRef = useRef(false);
   const [total, setTotal] = useState(0);
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [detailEvent, setDetailEvent] = useState<UsageEvent | null>(null);
 
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -68,7 +77,7 @@ export function LogsPage() {
   const [status, setStatus] = useState<"all" | "success" | "failed">("all");
 
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(50);
+  const [pageSize, setPageSize] = useState(20);
 
   const channelNames = useMemo(() => {
     const m = new Map<string, string>();
@@ -95,6 +104,7 @@ export function LogsPage() {
   ) {
     setLoading(true);
     try {
+      loadingRef.current = true;
       const sStartDate = overrides?.startDate ?? startDate;
       const sEndDate = overrides?.endDate ?? endDate;
       const sProtocol = overrides?.protocol ?? protocol;
@@ -128,6 +138,7 @@ export function LogsPage() {
       toast.error(t("logs.toast.loadFail"), { description: String(e) });
     } finally {
       setLoading(false);
+      loadingRef.current = false;
     }
   }
 
@@ -141,20 +152,117 @@ export function LogsPage() {
     refresh(1);
   }, [pageSize]);
 
+  // 自动刷新：每分钟一次（保留手动刷新按钮）
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      if (loadingRef.current) return;
+      void refresh(page);
+    }, 60_000);
+    return () => window.clearInterval(id);
+  }, [page, pageSize, startDate, endDate, protocol, channelId, model, requestId, status]);
+
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-4 h-full min-h-0">
+      <Dialog
+        open={detailOpen}
+        onOpenChange={(v) => {
+          setDetailOpen(v);
+          if (!v) setDetailEvent(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-[760px]">
+          <DialogHeader>
+            <DialogTitle>{t("logs.title")} - {t("common.details")}</DialogTitle>
+            <DialogDescription>
+              {detailEvent ? formatDateTime(detailEvent.ts_ms) : "-"}
+            </DialogDescription>
+          </DialogHeader>
+
+          {detailEvent && (
+            <div className="grid gap-3 text-sm">
+              <div className="grid grid-cols-[120px_1fr] gap-2">
+                <div className="text-muted-foreground">{t("logs.details.id")}</div>
+                <div className="font-mono break-all">{detailEvent.id}</div>
+              </div>
+              <div className="grid grid-cols-[120px_1fr] gap-2">
+                <div className="text-muted-foreground">{t("logs.details.requestId")}</div>
+                <div className="font-mono break-all">{detailEvent.request_id ?? "-"}</div>
+              </div>
+              <div className="grid grid-cols-[120px_1fr] gap-2">
+                <div className="text-muted-foreground">{t("logs.headers.terminal")}</div>
+                <div>{protocolLabel(t, detailEvent.protocol)}</div>
+              </div>
+              <div className="grid grid-cols-[120px_1fr] gap-2">
+                <div className="text-muted-foreground">{t("logs.headers.channel")}</div>
+                <div className="break-all">{channelNames.get(detailEvent.channel_id) ?? detailEvent.channel_id}</div>
+              </div>
+              <div className="grid grid-cols-[120px_1fr] gap-2">
+                <div className="text-muted-foreground">{t("logs.headers.model")}</div>
+                <div className="break-all">{detailEvent.model ?? "-"}</div>
+              </div>
+              <div className="grid grid-cols-[120px_1fr] gap-2">
+                <div className="text-muted-foreground">{t("logs.details.routeId")}</div>
+                <div className="font-mono break-all">{detailEvent.route_id ?? "-"}</div>
+              </div>
+              <div className="grid grid-cols-[120px_1fr] gap-2">
+                <div className="text-muted-foreground">{t("logs.headers.result")}</div>
+                <div>
+                  {detailEvent.success ? (
+                    <Badge variant="success">{detailEvent.http_status ?? 200}</Badge>
+                  ) : (
+                    <Badge variant="destructive">{detailEvent.http_status ?? "ERR"}</Badge>
+                  )}
+                </div>
+              </div>
+              <div className="grid grid-cols-[120px_1fr] gap-2">
+                <div className="text-muted-foreground">{t("logs.headers.timing")}</div>
+                <div className="flex flex-wrap gap-x-4 gap-y-1">
+                  <div>{t("logs.cell.duration")}: {formatDuration(detailEvent.latency_ms)}</div>
+                  <div>{t("logs.cell.ttft")}: {formatDuration(detailEvent.ttft_ms)}</div>
+                </div>
+              </div>
+              <div className="grid grid-cols-[120px_1fr] gap-2">
+                <div className="text-muted-foreground">{t("logs.headers.tokens")}</div>
+                <div className="flex flex-wrap gap-x-4 gap-y-1">
+                  <div>{t("logs.cell.input")}: {detailEvent.prompt_tokens?.toLocaleString() ?? "-"}</div>
+                  <div>{t("logs.cell.output")}: {detailEvent.completion_tokens?.toLocaleString() ?? "-"}</div>
+                  <div>{t("logs.cell.total")}: {detailEvent.total_tokens?.toLocaleString() ?? "-"}</div>
+                </div>
+              </div>
+              <div className="grid grid-cols-[120px_1fr] gap-2">
+                <div className="text-muted-foreground">{t("logs.headers.cost")}</div>
+                <div className="font-mono">
+                  {detailEvent.estimated_cost_usd ? `$${detailEvent.estimated_cost_usd}` : "-"}
+                </div>
+              </div>
+              <div className="grid grid-cols-[120px_1fr] gap-2">
+                <div className="text-muted-foreground">{t("logs.details.errorKind")}</div>
+                <div className="font-mono break-all">{detailEvent.error_kind ?? "-"}</div>
+              </div>
+              <div className="grid grid-cols-[120px_1fr] gap-2">
+                <div className="text-muted-foreground">{t("logs.details.errorDetail")}</div>
+                <pre className="text-xs whitespace-pre-wrap break-words rounded border bg-muted/30 p-2">{detailEvent.error_detail ? humanizeErrorText(detailEvent.error_detail) : "-"}</pre>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-lg font-semibold">{t("logs.title")}</h1>
           <p className="text-muted-foreground text-xs mt-0.5">{t("logs.subtitle")}</p>
         </div>
-        <Button size="sm" variant="outline" onClick={refresh} disabled={loading}>
-          <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
-          {t("common.refresh")}
-        </Button>
+        <div className="flex flex-col items-end gap-1">
+          <Button size="sm" variant="outline" onClick={() => refresh(page)} disabled={loading}>
+            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
+            {t("common.refresh")}
+          </Button>
+          <div className="text-xs text-muted-foreground">{t("common.autoRefresh1m")}</div>
+        </div>
       </div>
 
-      <Card>
+      <Card className="flex-1 min-h-0 flex flex-col">
         <CardHeader>
           <div className="flex items-start justify-between gap-4">
             <div>
@@ -292,29 +400,30 @@ export function LogsPage() {
             </div>
           </div>
         </CardHeader>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <Table className="min-w-[1100px]">
-              <TableHeader>
+        <CardContent className="p-0 flex flex-col min-h-0 flex-1">
+          <div className="flex-1 min-h-0 overflow-hidden">
+            <Table
+              containerClassName="h-full overflow-y-auto"
+              className="w-full table-fixed text-xs [&_th]:text-center [&_td]:text-center"
+            >
+              <TableHeader className="sticky top-0 bg-background z-10 [&_th]:whitespace-nowrap">
                 <TableRow>
-                  <TableHead className="w-[160px]">{t("logs.headers.time")}</TableHead>
-                  <TableHead>{t("logs.headers.terminal")}</TableHead>
-                  <TableHead>{t("logs.headers.channel")}</TableHead>
-                  <TableHead>{t("logs.headers.model")}</TableHead>
-                  <TableHead>{t("logs.headers.status")}</TableHead>
-                  <TableHead className="text-right">{t("logs.headers.ttft")}</TableHead>
-                  <TableHead className="text-right">{t("logs.headers.duration")}</TableHead>
-                  <TableHead className="text-right">{t("logs.headers.inputTokens")}</TableHead>
-                  <TableHead className="text-right">{t("logs.headers.outputTokens")}</TableHead>
-                  <TableHead className="text-right">{t("logs.headers.cost")}</TableHead>
-                  <TableHead>{t("logs.headers.error")}</TableHead>
+                  <TableHead className="w-30">{t("logs.headers.time")}</TableHead>
+                  <TableHead className="w-20">{t("logs.headers.terminal")}</TableHead>
+                  <TableHead className="w-32.5">{t("logs.headers.channel")}</TableHead>
+                  <TableHead className="w-42.5">{t("logs.headers.model")}</TableHead>
+                  <TableHead className="w-32.5">{t("logs.headers.timing")}</TableHead>
+                  <TableHead className="w-32.5">{t("logs.headers.tokens")}</TableHead>
+                  <TableHead className="w-22.5">{t("logs.headers.cost")}</TableHead>
+                  <TableHead className="w-20">{t("logs.headers.result")}</TableHead>
+                  <TableHead className="w-20">{t("common.details")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {events.length === 0 ? (
                   <TableRow>
                     <TableCell
-                      colSpan={11}
+                      colSpan={9}
                       className="text-center text-muted-foreground py-8"
                     >
                       {t("logs.empty")}
@@ -322,58 +431,84 @@ export function LogsPage() {
                   </TableRow>
                 ) : (
                   events.map((e) => (
-                    <TableRow key={e.id}>
-                      <TableCell className="text-muted-foreground text-sm">
-                        {formatDateTime(e.ts_ms)}
+                    <TableRow key={e.id} className="h-[72px]">
+                      <TableCell className="py-3">
+                        <div className="leading-4">{formatDateTime(e.ts_ms)}</div>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="py-3">
                         <Badge variant="outline">{protocolLabel(t, e.protocol)}</Badge>
                       </TableCell>
-                      <TableCell className="text-sm">
-                        {channelNames.get(e.channel_id) ?? "-"}
+                      <TableCell className="py-3">
+                        <div className="truncate max-w-[120px]">
+                          {channelNames.get(e.channel_id) ?? "-"}
+                        </div>
                       </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {e.model ?? "-"}
+                      <TableCell className="py-3">
+                        <div className="text-muted-foreground truncate max-w-[160px]">
+                          {e.model ?? "-"}
+                        </div>
                       </TableCell>
-                      <TableCell>
-                        {e.success ? (
-                          <Badge variant="success">{e.http_status ?? 200}</Badge>
-                        ) : (
-                          <Badge variant="destructive">
-                            {e.http_status ?? "ERR"}
-                          </Badge>
-                        )}
+                      <TableCell className="py-3">
+                        <div className="flex flex-col items-center gap-0.5 text-xs text-muted-foreground whitespace-nowrap">
+                          <div>{t("logs.cell.duration")}: {formatDuration(e.latency_ms)}</div>
+                          <div>{t("logs.cell.ttft")}: {formatDuration(e.ttft_ms)}</div>
+                        </div>
                       </TableCell>
-                      <TableCell className="text-right text-muted-foreground">
-                        {formatDuration(e.ttft_ms)}
+                      <TableCell className="py-3">
+                        <div className="flex flex-col items-center gap-0.5 text-xs text-muted-foreground">
+                          <div>{t("logs.cell.input")}: {e.prompt_tokens?.toLocaleString() ?? "-"}</div>
+                          <div>{t("logs.cell.output")}: {e.completion_tokens?.toLocaleString() ?? "-"}</div>
+                        </div>
                       </TableCell>
-                      <TableCell className="text-right text-muted-foreground">
-                        {formatDuration(e.latency_ms)}
+                      <TableCell className="py-3">
+                        <div className="text-xs font-mono text-muted-foreground whitespace-nowrap truncate">
+                          {e.estimated_cost_usd ? `$${e.estimated_cost_usd}` : "-"}
+                        </div>
                       </TableCell>
-                      <TableCell className="text-right text-muted-foreground">
-                        {e.prompt_tokens?.toLocaleString() ?? "-"}
+                      <TableCell className="py-3">
+                        <div className="flex flex-col items-center gap-1">
+                          <div>
+                            {e.success ? (
+                              <Badge variant="success">{e.http_status ?? 200}</Badge>
+                            ) : (
+                              <Badge variant="destructive">
+                                {e.http_status ?? "ERR"}
+                              </Badge>
+                            )}
+                          </div>
+                          {(e.error_detail || e.error_kind) && (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <div className="text-xs text-destructive/80 truncate max-w-[110px] cursor-default">
+                                  {clampStr(
+                                    e.error_detail
+                                      ? humanizeErrorText(e.error_detail)
+                                      : e.error_kind || "-",
+                                    30
+                                  )}
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent className="max-w-[520px] whitespace-pre-wrap break-words">
+                                {e.error_detail
+                                  ? humanizeErrorText(e.error_detail)
+                                  : e.error_kind}
+                              </TooltipContent>
+                            </Tooltip>
+                          )}
+                        </div>
                       </TableCell>
-                      <TableCell className="text-right text-muted-foreground">
-                        {e.completion_tokens?.toLocaleString() ?? "-"}
-                      </TableCell>
-                      <TableCell className="text-right font-mono text-xs text-muted-foreground">
-                        {e.estimated_cost_usd ? `$${e.estimated_cost_usd}` : "-"}
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {e.error_detail || e.error_kind ? (
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <span className="cursor-default">
-                                {clampStr(e.error_detail || e.error_kind || "-", 60)}
-                              </span>
-                            </TooltipTrigger>
-                            <TooltipContent className="max-w-[520px] whitespace-pre-wrap break-words">
-                              {e.error_detail || e.error_kind}
-                            </TooltipContent>
-                          </Tooltip>
-                        ) : (
-                          "-"
-                        )}
+                      <TableCell className="py-3">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 px-2 text-xs"
+                          onClick={() => {
+                            setDetailEvent(e);
+                            setDetailOpen(true);
+                          }}
+                        >
+                          {t("common.open")}
+                        </Button>
                       </TableCell>
                     </TableRow>
                   ))

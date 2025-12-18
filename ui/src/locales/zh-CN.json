@@ -28,11 +28,13 @@
   "common": {
     "loading": "加载中...",
     "refresh": "刷新",
+    "autoRefresh1m": "每分钟自动更新",
     "cancel": "取消",
     "save": "保存",
     "delete": "删除",
     "add": "添加",
     "open": "打开",
+    "details": "详情",
     "enabled": "启用",
     "disabled": "禁用",
     "actions": "操作",
@@ -242,8 +244,8 @@
       "channel": "渠道",
       "model": "模型",
       "modelPlaceholder": "模糊匹配",
-      "dimension": "Request ID",
-      "dimensionPlaceholder": "Request ID",
+      "dimension": "请求 ID",
+      "dimensionPlaceholder": "请求 ID",
       "status": "状态",
       "success": "成功",
       "failed": "失败",
@@ -262,13 +264,24 @@
       "terminal": "终端",
       "channel": "渠道",
       "model": "模型",
-      "status": "状态",
-      "ttft": "首字时间",
-      "duration": "耗时",
-      "inputTokens": "输入 Token",
-      "outputTokens": "输出 Token",
+      "timing": "耗时",
+      "tokens": "Token",
       "cost": "金额",
-      "error": "错误"
+      "result": "状态"
+    },
+    "cell": {
+      "duration": "耗时",
+      "ttft": "首字",
+      "input": "输入",
+      "output": "输出",
+      "total": "总计"
+    },
+    "details": {
+      "id": "ID",
+      "requestId": "请求 ID",
+      "routeId": "路由 ID",
+      "errorKind": "错误类型",
+      "errorDetail": "错误详情"
     },
     "empty": "暂无请求记录",
     "toast": {

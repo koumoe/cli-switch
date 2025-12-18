@@ -28,11 +28,13 @@
   "common": {
     "loading": "Loading...",
     "refresh": "Refresh",
+    "autoRefresh1m": "Auto updates every minute",
     "cancel": "Cancel",
     "save": "Save",
     "delete": "Delete",
     "add": "Add",
     "open": "Open",
+    "details": "Details",
     "enabled": "Enabled",
     "disabled": "Disabled",
     "actions": "Actions",
@@ -262,13 +264,24 @@
       "terminal": "Terminal",
       "channel": "Channel",
       "model": "Model",
-      "status": "Status",
-      "ttft": "TTFT",
-      "duration": "Duration",
-      "inputTokens": "Input",
-      "outputTokens": "Output",
+      "timing": "Timing",
+      "tokens": "Tokens",
       "cost": "Cost",
-      "error": "Error"
+      "result": "Result"
+    },
+    "cell": {
+      "duration": "Duration",
+      "ttft": "TTFT",
+      "input": "In",
+      "output": "Out",
+      "total": "Total"
+    },
+    "details": {
+      "id": "ID",
+      "requestId": "Request ID",
+      "routeId": "Route ID",
+      "errorKind": "Error Kind",
+      "errorDetail": "Error Detail"
     },
     "empty": "No request records",
     "toast": {

@@ -1,3 +1,5 @@
+import { extractErrorMessage } from "@/lib/error";
+
 export type Protocol = "openai" | "anthropic" | "gemini";
 
 export type Health = {
@@ -184,8 +186,21 @@ async function http<T>(method: string, path: string, body?: unknown): Promise<T>
   }
 
   const text = await res.text().catch(() => "");
-  const msg = text.trim().length > 0 ? text : `${method} ${path} failed: ${res.status}`;
-  throw new Error(msg);
+  const trimmed = text.trim();
+
+  let msg: string | null = null;
+  if (trimmed.length > 0) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      msg = extractErrorMessage(parsed);
+      if (!msg) msg = trimmed;
+    } catch {
+      msg = trimmed;
+    }
+  }
+
+  const fallback = `${method} ${path} failed: ${res.status}`;
+  throw new Error(msg ? `${msg}` : fallback);
 }
 
 export function getHealth(): Promise<Health> {
