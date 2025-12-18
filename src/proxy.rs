@@ -135,6 +135,7 @@ pub async fn forward(
                             "upstream_error:{}",
                             truncate(&e.to_string(), 240)
                         )),
+                        error_detail: Some(truncate(&e.to_string(), 2000)),
                         latency_ms: started.elapsed().as_millis() as i64,
                         ttft_ms: None,
                         prompt_tokens: None,
@@ -165,6 +166,14 @@ pub async fn forward(
                 http_status = status.as_u16(),
                 "proxy attempt got non-2xx, retry next channel"
             );
+            let error_detail = match upstream.content_length().unwrap_or(0) {
+                1..=65_536 => upstream
+                    .bytes()
+                    .await
+                    .ok()
+                    .map(|b| truncate(&String::from_utf8_lossy(&b), 2000)),
+                _ => None,
+            };
             spawn_usage_event(
                 storage::CreateUsageEvent {
                     request_id: Some(request_id.clone()),
@@ -176,6 +185,7 @@ pub async fn forward(
                     success: false,
                     http_status: Some(status.as_u16() as i64),
                     error_kind: Some(format!("upstream_http:{}", status.as_u16())),
+                    error_detail,
                     latency_ms: started.elapsed().as_millis() as i64,
                     ttft_ms: None,
                     prompt_tokens: None,
@@ -259,6 +269,8 @@ async fn proxy_upstream_response(
         let http_status = Some(status.as_u16() as i64);
         let success = status.is_success();
         let error_kind = (!success).then(|| format!("upstream_http:{}", status.as_u16()));
+        let error_detail =
+            (!success).then(|| truncate(&String::from_utf8_lossy(&bytes), 2000));
 
         spawn_usage_event(
             storage::CreateUsageEvent {
@@ -271,6 +283,7 @@ async fn proxy_upstream_response(
                 success,
                 http_status,
                 error_kind,
+                error_detail,
                 latency_ms: duration_ms,
                 ttft_ms: None,
                 prompt_tokens,
@@ -764,6 +777,10 @@ impl InstrumentedStream {
         } else {
             Some("upstream_error".to_string())
         };
+        let error_detail = self
+            .stream_error
+            .as_deref()
+            .map(|e| truncate(e, 2000));
 
         tracing::event!(
             tracing::Level::DEBUG,
@@ -786,6 +803,7 @@ impl InstrumentedStream {
                 success,
                 http_status: Some(self.ctx.http_status),
                 error_kind,
+                error_detail,
                 latency_ms: duration_ms,
                 ttft_ms: self.ttft_ms,
                 prompt_tokens,

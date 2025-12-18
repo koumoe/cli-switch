@@ -10,6 +10,8 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use std::{net::SocketAddr, path::PathBuf, sync::Arc};
+use tokio::sync::watch;
+use tokio::time::Duration;
 #[cfg(not(feature = "embed-ui"))]
 use tower_http::services::ServeDir;
 use tower_http::trace::TraceLayer;
@@ -22,6 +24,7 @@ pub struct AppState {
     pub listen_addr: SocketAddr,
     pub db_path: Arc<PathBuf>,
     pub http_client: reqwest::Client,
+    pub settings_notify: watch::Sender<u64>,
 }
 
 #[derive(Serialize)]
@@ -538,8 +541,16 @@ fn json_value_to_string(v: &serde_json::Value) -> Option<String> {
 }
 
 async fn pricing_sync(State(state): State<AppState>) -> Result<impl IntoResponse, ApiError> {
-    let resp = state
-        .http_client
+    let (updated, updated_at_ms) =
+        run_pricing_sync(&state.http_client, (*state.db_path).clone()).await?;
+    Ok(Json(PricingSyncResponse { updated, updated_at_ms }))
+}
+
+async fn run_pricing_sync(
+    http_client: &reqwest::Client,
+    db_path: PathBuf,
+) -> Result<(usize, i64), ApiError> {
+    let resp = http_client
         .get("https://openrouter.ai/api/v1/models")
         .send()
         .await
@@ -586,14 +597,51 @@ async fn pricing_sync(State(state): State<AppState>) -> Result<impl IntoResponse
         });
     }
 
-    let updated = storage::upsert_pricing_models((*state.db_path).clone(), models, updated_at_ms)
+    let updated = storage::upsert_pricing_models(db_path.clone(), models, updated_at_ms)
         .await
         .map_err(ApiError::Internal)?;
 
-    Ok(Json(PricingSyncResponse {
-        updated,
-        updated_at_ms,
-    }))
+    if let Err(e) = storage::backfill_usage_event_costs(db_path).await {
+        tracing::warn!(err = %e, "backfill usage event costs failed");
+    }
+
+    Ok((updated, updated_at_ms))
+}
+
+async fn pricing_auto_update_loop(
+    db_path: PathBuf,
+    http_client: reqwest::Client,
+    mut notify: watch::Receiver<u64>,
+) {
+    loop {
+        let settings = match storage::get_app_settings(db_path.clone()).await {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::warn!(err = %e, "load app settings failed");
+                storage::AppSettings::default()
+            }
+        };
+
+        if !settings.pricing_auto_update_enabled {
+            if notify.changed().await.is_err() {
+                break;
+            }
+            continue;
+        }
+
+        let hours = settings.pricing_auto_update_interval_hours.clamp(1, 8760);
+        if let Err(e) = run_pricing_sync(&http_client, db_path.clone()).await {
+            tracing::warn!(err = %e, "pricing auto sync failed");
+        }
+
+        tokio::select! {
+            _ = tokio::time::sleep(Duration::from_secs((hours as u64) * 3600)) => {}
+            changed = notify.changed() => {
+                if changed.is_err() { break; }
+                continue;
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -745,22 +793,121 @@ async fn stats_trend(
 }
 
 #[derive(Debug, Deserialize)]
-struct UsageRecentQuery {
-    limit: Option<i64>,
+struct UsageListQueryParams {
+    start_ms: Option<String>,
+    end_ms: Option<String>,
+    protocol: Option<String>,
+    channel_id: Option<String>,
+    model: Option<String>,
+    request_id: Option<String>,
+    success: Option<String>,
+    limit: Option<String>,
+    offset: Option<String>,
 }
 
-async fn usage_recent(
+async fn usage_list(
     State(state): State<AppState>,
-    Query(q): Query<UsageRecentQuery>,
+    Query(q): Query<UsageListQueryParams>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let limit = q.limit.unwrap_or(200).clamp(1, 2000);
-    let items = storage::list_usage_events_recent((*state.db_path).clone(), limit).await?;
-    Ok(Json(items))
+    fn parse_i64(name: &str, v: Option<String>) -> Result<Option<i64>, ApiError> {
+        let Some(v) = v else { return Ok(None) };
+        let s = v.trim();
+        if s.is_empty() {
+            return Ok(None);
+        }
+        s.parse::<i64>()
+            .map(Some)
+            .map_err(|e| ApiError::BadRequest(format!("{name} 无效：{e}")))
+    }
+
+    fn parse_bool(name: &str, v: Option<String>) -> Result<Option<bool>, ApiError> {
+        let Some(v) = v else { return Ok(None) };
+        let s = v.trim().to_ascii_lowercase();
+        if s.is_empty() {
+            return Ok(None);
+        }
+        match s.as_str() {
+            "true" | "1" => Ok(Some(true)),
+            "false" | "0" => Ok(Some(false)),
+            _ => Err(ApiError::BadRequest(format!("{name} 无效：{v}"))),
+        }
+    }
+
+    let start_ms = parse_i64("start_ms", q.start_ms)?;
+    let end_ms = parse_i64("end_ms", q.end_ms)?;
+    let limit = parse_i64("limit", q.limit)?.unwrap_or(50).clamp(1, 500);
+    let offset = parse_i64("offset", q.offset)?.unwrap_or(0).clamp(0, 10_000_000);
+    let success = parse_bool("success", q.success)?;
+
+    let protocol = match q.protocol.as_deref() {
+        Some(s) if !s.trim().is_empty() => Some(
+            s.parse::<storage::Protocol>()
+                .map_err(|e| ApiError::BadRequest(e.to_string()))?,
+        ),
+        _ => None,
+    };
+
+    let res = storage::list_usage_events(
+        (*state.db_path).clone(),
+        storage::UsageListQuery {
+            start_ms,
+            end_ms,
+            protocol,
+            channel_id: q.channel_id,
+            model: q.model,
+            request_id: q.request_id,
+            success,
+            limit,
+            offset,
+        },
+    )
+    .await?;
+
+    Ok(Json(res))
+}
+
+async fn get_settings(State(state): State<AppState>) -> Result<impl IntoResponse, ApiError> {
+    let settings = storage::get_app_settings((*state.db_path).clone()).await?;
+    Ok(Json(settings))
+}
+
+#[derive(Debug, Deserialize)]
+struct UpdateSettingsInput {
+    pricing_auto_update_enabled: Option<bool>,
+    pricing_auto_update_interval_hours: Option<i64>,
+}
+
+async fn update_settings(
+    State(state): State<AppState>,
+    Json(input): Json<UpdateSettingsInput>,
+) -> Result<impl IntoResponse, ApiError> {
+    if let Some(h) = input.pricing_auto_update_interval_hours {
+        if !(1..=8760).contains(&h) {
+            return Err(ApiError::BadRequest(
+                "pricing_auto_update_interval_hours 必须在 1..=8760 之间".to_string(),
+            ));
+        }
+    }
+
+    let settings = storage::update_app_settings(
+        (*state.db_path).clone(),
+        storage::AppSettingsPatch {
+            pricing_auto_update_enabled: input.pricing_auto_update_enabled,
+            pricing_auto_update_interval_hours: input.pricing_auto_update_interval_hours,
+        },
+    )
+    .await?;
+
+    let next = *state.settings_notify.borrow() + 1;
+    let _ = state.settings_notify.send(next);
+
+    Ok(Json(settings))
 }
 
 fn build_app(state: AppState) -> Router {
     let app = Router::new()
         .route("/api/health", get(health))
+        .route("/api/settings", get(get_settings).put(update_settings))
         .route("/api/channels", get(list_channels).post(create_channel))
         .route("/api/channels/reorder", post(reorder_channels))
         .route(
@@ -783,7 +930,7 @@ fn build_app(state: AppState) -> Router {
         .route("/api/stats/summary", get(stats_summary))
         .route("/api/stats/channels", get(stats_channels))
         .route("/api/stats/trend", get(stats_trend))
-        .route("/api/usage/recent", get(usage_recent))
+        .route("/api/usage/list", get(usage_list))
         .route("/v1/messages", any(proxy_anthropic))
         .route("/v1/messages/{*path}", any(proxy_anthropic))
         .route("/v1beta/{*path}", any(proxy_gemini))
@@ -817,13 +964,23 @@ pub async fn serve_with_listener(
     open_browser: bool,
 ) -> anyhow::Result<()> {
     let addr = listener.local_addr()?;
+    let (settings_notify, settings_rx) = watch::channel(0u64);
+    let http_client = reqwest::Client::builder().build()?;
+    let db_path = Arc::new(db_path);
     let state = AppState {
         listen_addr: addr,
-        db_path: Arc::new(db_path),
-        http_client: reqwest::Client::builder().build()?,
+        db_path: db_path.clone(),
+        http_client: http_client.clone(),
+        settings_notify,
     };
 
     let app = build_app(state);
+
+    tokio::spawn(pricing_auto_update_loop(
+        (*db_path).clone(),
+        http_client,
+        settings_rx,
+    ));
 
     if open_browser {
         let url = format!("http://{addr}");

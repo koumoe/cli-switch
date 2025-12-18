@@ -52,6 +52,7 @@ CREATE TABLE IF NOT EXISTS usage_events (
   success INTEGER NOT NULL,
   http_status INTEGER NULL,
   error_kind TEXT NULL,
+  error_detail TEXT NULL,
   latency_ms INTEGER NOT NULL,
   ttft_ms INTEGER NULL,
   prompt_tokens INTEGER NULL,
@@ -63,3 +64,9 @@ CREATE TABLE IF NOT EXISTS usage_events (
 CREATE INDEX IF NOT EXISTS idx_usage_ts ON usage_events(ts_ms);
 CREATE INDEX IF NOT EXISTS idx_usage_channel_ts ON usage_events(channel_id, ts_ms);
 CREATE INDEX IF NOT EXISTS idx_usage_success_ts ON usage_events(success, ts_ms);
+
+CREATE TABLE IF NOT EXISTS app_settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL,
+  updated_at_ms INTEGER NOT NULL
+);

@@ -115,6 +115,7 @@ pub fn init_db(db_path: &Path) -> anyhow::Result<()> {
         .with_context(|| "执行 migrations/001_init.sql 失败")?;
 
     ensure_channels_schema(&conn)?;
+    ensure_app_settings_schema(&conn)?;
     ensure_usage_events_schema(&conn)?;
 
     Ok(())
@@ -125,9 +126,24 @@ fn ensure_channels_schema(conn: &Connection) -> anyhow::Result<()> {
     Ok(())
 }
 
+fn ensure_app_settings_schema(conn: &Connection) -> anyhow::Result<()> {
+    conn.execute(
+        r#"
+        CREATE TABLE IF NOT EXISTS app_settings (
+          key TEXT PRIMARY KEY,
+          value TEXT NOT NULL,
+          updated_at_ms INTEGER NOT NULL
+        )
+        "#,
+        [],
+    )?;
+    Ok(())
+}
+
 fn ensure_usage_events_schema(conn: &Connection) -> anyhow::Result<()> {
     ensure_column(conn, "usage_events", "ttft_ms", "INTEGER NULL")?;
     ensure_column(conn, "usage_events", "request_id", "TEXT NULL")?;
+    ensure_column(conn, "usage_events", "error_detail", "TEXT NULL")?;
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_usage_request_ts ON usage_events(request_id, ts_ms)",
         [],
@@ -165,6 +181,98 @@ pub(crate) fn now_ms() -> i64 {
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_millis() as i64)
         .unwrap_or(0)
+}
+
+const KEY_PRICING_AUTO_UPDATE_ENABLED: &str = "pricing_auto_update_enabled";
+const KEY_PRICING_AUTO_UPDATE_INTERVAL_HOURS: &str = "pricing_auto_update_interval_hours";
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AppSettings {
+    pub pricing_auto_update_enabled: bool,
+    pub pricing_auto_update_interval_hours: i64,
+}
+
+impl Default for AppSettings {
+    fn default() -> Self {
+        Self {
+            pricing_auto_update_enabled: false,
+            pricing_auto_update_interval_hours: 24,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct AppSettingsPatch {
+    pub pricing_auto_update_enabled: Option<bool>,
+    pub pricing_auto_update_interval_hours: Option<i64>,
+}
+
+fn get_setting(conn: &Connection, key: &str) -> rusqlite::Result<Option<String>> {
+    conn.query_row(
+        "SELECT value FROM app_settings WHERE key = ?1",
+        params![key],
+        |row| row.get(0),
+    )
+    .optional()
+}
+
+fn set_setting(conn: &Connection, key: &str, value: &str, updated_at_ms: i64) -> rusqlite::Result<()> {
+    conn.execute(
+        r#"
+        INSERT INTO app_settings (key, value, updated_at_ms)
+        VALUES (?1, ?2, ?3)
+        ON CONFLICT(key) DO UPDATE SET
+          value = excluded.value,
+          updated_at_ms = excluded.updated_at_ms
+        "#,
+        params![key, value, updated_at_ms],
+    )?;
+    Ok(())
+}
+
+pub async fn get_app_settings(db_path: PathBuf) -> anyhow::Result<AppSettings> {
+    with_conn(db_path, move |conn| {
+        let mut out = AppSettings::default();
+
+        if let Some(v) = get_setting(conn, KEY_PRICING_AUTO_UPDATE_ENABLED)? {
+            out.pricing_auto_update_enabled = matches!(v.trim(), "1" | "true" | "TRUE" | "True");
+        }
+        if let Some(v) = get_setting(conn, KEY_PRICING_AUTO_UPDATE_INTERVAL_HOURS)? {
+            if let Ok(n) = v.trim().parse::<i64>() {
+                out.pricing_auto_update_interval_hours = n;
+            }
+        }
+
+        Ok(out)
+    })
+    .await
+}
+
+pub async fn update_app_settings(db_path: PathBuf, patch: AppSettingsPatch) -> anyhow::Result<AppSettings> {
+    let db_path2 = db_path.clone();
+    with_conn(db_path2, move |conn| {
+        let updated_at_ms = now_ms();
+        if let Some(v) = patch.pricing_auto_update_enabled {
+            set_setting(
+                conn,
+                KEY_PRICING_AUTO_UPDATE_ENABLED,
+                if v { "true" } else { "false" },
+                updated_at_ms,
+            )?;
+        }
+        if let Some(v) = patch.pricing_auto_update_interval_hours {
+            set_setting(
+                conn,
+                KEY_PRICING_AUTO_UPDATE_INTERVAL_HOURS,
+                &v.to_string(),
+                updated_at_ms,
+            )?;
+        }
+        Ok(())
+    })
+    .await?;
+
+    get_app_settings(db_path).await
 }
 
 async fn with_conn<T, F>(db_path: PathBuf, f: F) -> anyhow::Result<T>
@@ -982,6 +1090,7 @@ pub struct UsageEvent {
     pub success: bool,
     pub http_status: Option<i64>,
     pub error_kind: Option<String>,
+    pub error_detail: Option<String>,
     pub latency_ms: i64,
     pub ttft_ms: Option<i64>,
     pub prompt_tokens: Option<i64>,
@@ -1001,6 +1110,7 @@ pub struct CreateUsageEvent {
     pub success: bool,
     pub http_status: Option<i64>,
     pub error_kind: Option<String>,
+    pub error_detail: Option<String>,
     pub latency_ms: i64,
     pub ttft_ms: Option<i64>,
     pub prompt_tokens: Option<i64>,
@@ -1022,6 +1132,7 @@ pub async fn insert_usage_event(db_path: PathBuf, input: CreateUsageEvent) -> an
             success,
             http_status,
             error_kind,
+            error_detail,
             latency_ms,
             ttft_ms,
             prompt_tokens,
@@ -1029,14 +1140,21 @@ pub async fn insert_usage_event(db_path: PathBuf, input: CreateUsageEvent) -> an
             total_tokens,
             estimated_cost_usd,
         } = input;
+
+        let estimated_cost_usd = estimated_cost_usd.or_else(|| {
+            model
+                .as_deref()
+                .and_then(|m| estimate_cost_usd(conn, m, success, prompt_tokens, completion_tokens))
+        });
+
         conn.execute(
             r#"
             INSERT INTO usage_events (
               id, request_id, ts_ms, protocol, route_id, channel_id, model,
-              success, http_status, error_kind, latency_ms,
+              success, http_status, error_kind, error_detail, latency_ms,
               ttft_ms, prompt_tokens, completion_tokens, total_tokens, estimated_cost_usd
             )
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)
             "#,
             params![
                 id,
@@ -1049,6 +1167,7 @@ pub async fn insert_usage_event(db_path: PathBuf, input: CreateUsageEvent) -> an
                 if success { 1 } else { 0 },
                 http_status,
                 error_kind,
+                error_detail,
                 latency_ms,
                 ttft_ms,
                 prompt_tokens,
@@ -1062,6 +1181,136 @@ pub async fn insert_usage_event(db_path: PathBuf, input: CreateUsageEvent) -> an
     .await
 }
 
+fn parse_price_usd(s: &str) -> Option<f64> {
+    let v = s.trim().parse::<f64>().ok()?;
+    if v.is_finite() && v > 0.0 { Some(v) } else { None }
+}
+
+fn format_cost_usd(v: f64) -> Option<String> {
+    if !v.is_finite() || v <= 0.0 {
+        return None;
+    }
+    let mut s = format!("{v:.12}");
+    while s.contains('.') && s.ends_with('0') {
+        s.pop();
+    }
+    if s.ends_with('.') {
+        s.pop();
+    }
+    if s == "0" || s == "0.0" {
+        None
+    } else {
+        Some(s)
+    }
+}
+
+fn find_pricing_for_model(
+    conn: &Connection,
+    model: &str,
+) -> rusqlite::Result<Option<(Option<String>, Option<String>, Option<String>)>> {
+    let mut stmt = conn.prepare(
+        r#"
+        SELECT prompt_price, completion_price, request_price
+        FROM pricing_models
+        WHERE model_id = ?1
+        "#,
+    )?;
+    if let Some(row) = stmt
+        .query_row(params![model], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+        .optional()?
+    {
+        return Ok(Some(row));
+    }
+
+    let like = format!("%/{}", model.trim());
+    let mut stmt = conn.prepare(
+        r#"
+        SELECT prompt_price, completion_price, request_price
+        FROM pricing_models
+        WHERE model_id LIKE ?1
+        ORDER BY LENGTH(model_id) ASC
+        LIMIT 1
+        "#,
+    )?;
+    stmt.query_row(params![like], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+        .optional()
+}
+
+fn estimate_cost_usd(
+    conn: &Connection,
+    model: &str,
+    success: bool,
+    prompt_tokens: Option<i64>,
+    completion_tokens: Option<i64>,
+) -> Option<String> {
+    let Ok(Some((prompt_price, completion_price, request_price))) = find_pricing_for_model(conn, model)
+    else {
+        return None;
+    };
+
+    let prompt_unit = prompt_price
+        .as_deref()
+        .and_then(parse_price_usd)
+        .unwrap_or(0.0);
+    let completion_unit = completion_price
+        .as_deref()
+        .and_then(parse_price_usd)
+        .unwrap_or(0.0);
+    let request_unit = if success {
+        request_price.as_deref().and_then(parse_price_usd).unwrap_or(0.0)
+    } else {
+        0.0
+    };
+
+    let p = prompt_tokens.unwrap_or(0).max(0) as f64;
+    let c = completion_tokens.unwrap_or(0).max(0) as f64;
+
+    let cost = p * prompt_unit + c * completion_unit + request_unit;
+    format_cost_usd(cost)
+}
+
+pub async fn backfill_usage_event_costs(db_path: PathBuf) -> anyhow::Result<i64> {
+    with_conn(db_path, move |conn| {
+        let mut stmt = conn.prepare(
+            r#"
+            SELECT id, model, success, prompt_tokens, completion_tokens
+            FROM usage_events
+            WHERE estimated_cost_usd IS NULL
+              AND model IS NOT NULL
+              AND (prompt_tokens IS NOT NULL OR completion_tokens IS NOT NULL OR success = 1)
+            ORDER BY ts_ms DESC
+            LIMIT 20000
+            "#,
+        )?;
+
+        let rows = stmt.query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, i64>(2)? != 0,
+                row.get::<_, Option<i64>>(3)?,
+                row.get::<_, Option<i64>>(4)?,
+            ))
+        })?;
+
+        let mut updated = 0i64;
+        for row in rows {
+            let (id, model, success, prompt_tokens, completion_tokens) = row?;
+            let Some(cost) = estimate_cost_usd(conn, &model, success, prompt_tokens, completion_tokens) else {
+                continue;
+            };
+            let n = conn.execute(
+                "UPDATE usage_events SET estimated_cost_usd = ?1 WHERE id = ?2 AND estimated_cost_usd IS NULL",
+                params![cost, id],
+            )?;
+            updated += n as i64;
+        }
+
+        Ok(updated)
+    })
+    .await
+}
+
 pub async fn list_usage_events_recent(
     db_path: PathBuf,
     limit: i64,
@@ -1070,7 +1319,7 @@ pub async fn list_usage_events_recent(
         let mut stmt = conn.prepare(
             r#"
             SELECT id, request_id, ts_ms, protocol, route_id, channel_id, model,
-                   success, http_status, error_kind, latency_ms,
+                   success, http_status, error_kind, error_detail, latency_ms,
                    ttft_ms, prompt_tokens, completion_tokens, total_tokens, estimated_cost_usd
             FROM usage_events
             ORDER BY ts_ms DESC
@@ -1096,12 +1345,13 @@ pub async fn list_usage_events_recent(
                 success: row.get::<_, i64>(7)? != 0,
                 http_status: row.get(8)?,
                 error_kind: row.get(9)?,
-                latency_ms: row.get(10)?,
-                ttft_ms: row.get(11)?,
-                prompt_tokens: row.get(12)?,
-                completion_tokens: row.get(13)?,
-                total_tokens: row.get(14)?,
-                estimated_cost_usd: row.get(15)?,
+                error_detail: row.get(10)?,
+                latency_ms: row.get(11)?,
+                ttft_ms: row.get(12)?,
+                prompt_tokens: row.get(13)?,
+                completion_tokens: row.get(14)?,
+                total_tokens: row.get(15)?,
+                estimated_cost_usd: row.get(16)?,
             })
         })?;
         let mut out = Vec::new();
@@ -1109,6 +1359,130 @@ pub async fn list_usage_events_recent(
             out.push(row?);
         }
         Ok(out)
+    })
+    .await
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct UsageListQuery {
+    pub start_ms: Option<i64>,
+    pub end_ms: Option<i64>,
+    pub protocol: Option<Protocol>,
+    pub channel_id: Option<String>,
+    pub model: Option<String>,
+    pub request_id: Option<String>,
+    pub success: Option<bool>,
+    pub limit: i64,
+    pub offset: i64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct UsageListResult {
+    pub total: i64,
+    pub items: Vec<UsageEvent>,
+}
+
+pub async fn list_usage_events(
+    db_path: PathBuf,
+    q: UsageListQuery,
+) -> anyhow::Result<UsageListResult> {
+    with_conn(db_path, move |conn| {
+        let mut where_sql = Vec::<String>::new();
+        let mut params = Vec::<rusqlite::types::Value>::new();
+
+        if let Some(start_ms) = q.start_ms {
+            where_sql.push("ts_ms >= ?".to_string());
+            params.push(start_ms.into());
+        }
+        if let Some(end_ms) = q.end_ms {
+            where_sql.push("ts_ms <= ?".to_string());
+            params.push(end_ms.into());
+        }
+        if let Some(protocol) = q.protocol {
+            where_sql.push("protocol = ?".to_string());
+            params.push(protocol.as_str().to_string().into());
+        }
+        if let Some(channel_id) = q.channel_id.filter(|s| !s.trim().is_empty()) {
+            where_sql.push("channel_id = ?".to_string());
+            params.push(channel_id.into());
+        }
+        if let Some(model) = q.model.filter(|s| !s.trim().is_empty()) {
+            where_sql.push("model LIKE ?".to_string());
+            params.push(format!("%{}%", model.trim()).into());
+        }
+        if let Some(request_id) = q.request_id.filter(|s| !s.trim().is_empty()) {
+            where_sql.push("COALESCE(request_id, id) LIKE ?".to_string());
+            params.push(format!("%{}%", request_id.trim()).into());
+        }
+        if let Some(success) = q.success {
+            where_sql.push("success = ?".to_string());
+            params.push((if success { 1i64 } else { 0i64 }).into());
+        }
+
+        let where_clause = if where_sql.is_empty() {
+            "".to_string()
+        } else {
+            format!("WHERE {}", where_sql.join(" AND "))
+        };
+
+        let total: i64 = {
+            let sql = format!("SELECT COUNT(*) FROM usage_events {where_clause}");
+            let mut stmt = conn.prepare(&sql)?;
+            stmt.query_row(rusqlite::params_from_iter(params.iter()), |row| row.get(0))?
+        };
+
+        let mut params_items = params;
+        params_items.push(q.limit.into());
+        params_items.push(q.offset.into());
+
+        let sql = format!(
+            r#"
+            SELECT id, request_id, ts_ms, protocol, route_id, channel_id, model,
+                   success, http_status, error_kind, error_detail, latency_ms,
+                   ttft_ms, prompt_tokens, completion_tokens, total_tokens, estimated_cost_usd
+            FROM usage_events
+            {where_clause}
+            ORDER BY ts_ms DESC
+            LIMIT ? OFFSET ?
+            "#
+        );
+
+        let mut stmt = conn.prepare(&sql)?;
+        let rows = stmt.query_map(rusqlite::params_from_iter(params_items.iter()), |row| {
+            let protocol: String = row.get(3)?;
+            Ok(UsageEvent {
+                id: row.get(0)?,
+                request_id: row.get(1)?,
+                ts_ms: row.get(2)?,
+                protocol: protocol.parse::<Protocol>().map_err(|e| {
+                    rusqlite::Error::FromSqlConversionFailure(
+                        3,
+                        rusqlite::types::Type::Text,
+                        e.into_boxed_dyn_error(),
+                    )
+                })?,
+                route_id: row.get(4)?,
+                channel_id: row.get(5)?,
+                model: row.get(6)?,
+                success: row.get::<_, i64>(7)? != 0,
+                http_status: row.get(8)?,
+                error_kind: row.get(9)?,
+                error_detail: row.get(10)?,
+                latency_ms: row.get(11)?,
+                ttft_ms: row.get(12)?,
+                prompt_tokens: row.get(13)?,
+                completion_tokens: row.get(14)?,
+                total_tokens: row.get(15)?,
+                estimated_cost_usd: row.get(16)?,
+            })
+        })?;
+
+        let mut items = Vec::new();
+        for row in rows {
+            items.push(row?);
+        }
+
+        Ok(UsageListResult { total, items })
     })
     .await
 }
