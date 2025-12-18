@@ -45,6 +45,13 @@ cargo build --release
 # cargo gui-build
 ```
 
+### 下载预编译（Release）
+
+在 GitHub Releases 下载对应平台的包：
+
+- macOS：`CliSwitch-<version>-macos-<arch>.zip`，解压后双击 `CliSwitch.app`（不会启动/常驻终端）
+- Windows：`CliSwitch-<version>-windows-<arch>.zip`，解压后双击 `CliSwitch.exe`（不会弹出终端窗口）
+
 ### 运行
 
 ```bash
@@ -61,6 +68,17 @@ cargo build --release
 
 桌面端会在窗口里打开管理界面；Web 模式访问 http://127.0.0.1:3210。
 `serve` 默认会自动打开浏览器；如不需要可加 `--no-open`。
+
+### macOS：避免双击出现终端窗口
+
+macOS 上如果你直接在 Finder 里双击 `cliswitch` 可执行文件，系统会用「终端」来启动它，因此会常驻一个终端窗口。
+需要以 `.app` 形式打包后再启动：
+
+```bash
+chmod +x scripts/bundle-macos-app.sh
+./scripts/bundle-macos-app.sh
+open dist/macos/CliSwitch.app
+```
 
 ## 开发
 
