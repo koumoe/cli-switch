@@ -237,23 +237,22 @@ jobs:
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
 
-      - name: Build (desktop default)
-        run: cargo build --release
-
-      - name: Package
+      - name: Build .app bundle
         shell: bash
         run: |
           set -euo pipefail
           version="${{ needs.validate.outputs.version }}"
-          pkg="cliswitch-${version}-macos-${{ matrix.arch }}"
+          pkg="CliSwitch-${version}-macos-${{ matrix.arch }}"
 
           rm -rf dist
+          SKIP_UI=1 bash scripts/bundle-macos-app.sh
+
           mkdir -p "dist/${pkg}"
-          cp "target/release/cliswitch" "dist/${pkg}/cliswitch"
+          cp -R "dist/macos/CliSwitch.app" "dist/${pkg}/CliSwitch.app"
           cp README.md LICENSE "dist/${pkg}/"
 
-          tar -C dist -czf "dist/${pkg}.tar.gz" "${pkg}"
-          shasum -a 256 "dist/${pkg}.tar.gz" | cut -d' ' -f1 > "dist/${pkg}.tar.gz.sha256"
+          ditto -c -k --sequesterRsrc --keepParent "dist/${pkg}" "dist/${pkg}.zip"
+          shasum -a 256 "dist/${pkg}.zip" | cut -d' ' -f1 > "dist/${pkg}.zip.sha256"
 
       - name: Upload dist artifacts
         uses: actions/upload-artifact@v4
@@ -303,11 +302,13 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $version = "${{ needs.validate.outputs.version }}"
-          $pkg = "cliswitch-$version-windows-x64"
+          $pkg = "CliSwitch-$version-windows-x64"
 
           if (Test-Path dist) { Remove-Item -Recurse -Force dist }
           New-Item -ItemType Directory -Path "dist\\$pkg" | Out-Null
-          Copy-Item "target\\x86_64-pc-windows-msvc\\release\\cliswitch.exe" "dist\\$pkg\\cliswitch.exe"
+
+          # GUI 子系统（不弹终端）的可执行文件
+          Copy-Item "target\\x86_64-pc-windows-msvc\\release\\cliswitch.exe" "dist\\$pkg\\CliSwitch.exe"
           Copy-Item "README.md","LICENSE" "dist\\$pkg\\"
 
           Compress-Archive -Path "dist\\$pkg" -DestinationPath "dist\\$pkg.zip" -Force
@@ -362,11 +363,12 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $version = "${{ needs.validate.outputs.version }}"
-          $pkg = "cliswitch-$version-windows-arm64"
+          $pkg = "CliSwitch-$version-windows-arm64"
 
           if (Test-Path dist) { Remove-Item -Recurse -Force dist }
           New-Item -ItemType Directory -Path "dist\\$pkg" | Out-Null
-          Copy-Item "target\\aarch64-pc-windows-msvc\\release\\cliswitch.exe" "dist\\$pkg\\cliswitch.exe"
+          # GUI 子系统（不弹终端）的可执行文件
+          Copy-Item "target\\aarch64-pc-windows-msvc\\release\\cliswitch.exe" "dist\\$pkg\\CliSwitch.exe"
           Copy-Item "README.md","LICENSE" "dist\\$pkg\\"
 
           Compress-Archive -Path "dist\\$pkg" -DestinationPath "dist\\$pkg.zip" -Force
