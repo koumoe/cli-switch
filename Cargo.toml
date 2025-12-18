@@ -6,7 +6,7 @@ edition = "2024"
 [features]
 default = ["desktop"]
 embed-ui = ["dep:rust-embed"]
-desktop = ["dep:tao", "dep:wry", "dep:muda", "embed-ui"]
+desktop = ["dep:tao", "dep:wry", "dep:muda", "dep:tray-icon", "embed-ui"]
 
 [dependencies]
 anyhow = "1"
@@ -32,3 +32,4 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 wry = { version = "0.53", optional = true }
 muda = { version = "0.17", optional = true }
+tray-icon = { version = "0.21", optional = true }

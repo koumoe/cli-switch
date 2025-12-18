@@ -300,6 +300,14 @@
       "syncFail": "Failed to sync pricing"
     }
   },
+  "closePrompt": {
+    "title": "Close CliSwitch?",
+    "description": "Minimize to tray and keep running, or quit the app?",
+    "remember": "Remember my choice",
+    "rememberHint": "You can change this in Settings",
+    "minimize": "Minimize to tray",
+    "quit": "Quit"
+  },
   "settings": {
     "title": "Settings",
     "subtitle": "App configuration and system information",
@@ -339,6 +347,17 @@
       "intervalHours": "Interval (hours)",
       "intervalHoursHint": "1–8760 hours",
       "intervalInvalid": "Invalid interval",
+      "saved": "Saved",
+      "saveFail": "Save failed"
+    },
+    "close": {
+      "title": "Close Behavior",
+      "subtitle": "Choose what happens when you click the window close button",
+      "behavior": "On close",
+      "behaviorHint": "Ask every time / Minimize to tray / Quit",
+      "ask": "Ask every time",
+      "minimize": "Minimize to tray",
+      "quit": "Quit",
       "saved": "Saved",
       "saveFail": "Save failed"
     },

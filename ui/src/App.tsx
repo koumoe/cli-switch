@@ -20,6 +20,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  Switch,
   Tooltip,
   TooltipContent,
   TooltipTrigger,
@@ -64,6 +65,12 @@ function navigate(to: string) {
   if (window.location.pathname === to) return;
   window.history.pushState({}, "", to);
   window.dispatchEvent(new PopStateEvent("popstate"));
+}
+
+function postIpc(payload: unknown) {
+  const anyWindow = window as any;
+  const fn = anyWindow?.ipc?.postMessage as ((msg: string) => void) | undefined;
+  if (fn) fn(JSON.stringify(payload));
 }
 
 function NavTab({
@@ -178,6 +185,9 @@ export default function App() {
   const { t } = useI18n();
   const [pricingOnboardingOpen, setPricingOnboardingOpen] = useState(false);
   const [pricingSyncing, setPricingSyncing] = useState(false);
+  const [closePromptOpen, setClosePromptOpen] = useState(false);
+  const [closeRemember, setCloseRemember] = useState(false);
+  const [closeDecisionSent, setCloseDecisionSent] = useState(false);
 
   // 确保主题在应用启动时被应用
   useTheme();
@@ -226,8 +236,67 @@ export default function App() {
       });
   }, []);
 
+  useEffect(() => {
+    const onCloseRequested = () => {
+      setCloseDecisionSent(false);
+      setCloseRemember(false);
+      setClosePromptOpen(true);
+    };
+    window.addEventListener("cliswitch-close-requested", onCloseRequested as EventListener);
+    return () => {
+      window.removeEventListener("cliswitch-close-requested", onCloseRequested as EventListener);
+    };
+  }, []);
+
+  const sendCloseDecision = (action: "minimize_to_tray" | "quit" | "cancel", remember: boolean) => {
+    setCloseDecisionSent(true);
+    postIpc({ type: "close-decision", action, remember });
+    setClosePromptOpen(false);
+  };
+
   return (
     <div className="flex h-full bg-background text-foreground">
+      <Dialog
+        open={closePromptOpen}
+        onOpenChange={(open) => {
+          if (!open && closePromptOpen && !closeDecisionSent) {
+            sendCloseDecision("cancel", false);
+            return;
+          }
+          setClosePromptOpen(open);
+        }}
+      >
+        <DialogContent className="sm:max-w-[520px]">
+          <DialogHeader>
+            <DialogTitle>{t("closePrompt.title")}</DialogTitle>
+            <DialogDescription>{t("closePrompt.description")}</DialogDescription>
+          </DialogHeader>
+
+          <div className="flex items-center justify-between gap-3 py-1">
+            <div>
+              <div className="font-medium text-sm">{t("closePrompt.remember")}</div>
+              <div className="text-xs text-muted-foreground">{t("closePrompt.rememberHint")}</div>
+            </div>
+            <Switch checked={closeRemember} onCheckedChange={setCloseRemember} />
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => sendCloseDecision("cancel", false)}>
+              {t("common.cancel")}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => sendCloseDecision("minimize_to_tray", closeRemember)}
+            >
+              {t("closePrompt.minimize")}
+            </Button>
+            <Button onClick={() => sendCloseDecision("quit", closeRemember)}>
+              {t("closePrompt.quit")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={pricingOnboardingOpen} onOpenChange={setPricingOnboardingOpen}>
         <DialogContent className="sm:max-w-[520px]">
           <DialogHeader>

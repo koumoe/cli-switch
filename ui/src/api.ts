@@ -10,9 +10,12 @@ export type Health = {
   db_path?: string;
 };
 
+export type CloseBehavior = "ask" | "minimize_to_tray" | "quit";
+
 export type AppSettings = {
   pricing_auto_update_enabled: boolean;
   pricing_auto_update_interval_hours: number;
+  close_behavior: CloseBehavior;
 };
 
 export type Channel = {
@@ -212,7 +215,7 @@ export function getSettings(): Promise<AppSettings> {
 }
 
 export function updateSettings(
-  patch: Partial<Pick<AppSettings, "pricing_auto_update_enabled" | "pricing_auto_update_interval_hours">>
+  patch: Partial<AppSettings>
 ): Promise<AppSettings> {
   return http<AppSettings>("PUT", "/api/settings", patch);
 }

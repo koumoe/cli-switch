@@ -300,6 +300,14 @@
       "syncFail": "更新价格表失败"
     }
   },
+  "closePrompt": {
+    "title": "关闭 CliSwitch？",
+    "description": "你希望最小化到托盘继续运行，还是直接退出应用？",
+    "remember": "记住我的选择",
+    "rememberHint": "可在「设置」中随时修改",
+    "minimize": "最小化到托盘",
+    "quit": "退出应用"
+  },
   "settings": {
     "title": "设置",
     "subtitle": "应用配置和系统信息",
@@ -340,6 +348,17 @@
       "intervalHoursHint": "1~8760 小时",
       "intervalInvalid": "更新周期不合法",
       "saved": "设置已保存",
+      "saveFail": "保存失败"
+    },
+    "close": {
+      "title": "关闭行为",
+      "subtitle": "设置点击关闭按钮时的默认动作",
+      "behavior": "关闭时",
+      "behaviorHint": "可选：每次询问 / 最小化到托盘 / 直接退出",
+      "ask": "每次询问",
+      "minimize": "最小化到托盘",
+      "quit": "直接退出",
+      "saved": "关闭设置已保存",
       "saveFail": "保存失败"
     },
     "storage": {

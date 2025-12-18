@@ -185,11 +185,31 @@ pub(crate) fn now_ms() -> i64 {
 
 const KEY_PRICING_AUTO_UPDATE_ENABLED: &str = "pricing_auto_update_enabled";
 const KEY_PRICING_AUTO_UPDATE_INTERVAL_HOURS: &str = "pricing_auto_update_interval_hours";
+const KEY_CLOSE_BEHAVIOR: &str = "close_behavior";
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum CloseBehavior {
+    Ask,
+    MinimizeToTray,
+    Quit,
+}
+
+impl CloseBehavior {
+    fn as_str(self) -> &'static str {
+        match self {
+            CloseBehavior::Ask => "ask",
+            CloseBehavior::MinimizeToTray => "minimize_to_tray",
+            CloseBehavior::Quit => "quit",
+        }
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppSettings {
     pub pricing_auto_update_enabled: bool,
     pub pricing_auto_update_interval_hours: i64,
+    pub close_behavior: CloseBehavior,
 }
 
 impl Default for AppSettings {
@@ -197,6 +217,7 @@ impl Default for AppSettings {
         Self {
             pricing_auto_update_enabled: false,
             pricing_auto_update_interval_hours: 24,
+            close_behavior: CloseBehavior::Ask,
         }
     }
 }
@@ -205,6 +226,7 @@ impl Default for AppSettings {
 pub struct AppSettingsPatch {
     pub pricing_auto_update_enabled: Option<bool>,
     pub pricing_auto_update_interval_hours: Option<i64>,
+    pub close_behavior: Option<CloseBehavior>,
 }
 
 fn get_setting(conn: &Connection, key: &str) -> rusqlite::Result<Option<String>> {
@@ -216,7 +238,12 @@ fn get_setting(conn: &Connection, key: &str) -> rusqlite::Result<Option<String>>
     .optional()
 }
 
-fn set_setting(conn: &Connection, key: &str, value: &str, updated_at_ms: i64) -> rusqlite::Result<()> {
+fn set_setting(
+    conn: &Connection,
+    key: &str,
+    value: &str,
+    updated_at_ms: i64,
+) -> rusqlite::Result<()> {
     conn.execute(
         r#"
         INSERT INTO app_settings (key, value, updated_at_ms)
@@ -242,13 +269,24 @@ pub async fn get_app_settings(db_path: PathBuf) -> anyhow::Result<AppSettings> {
                 out.pricing_auto_update_interval_hours = n;
             }
         }
+        if let Some(v) = get_setting(conn, KEY_CLOSE_BEHAVIOR)? {
+            match v.trim() {
+                "ask" => out.close_behavior = CloseBehavior::Ask,
+                "minimize_to_tray" => out.close_behavior = CloseBehavior::MinimizeToTray,
+                "quit" => out.close_behavior = CloseBehavior::Quit,
+                _ => {}
+            }
+        }
 
         Ok(out)
     })
     .await
 }
 
-pub async fn update_app_settings(db_path: PathBuf, patch: AppSettingsPatch) -> anyhow::Result<AppSettings> {
+pub async fn update_app_settings(
+    db_path: PathBuf,
+    patch: AppSettingsPatch,
+) -> anyhow::Result<AppSettings> {
     let db_path2 = db_path.clone();
     with_conn(db_path2, move |conn| {
         let updated_at_ms = now_ms();
@@ -267,6 +305,9 @@ pub async fn update_app_settings(db_path: PathBuf, patch: AppSettingsPatch) -> a
                 &v.to_string(),
                 updated_at_ms,
             )?;
+        }
+        if let Some(v) = patch.close_behavior {
+            set_setting(conn, KEY_CLOSE_BEHAVIOR, v.as_str(), updated_at_ms)?;
         }
         Ok(())
     })
@@ -1183,7 +1224,11 @@ pub async fn insert_usage_event(db_path: PathBuf, input: CreateUsageEvent) -> an
 
 fn parse_price_usd(s: &str) -> Option<f64> {
     let v = s.trim().parse::<f64>().ok()?;
-    if v.is_finite() && v > 0.0 { Some(v) } else { None }
+    if v.is_finite() && v > 0.0 {
+        Some(v)
+    } else {
+        None
+    }
 }
 
 fn format_cost_usd(v: f64) -> Option<String> {
@@ -1216,7 +1261,9 @@ fn find_pricing_for_model(
         "#,
     )?;
     if let Some(row) = stmt
-        .query_row(params![model], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+        .query_row(params![model], |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+        })
         .optional()?
     {
         return Ok(Some(row));
@@ -1232,8 +1279,10 @@ fn find_pricing_for_model(
         LIMIT 1
         "#,
     )?;
-    stmt.query_row(params![like], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
-        .optional()
+    stmt.query_row(params![like], |row| {
+        Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+    })
+    .optional()
 }
 
 fn estimate_cost_usd(
@@ -1243,7 +1292,8 @@ fn estimate_cost_usd(
     prompt_tokens: Option<i64>,
     completion_tokens: Option<i64>,
 ) -> Option<String> {
-    let Ok(Some((prompt_price, completion_price, request_price))) = find_pricing_for_model(conn, model)
+    let Ok(Some((prompt_price, completion_price, request_price))) =
+        find_pricing_for_model(conn, model)
     else {
         return None;
     };
@@ -1257,7 +1307,10 @@ fn estimate_cost_usd(
         .and_then(parse_price_usd)
         .unwrap_or(0.0);
     let request_unit = if success {
-        request_price.as_deref().and_then(parse_price_usd).unwrap_or(0.0)
+        request_price
+            .as_deref()
+            .and_then(parse_price_usd)
+            .unwrap_or(0.0)
     } else {
         0.0
     };

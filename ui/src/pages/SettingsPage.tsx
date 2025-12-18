@@ -20,7 +20,7 @@ import {
 import { useTheme, type Theme } from "@/lib/theme";
 import { type Locale, useI18n } from "@/lib/i18n";
 import { formatDateTime } from "../lib";
-import { getHealth, getSettings, pricingStatus, pricingSync, updateSettings, type AppSettings, type Health, type PricingStatus } from "../api";
+import { getHealth, getSettings, pricingStatus, pricingSync, updateSettings, type AppSettings, type CloseBehavior, type Health, type PricingStatus } from "../api";
 
 export function SettingsPage() {
   const { theme, setTheme } = useTheme();
@@ -29,6 +29,7 @@ export function SettingsPage() {
   const [pricing, setPricing] = useState<PricingStatus | null>(null);
   const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
   const [saving, setSaving] = useState(false);
+  const [closeSaving, setCloseSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
@@ -248,10 +249,7 @@ export function SettingsPage() {
             <Switch
               checked={appSettings?.pricing_auto_update_enabled ?? false}
               onCheckedChange={(v) => {
-                setAppSettings((prev) => ({
-                  pricing_auto_update_enabled: v,
-                  pricing_auto_update_interval_hours: prev?.pricing_auto_update_interval_hours ?? 24,
-                }));
+                setAppSettings((prev) => (prev ? { ...prev, pricing_auto_update_enabled: v } : prev));
               }}
               disabled={!appSettings}
             />
@@ -271,10 +269,14 @@ export function SettingsPage() {
               value={appSettings?.pricing_auto_update_interval_hours ?? 24}
               onChange={(e) => {
                 const n = Number(e.target.value);
-                setAppSettings((prev) => ({
-                  pricing_auto_update_enabled: prev?.pricing_auto_update_enabled ?? false,
-                  pricing_auto_update_interval_hours: Number.isFinite(n) ? Math.floor(n) : 24,
-                }));
+                setAppSettings((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        pricing_auto_update_interval_hours: Number.isFinite(n) ? Math.floor(n) : 24,
+                      }
+                    : prev
+                );
               }}
               className="w-[140px] h-8"
               disabled={!appSettings || !(appSettings?.pricing_auto_update_enabled ?? false)}
@@ -306,6 +308,65 @@ export function SettingsPage() {
                 }
               }}
               disabled={!appSettings || saving}
+            >
+              {t("common.save")}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* 关闭行为 */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Monitor className="h-4 w-4" />
+            {t("settings.close.title")}
+          </CardTitle>
+          <CardDescription>{t("settings.close.subtitle")}</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <div className="font-medium text-sm">{t("settings.close.behavior")}</div>
+              <div className="text-xs text-muted-foreground">{t("settings.close.behaviorHint")}</div>
+            </div>
+            <div className="w-[220px]">
+              <Select
+                value={(appSettings?.close_behavior ?? "ask") as CloseBehavior}
+                onValueChange={(v) => {
+                  setAppSettings((prev) => (prev ? { ...prev, close_behavior: v as CloseBehavior } : prev));
+                }}
+                disabled={!appSettings}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ask">{t("settings.close.ask")}</SelectItem>
+                  <SelectItem value="minimize_to_tray">{t("settings.close.minimize")}</SelectItem>
+                  <SelectItem value="quit">{t("settings.close.quit")}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="flex justify-end">
+            <Button
+              size="sm"
+              onClick={async () => {
+                if (!appSettings) return;
+                setCloseSaving(true);
+                try {
+                  const next = await updateSettings({ close_behavior: appSettings.close_behavior });
+                  setAppSettings(next);
+                  toast.success(t("settings.close.saved"));
+                } catch (e) {
+                  toast.error(t("settings.close.saveFail"), { description: String(e) });
+                } finally {
+                  setCloseSaving(false);
+                }
+              }}
+              disabled={!appSettings || closeSaving}
             >
               {t("common.save")}
             </Button>

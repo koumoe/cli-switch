@@ -543,7 +543,10 @@ fn json_value_to_string(v: &serde_json::Value) -> Option<String> {
 async fn pricing_sync(State(state): State<AppState>) -> Result<impl IntoResponse, ApiError> {
     let (updated, updated_at_ms) =
         run_pricing_sync(&state.http_client, (*state.db_path).clone()).await?;
-    Ok(Json(PricingSyncResponse { updated, updated_at_ms }))
+    Ok(Json(PricingSyncResponse {
+        updated,
+        updated_at_ms,
+    }))
 }
 
 async fn run_pricing_sync(
@@ -786,9 +789,7 @@ async fn stats_trend(
                 items,
             }))
         }
-        StatsRange::Today => Err(ApiError::BadRequest(
-            "trend 仅支持 range=month".to_string(),
-        )),
+        StatsRange::Today => Err(ApiError::BadRequest("trend 仅支持 range=month".to_string())),
     }
 }
 
@@ -836,7 +837,9 @@ async fn usage_list(
     let start_ms = parse_i64("start_ms", q.start_ms)?;
     let end_ms = parse_i64("end_ms", q.end_ms)?;
     let limit = parse_i64("limit", q.limit)?.unwrap_or(50).clamp(1, 500);
-    let offset = parse_i64("offset", q.offset)?.unwrap_or(0).clamp(0, 10_000_000);
+    let offset = parse_i64("offset", q.offset)?
+        .unwrap_or(0)
+        .clamp(0, 10_000_000);
     let success = parse_bool("success", q.success)?;
 
     let protocol = match q.protocol.as_deref() {
@@ -875,6 +878,7 @@ async fn get_settings(State(state): State<AppState>) -> Result<impl IntoResponse
 struct UpdateSettingsInput {
     pricing_auto_update_enabled: Option<bool>,
     pricing_auto_update_interval_hours: Option<i64>,
+    close_behavior: Option<storage::CloseBehavior>,
 }
 
 async fn update_settings(
@@ -894,6 +898,7 @@ async fn update_settings(
         storage::AppSettingsPatch {
             pricing_auto_update_enabled: input.pricing_auto_update_enabled,
             pricing_auto_update_interval_hours: input.pricing_auto_update_interval_hours,
+            close_behavior: input.close_behavior,
         },
     )
     .await?;
