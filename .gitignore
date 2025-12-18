@@ -1,6 +1,7 @@
 target/
 .DS_Store
 .idea/
+dist/
 
 # Node / UI
 ui/node_modules/
