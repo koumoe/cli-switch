@@ -239,6 +239,38 @@ async fn list_channels(State(state): State<AppState>) -> Result<impl IntoRespons
     Ok(Json(channels))
 }
 
+#[derive(Debug, Deserialize)]
+struct ReorderChannelsInput {
+    protocol: Option<storage::Protocol>,
+    channel_ids: Vec<String>,
+}
+
+async fn reorder_channels(
+    State(state): State<AppState>,
+    Json(input): Json<ReorderChannelsInput>,
+) -> Result<impl IntoResponse, ApiError> {
+    let mut seen = std::collections::HashSet::<String>::new();
+    for id in &input.channel_ids {
+        if !seen.insert(id.clone()) {
+            return Err(ApiError::BadRequest("channel_ids 存在重复项".to_string()));
+        }
+    }
+
+    let res =
+        storage::reorder_channels((*state.db_path).clone(), input.protocol, input.channel_ids)
+            .await;
+    match res {
+        Ok(()) => Ok(StatusCode::NO_CONTENT),
+        Err(e) if e.to_string().starts_with("channel not found") => {
+            Err(ApiError::NotFound("channel not found".to_string()))
+        }
+        Err(e) if e.to_string().starts_with("channel reorder mismatch") => Err(
+            ApiError::BadRequest("channel_ids 需要覆盖该终端下所有渠道".to_string()),
+        ),
+        Err(e) => Err(ApiError::Internal(e)),
+    }
+}
+
 async fn create_channel(
     State(state): State<AppState>,
     Json(input): Json<storage::CreateChannel>,
@@ -684,6 +716,7 @@ fn build_app(state: AppState) -> Router {
     let app = Router::new()
         .route("/api/health", get(health))
         .route("/api/channels", get(list_channels).post(create_channel))
+        .route("/api/channels/reorder", post(reorder_channels))
         .route(
             "/api/channels/{id}",
             put(update_channel).delete(delete_channel),

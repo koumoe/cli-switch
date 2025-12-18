@@ -1,4 +1,7 @@
-#![cfg_attr(all(feature = "desktop", target_os = "windows"), windows_subsystem = "windows")]
+#![cfg_attr(
+    all(feature = "desktop", target_os = "windows"),
+    windows_subsystem = "windows"
+)]
 
 use anyhow::Context as _;
 use clap::{Parser, Subcommand};

@@ -32,11 +32,11 @@ pub async fn forward(
     protocol_root: &'static str,
     req: Request<Body>,
 ) -> Result<Response<Body>, ProxyError> {
-    let started = Instant::now();
-
-    let Some(channel) = pick_enabled_channel(db_path.clone(), protocol).await? else {
+    let channels = list_enabled_channels(db_path.clone(), protocol).await?;
+    if channels.is_empty() {
         return Err(ProxyError::NoEnabledChannel(protocol));
-    };
+    }
+    let total_channels = channels.len();
 
     let (parts, body) = req.into_parts();
     let body_bytes = to_bytes(body, MAX_INBOUND_BODY_BYTES)
@@ -45,21 +45,122 @@ pub async fn forward(
 
     let model = extract_model_from_body(&parts.headers, &body_bytes);
 
-    let mut url = build_upstream_url(&channel.base_url, &parts.uri, protocol_root)?;
-
-    let mut out_headers = filtered_headers(&parts.headers);
-    apply_auth(&channel, protocol, &mut url, &mut out_headers)?;
-
     let method = reqwest::Method::from_bytes(parts.method.as_str().as_bytes())
         .map_err(|e| ProxyError::Upstream(format!("invalid method: {e}")))?;
 
-    let upstream = client
-        .request(method, url)
-        .headers(out_headers)
-        .body(body_bytes)
-        .send()
-        .await
-        .map_err(|e| {
+    let mut last_err: Option<ProxyError> = None;
+
+    for (idx, channel) in channels.into_iter().enumerate() {
+        let is_last = idx + 1 >= total_channels;
+        let started = Instant::now();
+        tracing::event!(
+            tracing::Level::DEBUG,
+            protocol = protocol.as_str(),
+            channel_id = %channel.id,
+            attempt = idx + 1,
+            total = total_channels,
+            "proxy attempt start"
+        );
+
+        let mut url = match build_upstream_url(&channel.base_url, &parts.uri, protocol_root) {
+            Ok(v) => v,
+            Err(e) => {
+                tracing::event!(
+                    tracing::Level::WARN,
+                    protocol = protocol.as_str(),
+                    channel_id = %channel.id,
+                    attempt = idx + 1,
+                    total = total_channels,
+                    err = %e,
+                    "proxy attempt failed (build url)"
+                );
+                last_err = Some(e);
+                if is_last {
+                    break;
+                }
+                continue;
+            }
+        };
+
+        let mut out_headers = filtered_headers(&parts.headers);
+        if let Err(e) = apply_auth(&channel, protocol, &mut url, &mut out_headers) {
+            tracing::event!(
+                tracing::Level::WARN,
+                protocol = protocol.as_str(),
+                channel_id = %channel.id,
+                attempt = idx + 1,
+                total = total_channels,
+                err = %e,
+                "proxy attempt failed (apply auth)"
+            );
+            last_err = Some(e);
+            if is_last {
+                break;
+            }
+            continue;
+        }
+
+        let upstream = match client
+            .request(method.clone(), url)
+            .headers(out_headers)
+            .body(body_bytes.clone())
+            .send()
+            .await
+        {
+            Ok(r) => r,
+            Err(e) => {
+                tracing::event!(
+                    tracing::Level::WARN,
+                    protocol = protocol.as_str(),
+                    channel_id = %channel.id,
+                    attempt = idx + 1,
+                    total = total_channels,
+                    err = %e,
+                    "proxy attempt failed (request error)"
+                );
+                spawn_usage_event(
+                    storage::CreateUsageEvent {
+                        ts_ms: storage::now_ms(),
+                        protocol,
+                        route_id: None,
+                        channel_id: channel.id.clone(),
+                        model: model.clone(),
+                        success: false,
+                        http_status: None,
+                        error_kind: Some(format!(
+                            "upstream_error:{}",
+                            truncate(&e.to_string(), 240)
+                        )),
+                        latency_ms: started.elapsed().as_millis() as i64,
+                        ttft_ms: None,
+                        prompt_tokens: None,
+                        completion_tokens: None,
+                        total_tokens: None,
+                        estimated_cost_usd: None,
+                    },
+                    db_path.clone(),
+                );
+
+                let err = ProxyError::Upstream(e.to_string());
+                last_err = Some(err);
+                if is_last {
+                    break;
+                }
+                continue;
+            }
+        };
+
+        let status = upstream.status();
+        if !status.is_success() && !is_last {
+            tracing::event!(
+                tracing::Level::WARN,
+                protocol = protocol.as_str(),
+                channel_id = %channel.id,
+                attempt = idx + 1,
+                total = total_channels,
+                http_status = status.as_u16(),
+                "proxy attempt got non-2xx, retry next channel"
+            );
             spawn_usage_event(
                 storage::CreateUsageEvent {
                     ts_ms: storage::now_ms(),
@@ -68,8 +169,8 @@ pub async fn forward(
                     channel_id: channel.id.clone(),
                     model: model.clone(),
                     success: false,
-                    http_status: None,
-                    error_kind: Some(format!("upstream_error:{}", truncate(&e.to_string(), 240))),
+                    http_status: Some(status.as_u16() as i64),
+                    error_kind: Some(format!("upstream_http:{}", status.as_u16())),
                     latency_ms: started.elapsed().as_millis() as i64,
                     ttft_ms: None,
                     prompt_tokens: None,
@@ -79,10 +180,47 @@ pub async fn forward(
                 },
                 db_path.clone(),
             );
-            ProxyError::Upstream(e.to_string())
-        })?;
+            continue;
+        }
 
+        return proxy_upstream_response(
+            upstream,
+            StreamRecordContext {
+                db_path: db_path.clone(),
+                protocol,
+                channel_id: channel.id.clone(),
+                model: model.clone(),
+                http_status: 0,
+                status_is_success: false,
+                started,
+                parse_sse: false, // 将在内部按 Content-Type 决定
+            },
+        )
+        .await;
+    }
+
+    Err(last_err.unwrap_or_else(|| ProxyError::Upstream("all channels failed".to_string())))
+}
+
+async fn list_enabled_channels(
+    db_path: std::path::PathBuf,
+    protocol: Protocol,
+) -> Result<Vec<Channel>, anyhow::Error> {
+    let channels = storage::list_channels(db_path).await?;
+    Ok(channels
+        .into_iter()
+        .filter(|c| c.enabled && c.protocol == protocol)
+        .collect())
+}
+
+async fn proxy_upstream_response(
+    upstream: reqwest::Response,
+    mut ctx: StreamRecordContext,
+) -> Result<Response<Body>, ProxyError> {
     let status = upstream.status();
+    ctx.http_status = status.as_u16() as i64;
+    ctx.status_is_success = status.is_success();
+
     let headers = filtered_headers(upstream.headers());
     let content_type = upstream
         .headers()
@@ -92,6 +230,8 @@ pub async fn forward(
         .to_ascii_lowercase();
     let is_sse = content_type.starts_with("text/event-stream");
     let is_json = content_type.contains("application/json") || content_type.contains("+json");
+
+    ctx.parse_sse = is_sse;
 
     let mut resp = Response::builder().status(status);
     if let Some(h) = resp.headers_mut() {
@@ -106,8 +246,8 @@ pub async fn forward(
             .await
             .map_err(|e| ProxyError::Upstream(e.to_string()))?;
 
-        let duration_ms = started.elapsed().as_millis() as i64;
-        let usage = parse_usage_from_json(protocol, &bytes);
+        let duration_ms = ctx.started.elapsed().as_millis() as i64;
+        let usage = parse_usage_from_json(ctx.protocol, &bytes);
         let (prompt_tokens, completion_tokens, total_tokens) = usage.as_tuple();
 
         let http_status = Some(status.as_u16() as i64);
@@ -117,10 +257,10 @@ pub async fn forward(
         spawn_usage_event(
             storage::CreateUsageEvent {
                 ts_ms: storage::now_ms(),
-                protocol,
+                protocol: ctx.protocol,
                 route_id: None,
-                channel_id: channel.id.clone(),
-                model,
+                channel_id: ctx.channel_id.clone(),
+                model: ctx.model.clone(),
                 success,
                 http_status,
                 error_kind,
@@ -131,7 +271,7 @@ pub async fn forward(
                 total_tokens,
                 estimated_cost_usd: None,
             },
-            db_path,
+            ctx.db_path.clone(),
         );
 
         return resp
@@ -139,32 +279,10 @@ pub async fn forward(
             .map_err(|e| ProxyError::Upstream(e.to_string()));
     }
 
-    let stream = InstrumentedStream::new(
-        upstream.bytes_stream().boxed(),
-        StreamRecordContext {
-            db_path,
-            protocol,
-            channel_id: channel.id.clone(),
-            model,
-            http_status: status.as_u16() as i64,
-            status_is_success: status.is_success(),
-            started,
-            parse_sse: is_sse,
-        },
-    );
+    let stream = InstrumentedStream::new(upstream.bytes_stream().boxed(), ctx);
 
     resp.body(Body::from_stream(stream))
         .map_err(|e| ProxyError::Upstream(e.to_string()))
-}
-
-async fn pick_enabled_channel(
-    db_path: std::path::PathBuf,
-    protocol: Protocol,
-) -> Result<Option<Channel>, anyhow::Error> {
-    let channels = storage::list_channels(db_path).await?;
-    Ok(channels
-        .into_iter()
-        .find(|c| c.enabled && c.protocol == protocol))
 }
 
 fn build_upstream_url(

@@ -89,6 +89,7 @@ pub struct Channel {
     pub base_url: String,
     pub auth_type: String,
     pub auth_ref: String,
+    pub priority: i64,
     pub enabled: bool,
     pub created_at_ms: i64,
     pub updated_at_ms: i64,
@@ -112,8 +113,14 @@ pub fn init_db(db_path: &Path) -> anyhow::Result<()> {
     conn.execute_batch(migration)
         .with_context(|| "执行 migrations/001_init.sql 失败")?;
 
+    ensure_channels_schema(&conn)?;
     ensure_usage_events_schema(&conn)?;
 
+    Ok(())
+}
+
+fn ensure_channels_schema(conn: &Connection) -> anyhow::Result<()> {
+    ensure_column(conn, "channels", "priority", "INTEGER NOT NULL DEFAULT 0")?;
     Ok(())
 }
 
@@ -172,9 +179,14 @@ pub async fn list_channels(db_path: PathBuf) -> anyhow::Result<Vec<Channel>> {
     with_conn(db_path, |conn| {
         let mut stmt = conn.prepare(
             r#"
-            SELECT id, name, protocol, base_url, auth_type, auth_ref, enabled, created_at_ms, updated_at_ms
+            SELECT id, name, protocol, base_url, auth_type, auth_ref, priority, enabled, created_at_ms, updated_at_ms
             FROM channels
-            ORDER BY name ASC
+            ORDER BY CASE protocol
+              WHEN 'openai' THEN 0
+              WHEN 'anthropic' THEN 1
+              WHEN 'gemini' THEN 2
+              ELSE 9
+            END, priority DESC, name ASC
             "#,
         )?;
         let rows = stmt.query_map([], |row| {
@@ -194,9 +206,10 @@ pub async fn list_channels(db_path: PathBuf) -> anyhow::Result<Vec<Channel>> {
                 base_url: normalize_base_url(protocol, &base_url),
                 auth_type: row.get(4)?,
                 auth_ref: row.get(5)?,
-                enabled: row.get::<_, i64>(6)? != 0,
-                created_at_ms: row.get(7)?,
-                updated_at_ms: row.get(8)?,
+                priority: row.get(6)?,
+                enabled: row.get::<_, i64>(7)? != 0,
+                created_at_ms: row.get(8)?,
+                updated_at_ms: row.get(9)?,
             })
         })?;
 
@@ -216,6 +229,8 @@ pub struct CreateChannel {
     pub base_url: String,
     pub auth_type: Option<String>,
     pub auth_ref: String,
+    #[serde(default)]
+    pub priority: i64,
     pub enabled: bool,
 }
 
@@ -231,8 +246,8 @@ pub async fn create_channel(db_path: PathBuf, input: CreateChannel) -> anyhow::R
         let base_url = normalize_base_url(input.protocol, &input.base_url);
         conn.execute(
             r#"
-            INSERT INTO channels (id, name, protocol, base_url, auth_type, auth_ref, enabled, created_at_ms, updated_at_ms)
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+            INSERT INTO channels (id, name, protocol, base_url, auth_type, auth_ref, priority, enabled, created_at_ms, updated_at_ms)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
             "#,
             params![
                 id,
@@ -241,6 +256,7 @@ pub async fn create_channel(db_path: PathBuf, input: CreateChannel) -> anyhow::R
                 base_url,
                 auth_type,
                 input.auth_ref,
+                input.priority,
                 if input.enabled { 1 } else { 0 },
                 ts,
                 ts,
@@ -254,6 +270,7 @@ pub async fn create_channel(db_path: PathBuf, input: CreateChannel) -> anyhow::R
             base_url,
             auth_type,
             auth_ref: input.auth_ref,
+            priority: input.priority,
             enabled: input.enabled,
             created_at_ms: ts,
             updated_at_ms: ts,
@@ -268,6 +285,7 @@ pub struct UpdateChannel {
     pub base_url: Option<String>,
     pub auth_type: Option<String>,
     pub auth_ref: Option<String>,
+    pub priority: Option<i64>,
     pub enabled: Option<bool>,
 }
 
@@ -282,7 +300,7 @@ pub async fn update_channel(
         let mut channel: Channel = {
             let mut stmt = conn.prepare(
                 r#"
-                SELECT id, name, protocol, base_url, auth_type, auth_ref, enabled, created_at_ms, updated_at_ms
+                SELECT id, name, protocol, base_url, auth_type, auth_ref, priority, enabled, created_at_ms, updated_at_ms
                 FROM channels
                 WHERE id = ?1
                 "#,
@@ -304,9 +322,10 @@ pub async fn update_channel(
                     base_url: normalize_base_url(protocol, &base_url),
                     auth_type: row.get(4)?,
                     auth_ref: row.get(5)?,
-                    enabled: row.get::<_, i64>(6)? != 0,
-                    created_at_ms: row.get(7)?,
-                    updated_at_ms: row.get(8)?,
+                    priority: row.get(6)?,
+                    enabled: row.get::<_, i64>(7)? != 0,
+                    created_at_ms: row.get(8)?,
+                    updated_at_ms: row.get(9)?,
                 })
             });
 
@@ -331,6 +350,9 @@ pub async fn update_channel(
         if let Some(v) = input.auth_ref {
             channel.auth_ref = v;
         }
+        if let Some(v) = input.priority {
+            channel.priority = v;
+        }
         if let Some(v) = input.enabled {
             channel.enabled = v;
         }
@@ -339,7 +361,7 @@ pub async fn update_channel(
         conn.execute(
             r#"
             UPDATE channels
-            SET name = ?2, base_url = ?3, auth_type = ?4, auth_ref = ?5, enabled = ?6, updated_at_ms = ?7
+            SET name = ?2, base_url = ?3, auth_type = ?4, auth_ref = ?5, priority = ?6, enabled = ?7, updated_at_ms = ?8
             WHERE id = ?1
             "#,
             params![
@@ -348,8 +370,9 @@ pub async fn update_channel(
                 channel.base_url,
                 channel.auth_type,
                 channel.auth_ref,
+                channel.priority,
                 if channel.enabled { 1 } else { 0 },
-                channel.updated_at_ms
+                channel.updated_at_ms,
             ],
         )?;
 
@@ -386,7 +409,7 @@ pub async fn get_channel(db_path: PathBuf, channel_id: String) -> anyhow::Result
     with_conn(db_path, move |conn| {
         let mut stmt = conn.prepare(
             r#"
-            SELECT id, name, protocol, base_url, auth_type, auth_ref, enabled, created_at_ms, updated_at_ms
+            SELECT id, name, protocol, base_url, auth_type, auth_ref, priority, enabled, created_at_ms, updated_at_ms
             FROM channels
             WHERE id = ?1
             "#,
@@ -409,13 +432,73 @@ pub async fn get_channel(db_path: PathBuf, channel_id: String) -> anyhow::Result
                 base_url: normalize_base_url(protocol, &base_url),
                 auth_type: row.get(4)?,
                 auth_ref: row.get(5)?,
-                enabled: row.get::<_, i64>(6)? != 0,
-                created_at_ms: row.get(7)?,
-                updated_at_ms: row.get(8)?,
+                priority: row.get(6)?,
+                enabled: row.get::<_, i64>(7)? != 0,
+                created_at_ms: row.get(8)?,
+                updated_at_ms: row.get(9)?,
             })
         })
         .optional()
         .map_err(Into::into)
+    })
+    .await
+}
+
+pub async fn reorder_channels(
+    db_path: PathBuf,
+    protocol: Option<Protocol>,
+    channel_ids_in_priority_order: Vec<String>,
+) -> anyhow::Result<()> {
+    with_conn(db_path, move |conn| {
+        let mut all_ids = Vec::<String>::new();
+        if let Some(p) = protocol {
+            let mut stmt = conn.prepare(r#"SELECT id FROM channels WHERE protocol = ?1"#)?;
+            let mut rows = stmt.query([p.as_str()])?;
+            while let Some(row) = rows.next()? {
+                all_ids.push(row.get::<_, String>(0)?);
+            }
+        } else {
+            let mut stmt = conn.prepare(r#"SELECT id FROM channels"#)?;
+            let mut rows = stmt.query([])?;
+            while let Some(row) = rows.next()? {
+                all_ids.push(row.get::<_, String>(0)?);
+            }
+        }
+
+        if all_ids.len() != channel_ids_in_priority_order.len() {
+            return Err(anyhow::anyhow!("channel reorder mismatch: length"));
+        }
+
+        let all_set = all_ids
+            .into_iter()
+            .collect::<std::collections::HashSet<String>>();
+        let incoming_set = channel_ids_in_priority_order
+            .iter()
+            .cloned()
+            .collect::<std::collections::HashSet<String>>();
+        if incoming_set != all_set {
+            if incoming_set.is_subset(&all_set) {
+                return Err(anyhow::anyhow!("channel reorder mismatch: coverage"));
+            }
+            return Err(anyhow::anyhow!("channel not found"));
+        }
+
+        let ts = now_ms();
+        let tx = conn.unchecked_transaction()?;
+        let n = channel_ids_in_priority_order.len() as i64;
+        for (idx, channel_id) in channel_ids_in_priority_order.into_iter().enumerate() {
+            let priority = n - (idx as i64);
+            tx.execute(
+                r#"
+                UPDATE channels
+                SET priority = ?2, updated_at_ms = ?3
+                WHERE id = ?1
+                "#,
+                params![channel_id, priority, ts],
+            )?;
+        }
+        tx.commit()?;
+        Ok(())
     })
     .await
 }

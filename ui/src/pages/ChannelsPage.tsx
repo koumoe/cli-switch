@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import {
   Plus,
+  GripVertical,
   Pencil,
   Trash2,
   Power,
@@ -32,6 +33,10 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
 } from "@/components/ui";
 import { useI18n } from "@/lib/i18n";
 import {
@@ -42,11 +47,12 @@ import {
   enableChannel,
   disableChannel,
   testChannel,
+  reorderChannels,
   type Channel,
   type CreateChannelInput,
   type Protocol,
 } from "../api";
-import { formatDateTime, clampStr, terminalLabel } from "../lib";
+import { formatDateTime } from "../lib";
 
 type ChannelDraft = CreateChannelInput;
 
@@ -57,6 +63,7 @@ function emptyDraft(): ChannelDraft {
     base_url: "https://api.openai.com",
     auth_type: "auto",
     auth_ref: "",
+    priority: 0,
     enabled: true,
   };
 }
@@ -74,8 +81,12 @@ function defaultBaseUrl(protocol: Protocol): string {
 
 export function ChannelsPage() {
   const { t } = useI18n();
-  const [channels, setChannels] = useState<Channel[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [activeProtocol, setActiveProtocol] = useState<Protocol>("openai");
+  const [channelsByProtocol, setChannelsByProtocol] = useState<
+    Record<Protocol, Channel[]>
+  >({ openai: [], anthropic: [], gemini: [] });
+  const [reordering, setReordering] = useState(false);
+  const [dragId, setDragId] = useState<string | null>(null);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<"create" | "edit">("create");
@@ -87,14 +98,13 @@ export function ChannelsPage() {
   const [deleting, setDeleting] = useState(false);
 
   async function refresh() {
-    setLoading(true);
     try {
       const cs = await listChannels();
-      setChannels(cs);
+      const by: Record<Protocol, Channel[]> = { openai: [], anthropic: [], gemini: [] };
+      for (const c of cs) by[c.protocol].push(c);
+      setChannelsByProtocol(by);
     } catch (e) {
       toast.error(t("channels.toast.loadFail"), { description: String(e) });
-    } finally {
-      setLoading(false);
     }
   }
 
@@ -105,7 +115,11 @@ export function ChannelsPage() {
   function openCreate() {
     setModalMode("create");
     setEditId(null);
-    setDraft(emptyDraft());
+    setDraft({
+      ...emptyDraft(),
+      protocol: activeProtocol,
+      base_url: defaultBaseUrl(activeProtocol),
+    });
     setModalOpen(true);
   }
 
@@ -118,6 +132,7 @@ export function ChannelsPage() {
       base_url: c.base_url,
       auth_type: "auto",
       auth_ref: c.auth_ref,
+      priority: c.priority ?? 0,
       enabled: c.enabled,
     });
     setModalOpen(true);
@@ -138,6 +153,7 @@ export function ChannelsPage() {
           base_url: draft.base_url.trim(),
           auth_type: "auto",
           auth_ref: draft.auth_ref,
+          priority: draft.priority,
           enabled: draft.enabled,
         });
         toast.success(t("channels.toast.updateOk"));
@@ -215,56 +231,118 @@ export function ChannelsPage() {
     }
   }
 
-  return (
-    <div className="space-y-4">
-      {/* 页面标题 */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-lg font-semibold">{t("channels.title")}</h1>
-          <p className="text-muted-foreground text-xs mt-0.5">
-            {t("channels.subtitle")}
-          </p>
-        </div>
-        <Button size="sm" onClick={openCreate}>
-          <Plus className="h-4 w-4 mr-2" />
-          {t("channels.new")}
-        </Button>
-      </div>
+  async function persistOrder(protocol: Protocol, next: Channel[]) {
+    setReordering(true);
+    try {
+      await reorderChannels(protocol, next.map((c) => c.id));
+      toast.success(t("channels.toast.reorderOk"));
+      await refresh();
+    } catch (e) {
+      toast.error(t("channels.toast.reorderFail"), { description: String(e) });
+      await refresh();
+    } finally {
+      setReordering(false);
+    }
+  }
 
-      {/* 渠道表格 */}
+  function moveByDrop(protocol: Protocol, fromId: string, toId: string) {
+    if (fromId === toId) return;
+    const list = channelsByProtocol[protocol];
+    const fromIdx = list.findIndex((c) => c.id === fromId);
+    const toIdx = list.findIndex((c) => c.id === toId);
+    if (fromIdx < 0 || toIdx < 0) return;
+
+    const next = [...list];
+    const [item] = next.splice(fromIdx, 1);
+    next.splice(toIdx, 0, item);
+    setChannelsByProtocol((m) => ({ ...m, [protocol]: next }));
+    void persistOrder(protocol, next);
+  }
+
+  function moveToEnd(protocol: Protocol, fromId: string) {
+    const list = channelsByProtocol[protocol];
+    const fromIdx = list.findIndex((c) => c.id === fromId);
+    if (fromIdx < 0) return;
+    const next = [...list];
+    const [item] = next.splice(fromIdx, 1);
+    next.push(item);
+    setChannelsByProtocol((m) => ({ ...m, [protocol]: next }));
+    void persistOrder(protocol, next);
+  }
+
+  function renderTable(protocol: Protocol) {
+    const tabChannels = channelsByProtocol[protocol];
+    return (
       <Card>
         <CardContent className="p-0">
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-[32px]"></TableHead>
                 <TableHead>{t("channels.table.name")}</TableHead>
-                <TableHead>{t("channels.table.terminal")}</TableHead>
-                <TableHead>{t("channels.table.baseUrl")}</TableHead>
-                <TableHead className="w-[70px] text-center">{t("channels.table.status")}</TableHead>
+                <TableHead className="w-[90px] text-right">
+                  {t("channels.table.priority")}
+                </TableHead>
+                <TableHead className="w-[70px] text-center">
+                  {t("channels.table.status")}
+                </TableHead>
                 <TableHead>{t("channels.table.updatedAt")}</TableHead>
                 <TableHead className="w-[100px]">{t("common.actions")}</TableHead>
               </TableRow>
             </TableHeader>
-            <TableBody>
-              {channels.length === 0 ? (
+            <TableBody
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => {
+                if (e.defaultPrevented) return;
+                e.preventDefault();
+                const fromId = e.dataTransfer.getData("text/plain");
+                if (fromId) moveToEnd(protocol, fromId);
+                setDragId(null);
+              }}
+            >
+              {tabChannels.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                  <TableCell
+                    colSpan={6}
+                    className="text-center text-muted-foreground py-8"
+                  >
                     {t("channels.table.empty")}
                   </TableCell>
                 </TableRow>
               ) : (
-                channels.map((c) => (
-                  <TableRow key={c.id}>
+                tabChannels.map((c) => (
+                  <TableRow
+                    key={c.id}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      const fromId = e.dataTransfer.getData("text/plain");
+                      if (fromId) moveByDrop(protocol, fromId, c.id);
+                      setDragId(null);
+                    }}
+                    className={dragId === c.id ? "bg-accent/30" : undefined}
+                  >
+                    <TableCell>
+                      <button
+                        className="text-muted-foreground hover:text-foreground cursor-grab active:cursor-grabbing"
+                        draggable={!reordering}
+                        onDragStart={(e) => {
+                          e.dataTransfer.setData("text/plain", c.id);
+                          e.dataTransfer.effectAllowed = "move";
+                          setDragId(c.id);
+                        }}
+                        onDragEnd={() => setDragId(null)}
+                        title={t("channels.actions.drag")}
+                      >
+                        <GripVertical className="h-4 w-4" />
+                      </button>
+                    </TableCell>
                     <TableCell>
                       <div className="font-medium">{c.name}</div>
                     </TableCell>
-                    <TableCell>
-                      <Badge variant="outline">{terminalLabel(c.protocol)}</Badge>
-                    </TableCell>
-                    <TableCell>
-                      <code className="text-xs text-muted-foreground">
-                        {clampStr(c.base_url, 40)}
-                      </code>
+                    <TableCell className="text-right font-mono text-sm">
+                      {c.priority}
                     </TableCell>
                     <TableCell className="text-center">
                       <Badge variant={c.enabled ? "success" : "secondary"}>
@@ -289,7 +367,11 @@ export function ChannelsPage() {
                           variant="ghost"
                           size="icon"
                           onClick={() => toggleEnabled(c)}
-                          title={c.enabled ? t("channels.actions.disable") : t("channels.actions.enable")}
+                          title={
+                            c.enabled
+                              ? t("channels.actions.disable")
+                              : t("channels.actions.enable")
+                          }
                         >
                           {c.enabled ? (
                             <PowerOff className="h-4 w-4" />
@@ -322,6 +404,43 @@ export function ChannelsPage() {
           </Table>
         </CardContent>
       </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* 页面标题 */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-lg font-semibold">{t("channels.title")}</h1>
+          <p className="text-muted-foreground text-xs mt-0.5">
+            {t("channels.subtitle")}
+          </p>
+        </div>
+        <Button size="sm" onClick={openCreate}>
+          <Plus className="h-4 w-4 mr-2" />
+          {t("channels.new")}
+        </Button>
+      </div>
+
+      {/* 渠道表格 */}
+      <Tabs
+        value={activeProtocol}
+        onValueChange={(v) => {
+          setActiveProtocol(v as Protocol);
+          setDragId(null);
+        }}
+      >
+        <TabsList>
+          <TabsTrigger value="openai">{t("channels.tabs.codex")}</TabsTrigger>
+          <TabsTrigger value="anthropic">{t("channels.tabs.claude")}</TabsTrigger>
+          <TabsTrigger value="gemini">{t("channels.tabs.gemini")}</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="openai">{renderTable("openai")}</TabsContent>
+        <TabsContent value="anthropic">{renderTable("anthropic")}</TabsContent>
+        <TabsContent value="gemini">{renderTable("gemini")}</TabsContent>
+      </Tabs>
 
       {/* 新建/编辑弹窗 */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
@@ -371,17 +490,34 @@ export function ChannelsPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="anthropic">
-                      Claude Code
+                      {t("channels.tabs.claude")}
                     </SelectItem>
                     <SelectItem value="openai">
-                      Codex
+                      {t("channels.tabs.codex")}
                     </SelectItem>
                     <SelectItem value="gemini">
-                      Gemini
+                      {t("channels.tabs.gemini")}
                     </SelectItem>
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">{t("channels.modal.priority")}</label>
+              <Input
+                type="number"
+                value={String(draft.priority ?? 0)}
+                onChange={(e) =>
+                  setDraft((d) => ({
+                    ...d,
+                    priority: Number.isFinite(Number(e.target.value))
+                      ? Number(e.target.value)
+                      : 0,
+                  }))
+                }
+                placeholder="0"
+              />
             </div>
 
             <div className="space-y-2">

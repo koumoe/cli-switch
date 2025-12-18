@@ -151,7 +151,7 @@ curl http://127.0.0.1:3210/api/health
 
 ### 代理配置示例（MVP）
 
-当前代理逻辑：按 `protocol` 选择**第一个启用的**渠道（按 `name` 排序），并将请求原样透传到该渠道的 `base_url`。
+当前代理逻辑：按 `protocol` 选择**第一个启用的**渠道（按 `priority` 从大到小排序，其次按 `name`），并将请求原样透传到该渠道的 `base_url`。
 
 支持的 `auth_type`：
 
@@ -171,6 +171,7 @@ curl -X POST http://127.0.0.1:3210/api/channels \
     "base_url": "https://api.openai.com/v1",
     "auth_type": "bearer",
     "auth_ref": "<OPENAI_API_KEY>",
+    "priority": 10,
     "enabled": true
   }'
 ```
@@ -186,6 +187,7 @@ curl -X POST http://127.0.0.1:3210/api/channels \
     "base_url": "https://api.anthropic.com/v1",
     "auth_type": "x-api-key",
     "auth_ref": "<ANTHROPIC_API_KEY>",
+    "priority": 10,
     "enabled": true
   }'
 ```
@@ -201,6 +203,7 @@ curl -X POST http://127.0.0.1:3210/api/channels \
     "base_url": "https://generativelanguage.googleapis.com/v1beta",
     "auth_type": "query",
     "auth_ref": "<GEMINI_API_KEY>",
+    "priority": 10,
     "enabled": true
   }'
 ```

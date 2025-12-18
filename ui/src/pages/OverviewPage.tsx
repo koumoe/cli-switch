@@ -16,6 +16,7 @@ import {
   statsSummary,
   statsChannels,
   type Channel,
+  type Protocol,
   type UsageEvent,
   type StatsSummary,
   type ChannelStats,
@@ -137,9 +138,23 @@ export function OverviewPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  const enabledChannels = useMemo(
-    () => channels.filter((c) => c.enabled),
-    [channels]
+  const enabledByProtocol = useMemo(() => {
+    const by: Record<Protocol, Channel[]> = { openai: [], anthropic: [], gemini: [] };
+    for (const c of channels) {
+      if (c.enabled) by[c.protocol].push(c);
+    }
+    for (const p of Object.keys(by) as Protocol[]) {
+      by[p].sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0) || a.name.localeCompare(b.name));
+    }
+    return by;
+  }, [channels]);
+
+  const hasAnyEnabled = useMemo(
+    () =>
+      enabledByProtocol.openai.length > 0 ||
+      enabledByProtocol.anthropic.length > 0 ||
+      enabledByProtocol.gemini.length > 0,
+    [enabledByProtocol],
   );
 
   const rangeStartMs = stats?.start_ms ?? getTodayStartMs();
@@ -298,28 +313,41 @@ export function OverviewPage() {
         <CardContent className="px-3 pb-3">
           {loading ? (
             <p className="text-muted-foreground text-xs">{t("common.loading")}</p>
-          ) : enabledChannels.length === 0 ? (
+          ) : !hasAnyEnabled ? (
             <p className="text-muted-foreground text-xs">
               {t("overview.activeChannels.empty")}
             </p>
           ) : (
-            <div className="flex flex-wrap items-center gap-2">
-              {enabledChannels.map((c, idx) => (
-                <React.Fragment key={c.id}>
-                  <div className="flex items-center gap-1.5 px-2 py-1 rounded border bg-card">
-                    <Badge variant="outline" className="text-[10px] px-1 py-0">
-                      {idx + 1}
-                    </Badge>
-                    <span className="text-xs font-medium">{c.name}</span>
-                    <Badge variant="secondary" className="text-[10px] px-1 py-0">
-                      {terminalLabel(c.protocol)}
-                    </Badge>
-                  </div>
-                  {idx < enabledChannels.length - 1 && (
-                    <ArrowRight className="h-3 w-3 text-muted-foreground" />
-                  )}
-                </React.Fragment>
-              ))}
+            <div className="space-y-3">
+              {(["openai", "anthropic", "gemini"] as Protocol[])
+                .filter((p) => enabledByProtocol[p].length > 0)
+                .map((p) => {
+                  const list = enabledByProtocol[p];
+                  return (
+                    <div key={p} className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="text-[10px] px-2 py-0.5">
+                          {terminalLabel(p)}
+                        </Badge>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        {list.map((c, idx) => (
+                          <React.Fragment key={c.id}>
+                            <div className="flex items-center gap-1.5 px-2 py-1 rounded border bg-card">
+                              <Badge variant="outline" className="text-[10px] px-1 py-0">
+                                {idx + 1}
+                              </Badge>
+                              <span className="text-xs font-medium">{c.name}</span>
+                            </div>
+                            {idx < list.length - 1 && (
+                              <ArrowRight className="h-3 w-3 text-muted-foreground" />
+                            )}
+                          </React.Fragment>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
             </div>
           )}
         </CardContent>

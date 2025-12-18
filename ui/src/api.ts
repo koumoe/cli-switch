@@ -15,6 +15,7 @@ export type Channel = {
   base_url: string;
   auth_type: string;
   auth_ref: string;
+  priority: number;
   enabled: boolean;
   created_at_ms: number;
   updated_at_ms: number;
@@ -26,6 +27,7 @@ export type CreateChannelInput = {
   base_url: string;
   auth_type: string;
   auth_ref: string;
+  priority: number;
   enabled: boolean;
 };
 
@@ -34,6 +36,7 @@ export type UpdateChannelInput = Partial<{
   base_url: string;
   auth_type: string;
   auth_ref: string;
+  priority: number;
   enabled: boolean;
 }>;
 
@@ -188,6 +191,10 @@ export function deleteChannel(id: string): Promise<void> {
 
 export function testChannel(id: string): Promise<ChannelTestResponse> {
   return http<ChannelTestResponse>("POST", `/api/channels/${encodeURIComponent(id)}/test`);
+}
+
+export function reorderChannels(protocol: Protocol, channelIds: string[]): Promise<void> {
+  return http<void>("POST", "/api/channels/reorder", { protocol, channel_ids: channelIds });
 }
 
 export function listRoutes(): Promise<Route[]> {

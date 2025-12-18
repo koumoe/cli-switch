@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS channels (
   base_url TEXT NOT NULL,
   auth_type TEXT NOT NULL,
   auth_ref TEXT NOT NULL,
+  priority INTEGER NOT NULL DEFAULT 0,
   enabled INTEGER NOT NULL,
   created_at_ms INTEGER NOT NULL,
   updated_at_ms INTEGER NOT NULL

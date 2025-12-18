@@ -71,15 +71,22 @@
     "title": "渠道",
     "subtitle": "管理上游 API 渠道的配置和连接",
     "new": "新建渠道",
+    "tabs": {
+      "codex": "Codex",
+      "claude": "Claude Code",
+      "gemini": "Gemini"
+    },
     "table": {
       "name": "名称",
       "terminal": "终端",
+      "priority": "优先级",
       "baseUrl": "Base URL",
       "status": "状态",
       "updatedAt": "更新时间",
       "empty": "暂无渠道，点击「新建渠道」添加"
     },
     "actions": {
+      "drag": "拖拽排序",
       "test": "测试连接",
       "edit": "编辑",
       "delete": "删除",
@@ -92,6 +99,7 @@
       "description": "配置 API 渠道的连接信息",
       "name": "名称",
       "terminal": "终端",
+      "priority": "优先级（数值越大越优先）",
       "baseUrl": "Base URL",
       "apiKey": "API Key / Token",
       "enabled": "启用"
@@ -118,7 +126,9 @@
       "testReachableOkDesc": "状态: {{status}}, 延迟: {{latency}}ms",
       "testReachableBadTitle": "{{name}} 可达但返回异常",
       "testUnreachableTitle": "{{name}} 无法连接",
-      "testTimeout": "连接超时"
+      "testTimeout": "连接超时",
+      "reorderOk": "排序已保存",
+      "reorderFail": "保存排序失败"
     }
   },
   "routes": {

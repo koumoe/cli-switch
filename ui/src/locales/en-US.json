@@ -71,15 +71,22 @@
     "title": "Channels",
     "subtitle": "Manage upstream API channel configuration and connectivity",
     "new": "New Channel",
+    "tabs": {
+      "codex": "Codex",
+      "claude": "Claude Code",
+      "gemini": "Gemini"
+    },
     "table": {
       "name": "Name",
       "terminal": "Terminal",
+      "priority": "Priority",
       "baseUrl": "Base URL",
       "status": "Status",
       "updatedAt": "Updated At",
       "empty": "No channels. Click “New Channel” to add one."
     },
     "actions": {
+      "drag": "Drag to reorder",
       "test": "Test Connection",
       "edit": "Edit",
       "delete": "Delete",
@@ -92,6 +99,7 @@
       "description": "Configure API channel connection details",
       "name": "Name",
       "terminal": "Terminal",
+      "priority": "Priority (higher wins)",
       "baseUrl": "Base URL",
       "apiKey": "API Key / Token",
       "enabled": "Enabled"
@@ -118,7 +126,9 @@
       "testReachableOkDesc": "Status: {{status}}, Latency: {{latency}}ms",
       "testReachableBadTitle": "{{name}} reachable but returned an error",
       "testUnreachableTitle": "Cannot reach {{name}}",
-      "testTimeout": "Connection timed out"
+      "testTimeout": "Connection timed out",
+      "reorderOk": "Order saved",
+      "reorderFail": "Failed to save order"
     }
   },
   "routes": {
