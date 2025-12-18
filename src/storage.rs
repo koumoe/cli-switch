@@ -116,6 +116,7 @@ pub fn init_db(db_path: &Path) -> anyhow::Result<()> {
 
     ensure_channels_schema(&conn)?;
     ensure_app_settings_schema(&conn)?;
+    ensure_pricing_models_schema(&conn)?;
     ensure_usage_events_schema(&conn)?;
 
     Ok(())
@@ -140,10 +141,18 @@ fn ensure_app_settings_schema(conn: &Connection) -> anyhow::Result<()> {
     Ok(())
 }
 
+fn ensure_pricing_models_schema(conn: &Connection) -> anyhow::Result<()> {
+    ensure_column(conn, "pricing_models", "cache_read_price", "TEXT NULL")?;
+    ensure_column(conn, "pricing_models", "cache_write_price", "TEXT NULL")?;
+    Ok(())
+}
+
 fn ensure_usage_events_schema(conn: &Connection) -> anyhow::Result<()> {
     ensure_column(conn, "usage_events", "ttft_ms", "INTEGER NULL")?;
     ensure_column(conn, "usage_events", "request_id", "TEXT NULL")?;
     ensure_column(conn, "usage_events", "error_detail", "TEXT NULL")?;
+    ensure_column(conn, "usage_events", "cache_read_tokens", "INTEGER NULL")?;
+    ensure_column(conn, "usage_events", "cache_write_tokens", "INTEGER NULL")?;
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_usage_request_ts ON usage_events(request_id, ts_ms)",
         [],
@@ -984,6 +993,8 @@ pub struct UpsertPricingModel {
     pub prompt_price: Option<String>,
     pub completion_price: Option<String>,
     pub request_price: Option<String>,
+    pub cache_read_price: Option<String>,
+    pub cache_write_price: Option<String>,
     pub raw_json: Option<String>,
 }
 
@@ -1033,12 +1044,18 @@ pub async fn upsert_pricing_models(
         {
             let mut stmt = tx.prepare(
                 r#"
-                INSERT INTO pricing_models (model_id, prompt_price, completion_price, request_price, raw_json, updated_at_ms)
-                VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+                INSERT INTO pricing_models (
+                  model_id, prompt_price, completion_price, request_price,
+                  cache_read_price, cache_write_price,
+                  raw_json, updated_at_ms
+                )
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
                 ON CONFLICT(model_id) DO UPDATE SET
                   prompt_price = excluded.prompt_price,
                   completion_price = excluded.completion_price,
                   request_price = excluded.request_price,
+                  cache_read_price = excluded.cache_read_price,
+                  cache_write_price = excluded.cache_write_price,
                   raw_json = excluded.raw_json,
                   updated_at_ms = excluded.updated_at_ms
                 "#,
@@ -1050,6 +1067,8 @@ pub async fn upsert_pricing_models(
                     m.prompt_price,
                     m.completion_price,
                     m.request_price,
+                    m.cache_read_price,
+                    m.cache_write_price,
                     m.raw_json,
                     updated_at_ms
                 ])?;
@@ -1137,6 +1156,8 @@ pub struct UsageEvent {
     pub prompt_tokens: Option<i64>,
     pub completion_tokens: Option<i64>,
     pub total_tokens: Option<i64>,
+    pub cache_read_tokens: Option<i64>,
+    pub cache_write_tokens: Option<i64>,
     pub estimated_cost_usd: Option<String>,
 }
 
@@ -1157,6 +1178,8 @@ pub struct CreateUsageEvent {
     pub prompt_tokens: Option<i64>,
     pub completion_tokens: Option<i64>,
     pub total_tokens: Option<i64>,
+    pub cache_read_tokens: Option<i64>,
+    pub cache_write_tokens: Option<i64>,
     pub estimated_cost_usd: Option<String>,
 }
 
@@ -1179,13 +1202,23 @@ pub async fn insert_usage_event(db_path: PathBuf, input: CreateUsageEvent) -> an
             prompt_tokens,
             completion_tokens,
             total_tokens,
+            cache_read_tokens,
+            cache_write_tokens,
             estimated_cost_usd,
         } = input;
 
         let estimated_cost_usd = estimated_cost_usd.or_else(|| {
-            model
-                .as_deref()
-                .and_then(|m| estimate_cost_usd(conn, m, success, prompt_tokens, completion_tokens))
+            model.as_deref().and_then(|m| {
+                estimate_cost_usd(
+                    conn,
+                    m,
+                    success,
+                    prompt_tokens,
+                    completion_tokens,
+                    cache_read_tokens,
+                    cache_write_tokens,
+                )
+            })
         });
 
         conn.execute(
@@ -1193,9 +1226,11 @@ pub async fn insert_usage_event(db_path: PathBuf, input: CreateUsageEvent) -> an
             INSERT INTO usage_events (
               id, request_id, ts_ms, protocol, route_id, channel_id, model,
               success, http_status, error_kind, error_detail, latency_ms,
-              ttft_ms, prompt_tokens, completion_tokens, total_tokens, estimated_cost_usd
+              ttft_ms, prompt_tokens, completion_tokens, total_tokens,
+              cache_read_tokens, cache_write_tokens,
+              estimated_cost_usd
             )
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)
             "#,
             params![
                 id,
@@ -1214,6 +1249,8 @@ pub async fn insert_usage_event(db_path: PathBuf, input: CreateUsageEvent) -> an
                 prompt_tokens,
                 completion_tokens,
                 total_tokens,
+                cache_read_tokens,
+                cache_write_tokens,
                 estimated_cost_usd,
             ],
         )?;
@@ -1252,17 +1289,31 @@ fn format_cost_usd(v: f64) -> Option<String> {
 fn find_pricing_for_model(
     conn: &Connection,
     model: &str,
-) -> rusqlite::Result<Option<(Option<String>, Option<String>, Option<String>)>> {
+) -> rusqlite::Result<
+    Option<(
+        Option<String>,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+    )>,
+> {
     let mut stmt = conn.prepare(
         r#"
-        SELECT prompt_price, completion_price, request_price
+        SELECT prompt_price, completion_price, request_price, cache_read_price, cache_write_price
         FROM pricing_models
         WHERE model_id = ?1
         "#,
     )?;
     if let Some(row) = stmt
         .query_row(params![model], |row| {
-            Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+            Ok((
+                row.get(0)?,
+                row.get(1)?,
+                row.get(2)?,
+                row.get(3)?,
+                row.get(4)?,
+            ))
         })
         .optional()?
     {
@@ -1272,7 +1323,7 @@ fn find_pricing_for_model(
     let like = format!("%/{}", model.trim());
     let mut stmt = conn.prepare(
         r#"
-        SELECT prompt_price, completion_price, request_price
+        SELECT prompt_price, completion_price, request_price, cache_read_price, cache_write_price
         FROM pricing_models
         WHERE model_id LIKE ?1
         ORDER BY LENGTH(model_id) ASC
@@ -1280,7 +1331,13 @@ fn find_pricing_for_model(
         "#,
     )?;
     stmt.query_row(params![like], |row| {
-        Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+        Ok((
+            row.get(0)?,
+            row.get(1)?,
+            row.get(2)?,
+            row.get(3)?,
+            row.get(4)?,
+        ))
     })
     .optional()
 }
@@ -1291,9 +1348,16 @@ fn estimate_cost_usd(
     success: bool,
     prompt_tokens: Option<i64>,
     completion_tokens: Option<i64>,
+    cache_read_tokens: Option<i64>,
+    cache_write_tokens: Option<i64>,
 ) -> Option<String> {
-    let Ok(Some((prompt_price, completion_price, request_price))) =
-        find_pricing_for_model(conn, model)
+    let Ok(Some((
+        prompt_price,
+        completion_price,
+        request_price,
+        cache_read_price,
+        cache_write_price,
+    ))) = find_pricing_for_model(conn, model)
     else {
         return None;
     };
@@ -1306,6 +1370,14 @@ fn estimate_cost_usd(
         .as_deref()
         .and_then(parse_price_usd)
         .unwrap_or(0.0);
+    let cache_read_unit = cache_read_price
+        .as_deref()
+        .and_then(parse_price_usd)
+        .unwrap_or(0.0);
+    let cache_write_unit = cache_write_price
+        .as_deref()
+        .and_then(parse_price_usd)
+        .unwrap_or(0.0);
     let request_unit = if success {
         request_price
             .as_deref()
@@ -1315,10 +1387,26 @@ fn estimate_cost_usd(
         0.0
     };
 
-    let p = prompt_tokens.unwrap_or(0).max(0) as f64;
     let c = completion_tokens.unwrap_or(0).max(0) as f64;
+    let cr = cache_read_tokens.unwrap_or(0).max(0) as i64;
+    let cw = cache_write_tokens.unwrap_or(0).max(0) as i64;
 
-    let cost = p * prompt_unit + c * completion_unit + request_unit;
+    let mut regular_prompt_tokens = prompt_tokens.unwrap_or(0).max(0);
+    if cr <= regular_prompt_tokens {
+        regular_prompt_tokens -= cr;
+    }
+    if cw <= regular_prompt_tokens {
+        regular_prompt_tokens -= cw;
+    }
+    let p = regular_prompt_tokens as f64;
+    let cr = cr as f64;
+    let cw = cw as f64;
+
+    let cost = p * prompt_unit
+        + c * completion_unit
+        + cr * cache_read_unit
+        + cw * cache_write_unit
+        + request_unit;
     format_cost_usd(cost)
 }
 
@@ -1326,7 +1414,7 @@ pub async fn backfill_usage_event_costs(db_path: PathBuf) -> anyhow::Result<i64>
     with_conn(db_path, move |conn| {
         let mut stmt = conn.prepare(
             r#"
-            SELECT id, model, success, prompt_tokens, completion_tokens
+            SELECT id, model, success, prompt_tokens, completion_tokens, cache_read_tokens, cache_write_tokens
             FROM usage_events
             WHERE estimated_cost_usd IS NULL
               AND model IS NOT NULL
@@ -1343,13 +1431,24 @@ pub async fn backfill_usage_event_costs(db_path: PathBuf) -> anyhow::Result<i64>
                 row.get::<_, i64>(2)? != 0,
                 row.get::<_, Option<i64>>(3)?,
                 row.get::<_, Option<i64>>(4)?,
+                row.get::<_, Option<i64>>(5)?,
+                row.get::<_, Option<i64>>(6)?,
             ))
         })?;
 
         let mut updated = 0i64;
         for row in rows {
-            let (id, model, success, prompt_tokens, completion_tokens) = row?;
-            let Some(cost) = estimate_cost_usd(conn, &model, success, prompt_tokens, completion_tokens) else {
+            let (id, model, success, prompt_tokens, completion_tokens, cache_read_tokens, cache_write_tokens) =
+                row?;
+            let Some(cost) = estimate_cost_usd(
+                conn,
+                &model,
+                success,
+                prompt_tokens,
+                completion_tokens,
+                cache_read_tokens,
+                cache_write_tokens,
+            ) else {
                 continue;
             };
             let n = conn.execute(
@@ -1373,7 +1472,9 @@ pub async fn list_usage_events_recent(
             r#"
             SELECT id, request_id, ts_ms, protocol, route_id, channel_id, model,
                    success, http_status, error_kind, error_detail, latency_ms,
-                   ttft_ms, prompt_tokens, completion_tokens, total_tokens, estimated_cost_usd
+                   ttft_ms, prompt_tokens, completion_tokens, total_tokens,
+                   cache_read_tokens, cache_write_tokens,
+                   estimated_cost_usd
             FROM usage_events
             ORDER BY ts_ms DESC
             LIMIT ?1
@@ -1404,7 +1505,9 @@ pub async fn list_usage_events_recent(
                 prompt_tokens: row.get(13)?,
                 completion_tokens: row.get(14)?,
                 total_tokens: row.get(15)?,
-                estimated_cost_usd: row.get(16)?,
+                cache_read_tokens: row.get(16)?,
+                cache_write_tokens: row.get(17)?,
+                estimated_cost_usd: row.get(18)?,
             })
         })?;
         let mut out = Vec::new();
@@ -1492,7 +1595,9 @@ pub async fn list_usage_events(
             r#"
             SELECT id, request_id, ts_ms, protocol, route_id, channel_id, model,
                    success, http_status, error_kind, error_detail, latency_ms,
-                   ttft_ms, prompt_tokens, completion_tokens, total_tokens, estimated_cost_usd
+                   ttft_ms, prompt_tokens, completion_tokens, total_tokens,
+                   cache_read_tokens, cache_write_tokens,
+                   estimated_cost_usd
             FROM usage_events
             {where_clause}
             ORDER BY ts_ms DESC
@@ -1526,7 +1631,9 @@ pub async fn list_usage_events(
                 prompt_tokens: row.get(13)?,
                 completion_tokens: row.get(14)?,
                 total_tokens: row.get(15)?,
-                estimated_cost_usd: row.get(16)?,
+                cache_read_tokens: row.get(16)?,
+                cache_write_tokens: row.get(17)?,
+                estimated_cost_usd: row.get(18)?,
             })
         })?;
 

@@ -37,6 +37,8 @@ CREATE TABLE IF NOT EXISTS pricing_models (
   prompt_price TEXT NULL,
   completion_price TEXT NULL,
   request_price TEXT NULL,
+  cache_read_price TEXT NULL,
+  cache_write_price TEXT NULL,
   raw_json TEXT NULL,
   updated_at_ms INTEGER NOT NULL
 );
@@ -58,6 +60,8 @@ CREATE TABLE IF NOT EXISTS usage_events (
   prompt_tokens INTEGER NULL,
   completion_tokens INTEGER NULL,
   total_tokens INTEGER NULL,
+  cache_read_tokens INTEGER NULL,
+  cache_write_tokens INTEGER NULL,
   estimated_cost_usd TEXT NULL
 );
 

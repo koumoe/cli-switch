@@ -141,6 +141,8 @@ pub async fn forward(
                         prompt_tokens: None,
                         completion_tokens: None,
                         total_tokens: None,
+                        cache_read_tokens: None,
+                        cache_write_tokens: None,
                         estimated_cost_usd: None,
                     },
                     db_path.clone(),
@@ -191,6 +193,8 @@ pub async fn forward(
                     prompt_tokens: None,
                     completion_tokens: None,
                     total_tokens: None,
+                    cache_read_tokens: None,
+                    cache_write_tokens: None,
                     estimated_cost_usd: None,
                 },
                 db_path.clone(),
@@ -264,7 +268,8 @@ async fn proxy_upstream_response(
 
         let duration_ms = ctx.started.elapsed().as_millis() as i64;
         let usage = parse_usage_from_json(ctx.protocol, &bytes);
-        let (prompt_tokens, completion_tokens, total_tokens) = usage.as_tuple();
+        let (prompt_tokens, completion_tokens, total_tokens, cache_read_tokens, cache_write_tokens) =
+            usage.as_event_fields();
 
         let http_status = Some(status.as_u16() as i64);
         let success = status.is_success();
@@ -292,6 +297,8 @@ async fn proxy_upstream_response(
                 prompt_tokens,
                 completion_tokens,
                 total_tokens,
+                cache_read_tokens,
+                cache_write_tokens,
                 estimated_cost_usd: None,
             },
             ctx.db_path.clone(),
@@ -577,10 +584,20 @@ struct TokenUsage {
     prompt_tokens: Option<i64>,
     completion_tokens: Option<i64>,
     total_tokens: Option<i64>,
+    cache_read_tokens: Option<i64>,
+    cache_write_tokens: Option<i64>,
 }
 
 impl TokenUsage {
-    fn as_tuple(self) -> (Option<i64>, Option<i64>, Option<i64>) {
+    fn as_event_fields(
+        self,
+    ) -> (
+        Option<i64>,
+        Option<i64>,
+        Option<i64>,
+        Option<i64>,
+        Option<i64>,
+    ) {
         let total = match (
             self.total_tokens,
             self.prompt_tokens,
@@ -590,7 +607,13 @@ impl TokenUsage {
             (None, Some(p), Some(c)) => Some(p + c),
             _ => None,
         };
-        (self.prompt_tokens, self.completion_tokens, total)
+        (
+            self.prompt_tokens,
+            self.completion_tokens,
+            total,
+            self.cache_read_tokens,
+            self.cache_write_tokens,
+        )
     }
 
     fn merge(&mut self, other: TokenUsage) {
@@ -602,6 +625,12 @@ impl TokenUsage {
         }
         if other.total_tokens.is_some() {
             self.total_tokens = other.total_tokens;
+        }
+        if other.cache_read_tokens.is_some() {
+            self.cache_read_tokens = other.cache_read_tokens;
+        }
+        if other.cache_write_tokens.is_some() {
+            self.cache_write_tokens = other.cache_write_tokens;
         }
     }
 }
@@ -709,10 +738,28 @@ fn extract_openai_usage(v: &serde_json::Value) -> TokenUsage {
             .or_else(|| u.get("output_tokens"))
             .and_then(|n| n.as_i64());
         let total_tokens = u.get("total_tokens").and_then(|n| n.as_i64());
+        let cache_read_tokens = u
+            .get("prompt_tokens_details")
+            .and_then(|d| d.get("cached_tokens"))
+            .or_else(|| {
+                u.get("input_tokens_details")
+                    .and_then(|d| d.get("cached_tokens"))
+            })
+            .and_then(|n| n.as_i64());
+        let cache_write_tokens = u
+            .get("prompt_tokens_details")
+            .and_then(|d| d.get("cache_creation_tokens"))
+            .or_else(|| {
+                u.get("input_tokens_details")
+                    .and_then(|d| d.get("cache_creation_tokens"))
+            })
+            .and_then(|n| n.as_i64());
         return TokenUsage {
             prompt_tokens,
             completion_tokens,
             total_tokens,
+            cache_read_tokens,
+            cache_write_tokens,
         };
     }
     TokenUsage::default()
@@ -725,10 +772,22 @@ fn extract_anthropic_usage(v: &serde_json::Value) -> TokenUsage {
     if let Some(u) = usage {
         let prompt_tokens = u.get("input_tokens").and_then(|n| n.as_i64());
         let completion_tokens = u.get("output_tokens").and_then(|n| n.as_i64());
+        let cache_read_tokens = u
+            .get("cache_read_input_tokens")
+            .or_else(|| u.get("cache_read_tokens"))
+            .and_then(|n| n.as_i64());
+        let cache_write_tokens = u
+            .get("cache_creation_input_tokens")
+            .or_else(|| u.get("cache_write_input_tokens"))
+            .or_else(|| u.get("cache_creation_tokens"))
+            .or_else(|| u.get("cache_write_tokens"))
+            .and_then(|n| n.as_i64());
         return TokenUsage {
             prompt_tokens,
             completion_tokens,
             total_tokens: None,
+            cache_read_tokens,
+            cache_write_tokens,
         };
     }
     TokenUsage::default()
@@ -745,6 +804,8 @@ fn extract_gemini_usage(v: &serde_json::Value) -> TokenUsage {
             prompt_tokens,
             completion_tokens,
             total_tokens,
+            cache_read_tokens: None,
+            cache_write_tokens: None,
         };
     }
     TokenUsage::default()
@@ -848,7 +909,8 @@ impl InstrumentedStream {
         self.finalized = true;
 
         let duration_ms = self.ctx.started.elapsed().as_millis() as i64;
-        let (prompt_tokens, completion_tokens, total_tokens) = self.usage.as_tuple();
+        let (prompt_tokens, completion_tokens, total_tokens, cache_read_tokens, cache_write_tokens) =
+            self.usage.as_event_fields();
 
         let success = self.ctx.status_is_success && self.stream_error.is_none();
         let error_kind = if success {
@@ -899,6 +961,8 @@ impl InstrumentedStream {
                 prompt_tokens,
                 completion_tokens,
                 total_tokens,
+                cache_read_tokens,
+                cache_write_tokens,
                 estimated_cost_usd: None,
             },
             self.ctx.db_path.clone(),
