@@ -2,6 +2,7 @@ use anyhow::Context as _;
 use rusqlite::{Connection, OptionalExtension as _, params};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -126,6 +127,11 @@ fn ensure_channels_schema(conn: &Connection) -> anyhow::Result<()> {
 
 fn ensure_usage_events_schema(conn: &Connection) -> anyhow::Result<()> {
     ensure_column(conn, "usage_events", "ttft_ms", "INTEGER NULL")?;
+    ensure_column(conn, "usage_events", "request_id", "TEXT NULL")?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_usage_request_ts ON usage_events(request_id, ts_ms)",
+        [],
+    )?;
     Ok(())
 }
 
@@ -967,6 +973,7 @@ pub async fn search_pricing_models(
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UsageEvent {
     pub id: String,
+    pub request_id: Option<String>,
     pub ts_ms: i64,
     pub protocol: Protocol,
     pub route_id: Option<String>,
@@ -985,6 +992,7 @@ pub struct UsageEvent {
 
 #[derive(Debug, Clone)]
 pub struct CreateUsageEvent {
+    pub request_id: Option<Arc<str>>,
     pub ts_ms: i64,
     pub protocol: Protocol,
     pub route_id: Option<String>,
@@ -1004,31 +1012,49 @@ pub struct CreateUsageEvent {
 pub async fn insert_usage_event(db_path: PathBuf, input: CreateUsageEvent) -> anyhow::Result<()> {
     with_conn(db_path, move |conn| {
         let id = Uuid::new_v4().to_string();
+        let CreateUsageEvent {
+            request_id,
+            ts_ms,
+            protocol,
+            route_id,
+            channel_id,
+            model,
+            success,
+            http_status,
+            error_kind,
+            latency_ms,
+            ttft_ms,
+            prompt_tokens,
+            completion_tokens,
+            total_tokens,
+            estimated_cost_usd,
+        } = input;
         conn.execute(
             r#"
             INSERT INTO usage_events (
-              id, ts_ms, protocol, route_id, channel_id, model,
+              id, request_id, ts_ms, protocol, route_id, channel_id, model,
               success, http_status, error_kind, latency_ms,
               ttft_ms, prompt_tokens, completion_tokens, total_tokens, estimated_cost_usd
             )
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)
             "#,
             params![
                 id,
-                input.ts_ms,
-                input.protocol.as_str(),
-                input.route_id,
-                input.channel_id,
-                input.model,
-                if input.success { 1 } else { 0 },
-                input.http_status,
-                input.error_kind,
-                input.latency_ms,
-                input.ttft_ms,
-                input.prompt_tokens,
-                input.completion_tokens,
-                input.total_tokens,
-                input.estimated_cost_usd,
+                request_id.as_deref(),
+                ts_ms,
+                protocol.as_str(),
+                route_id,
+                channel_id,
+                model,
+                if success { 1 } else { 0 },
+                http_status,
+                error_kind,
+                latency_ms,
+                ttft_ms,
+                prompt_tokens,
+                completion_tokens,
+                total_tokens,
+                estimated_cost_usd,
             ],
         )?;
         Ok(())
@@ -1043,7 +1069,7 @@ pub async fn list_usage_events_recent(
     with_conn(db_path, move |conn| {
         let mut stmt = conn.prepare(
             r#"
-            SELECT id, ts_ms, protocol, route_id, channel_id, model,
+            SELECT id, request_id, ts_ms, protocol, route_id, channel_id, model,
                    success, http_status, error_kind, latency_ms,
                    ttft_ms, prompt_tokens, completion_tokens, total_tokens, estimated_cost_usd
             FROM usage_events
@@ -1052,29 +1078,30 @@ pub async fn list_usage_events_recent(
             "#,
         )?;
         let rows = stmt.query_map(params![limit], |row| {
-            let protocol: String = row.get(2)?;
+            let protocol: String = row.get(3)?;
             Ok(UsageEvent {
                 id: row.get(0)?,
-                ts_ms: row.get(1)?,
+                request_id: row.get(1)?,
+                ts_ms: row.get(2)?,
                 protocol: protocol.parse::<Protocol>().map_err(|e| {
                     rusqlite::Error::FromSqlConversionFailure(
-                        2,
+                        3,
                         rusqlite::types::Type::Text,
                         e.into_boxed_dyn_error(),
                     )
                 })?,
-                route_id: row.get(3)?,
-                channel_id: row.get(4)?,
-                model: row.get(5)?,
-                success: row.get::<_, i64>(6)? != 0,
-                http_status: row.get(7)?,
-                error_kind: row.get(8)?,
-                latency_ms: row.get(9)?,
-                ttft_ms: row.get(10)?,
-                prompt_tokens: row.get(11)?,
-                completion_tokens: row.get(12)?,
-                total_tokens: row.get(13)?,
-                estimated_cost_usd: row.get(14)?,
+                route_id: row.get(4)?,
+                channel_id: row.get(5)?,
+                model: row.get(6)?,
+                success: row.get::<_, i64>(7)? != 0,
+                http_status: row.get(8)?,
+                error_kind: row.get(9)?,
+                latency_ms: row.get(10)?,
+                ttft_ms: row.get(11)?,
+                prompt_tokens: row.get(12)?,
+                completion_tokens: row.get(13)?,
+                total_tokens: row.get(14)?,
+                estimated_cost_usd: row.get(15)?,
             })
         })?;
         let mut out = Vec::new();
@@ -1102,10 +1129,24 @@ pub async fn stats_summary(db_path: PathBuf, start_ms: i64) -> anyhow::Result<St
     with_conn(db_path, move |conn| {
         let mut stmt = conn.prepare(
             r#"
+            WITH per_req AS (
+              SELECT
+                COALESCE(request_id, id) AS rid,
+                MAX(success) AS any_success
+              FROM usage_events
+              WHERE ts_ms >= ?1
+              GROUP BY rid
+            ),
+            req_agg AS (
+              SELECT
+                COUNT(*) AS requests,
+                SUM(any_success) AS success
+              FROM per_req
+            )
             SELECT
-              COUNT(*) AS requests,
-              SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END) AS success,
-              SUM(CASE WHEN success = 0 THEN 1 ELSE 0 END) AS failed,
+              (SELECT requests FROM req_agg) AS requests,
+              (SELECT success FROM req_agg) AS success,
+              (SELECT requests - success FROM req_agg) AS failed,
               SUM(COALESCE(prompt_tokens, 0)) AS prompt_tokens,
               SUM(COALESCE(completion_tokens, 0)) AS completion_tokens,
               SUM(COALESCE(total_tokens, 0)) AS total_tokens,

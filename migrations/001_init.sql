@@ -43,6 +43,7 @@ CREATE TABLE IF NOT EXISTS pricing_models (
 
 CREATE TABLE IF NOT EXISTS usage_events (
   id TEXT PRIMARY KEY,
+  request_id TEXT NULL,
   ts_ms INTEGER NOT NULL,
   protocol TEXT NOT NULL CHECK(protocol IN ('openai','anthropic','gemini')),
   route_id TEXT NULL,

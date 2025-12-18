@@ -4,8 +4,10 @@ use bytes::Bytes;
 use futures_util::StreamExt as _;
 use reqwest::Url;
 use std::pin::Pin;
+use std::sync::Arc;
 use std::task::{Context, Poll};
 use std::time::Instant;
+use uuid::Uuid;
 
 use crate::storage::{self, Channel, Protocol};
 
@@ -32,6 +34,7 @@ pub async fn forward(
     protocol_root: &'static str,
     req: Request<Body>,
 ) -> Result<Response<Body>, ProxyError> {
+    let request_id: Arc<str> = Arc::from(Uuid::new_v4().to_string());
     let channels = list_enabled_channels(db_path.clone(), protocol).await?;
     if channels.is_empty() {
         return Err(ProxyError::NoEnabledChannel(protocol));
@@ -120,6 +123,7 @@ pub async fn forward(
                 );
                 spawn_usage_event(
                     storage::CreateUsageEvent {
+                        request_id: Some(request_id.clone()),
                         ts_ms: storage::now_ms(),
                         protocol,
                         route_id: None,
@@ -163,6 +167,7 @@ pub async fn forward(
             );
             spawn_usage_event(
                 storage::CreateUsageEvent {
+                    request_id: Some(request_id.clone()),
                     ts_ms: storage::now_ms(),
                     protocol,
                     route_id: None,
@@ -190,6 +195,7 @@ pub async fn forward(
                 protocol,
                 channel_id: channel.id.clone(),
                 model: model.clone(),
+                request_id: request_id.clone(),
                 http_status: 0,
                 status_is_success: false,
                 started,
@@ -256,6 +262,7 @@ async fn proxy_upstream_response(
 
         spawn_usage_event(
             storage::CreateUsageEvent {
+                request_id: Some(ctx.request_id.clone()),
                 ts_ms: storage::now_ms(),
                 protocol: ctx.protocol,
                 route_id: None,
@@ -667,6 +674,7 @@ struct StreamRecordContext {
     protocol: Protocol,
     channel_id: String,
     model: Option<String>,
+    request_id: Arc<str>,
     http_status: i64,
     status_is_success: bool,
     started: Instant,
@@ -769,6 +777,7 @@ impl InstrumentedStream {
 
         spawn_usage_event(
             storage::CreateUsageEvent {
+                request_id: Some(self.ctx.request_id.clone()),
                 ts_ms: storage::now_ms(),
                 protocol: self.ctx.protocol,
                 route_id: None,
