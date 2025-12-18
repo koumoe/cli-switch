@@ -212,7 +212,6 @@
     "log": {
       "title": "Request Logs",
       "subtitle": "Latest 100 request records",
-      "onlyFailures": "Failures only",
       "headers": {
         "time": "Time",
         "terminal": "Terminal",
@@ -233,9 +232,31 @@
     "subtitle": "Request details with duration / tokens",
     "table": {
       "title": "Request Logs",
-      "subtitle": "Latest 100 request records"
+      "subtitle": "Filter and paginate all request records"
     },
-    "onlyFailures": "Failures only",
+    "filters": {
+      "all": "All",
+      "startDate": "Start date",
+      "endDate": "End date",
+      "terminal": "Terminal",
+      "channel": "Channel",
+      "model": "Model",
+      "modelPlaceholder": "Fuzzy match",
+      "dimension": "Request ID",
+      "dimensionPlaceholder": "Request ID",
+      "status": "Status",
+      "success": "Success",
+      "failed": "Failed",
+      "search": "Search",
+      "reset": "Reset"
+    },
+    "pagination": {
+      "total": "Total {{total}}",
+      "page": "Page {{page}} / {{totalPages}}",
+      "perPage": "per page",
+      "prev": "Prev",
+      "next": "Next"
+    },
     "headers": {
       "time": "Time",
       "terminal": "Terminal",
@@ -246,11 +267,23 @@
       "duration": "Duration",
       "inputTokens": "Input",
       "outputTokens": "Output",
+      "cost": "Cost",
       "error": "Error"
     },
     "empty": "No request records",
     "toast": {
       "loadFail": "Failed to load"
+    }
+  },
+  "pricing": {
+    "onboarding": {
+      "title": "Sync pricing",
+      "description": "Sync OpenRouter model pricing to enable per-log cost calculation and cost stats.",
+      "sync": "Sync now",
+      "syncing": "Syncing...",
+      "skip": "Later",
+      "syncOk": "Pricing synced",
+      "syncFail": "Failed to sync pricing"
     }
   },
   "settings": {
@@ -277,6 +310,23 @@
       "endpoint": "API Endpoint:",
       "endpointHint": "Use this as the API endpoint in your AI tools.",
       "backendListen": "Backend listen:"
+    },
+    "pricing": {
+      "title": "Pricing",
+      "subtitle": "Used for per-log cost calculation and cost stats",
+      "status": "Sync status",
+      "count": "Models: {{count}}",
+      "lastSync": "Last sync: {{time}}",
+      "sync": "Sync pricing",
+      "syncOk": "Pricing synced",
+      "syncFail": "Failed to sync pricing",
+      "autoUpdate": "Scheduled pricing sync",
+      "autoUpdateHint": "When enabled, periodically sync OpenRouter pricing",
+      "intervalHours": "Interval (hours)",
+      "intervalHoursHint": "1–8760 hours",
+      "intervalInvalid": "Invalid interval",
+      "saved": "Saved",
+      "saveFail": "Save failed"
     },
     "storage": {
       "title": "Storage",

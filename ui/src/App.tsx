@@ -12,8 +12,20 @@ import {
 import { useI18n } from "@/lib/i18n";
 import { useTheme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui";
-import { getHealth } from "./api";
+import {
+  Button,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui";
+import { toast } from "sonner";
+import { getHealth, pricingStatus, pricingSync } from "./api";
 
 import { OverviewPage } from "./pages/OverviewPage";
 import { ChannelsPage } from "./pages/ChannelsPage";
@@ -32,6 +44,7 @@ const NAV_ITEMS: { route: AppRoute; labelKey: string; icon: React.ElementType }[
 ];
 
 const SIDEBAR_KEY = "cliswitch-sidebar-collapsed";
+const PRICING_ONBOARDING_SHOWN_KEY = "cliswitch-pricing-onboarding-shown";
 
 function routeFromPath(pathname: string): AppRoute {
   if (pathname === "/") return "overview";
@@ -161,6 +174,8 @@ export default function App() {
     return localStorage.getItem(SIDEBAR_KEY) === "true";
   });
   const { t } = useI18n();
+  const [pricingOnboardingOpen, setPricingOnboardingOpen] = useState(false);
+  const [pricingSyncing, setPricingSyncing] = useState(false);
 
   // 确保主题在应用启动时被应用
   useTheme();
@@ -193,8 +208,59 @@ export default function App() {
     };
   }, []);
 
+  useEffect(() => {
+    const shown = localStorage.getItem(PRICING_ONBOARDING_SHOWN_KEY) === "true";
+    if (shown) return;
+
+    pricingStatus()
+      .then((st) => {
+        if (st.count <= 0) {
+          localStorage.setItem(PRICING_ONBOARDING_SHOWN_KEY, "true");
+          setPricingOnboardingOpen(true);
+        }
+      })
+      .catch(() => {
+        // ignore
+      });
+  }, []);
+
   return (
     <div className="flex h-full bg-background text-foreground">
+      <Dialog open={pricingOnboardingOpen} onOpenChange={setPricingOnboardingOpen}>
+        <DialogContent className="sm:max-w-[520px]">
+          <DialogHeader>
+            <DialogTitle>{t("pricing.onboarding.title")}</DialogTitle>
+            <DialogDescription>{t("pricing.onboarding.description")}</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setPricingOnboardingOpen(false)}
+              disabled={pricingSyncing}
+            >
+              {t("pricing.onboarding.skip")}
+            </Button>
+            <Button
+              onClick={async () => {
+                setPricingSyncing(true);
+                try {
+                  await pricingSync();
+                  toast.success(t("pricing.onboarding.syncOk"));
+                  setPricingOnboardingOpen(false);
+                } catch (e) {
+                  toast.error(t("pricing.onboarding.syncFail"), { description: String(e) });
+                } finally {
+                  setPricingSyncing(false);
+                }
+              }}
+              disabled={pricingSyncing}
+            >
+              {pricingSyncing ? t("pricing.onboarding.syncing") : t("pricing.onboarding.sync")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* 侧边栏导航 */}
       <aside
         className={cn(

@@ -8,6 +8,11 @@ export type Health = {
   db_path?: string;
 };
 
+export type AppSettings = {
+  pricing_auto_update_enabled: boolean;
+  pricing_auto_update_interval_hours: number;
+};
+
 export type Channel = {
   id: string;
   name: string;
@@ -129,6 +134,7 @@ export type StatsChannels = {
 
 export type UsageEvent = {
   id: string;
+  request_id: string | null;
   ts_ms: number;
   protocol: Protocol;
   route_id: string | null;
@@ -137,12 +143,18 @@ export type UsageEvent = {
   success: boolean;
   http_status: number | null;
   error_kind: string | null;
+  error_detail: string | null;
   latency_ms: number;
   ttft_ms: number | null;
   prompt_tokens: number | null;
   completion_tokens: number | null;
   total_tokens: number | null;
   estimated_cost_usd: string | null;
+};
+
+export type UsageListResult = {
+  total: number;
+  items: UsageEvent[];
 };
 
 export type TrendPoint = {
@@ -178,6 +190,16 @@ async function http<T>(method: string, path: string, body?: unknown): Promise<T>
 
 export function getHealth(): Promise<Health> {
   return http<Health>("GET", "/api/health");
+}
+
+export function getSettings(): Promise<AppSettings> {
+  return http<AppSettings>("GET", "/api/settings");
+}
+
+export function updateSettings(
+  patch: Partial<Pick<AppSettings, "pricing_auto_update_enabled" | "pricing_auto_update_interval_hours">>
+): Promise<AppSettings> {
+  return http<AppSettings>("PUT", "/api/settings", patch);
 }
 
 export function listChannels(): Promise<Channel[]> {
@@ -265,6 +287,28 @@ export function statsTrend(range: "month"): Promise<StatsTrend> {
   return http<StatsTrend>("GET", `/api/stats/trend?range=${encodeURIComponent(range)}`);
 }
 
-export function usageRecent(limit = 200): Promise<UsageEvent[]> {
-  return http<UsageEvent[]>("GET", `/api/usage/recent?limit=${encodeURIComponent(String(limit))}`);
+export function usageList(
+  query: Partial<{
+    start_ms: number;
+    end_ms: number;
+    protocol: Protocol;
+    channel_id: string;
+    model: string;
+    request_id: string;
+    success: boolean;
+    limit: number;
+    offset: number;
+  }>
+): Promise<UsageListResult> {
+  const p = new URLSearchParams();
+  if (query.start_ms !== undefined) p.set("start_ms", String(query.start_ms));
+  if (query.end_ms !== undefined) p.set("end_ms", String(query.end_ms));
+  if (query.protocol) p.set("protocol", query.protocol);
+  if (query.channel_id) p.set("channel_id", query.channel_id);
+  if (query.model) p.set("model", query.model);
+  if (query.request_id) p.set("request_id", query.request_id);
+  if (query.success !== undefined) p.set("success", String(query.success));
+  if (query.limit !== undefined) p.set("limit", String(query.limit));
+  if (query.offset !== undefined) p.set("offset", String(query.offset));
+  return http<UsageListResult>("GET", `/api/usage/list?${p.toString()}`);
 }

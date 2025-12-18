@@ -212,7 +212,6 @@
     "log": {
       "title": "请求日志",
       "subtitle": "最近 100 条请求记录",
-      "onlyFailures": "仅失败",
       "headers": {
         "time": "时间",
         "terminal": "终端",
@@ -233,9 +232,31 @@
     "subtitle": "请求明细与耗时 / Token 统计",
     "table": {
       "title": "请求日志",
-      "subtitle": "最近 100 条请求记录"
+      "subtitle": "支持筛选与分页查看所有请求记录"
     },
-    "onlyFailures": "仅失败",
+    "filters": {
+      "all": "全部",
+      "startDate": "开始日期",
+      "endDate": "结束日期",
+      "terminal": "终端",
+      "channel": "渠道",
+      "model": "模型",
+      "modelPlaceholder": "模糊匹配",
+      "dimension": "Request ID",
+      "dimensionPlaceholder": "Request ID",
+      "status": "状态",
+      "success": "成功",
+      "failed": "失败",
+      "search": "查询",
+      "reset": "重置"
+    },
+    "pagination": {
+      "total": "共 {{total}} 条",
+      "page": "第 {{page}} / {{totalPages}} 页",
+      "perPage": "每页",
+      "prev": "上一页",
+      "next": "下一页"
+    },
     "headers": {
       "time": "时间",
       "terminal": "终端",
@@ -246,11 +267,23 @@
       "duration": "耗时",
       "inputTokens": "输入 Token",
       "outputTokens": "输出 Token",
+      "cost": "金额",
       "error": "错误"
     },
     "empty": "暂无请求记录",
     "toast": {
       "loadFail": "加载失败"
+    }
+  },
+  "pricing": {
+    "onboarding": {
+      "title": "更新价格表",
+      "description": "首次使用建议先同步 OpenRouter 模型价格，用于计算日志金额与成本统计。",
+      "sync": "立即更新",
+      "syncing": "更新中...",
+      "skip": "稍后",
+      "syncOk": "价格表已更新",
+      "syncFail": "更新价格表失败"
     }
   },
   "settings": {
@@ -277,6 +310,23 @@
       "endpoint": "API 端点：",
       "endpointHint": "将此地址配置为你的 AI 工具的 API 端点即可使用。",
       "backendListen": "后端监听："
+    },
+    "pricing": {
+      "title": "价格表",
+      "subtitle": "用于计算日志金额与成本统计",
+      "status": "同步状态",
+      "count": "模型数：{{count}}",
+      "lastSync": "上次同步：{{time}}",
+      "sync": "同步价格表",
+      "syncOk": "价格表同步成功",
+      "syncFail": "价格表同步失败",
+      "autoUpdate": "定时更新价格",
+      "autoUpdateHint": "开启后按周期自动同步 OpenRouter 价格表",
+      "intervalHours": "更新周期（小时）",
+      "intervalHoursHint": "1~8760 小时",
+      "intervalInvalid": "更新周期不合法",
+      "saved": "设置已保存",
+      "saveFail": "保存失败"
     },
     "storage": {
       "title": "数据存储",

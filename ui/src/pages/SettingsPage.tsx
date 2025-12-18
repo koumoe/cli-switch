@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Sun, Moon, Monitor, FolderOpen, Info, Database, Languages } from "lucide-react";
+import { Sun, Moon, Monitor, FolderOpen, Info, Database, Languages, DollarSign, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import {
   Button,
@@ -10,6 +10,7 @@ import {
   CardTitle,
   Badge,
   Input,
+  Switch,
   Select,
   SelectContent,
   SelectItem,
@@ -18,17 +19,30 @@ import {
 } from "@/components/ui";
 import { useTheme, type Theme } from "@/lib/theme";
 import { type Locale, useI18n } from "@/lib/i18n";
-import { getHealth, type Health } from "../api";
+import { formatDateTime } from "../lib";
+import { getHealth, getSettings, pricingStatus, pricingSync, updateSettings, type AppSettings, type Health, type PricingStatus } from "../api";
 
 export function SettingsPage() {
   const { theme, setTheme } = useTheme();
   const { locale, setLocale, locales, t } = useI18n();
   const [health, setHealth] = useState<Health | null>(null);
+  const [pricing, setPricing] = useState<PricingStatus | null>(null);
+  const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
     getHealth()
       .then(setHealth)
       .catch(() => setHealth({ status: "离线" }));
+
+    pricingStatus()
+      .then(setPricing)
+      .catch(() => setPricing(null));
+
+    getSettings()
+      .then(setAppSettings)
+      .catch(() => setAppSettings(null));
   }, []);
 
   const apiEndpoint = (() => {
@@ -176,6 +190,126 @@ export function SettingsPage() {
               {t("settings.proxy.backendListen")}<code className="font-mono">{health.listen_addr}</code>
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      {/* 价格表与自动更新 */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <DollarSign className="h-4 w-4" />
+            {t("settings.pricing.title")}
+          </CardTitle>
+          <CardDescription>{t("settings.pricing.subtitle")}</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <div className="font-medium text-sm">{t("settings.pricing.status")}</div>
+              <div className="text-xs text-muted-foreground">
+                {t("settings.pricing.count", { count: (pricing?.count ?? 0).toLocaleString() })}
+                {" · "}
+                {t("settings.pricing.lastSync", {
+                  time: pricing?.last_sync_ms ? formatDateTime(pricing.last_sync_ms) : "-",
+                })}
+              </div>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={async () => {
+                setSyncing(true);
+                try {
+                  await pricingSync();
+                  const st = await pricingStatus();
+                  setPricing(st);
+                  toast.success(t("settings.pricing.syncOk"));
+                } catch (e) {
+                  toast.error(t("settings.pricing.syncFail"), { description: String(e) });
+                } finally {
+                  setSyncing(false);
+                }
+              }}
+              disabled={syncing}
+              className="gap-2"
+            >
+              <RefreshCw className={`h-4 w-4 ${syncing ? "animate-spin" : ""}`} />
+              {t("settings.pricing.sync")}
+            </Button>
+          </div>
+
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <div className="font-medium text-sm">{t("settings.pricing.autoUpdate")}</div>
+              <div className="text-xs text-muted-foreground">
+                {t("settings.pricing.autoUpdateHint")}
+              </div>
+            </div>
+            <Switch
+              checked={appSettings?.pricing_auto_update_enabled ?? false}
+              onCheckedChange={(v) => {
+                setAppSettings((prev) => ({
+                  pricing_auto_update_enabled: v,
+                  pricing_auto_update_interval_hours: prev?.pricing_auto_update_interval_hours ?? 24,
+                }));
+              }}
+              disabled={!appSettings}
+            />
+          </div>
+
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <div className="font-medium text-sm">{t("settings.pricing.intervalHours")}</div>
+              <div className="text-xs text-muted-foreground">
+                {t("settings.pricing.intervalHoursHint")}
+              </div>
+            </div>
+            <Input
+              type="number"
+              min={1}
+              max={8760}
+              value={appSettings?.pricing_auto_update_interval_hours ?? 24}
+              onChange={(e) => {
+                const n = Number(e.target.value);
+                setAppSettings((prev) => ({
+                  pricing_auto_update_enabled: prev?.pricing_auto_update_enabled ?? false,
+                  pricing_auto_update_interval_hours: Number.isFinite(n) ? Math.floor(n) : 24,
+                }));
+              }}
+              className="w-[140px] h-8"
+              disabled={!appSettings || !(appSettings?.pricing_auto_update_enabled ?? false)}
+            />
+          </div>
+
+          <div className="flex justify-end">
+            <Button
+              size="sm"
+              onClick={async () => {
+                if (!appSettings) return;
+                const hours = appSettings.pricing_auto_update_interval_hours;
+                if (!Number.isFinite(hours) || hours < 1 || hours > 8760) {
+                  toast.error(t("settings.pricing.intervalInvalid"));
+                  return;
+                }
+                setSaving(true);
+                try {
+                  const next = await updateSettings({
+                    pricing_auto_update_enabled: appSettings.pricing_auto_update_enabled,
+                    pricing_auto_update_interval_hours: hours,
+                  });
+                  setAppSettings(next);
+                  toast.success(t("settings.pricing.saved"));
+                } catch (e) {
+                  toast.error(t("settings.pricing.saveFail"), { description: String(e) });
+                } finally {
+                  setSaving(false);
+                }
+              }}
+              disabled={!appSettings || saving}
+            >
+              {t("common.save")}
+            </Button>
+          </div>
         </CardContent>
       </Card>
 
