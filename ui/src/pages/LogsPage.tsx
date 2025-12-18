@@ -408,15 +408,15 @@ export function LogsPage() {
             >
               <TableHeader className="sticky top-0 bg-background z-10 [&_th]:whitespace-nowrap">
                 <TableRow>
-                  <TableHead className="w-30">{t("logs.headers.time")}</TableHead>
-                  <TableHead className="w-20">{t("logs.headers.terminal")}</TableHead>
-                  <TableHead className="w-32.5">{t("logs.headers.channel")}</TableHead>
-                  <TableHead className="w-42.5">{t("logs.headers.model")}</TableHead>
-                  <TableHead className="w-32.5">{t("logs.headers.timing")}</TableHead>
-                  <TableHead className="w-32.5">{t("logs.headers.tokens")}</TableHead>
-                  <TableHead className="w-22.5">{t("logs.headers.cost")}</TableHead>
+                  <TableHead className="w-28">{t("logs.headers.time")}</TableHead>
+                  <TableHead className="w-16">{t("logs.headers.terminal")}</TableHead>
+                  <TableHead className="w-24">{t("logs.headers.channel")}</TableHead>
+                  <TableHead className="w-28">{t("logs.headers.model")}</TableHead>
+                  <TableHead className="w-24">{t("logs.headers.timing")}</TableHead>
+                  <TableHead className="w-24">{t("logs.headers.tokens")}</TableHead>
+                  <TableHead className="w-20">{t("logs.headers.cost")}</TableHead>
                   <TableHead className="w-20">{t("logs.headers.result")}</TableHead>
-                  <TableHead className="w-20">{t("common.details")}</TableHead>
+                  <TableHead className="w-14">{t("common.details")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -439,12 +439,12 @@ export function LogsPage() {
                         <Badge variant="outline">{protocolLabel(t, e.protocol)}</Badge>
                       </TableCell>
                       <TableCell className="py-3">
-                        <div className="truncate max-w-[120px]">
+                        <div className="truncate max-w-22.5">
                           {channelNames.get(e.channel_id) ?? "-"}
                         </div>
                       </TableCell>
                       <TableCell className="py-3">
-                        <div className="text-muted-foreground truncate max-w-[160px]">
+                        <div className="text-muted-foreground truncate max-w-25">
                           {e.model ?? "-"}
                         </div>
                       </TableCell>
@@ -479,7 +479,7 @@ export function LogsPage() {
                           {(e.error_detail || e.error_kind) && (
                             <Tooltip>
                               <TooltipTrigger asChild>
-                                <div className="text-xs text-destructive/80 truncate max-w-[110px] cursor-default">
+                                <div className="text-xs text-destructive/80 truncate max-w-20 cursor-default">
                                   {clampStr(
                                     e.error_detail
                                       ? humanizeErrorText(e.error_detail)
@@ -488,7 +488,7 @@ export function LogsPage() {
                                   )}
                                 </div>
                               </TooltipTrigger>
-                              <TooltipContent className="max-w-[520px] whitespace-pre-wrap break-words">
+                              <TooltipContent className="max-w-130 whitespace-pre-wrap wrap-break-word">
                                 {e.error_detail
                                   ? humanizeErrorText(e.error_detail)
                                   : e.error_kind}
@@ -517,7 +517,7 @@ export function LogsPage() {
             </Table>
           </div>
 
-          <div className="flex items-center justify-between px-4 py-3 border-t bg-background">
+          <div className="flex items-center justify-between px-4 py-3 border-t bg-background rounded-b-lg">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               {t("logs.pagination.page", { page, totalPages })}
               <Select
