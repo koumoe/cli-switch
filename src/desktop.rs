@@ -251,7 +251,10 @@ fn handle_user_event(
                         }
                         CloseDecisionAction::Quit => {
                             if remember {
-                                persist_close_behavior_sync(db_path.as_path(), storage::CloseBehavior::Quit);
+                                persist_close_behavior_sync(
+                                    db_path.as_path(),
+                                    storage::CloseBehavior::Quit,
+                                );
                             }
                             quit_app(server_handle, control_flow);
                         }
