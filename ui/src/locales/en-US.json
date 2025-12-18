@@ -208,6 +208,7 @@
         "requests": "Requests",
         "success": "Success",
         "failed": "Failed",
+        "cost": "Cost",
         "avgLatency": "Avg Duration"
       }
     },

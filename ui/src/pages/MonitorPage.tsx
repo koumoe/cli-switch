@@ -32,6 +32,15 @@ import { protocolLabel } from "../lib";
 
 export function MonitorPage() {
   const { t } = useI18n();
+  const colClass = {
+    channel: "w-28",
+    terminal: "w-20",
+    requests: "w-16",
+    success: "w-16",
+    failed: "w-16",
+    cost: "w-28",
+    avgLatency: "w-24",
+  } as const;
   const [stats, setStats] = useState<StatsSummary | null>(null);
   const [channelStats, setChannelStats] = useState<ChannelStats[]>([]);
   const [loading, setLoading] = useState(false);
@@ -162,17 +171,32 @@ export function MonitorPage() {
             <CardDescription>{t("monitor.channelStats.subtitle")}</CardDescription>
           </CardHeader>
           <CardContent className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>{t("monitor.channelStats.headers.channel")}</TableHead>
-                  <TableHead>{t("monitor.channelStats.headers.terminal")}</TableHead>
-                  <TableHead className="text-right">{t("monitor.channelStats.headers.requests")}</TableHead>
-                  <TableHead className="text-right">{t("monitor.channelStats.headers.success")}</TableHead>
-                  <TableHead className="text-right">{t("monitor.channelStats.headers.failed")}</TableHead>
-                  <TableHead className="text-right">{t("monitor.channelStats.headers.avgLatency")}</TableHead>
-                </TableRow>
-              </TableHeader>
+	            <Table>
+	              <TableHeader>
+	                <TableRow>
+	                  <TableHead className={colClass.channel}>
+	                    {t("monitor.channelStats.headers.channel")}
+	                  </TableHead>
+	                  <TableHead className={colClass.terminal}>
+	                    {t("monitor.channelStats.headers.terminal")}
+	                  </TableHead>
+	                  <TableHead className={colClass.requests}>
+	                    {t("monitor.channelStats.headers.requests")}
+	                  </TableHead>
+	                  <TableHead className={colClass.success}>
+	                    {t("monitor.channelStats.headers.success")}
+	                  </TableHead>
+	                  <TableHead className={colClass.failed}>
+	                    {t("monitor.channelStats.headers.failed")}
+	                  </TableHead>
+	                  <TableHead className={colClass.cost}>
+	                    {t("monitor.channelStats.headers.cost")}
+	                  </TableHead>
+	                  <TableHead className={colClass.avgLatency}>
+	                    {t("monitor.channelStats.headers.avgLatency")}
+	                  </TableHead>
+	                </TableRow>
+	              </TableHeader>
               <TableBody>
                 {channelStats.map((cs) => (
                   <TableRow key={cs.channel_id}>
@@ -180,14 +204,17 @@ export function MonitorPage() {
                     <TableCell>
                       <Badge variant="outline">{protocolLabel(t, cs.protocol)}</Badge>
                     </TableCell>
-                    <TableCell className="text-right">{cs.requests}</TableCell>
-                    <TableCell className="text-right text-success">
+                    <TableCell>{cs.requests}</TableCell>
+                    <TableCell className="text-success">
                       {cs.success}
                     </TableCell>
-                    <TableCell className="text-right text-destructive">
+                    <TableCell className="text-destructive">
                       {cs.failed}
                     </TableCell>
-                    <TableCell className="text-right text-muted-foreground">
+                    <TableCell className="text-muted-foreground font-mono">
+                      {cs.estimated_cost_usd ? `$${cs.estimated_cost_usd}` : "-"}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
                       {cs.avg_latency_ms
                         ? `${Math.round(cs.avg_latency_ms)}ms`
                         : "-"}

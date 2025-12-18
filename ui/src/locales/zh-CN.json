@@ -208,6 +208,7 @@
         "requests": "请求",
         "success": "成功",
         "failed": "失败",
+        "cost": "金额",
         "avgLatency": "平均耗时"
       }
     },
