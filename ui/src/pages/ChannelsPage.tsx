@@ -272,22 +272,32 @@ export function ChannelsPage() {
 
   function renderTable(protocol: Protocol) {
     const tabChannels = channelsByProtocol[protocol];
+    const colClass = {
+      drag: "w-10",
+      name: "w-44",
+      priority: "w-20",
+      status: "w-20",
+      updatedAt: "w-44",
+      actions: "w-32",
+    } as const;
     return (
       <Card>
         <CardContent className="p-0">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-[32px]"></TableHead>
-                <TableHead>{t("channels.table.name")}</TableHead>
-                <TableHead className="w-[90px] text-right">
+                <TableHead className={colClass.drag}></TableHead>
+                <TableHead className={colClass.name}>{t("channels.table.name")}</TableHead>
+                <TableHead className={colClass.priority}>
                   {t("channels.table.priority")}
                 </TableHead>
-                <TableHead className="w-[70px] text-center">
+                <TableHead className={colClass.status}>
                   {t("channels.table.status")}
                 </TableHead>
-                <TableHead>{t("channels.table.updatedAt")}</TableHead>
-                <TableHead className="w-[100px]">{t("common.actions")}</TableHead>
+                <TableHead className={colClass.updatedAt}>
+                  {t("channels.table.updatedAt")}
+                </TableHead>
+                <TableHead className={colClass.actions}>{t("common.actions")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody
@@ -341,10 +351,10 @@ export function ChannelsPage() {
                     <TableCell>
                       <div className="font-medium">{c.name}</div>
                     </TableCell>
-                    <TableCell className="text-right font-mono text-sm">
+                    <TableCell className="font-mono text-sm">
                       {c.priority}
                     </TableCell>
-                    <TableCell className="text-center">
+                    <TableCell>
                       <Badge variant={c.enabled ? "success" : "secondary"}>
                         {c.enabled ? t("common.enabled") : t("common.disabled")}
                       </Badge>

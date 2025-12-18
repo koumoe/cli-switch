@@ -56,6 +56,13 @@ function emptyDraft(): RouteDraft {
 
 export function RoutesPage() {
   const { t } = useI18n();
+  const colClass = {
+    name: "text-left",
+    terminal: "w-20",
+    status: "w-20",
+    updatedAt: "w-44",
+    actions: "w-32",
+  } as const;
   const [routes, setRoutes] = useState<Route[]>([]);
   const [channels, setChannels] = useState<Channel[]>([]);
   const [loading, setLoading] = useState(false);
@@ -237,18 +244,22 @@ export function RoutesPage() {
       {/* 路由表格 */}
       <Card>
         <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>{t("routes.table.name")}</TableHead>
-                <TableHead>{t("routes.table.terminal")}</TableHead>
-                <TableHead>{t("routes.table.modelMatch")}</TableHead>
-                <TableHead>{t("routes.table.status")}</TableHead>
-                <TableHead>{t("routes.table.updatedAt")}</TableHead>
-                <TableHead className="w-[120px]">{t("common.actions")}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
+	          <Table>
+	            <TableHeader>
+	              <TableRow>
+	                <TableHead className={colClass.name}>{t("routes.table.name")}</TableHead>
+	                <TableHead className={colClass.terminal}>
+	                  {t("routes.table.terminal")}
+	                </TableHead>
+	                <TableHead>{t("routes.table.modelMatch")}</TableHead>
+	                <TableHead className={colClass.status}>{t("routes.table.status")}</TableHead>
+	                <TableHead className={colClass.updatedAt}>
+	                  {t("routes.table.updatedAt")}
+	                </TableHead>
+	                <TableHead className={colClass.actions}>{t("common.actions")}</TableHead>
+	              </TableRow>
+	            </TableHeader>
+	            <TableBody>
               {routes.length === 0 ? (
                 <TableRow>
                   <TableCell
@@ -259,22 +270,22 @@ export function RoutesPage() {
                   </TableCell>
                 </TableRow>
               ) : (
-                routes.map((r) => (
-                  <TableRow key={r.id}>
-                    <TableCell>
-                      <div className="font-medium">{r.name}</div>
-                    </TableCell>
+	                routes.map((r) => (
+	                  <TableRow key={r.id}>
+	                    <TableCell className={colClass.name}>
+	                      <div className="font-medium">{r.name}</div>
+	                    </TableCell>
                     <TableCell>
                       <Badge variant="outline">{protocolLabel(t, r.protocol)}</Badge>
                     </TableCell>
                     <TableCell className="text-muted-foreground">
                       {r.match_model ?? "-"}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={r.enabled ? "success" : "secondary"}>
-                        {r.enabled ? t("common.enabled") : t("common.disabled")}
-                      </Badge>
-                    </TableCell>
+	                    </TableCell>
+	                    <TableCell>
+	                      <Badge variant={r.enabled ? "success" : "secondary"}>
+	                        {r.enabled ? t("common.enabled") : t("common.disabled")}
+	                      </Badge>
+	                    </TableCell>
                     <TableCell className="text-muted-foreground text-sm">
                       {formatDateTime(r.updated_at_ms)}
                     </TableCell>
