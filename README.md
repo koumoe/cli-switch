@@ -6,13 +6,17 @@
 
 **Local AI API Proxy & Management Center**
 
-Unified Gateway · Multi-Channel Aggregation · Auto Failover · Cost Transparency
+Unified Gateway · Multi-Channel Aggregation · Auto Failover
 
 [![GitHub Release](https://img.shields.io/github/v/release/koumoe/cli-switch?style=flat-square&logo=github&label=Release)](https://github.com/koumoe/cli-switch/releases/latest)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg?style=flat-square)](https://www.gnu.org/licenses/agpl-3.0)
-[![CI](https://github.com/koumoe/cli-switch/actions/workflows/ci.yml/badge.svg)](https://github.com/koumoe/cli-switch/actions/workflows/ci.yml)
+[![CI](https://img.shields.io/github/actions/workflow/status/koumoe/cli-switch/ci.yml?style=flat-square&logo=githubactions&label=CI)](https://github.com/koumoe/cli-switch/actions/workflows/ci.yml)
+[![Rust](https://img.shields.io/badge/Rust-1.92.0-CE422B?style=flat-square&logo=rust)](https://www.rust-lang.org/)
+[![Node.js](https://img.shields.io/badge/Node.js-25.2.1-339933?style=flat-square&logo=nodedotjs)](https://nodejs.org/)
 
-[Download](#download) · [Features](#features) · [Contributing](#contributing) · [中文文档](docs/README_CN.md)
+[Download](#download) · [Features](#features) · [Contributing](#contributing)
+
+English · [简体中文](docs/README_CN.md)
 
 </div>
 
