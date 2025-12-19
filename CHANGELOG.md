@@ -1,3 +1,12 @@
+## [0.2.8](https://github.com/koumoe/cli-switch/compare/v0.2.6...v0.2.8) (2025-12-19)
+
+### Bug Fixes
+
+* **ci:** base next version on Cargo.toml when ahead of tags ([1e3ed3f](https://github.com/koumoe/cli-switch/commit/1e3ed3f69cc635820cbd15f783c7d321562d6c4d))
+* **ci:** read commit message safely ([6649696](https://github.com/koumoe/cli-switch/commit/6649696ec173e2dbdd78b104b1bf0e9383aa71a6))
+* **macos:** ad-hoc sign app bundle ([ec73432](https://github.com/koumoe/cli-switch/commit/ec7343210dcd1f9bb128a4a543a311623b23666e))
+* **macos:** re-sign app after self-update ([643845d](https://github.com/koumoe/cli-switch/commit/643845d98ad7606466c19b3f3019bf1aa3affbb7))
+* **update:** show server version and download progress ([#12](https://github.com/koumoe/cli-switch/issues/12)) ([d035384](https://github.com/koumoe/cli-switch/commit/d0353845d4e283711f519431a67c0ff545a3eda6))
 ## [0.2.7](https://github.com/koumoe/cli-switch/compare/v0.2.6...v0.2.7) (2025-12-19)
 
 ### Bug Fixes
