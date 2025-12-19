@@ -5,6 +5,8 @@ use axum::{
     routing::any,
 };
 use cliswitch::{proxy, storage};
+use std::time::{SystemTime, UNIX_EPOCH};
+use tokio::time::{Duration, sleep};
 
 async fn spawn_upstream(status: StatusCode, body: &'static str) -> String {
     let app = Router::new().route(
@@ -33,6 +35,19 @@ fn temp_db_path() -> std::path::PathBuf {
     let mut p = std::env::temp_dir();
     p.push(format!("cliswitch-test-{}.sqlite", uuid::Uuid::new_v4()));
     p
+}
+
+async fn wait_for_usage_event(db_path: std::path::PathBuf) -> storage::UsageEvent {
+    for _ in 0..100 {
+        let events = storage::list_usage_events_recent(db_path.clone(), 10)
+            .await
+            .expect("list usage events");
+        if let Some(e) = events.into_iter().next() {
+            return e;
+        }
+        sleep(Duration::from_millis(10)).await;
+    }
+    panic!("timeout waiting for usage event");
 }
 
 #[tokio::test]
@@ -161,4 +176,76 @@ async fn return_last_error_when_all_channels_fail() {
         .await
         .expect("read body");
     assert_eq!(std::str::from_utf8(&bytes).unwrap(), r#"{"err":"c3"}"#);
+}
+
+#[tokio::test]
+async fn gemini_logs_include_model_and_cost() {
+    let base = spawn_upstream(
+        StatusCode::OK,
+        r#"{"usageMetadata":{"promptTokenCount":10,"candidatesTokenCount":5,"totalTokenCount":15}}"#,
+    )
+    .await;
+
+    let db_path = temp_db_path();
+    storage::init_db(&db_path).expect("init_db");
+
+    storage::upsert_pricing_models(
+        db_path.clone(),
+        vec![storage::UpsertPricingModel {
+            model_id: "gemini-1.5-pro".to_string(),
+            prompt_price: Some("0.125".to_string()),
+            completion_price: Some("0.25".to_string()),
+            request_price: Some("0.5".to_string()),
+            cache_read_price: None,
+            cache_write_price: None,
+            raw_json: None,
+        }],
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time")
+            .as_millis() as i64,
+    )
+    .await
+    .expect("upsert pricing");
+
+    storage::create_channel(
+        db_path.clone(),
+        storage::CreateChannel {
+            name: "g1".to_string(),
+            protocol: storage::Protocol::Gemini,
+            base_url: format!("{base}/v1beta"),
+            auth_type: None,
+            auth_ref: "t".to_string(),
+            priority: 10,
+            enabled: true,
+        },
+    )
+    .await
+    .expect("create channel");
+
+    let client = reqwest::Client::builder().build().expect("client");
+    let req = Request::builder()
+        .method("POST")
+        .uri("/v1beta/models/gemini-1.5-pro:generateContent")
+        .header(axum::http::header::CONTENT_TYPE, "application/json")
+        .body(Body::from(
+            r#"{"contents":[{"role":"user","parts":[{"text":"hi"}]}]}"#,
+        ))
+        .expect("req");
+
+    let resp = proxy::forward(
+        &client,
+        db_path.clone(),
+        storage::Protocol::Gemini,
+        "/v1beta",
+        req,
+    )
+    .await
+    .expect("forward");
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let event = wait_for_usage_event(db_path.clone()).await;
+    assert_eq!(event.protocol, storage::Protocol::Gemini);
+    assert_eq!(event.model.as_deref(), Some("gemini-1.5-pro"));
+    assert_eq!(event.estimated_cost_usd.as_deref(), Some("3"));
 }

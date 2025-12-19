@@ -47,7 +47,7 @@ pub async fn forward(
         .await
         .map_err(|e| ProxyError::ReadBody(e.to_string()))?;
 
-    let model = extract_model_from_body(&parts.headers, &body_bytes);
+    let model = extract_model(protocol, &parts.headers, &parts.uri, &body_bytes);
 
     let method = reqwest::Method::from_bytes(parts.method.as_str().as_bytes())
         .map_err(|e| ProxyError::Upstream(format!("invalid method: {e}")))?;
@@ -648,6 +648,33 @@ fn extract_model_from_body(headers: &HeaderMap, body: &[u8]) -> Option<String> {
     v.get("model")
         .and_then(|m| m.as_str())
         .map(|s| s.to_string())
+}
+
+fn extract_model(
+    protocol: Protocol,
+    headers: &HeaderMap,
+    uri: &axum::http::Uri,
+    body: &[u8],
+) -> Option<String> {
+    extract_model_from_body(headers, body).or_else(|| match protocol {
+        Protocol::Gemini => extract_gemini_model_from_uri(uri),
+        _ => None,
+    })
+}
+
+fn extract_gemini_model_from_uri(uri: &axum::http::Uri) -> Option<String> {
+    let path = uri.path();
+    for marker in ["/models/", "/tunedModels/"] {
+        if let Some(pos) = path.rfind(marker) {
+            let rest = &path[(pos + marker.len())..];
+            let segment = rest.split('/').next().unwrap_or("");
+            let model = segment.split(':').next().unwrap_or("").trim();
+            if !model.is_empty() {
+                return Some(model.to_string());
+            }
+        }
+    }
+    None
 }
 
 #[derive(Debug, Default, Clone, Copy)]
