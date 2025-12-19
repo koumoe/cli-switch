@@ -58,6 +58,15 @@ function bumpVersion(baseVersion, bump) {
   return null;
 }
 
+function compareSemver(a, b) {
+  const av = parseSemver(a);
+  const bv = parseSemver(b);
+  if (av.major !== bv.major) return av.major > bv.major ? 1 : -1;
+  if (av.minor !== bv.minor) return av.minor > bv.minor ? 1 : -1;
+  if (av.patch !== bv.patch) return av.patch > bv.patch ? 1 : -1;
+  return 0;
+}
+
 function conventionalBumpForCommit(subject, body) {
   const header = subject.trim();
   const commitBody = body || '';
@@ -91,7 +100,10 @@ try {
   lastTag = null;
 }
 
-const baseVersion = lastTag ? lastTag.replace(/^v/, '') : readCargoPackageVersion();
+const cargoVersion = readCargoPackageVersion();
+const tagVersion = lastTag ? lastTag.replace(/^v/, '') : null;
+const baseVersion =
+  tagVersion && compareSemver(cargoVersion, tagVersion) > 0 ? cargoVersion : (tagVersion || cargoVersion);
 const rangeArgs = lastTag ? [`${lastTag}..HEAD`] : [];
 
 let logOutput = '';
@@ -127,4 +139,5 @@ if (process.env.GITHUB_OUTPUT) {
 console.log(outputs.join('\n'));
 console.log(`base_version=${baseVersion}`);
 console.log(`last_tag=${lastTag || ''}`);
+console.log(`cargo_version=${cargoVersion}`);
 console.log(`bump=${bump || ''}`);
