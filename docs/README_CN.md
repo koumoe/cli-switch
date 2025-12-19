@@ -6,13 +6,17 @@
 
 **本地 AI API 代理管理中心**
 
-统一入口 · 多渠道聚合 · 故障自动转移 · 费用透明可控
+统一入口 · 多渠道聚合 · 故障自动转移
 
 [![GitHub Release](https://img.shields.io/github/v/release/koumoe/cli-switch?style=flat-square&logo=github&label=Release)](https://github.com/koumoe/cli-switch/releases/latest)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg?style=flat-square)](https://www.gnu.org/licenses/agpl-3.0)
-[![CI](https://github.com/koumoe/cli-switch/actions/workflows/ci.yml/badge.svg)](https://github.com/koumoe/cli-switch/actions/workflows/ci.yml)
+[![CI](https://img.shields.io/github/actions/workflow/status/koumoe/cli-switch/ci.yml?style=flat-square&logo=githubactions&label=CI)](https://github.com/koumoe/cli-switch/actions/workflows/ci.yml)
+[![Rust](https://img.shields.io/badge/Rust-1.92.0-CE422B?style=flat-square&logo=rust)](https://www.rust-lang.org/)
+[![Node.js](https://img.shields.io/badge/Node.js-25.2.1-339933?style=flat-square&logo=nodedotjs)](https://nodejs.org/)
 
-[下载安装](#下载安装) · [功能特性](#功能特性) · [参与贡献](#参与贡献) · [English](../README.md)
+[下载安装](#下载安装) · [功能特性](#功能特性) · [参与贡献](#参与贡献)
+
+[English](../README.md) · 简体中文
 
 </div>
 
