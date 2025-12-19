@@ -1,3 +1,9 @@
+## [0.2.4](https://github.com/koumoe/cli-switch/compare/v0.2.3...v0.2.4) (2025-12-19)
+
+### Bug Fixes
+
+* **ci:** stabilize release workflow ([b2ea369](https://github.com/koumoe/cli-switch/commit/b2ea369f470cc2930fbb456c042628b1fa30867c))
+* **release:** repair changelog ([aec61a8](https://github.com/koumoe/cli-switch/commit/aec61a8e0840ccc2f00a8158127a587d6e8642a0))
 ## [0.2.3](https://github.com/koumoe/cli-switch/compare/v0.2.2...v0.2.3) (2025-12-19)
 
 ### Bug Fixes
