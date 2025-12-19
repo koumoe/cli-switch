@@ -14,10 +14,33 @@ env:
 
 jobs:
   # =============================================================================
+  # 0. 检查是否跳过（避免循环触发）
+  # =============================================================================
+  check:
+    name: Check
+    runs-on: ubuntu-latest
+    outputs:
+      should_skip: ${{ steps.check.outputs.should_skip }}
+    steps:
+      - name: Check commit message
+        id: check
+        run: |
+          msg="${{ github.event.head_commit.message }}"
+          if [[ "$msg" == chore\(release\):* ]]; then
+            echo "should_skip=true" >> "$GITHUB_OUTPUT"
+            echo "⏭️ Skipping release workflow for release commit"
+          else
+            echo "should_skip=false" >> "$GITHUB_OUTPUT"
+            echo "✅ Proceeding with release workflow"
+          fi
+
+  # =============================================================================
   # 1. CI 检查
   # =============================================================================
   ci:
     name: CI
+    needs: check
+    if: needs.check.outputs.should_skip != 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -60,7 +83,8 @@ jobs:
   # =============================================================================
   analyze:
     name: Analyze
-    needs: ci
+    needs: [check, ci]
+    if: needs.check.outputs.should_skip != 'true'
     runs-on: ubuntu-latest
     outputs:
       should_release: ${{ steps.analyze.outputs.should_release }}
@@ -149,9 +173,15 @@ jobs:
           # 更新版本文件
           node scripts/bump-version.mjs "${VERSION}"
 
-          # 生成 CHANGELOG
+          # 创建临时 tag 用于生成 CHANGELOG
+          git tag "v${VERSION}"
+
+          # 生成 CHANGELOG（只追加新条目）
           npm install -g conventional-changelog-cli
-          conventional-changelog -p conventionalcommits -i CHANGELOG.md -s -r 0
+          conventional-changelog -p conventionalcommits -i CHANGELOG.md -s
+
+          # 删除临时 tag
+          git tag -d "v${VERSION}"
 
           # 提交变更
           git add Cargo.toml Cargo.lock ui/package.json CHANGELOG.md
