@@ -183,6 +183,18 @@ pub async fn check_latest(
     data_dir: &Path,
 ) -> UpdateCheck {
     {
+        let rt = runtime.lock().await;
+        if matches!(rt.stage, Stage::Checking | Stage::Downloading) {
+            tracing::debug!(stage = ?rt.stage, "update check skipped: runtime busy");
+            return UpdateCheck {
+                current_version: env!("CARGO_PKG_VERSION").to_string(),
+                latest_version: rt.latest_version.clone(),
+                update_available: rt.update_available,
+            };
+        }
+    }
+
+    {
         let mut rt = runtime.lock().await;
         rt.stage = Stage::Checking;
         rt.error = None;
@@ -276,9 +288,104 @@ pub async fn spawn_download_latest(
 ) -> bool {
     {
         let mut rt = runtime.lock().await;
-        if rt.stage == Stage::Downloading {
+        if matches!(rt.stage, Stage::Checking | Stage::Downloading) {
+            tracing::debug!(stage = ?rt.stage, "update download skipped: runtime busy");
             return false;
         }
+        rt.stage = Stage::Checking;
+        rt.error = None;
+        rt.downloading_version = None;
+        rt.download_percent = None;
+        rt.download_total_bytes = None;
+        rt.download_downloaded_bytes = 0;
+    }
+
+    let release = match github_latest_release(&client).await {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::warn!(err = %e, "update download check failed: github latest release");
+            let mut rt = runtime.lock().await;
+            rt.stage = Stage::Error;
+            rt.error = Some(e.to_string());
+            rt.downloading_version = None;
+            rt.download_percent = None;
+            rt.download_total_bytes = None;
+            rt.download_downloaded_bytes = 0;
+            return false;
+        }
+    };
+
+    let latest = normalize_version_tag(&release.tag_name).to_string();
+    let (available, version_err) = match (
+        semver::Version::parse(env!("CARGO_PKG_VERSION")),
+        semver::Version::parse(&latest),
+    ) {
+        (Ok(cur), Ok(lat)) => (lat > cur, None),
+        _ => (false, Some("版本号解析失败".to_string())),
+    };
+
+    if let Some(err) = version_err {
+        tracing::warn!(err = %err, latest = %latest, "update download check failed: version parse");
+        let mut rt = runtime.lock().await;
+        rt.latest_version = Some(latest);
+        rt.update_available = false;
+        rt.stage = Stage::Error;
+        rt.error = Some(err);
+        rt.downloading_version = None;
+        rt.download_percent = None;
+        rt.download_total_bytes = None;
+        rt.download_downloaded_bytes = 0;
+        return false;
+    }
+
+    let pending = load_pending_update(&data_dir);
+    if pending.as_ref().is_some_and(|p| p.version == latest) {
+        tracing::debug!(latest = %latest, "update download skipped: already pending");
+        let mut rt = runtime.lock().await;
+        rt.latest_version = Some(latest);
+        rt.update_available = available;
+        rt.stage = Stage::Ready;
+        rt.error = None;
+        rt.downloading_version = None;
+        rt.download_percent = None;
+        rt.download_total_bytes = None;
+        rt.download_downloaded_bytes = 0;
+        return false;
+    }
+
+    if !available {
+        tracing::debug!(latest = %latest, "update download skipped: no update available");
+        let mut rt = runtime.lock().await;
+        rt.latest_version = Some(latest);
+        rt.update_available = false;
+        rt.stage = Stage::Idle;
+        rt.error = None;
+        rt.downloading_version = None;
+        rt.download_percent = None;
+        rt.download_total_bytes = None;
+        rt.download_downloaded_bytes = 0;
+        return false;
+    }
+
+    if pick_asset(&release).is_none() {
+        tracing::warn!(latest = %latest, platform = %current_platform_key(), "update download skipped: no matching asset");
+        let mut rt = runtime.lock().await;
+        rt.latest_version = Some(latest);
+        rt.update_available = true;
+        rt.stage = Stage::Error;
+        rt.error = Some("未找到适配当前平台的 Release 资源".to_string());
+        rt.downloading_version = None;
+        rt.download_percent = None;
+        rt.download_total_bytes = None;
+        rt.download_downloaded_bytes = 0;
+        return false;
+    }
+
+    {
+        tracing::info!(latest = %latest, "update download started");
+        let mut rt = runtime.lock().await;
+        rt.latest_version = Some(latest);
+        rt.update_available = true;
         rt.stage = Stage::Downloading;
         rt.error = None;
         rt.download_percent = Some(0);
