@@ -17,6 +17,7 @@ jobs:
   release:
     name: Release
     needs: ci
+    if: ${{ secrets.RELEASE_TOKEN != '' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
