@@ -710,7 +710,7 @@ export function SettingsPage() {
 	                  if (v) {
 	                    const dl = await downloadUpdate();
 	                    setUpdateStatus(dl.status);
-	                    toast.success(t("settings.update.autoStarted"));
+	                    if (dl.started) toast.success(t("settings.update.autoStarted"));
 	                  }
 	                } catch (e) {
                   setAppSettings({ ...appSettings, app_auto_update_enabled: prev });
