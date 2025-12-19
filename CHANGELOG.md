@@ -1,3 +1,4 @@
+## [](https://github.com/koumoe/cli-switch/compare/v0.2.2...v) (2025-12-19)
 ## [](https://github.com/koumoe/cli-switch/compare/v0.2.0...v) (2025-12-19)
 ## [0.2.0](https://github.com/koumoe/cli-switch/compare/v0.1.1...v0.2.0) (2025-12-19)
 
