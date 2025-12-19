@@ -1,5 +1,14 @@
-## [](https://github.com/koumoe/cli-switch/compare/v0.2.2...v) (2025-12-19)
-## [](https://github.com/koumoe/cli-switch/compare/v0.2.0...v) (2025-12-19)
+## [0.2.3](https://github.com/koumoe/cli-switch/compare/v0.2.2...v0.2.3) (2025-12-19)
+
+### Bug Fixes
+
+* **ci:** create temp package.json for changelog version ([#8](https://github.com/koumoe/cli-switch/issues/8)) ([b17eed7](https://github.com/koumoe/cli-switch/commit/b17eed7c5db08c7b251e939fbdf6229e5d878dc9))
+## [0.2.2](https://github.com/koumoe/cli-switch/compare/v0.2.1...v0.2.2) (2025-12-19)
+
+### Bug Fixes
+
+* **ci:** prevent release workflow loop and fix changelog ([#7](https://github.com/koumoe/cli-switch/issues/7)) ([7bbb36d](https://github.com/koumoe/cli-switch/commit/7bbb36dc6c14597c989ec8fc4444153deb6f92bf))
+## [0.2.1](https://github.com/koumoe/cli-switch/compare/v0.2.0...v0.2.1) (2025-12-19)
 ## [0.2.0](https://github.com/koumoe/cli-switch/compare/v0.1.1...v0.2.0) (2025-12-19)
 
 ### Features
