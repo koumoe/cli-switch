@@ -1,268 +1,220 @@
+<div align="center">
+
+<img src="assets/logo.png" alt="CliSwitch" width="128" />
+
 # CliSwitch
 
-[![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
+**Local AI API Proxy & Management Center**
+
+Unified Gateway · Multi-Channel Aggregation · Auto Failover · Cost Transparency
+
+[![GitHub Release](https://img.shields.io/github/v/release/koumoe/cli-switch?style=flat-square&logo=github&label=Release)](https://github.com/koumoe/cli-switch/releases/latest)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg?style=flat-square)](https://www.gnu.org/licenses/agpl-3.0)
 [![CI](https://github.com/koumoe/cli-switch/actions/workflows/ci.yml/badge.svg)](https://github.com/koumoe/cli-switch/actions/workflows/ci.yml)
-[![Rust](https://img.shields.io/badge/Rust-1.92.0-orange.svg)](https://www.rust-lang.org/)
-[![Node.js](https://img.shields.io/badge/Node.js-25.2.1-green.svg)](https://nodejs.org/)
 
-本地多渠道 AI CLI 代理服务，支持 Claude / Codex CLI / Gemini CLI 的无感接入、故障转移与用量统计。
+[Download](#download) · [Features](#features) · [Contributing](#contributing) · [中文文档](docs/README_CN.md)
 
-## 功能特性
+</div>
 
-- **多 CLI 支持**：统一代理 Claude、Codex CLI、Gemini CLI
-- **多渠道管理**：支持同平台多 Key、不同平台混合配置
-- **智能路由**：按优先级自动重试与故障转移
-- **用量统计**：记录 token 使用量，基于 llm-metadata 价格数据估算费用
-- **可视化界面**：Web UI 管理渠道、路由与统计
-- **单文件分发**：Rust 编译为单可执行文件，内嵌前端资源
+---
 
-## 快速开始
+## Preview
 
-### 环境要求
+### Dashboard
 
-| 依赖 | 版本 | 说明 |
-|------|------|------|
-| Rust | 1.92.0 | 运行时 |
-| Node.js | 25.2.1 | 仅构建期 |
+Real-time monitoring of request metrics and active channel retry chain at a glance.
 
-### 安装
+<p align="center">
+  <img src="docs/screenshots/en/dashboard.png" alt="Dashboard" width="800" />
+</p>
+
+### Channels
+
+Configure channel priority and auto-disable on failure — requests automatically route to healthy channels.
+
+<p align="center">
+  <img src="docs/screenshots/en/channels.png" alt="Channels" width="800" />
+</p>
+
+### Logs
+
+Track every request with latency, token usage, and estimated cost breakdown.
+
+<p align="center">
+  <img src="docs/screenshots/en/logs.png" alt="Logs" width="800" />
+</p>
+
+<details>
+<summary><strong>More Screenshots</strong></summary>
+
+### Statistics
+
+<p align="center">
+  <img src="docs/screenshots/en/stats.png" alt="Stats" width="800" />
+</p>
+
+### Settings
+
+<p align="center">
+  <img src="docs/screenshots/en/settings.png" alt="Settings" width="800" />
+</p>
+
+</details>
+
+---
+
+## Why CliSwitch?
+
+> Managing multiple AI API keys across different platforms? Want unified access, automatic failover, and transparent cost tracking?
+
+**CliSwitch** is a native desktop app designed for AI developers and power users.
+
+---
+
+## Key Benefits
+
+<table>
+<tr>
+<td width="50%">
+
+### Simple & Easy
+
+- **Zero Config** — Download and run, that's it
+- **Unified Endpoint** — One address for all AI APIs
+- **Visual Management** — Modern Web UI built-in
+
+</td>
+<td width="50%">
+
+### Secure & Reliable
+
+- **Local Only** — Listens on 127.0.0.1 only
+- **Keys Stay Local** — Data stored in local SQLite
+- **Auto Failover** — Switches to available channels
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+### Cost Transparency
+
+- **Usage Tracking** — Real-time token consumption
+- **Cost Estimation** — Auto-sync model pricing
+- **Trend Analysis** — Visual spending reports
+
+</td>
+<td width="50%">
+
+### Data Compliance
+
+- **Local First** — Keys and logs stored locally only
+- **No Telemetry** — No analytics or tracking
+- **Open Source** — AGPL-3.0 licensed
+
+</td>
+</tr>
+</table>
+
+---
+
+## Features
+
+- **Multi-Channel Management** — Configure multiple keys across OpenAI / Anthropic / Gemini
+- **Priority-Based Routing** — Requests routed by channel priority
+- **Automatic Failover** — Seamlessly switch on upstream errors
+- **Auto Disable** — Temporarily disable failing channels (configurable)
+- **Usage Statistics** — Track latency, TTFT, tokens, and estimated costs
+- **Price Sync** — Automatic model pricing updates
+- **Single Binary** — Native desktop app with embedded frontend
+
+---
+
+## Proxy Endpoints
+
+| Protocol | Proxy Endpoint |
+|:---:|:---|
+| **OpenAI** | `http://127.0.0.1:3210/v1` |
+| **Anthropic** | `http://127.0.0.1:3210/v1/messages` |
+| **Gemini** | `http://127.0.0.1:3210/v1beta` |
+
+> Compatible with any client/SDK that supports custom Base URL
+
+---
+
+## Download
+
+Go to [Releases](https://github.com/koumoe/cli-switch/releases/latest) to download:
+
+| Platform | Download |
+|:---:|:---|
+| macOS (Apple Silicon) | `CliSwitch-x.x.x-macos-arm64.zip` |
+| macOS (Intel) | `CliSwitch-x.x.x-macos-x64.zip` |
+| Windows (x64) | `CliSwitch-x.x.x-windows-x64.zip` |
+| Windows (ARM64) | `CliSwitch-x.x.x-windows-arm64.zip` |
+| Linux (x64) | `cliswitch-x.x.x-linux-x64.tar.gz` |
+| Linux (ARM64) | `cliswitch-x.x.x-linux-arm64.tar.gz` |
+
+### Quick Start
+
+1. Download the archive for your platform
+2. Unpack and launch the app (macOS: `CliSwitch.app`, Windows: `CliSwitch.exe`, Linux: `./cliswitch`)
+3. Add your API channels
+4. Point your client to `http://127.0.0.1:3210`
+
+Done!
+
+<!-- Screenshot: Quick Start GIF -->
+<!-- <p align="center">
+  <img src="docs/screenshots/en/quickstart.gif" alt="Quick Start" width="600" />
+</p> -->
+
+---
+
+## Build from Source
+
+<details>
+<summary>Click to expand</summary>
+
+**Requirements:** Rust 1.92.0 / Node.js 25.2.1
 
 ```bash
-# 克隆项目
+# Clone
 git clone https://github.com/koumoe/cli-switch.git
 cd cli-switch
 
-# 构建前端
-cd ui
-npm ci
-npm run build
-cd ..
+# Build frontend
+cd ui && npm ci && npm run build && cd ..
 
-# 构建桌面端（单可执行文件，默认启用 `desktop`）
+# Build desktop app
 cargo build --release
-
-# 更短的命令（见 `.cargo/config.toml`）
-# cargo gui-build
 ```
 
-### 下载预编译（Release）
+</details>
 
-在 GitHub Releases 下载对应平台的包：
+---
 
-- macOS：`CliSwitch-<version>-macos-<arch>.zip`，解压后双击 `CliSwitch.app`（不会启动/常驻终端）
-- Windows：`CliSwitch-<version>-windows-<arch>.zip`，解压后双击 `CliSwitch.exe`（不会弹出终端窗口）
+## Contributing
 
-### 运行
+We welcome contributions! Here's how you can help:
 
-```bash
-# 桌面端（构建时启用了 `desktop` feature）：直接运行即可（默认端口 3210）
-./target/release/cliswitch
+- **Bug Reports** — [Open an issue](https://github.com/koumoe/cli-switch/issues)
+- **Feature Requests** — Share your ideas via issues
+- **Pull Requests** — Fork, code, and submit a PR
+- **Documentation** — Help improve docs and translations
 
-# Web 管理界面（serve，默认端口 3210，会打开浏览器）
-./target/release/cliswitch serve
+---
 
-# 如需改端口
-./target/release/cliswitch serve --port 4000
-./target/release/cliswitch desktop --port 4000
-```
+## License
 
-桌面端会在窗口里打开管理界面；Web 模式访问 http://127.0.0.1:3210。
-`serve` 默认会自动打开浏览器；如不需要可加 `--no-open`。
+This project is licensed under [AGPL-3.0](https://www.gnu.org/licenses/agpl-3.0).
 
-### macOS：避免双击出现终端窗口
+---
 
-macOS 上如果你直接在 Finder 里双击 `cliswitch` 可执行文件，系统会用「终端」来启动它，因此会常驻一个终端窗口。
-需要以 `.app` 形式打包后再启动：
+<div align="center">
 
-```bash
-chmod +x scripts/bundle-macos-app.sh
-./scripts/bundle-macos-app.sh
-open dist/macos/CliSwitch.app
-```
+**CliSwitch** — Simplify Your AI API Management
 
-## 开发
+[GitHub](https://github.com/koumoe/cli-switch) · [Issues](https://github.com/koumoe/cli-switch/issues) · [Releases](https://github.com/koumoe/cli-switch/releases)
 
-### 后端开发
-
-```bash
-# 桌面端（默认，端口 3210）
-cargo run
-
-# 或用更短的别名
-cargo gui
-```
-
-### 前端开发
-
-```bash
-cd ui
-npm install
-npm run dev
-```
-
-前端开发服务器已配置 `/api` 代理到 `http://127.0.0.1:3210`。
-
-## 贡献（Fork & PR）
-
-欢迎贡献代码与想法！推荐流程如下：
-
-1. 在 GitHub 上 Fork 本仓库到你的账号
-2. 克隆你 Fork 后的仓库（示例）：
-
-```bash
-git clone https://github.com/<yourname>/cli-switch.git
-cd cli-switch
-```
-
-3. 创建分支（建议使用 `feat/`、`fix/` 等前缀）：
-
-```bash
-git checkout -b feat/your-change
-```
-
-4. 本地自检（按改动范围选择）：
-
-```bash
-# Rust
-cargo fmt
-cargo clippy
-cargo test
-
-# UI（如涉及前端/内嵌资源）
-cd ui
-npm ci
-npm run build
-```
-
-5. 推送并发起 Pull Request：在 PR 描述中说明动机、改动点、验证方式，关联 Issue（如有）
-
-约定：
-
-- 合并到默认分支请走 PR
-- Commit message 建议使用 `feat:` / `fix:` / `docs:` 等前缀
-
-## API
-
-### 健康检查
-
-```bash
-curl http://127.0.0.1:3210/api/health
-```
-
-### 代理配置示例（MVP）
-
-当前代理逻辑：按 `protocol` 选择**第一个启用的**渠道（按 `priority` 从大到小排序，其次按 `name`），并将请求原样透传到该渠道的 `base_url`。
-
-支持的 `auth_type`：
-
-- `bearer`：注入 `Authorization: Bearer <auth_ref>`
-- `x-api-key`：注入 `x-api-key: <auth_ref>`（Anthropic 常用）
-- `x-goog-api-key`：注入 `x-goog-api-key: <auth_ref>`（Gemini 可用）
-- `query`：在 URL query 里追加 `key=<auth_ref>`（Gemini 常用）
-
-创建 OpenAI 渠道（示例）：
-
-```bash
-curl -X POST http://127.0.0.1:3210/api/channels \
-  -H 'content-type: application/json' \
-  -d '{
-    "name": "openai-main",
-    "protocol": "openai",
-    "base_url": "https://api.openai.com/v1",
-    "auth_type": "bearer",
-    "auth_ref": "<OPENAI_API_KEY>",
-    "priority": 10,
-    "enabled": true
-  }'
-```
-
-创建 Anthropic 渠道（示例）：
-
-```bash
-curl -X POST http://127.0.0.1:3210/api/channels \
-  -H 'content-type: application/json' \
-  -d '{
-    "name": "anthropic-main",
-    "protocol": "anthropic",
-    "base_url": "https://api.anthropic.com/v1",
-    "auth_type": "x-api-key",
-    "auth_ref": "<ANTHROPIC_API_KEY>",
-    "priority": 10,
-    "enabled": true
-  }'
-```
-
-创建 Gemini 渠道（示例）：
-
-```bash
-curl -X POST http://127.0.0.1:3210/api/channels \
-  -H 'content-type: application/json' \
-  -d '{
-    "name": "gemini-main",
-    "protocol": "gemini",
-    "base_url": "https://generativelanguage.googleapis.com/v1beta",
-    "auth_type": "query",
-    "auth_ref": "<GEMINI_API_KEY>",
-    "priority": 10,
-    "enabled": true
-  }'
-```
-
-配置好渠道后，即可直接把 CLI 的 Base URL 指向 `http://127.0.0.1:3210`，并按原协议路径发起请求：
-
-- OpenAI：`/v1/*`
-- Anthropic：`/v1/messages`
-- Gemini：`/v1beta/*`
-
-### 管理接口
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/api/channels` | 获取渠道列表 |
-| POST | `/api/channels` | 创建渠道 |
-| PUT | `/api/channels/{id}` | 更新渠道 |
-| POST | `/api/channels/{id}/enable` | 启用渠道 |
-| POST | `/api/channels/{id}/disable` | 禁用渠道 |
-| GET | `/api/routes` | 获取路由列表 |
-| POST | `/api/routes` | 创建路由 |
-| PUT | `/api/routes/{id}` | 更新路由 |
-
-### 代理入口
-
-| 路径 | 协议 |
-|------|------|
-| `/v1/*` | OpenAI 兼容 |
-| `/v1/messages` | Anthropic |
-| `/v1beta/*` | Gemini |
-
-## 项目结构
-
-```
-cliswitch/
-├── src/                # Rust 后端源码
-│   ├── main.rs
-│   ├── server.rs
-│   └── storage.rs
-├── ui/                 # React 前端
-│   ├── src/
-│   └── package.json
-├── migrations/         # SQLite 迁移脚本
-└── Cargo.toml
-```
-
-## 开发状态
-
-当前为 MVP 开发阶段，已完成：
-
-- [x] 项目骨架搭建
-- [x] SQLite 数据模型
-- [x] 渠道/路由 CRUD API
-- [ ] 代理转发核心逻辑
-- [ ] 价格同步
-- [ ] 用量统计
-- [ ] Web UI 页面
-
-## 许可证
-
-本项目采用 [GNU Affero General Public License v3.0 (AGPL-3.0)](https://www.gnu.org/licenses/agpl-3.0) 许可证。
-详见 [LICENSE](./LICENSE) 文件。
+</div>
