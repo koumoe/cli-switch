@@ -228,7 +228,9 @@ async fn gemini_logs_include_model_and_cost() {
         .method("POST")
         .uri("/v1beta/models/gemini-1.5-pro:generateContent")
         .header(axum::http::header::CONTENT_TYPE, "application/json")
-        .body(Body::from(r#"{"contents":[{"role":"user","parts":[{"text":"hi"}]}]}"#))
+        .body(Body::from(
+            r#"{"contents":[{"role":"user","parts":[{"text":"hi"}]}]}"#,
+        ))
         .expect("req");
 
     let resp = proxy::forward(
