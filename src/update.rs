@@ -561,13 +561,21 @@ pub fn apply_pending_on_exit(data_dir: &Path) -> anyhow::Result<bool> {
                 .with_context(|| format!("create dir failed: {}", parent.display()))?;
         }
 
-        let script_body = format!(
-            WINDOWS_APPLY_SCRIPT_TEMPLATE,
-            src = pending.staged_executable.display(),
-            dst = target.display(),
-            pending = pending_path(data_dir).display(),
-            staged = pending.staged_executable.display(),
-        );
+        let escape_for_set = |s: &str| s.replace('"', "^\"");
+        let script_body = WINDOWS_APPLY_SCRIPT_TEMPLATE
+            .replace(
+                "{src}",
+                &escape_for_set(&pending.staged_executable.display().to_string()),
+            )
+            .replace("{dst}", &escape_for_set(&target.display().to_string()))
+            .replace(
+                "{pending}",
+                &escape_for_set(&pending_path(data_dir).display().to_string()),
+            )
+            .replace(
+                "{staged}",
+                &escape_for_set(&pending.staged_executable.display().to_string()),
+            );
         std::fs::write(&script, script_body.as_bytes())
             .with_context(|| format!("write apply script failed: {}", script.display()))?;
 
