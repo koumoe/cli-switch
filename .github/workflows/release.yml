@@ -1,44 +1,60 @@
 name: Release
 
 on:
-  push:
-    tags:
-      - "v*"
+  release:
+    types: [published]
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (e.g. v0.2.0)"
+        required: true
+        type: string
 
 permissions:
   contents: write
 
 jobs:
-  validate:
-    name: Validate Version
+  prepare:
+    name: Prepare Release
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.meta.outputs.version }}
-      prerelease: ${{ steps.meta.outputs.prerelease }}
+      tag: ${{ steps.meta.outputs.tag }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
       - name: Compute release metadata
         id: meta
         shell: bash
         run: |
           set -euo pipefail
-          version="${GITHUB_REF_NAME#v}"
-          if [[ "${GITHUB_REF_NAME}" == *-* ]]; then
-            prerelease="true"
+          if [[ "${{ github.event_name }}" == "release" ]]; then
+            tag="${{ github.event.release.tag_name }}"
           else
-            prerelease="false"
+            tag="${{ inputs.tag }}"
           fi
+          if [[ ! "${tag}" =~ ^v[0-9]+\\.[0-9]+\\.[0-9]+([-.][0-9A-Za-z.]+)?$ ]]; then
+            echo "Invalid tag format: ${tag} (expected vMAJOR.MINOR.PATCH[-PRERELEASE])" >&2
+            exit 1
+          fi
+          version="${tag#v}"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
           echo "version=${version}" >> "$GITHUB_OUTPUT"
-          echo "prerelease=${prerelease}" >> "$GITHUB_OUTPUT"
+          echo "Release: ${tag} (version: ${version})"
+
+  validate_versions:
+    name: Validate versions match tag
+    needs: prepare
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (tag)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.tag }}
 
       - name: Validate tag version matches manifests
         shell: bash
         run: |
           set -euo pipefail
-          version="${GITHUB_REF_NAME#v}"
+          version="${{ needs.prepare.outputs.version }}"
 
           cargo_version="$(python - <<'PY'
           import tomllib
@@ -63,17 +79,21 @@ jobs:
 
   ci_gate:
     name: CI Gate
-    needs: validate
+    needs: [prepare, validate_versions]
     uses: ./.github/workflows/ci.yml
+    with:
+      ref: ${{ needs.prepare.outputs.tag }}
     secrets: inherit
 
   linux_desktop_amd64:
     name: Linux Desktop (x86_64)
-    needs: [validate, ci_gate]
+    needs: [prepare, validate_versions, ci_gate]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.tag }}
 
       - name: Install Linux desktop dependencies
         shell: bash
@@ -115,7 +135,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          version="${{ needs.validate.outputs.version }}"
+          version="${{ needs.prepare.outputs.version }}"
           pkg="cliswitch-${version}-linux-x64"
 
           rm -rf dist
@@ -134,11 +154,13 @@ jobs:
 
   linux_desktop_arm64:
     name: Linux Desktop (aarch64)
-    needs: [validate, ci_gate]
+    needs: [prepare, validate_versions, ci_gate]
     runs-on: ubuntu-24.04-arm
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.tag }}
 
       - name: Install Linux desktop dependencies
         shell: bash
@@ -180,7 +202,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          version="${{ needs.validate.outputs.version }}"
+          version="${{ needs.prepare.outputs.version }}"
           pkg="cliswitch-${version}-linux-arm64"
 
           rm -rf dist
@@ -199,7 +221,7 @@ jobs:
 
   macos_desktop:
     name: macOS Desktop (${{ matrix.runs_on }})
-    needs: [validate, ci_gate]
+    needs: [prepare, validate_versions, ci_gate]
     runs-on: ${{ matrix.runs_on }}
     strategy:
       fail-fast: false
@@ -213,6 +235,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.tag }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -241,7 +265,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          version="${{ needs.validate.outputs.version }}"
+          version="${{ needs.prepare.outputs.version }}"
           pkg="CliSwitch-${version}-macos-${{ matrix.arch }}"
 
           rm -rf dist
@@ -262,11 +286,13 @@ jobs:
 
   windows_desktop_amd64:
     name: Windows Desktop (x86_64)
-    needs: [validate, ci_gate]
+    needs: [prepare, validate_versions, ci_gate]
     runs-on: windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.tag }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -301,7 +327,7 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
-          $version = "${{ needs.validate.outputs.version }}"
+          $version = "${{ needs.prepare.outputs.version }}"
           $pkg = "CliSwitch-$version-windows-x64"
 
           if (Test-Path dist) { Remove-Item -Recurse -Force dist }
@@ -323,11 +349,13 @@ jobs:
 
   windows_desktop_arm64:
     name: Windows Desktop (aarch64)
-    needs: [validate, ci_gate]
+    needs: [prepare, validate_versions, ci_gate]
     runs-on: windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.tag }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -362,7 +390,7 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
-          $version = "${{ needs.validate.outputs.version }}"
+          $version = "${{ needs.prepare.outputs.version }}"
           $pkg = "CliSwitch-$version-windows-arm64"
 
           if (Test-Path dist) { Remove-Item -Recurse -Force dist }
@@ -382,11 +410,12 @@ jobs:
           path: dist/*.*
 
   publish:
-    name: Publish GitHub Release
+    name: Upload Release Assets
     if: >-
       ${{
         always() &&
-        needs.validate.result == 'success' &&
+        needs.prepare.result == 'success' &&
+        needs.validate_versions.result == 'success' &&
         needs.ci_gate.result == 'success' &&
         needs.linux_desktop_amd64.result == 'success' &&
         needs.linux_desktop_arm64.result == 'success' &&
@@ -395,7 +424,8 @@ jobs:
         needs.windows_desktop_arm64.result == 'success'
       }}
     needs:
-      - validate
+      - prepare
+      - validate_versions
       - ci_gate
       - linux_desktop_amd64
       - linux_desktop_arm64
@@ -410,9 +440,8 @@ jobs:
           path: dist
           merge-multiple: true
 
-      - name: Create GitHub Release and upload assets
+      - name: Upload assets to release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ needs.prepare.outputs.tag }}
           files: dist/*
-          generate_release_notes: true
-          prerelease: ${{ needs.validate.outputs.prerelease }}
