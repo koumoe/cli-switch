@@ -86,4 +86,17 @@ pkg.version = version;
 writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n');
 console.log(`Updated ${pkgPath}`);
 
+// Update ui/package-lock.json (keep npm ci consistent)
+const lockPath = join(rootDir, 'ui', 'package-lock.json');
+const lockRaw = readFileSync(lockPath, 'utf-8');
+const lock = JSON.parse(lockRaw);
+if (typeof lock === 'object' && lock) {
+  lock.version = version;
+  if (lock.packages && lock.packages['']) {
+    lock.packages[''].version = version;
+  }
+}
+writeFileSync(lockPath, JSON.stringify(lock, null, 2) + '\n');
+console.log(`Updated ${lockPath}`);
+
 console.log('Version bump complete');
