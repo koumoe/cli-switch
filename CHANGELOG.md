@@ -1,3 +1,8 @@
+## [0.2.5](https://github.com/koumoe/cli-switch/compare/v0.2.4...v0.2.5) (2025-12-19)
+
+### Bug Fixes
+
+* **ci:** replace semantic-release with commit analyzer ([#10](https://github.com/koumoe/cli-switch/issues/10)) ([5e036cc](https://github.com/koumoe/cli-switch/commit/5e036cc8ddd6c39a06f234f48bb6f01dbf1a52be))
 ## [0.2.4](https://github.com/koumoe/cli-switch/compare/v0.2.3...v0.2.4) (2025-12-19)
 
 ### Bug Fixes
