@@ -173,6 +173,9 @@ jobs:
           # 更新版本文件
           node scripts/bump-version.mjs "${VERSION}"
 
+          # 创建临时 package.json 供 conventional-changelog 使用
+          echo "{\"version\": \"${VERSION}\"}" > package.json
+
           # 创建临时 tag 用于生成 CHANGELOG
           git tag "v${VERSION}"
 
@@ -180,7 +183,8 @@ jobs:
           npm install -g conventional-changelog-cli
           conventional-changelog -p conventionalcommits -i CHANGELOG.md -s
 
-          # 删除临时 tag
+          # 删除临时文件和 tag
+          rm package.json
           git tag -d "v${VERSION}"
 
           # 提交变更
