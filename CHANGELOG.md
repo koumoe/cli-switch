@@ -1,3 +1,8 @@
+## [0.2.9](https://github.com/koumoe/cli-switch/compare/v0.2.8...v0.2.9) (2025-12-19)
+
+### Bug Fixes
+
+* stop update check from mis-triggering downloads ([#18](https://github.com/koumoe/cli-switch/issues/18)) ([5f4bd7a](https://github.com/koumoe/cli-switch/commit/5f4bd7ae46ef2b304a3eb55774668813d4168a12))
 ## [0.2.8](https://github.com/koumoe/cli-switch/compare/v0.2.6...v0.2.8) (2025-12-19)
 
 ### Bug Fixes
