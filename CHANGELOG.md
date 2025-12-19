@@ -1,3 +1,4 @@
+## [](https://github.com/koumoe/cli-switch/compare/v0.2.0...v) (2025-12-19)
 ## [0.2.0](https://github.com/koumoe/cli-switch/compare/v0.1.1...v0.2.0) (2025-12-19)
 
 ### Features
@@ -30,7 +31,30 @@
 * **ui:** improve logs details and error messages ([46dea19](https://github.com/koumoe/cli-switch/commit/46dea1927ca06fb5e22d83a95c61f6ee537ad5fe))
 * **ui:** refine logs table layout ([f283e1b](https://github.com/koumoe/cli-switch/commit/f283e1baf1988ace3fca9e68e57487dd3647c91e))
 * **windows:** render apply script without format! ([ef0bff9](https://github.com/koumoe/cli-switch/commit/ef0bff94077e8839067227abdc4081ec889c6a58))
+## [0.1.1](https://github.com/koumoe/cli-switch/compare/e46c8238f56bad8652072d2cdd62aa39f8db40fa...v0.1.1) (2025-12-17)
 
-### Refactoring
+### Features
 
-* **ui:** unify table alignment and badge styles ([518c8e2](https://github.com/koumoe/cli-switch/commit/518c8e2f0805fb2cca7073bfa03256c6e3f0c717))
+* add backend APIs, usage tracking and desktop mode ([8b55d14](https://github.com/koumoe/cli-switch/commit/8b55d144efcf19f9372cc50273c4562d13788464))
+* add Edit menu with clipboard shortcuts for macOS ([8ddd257](https://github.com/koumoe/cli-switch/commit/8ddd25761ab16c091a93a7a2744a11ff26fb596d))
+* add logs page and hide routes ([f0b3fcd](https://github.com/koumoe/cli-switch/commit/f0b3fcd61d528e7b1e89825421018e52924e115c))
+* add multi-platform release workflow ([c1e5eb6](https://github.com/koumoe/cli-switch/commit/c1e5eb65709604c3a33f6ee8c34d6d9a4c2ae70a))
+* add upstream proxy forwarding for OpenAI/Anthropic/Gemini ([ae05b58](https://github.com/koumoe/cli-switch/commit/ae05b58d76c9f8d3a5532fabad49a941fa807c27))
+* automatic auth and terminal-based channels ([263b182](https://github.com/koumoe/cli-switch/commit/263b1826a9b1a4be5c0df539d2a6a3da61528b00))
+* enrich /api/health with runtime details ([6c31456](https://github.com/koumoe/cli-switch/commit/6c3145671be0cd036d1957c038720d90428f0a81))
+* implement complete web UI with SPA routing ([7f5dc23](https://github.com/koumoe/cli-switch/commit/7f5dc231ad8d3746f69d0016faed08421665ec37))
+* improve desktop window and UI layout ([ee87465](https://github.com/koumoe/cli-switch/commit/ee87465ec741d95db152a34889502e6a92bea5c3))
+* initial project import ([e46c823](https://github.com/koumoe/cli-switch/commit/e46c8238f56bad8652072d2cdd62aa39f8db40fa))
+* record ttft and token usage in logs ([b672515](https://github.com/koumoe/cli-switch/commit/b672515cc26c160958b0e7fe17334820e3e4aea2))
+* revamp web UI with Radix and Tailwind ([ba1d626](https://github.com/koumoe/cli-switch/commit/ba1d626f362b3a54f1ee9e3abb99212f3569571d))
+* **ui:** add i18n with locale switch ([eddb65e](https://github.com/koumoe/cli-switch/commit/eddb65e50334231e3bdb7496eb600d25d0bfa337))
+
+### Bug Fixes
+
+* format rust sources ([a351b2c](https://github.com/koumoe/cli-switch/commit/a351b2c6d1880eb56f29b07a27fa245f3f9196a4))
+* gate release and fix desktop builds ([c46673b](https://github.com/koumoe/cli-switch/commit/c46673b9034bbe8603ddd7cb4f57a24497e0f4ae))
+* improve CI/CD workflow and release package naming ([9b10cea](https://github.com/koumoe/cli-switch/commit/9b10ceaf44db106eb911ca0a4ce74532169574e8))
+* make linux arm64 desktop self-hosted ([9289456](https://github.com/koumoe/cli-switch/commit/928945644a2dfa5eb831d533b59d4206931ae0d1))
+* reduce macOS debug system log noise ([4bf8fe0](https://github.com/koumoe/cli-switch/commit/4bf8fe00437c9204f20dc9668c6e1f89f02a939d))
+* resolve build errors in server and storage ([7bc9dc3](https://github.com/koumoe/cli-switch/commit/7bc9dc3a253f32e90b03f4dfe0b52f9965546323))
+* **ui:** fix delete confirmation in webview ([90196b5](https://github.com/koumoe/cli-switch/commit/90196b53539d9c76aaf74c7babed43daa501c7ed))
