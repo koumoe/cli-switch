@@ -1,3 +1,10 @@
+## [0.2.7](https://github.com/koumoe/cli-switch/compare/v0.2.6...v0.2.7) (2025-12-19)
+
+### Bug Fixes
+
+* **macos:** ad-hoc sign app bundle ([ec73432](https://github.com/koumoe/cli-switch/commit/ec7343210dcd1f9bb128a4a543a311623b23666e))
+* **macos:** re-sign app after self-update ([643845d](https://github.com/koumoe/cli-switch/commit/643845d98ad7606466c19b3f3019bf1aa3affbb7))
+* **update:** show server version and download progress ([#12](https://github.com/koumoe/cli-switch/issues/12)) ([d035384](https://github.com/koumoe/cli-switch/commit/d0353845d4e283711f519431a67c0ff545a3eda6))
 ## [0.2.6](https://github.com/koumoe/cli-switch/compare/v0.2.5...v0.2.6) (2025-12-19)
 
 ### Bug Fixes
