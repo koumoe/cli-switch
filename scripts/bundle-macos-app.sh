@@ -92,4 +92,11 @@ cat >"$APP_DIR/Contents/Info.plist" <<PLIST
 </plist>
 PLIST
 
+if [[ "${SKIP_CODESIGN:-0}" != "1" ]] && command -v codesign >/dev/null 2>&1; then
+  CODESIGN_IDENTITY="${CODESIGN_IDENTITY:--}"
+  echo "Signing app bundle (identity=${CODESIGN_IDENTITY})..."
+  codesign --force --deep --sign "${CODESIGN_IDENTITY}" "${APP_DIR}"
+  codesign --verify --deep --strict --verbose=2 "${APP_DIR}"
+fi
+
 echo "OK: ${APP_DIR}"
