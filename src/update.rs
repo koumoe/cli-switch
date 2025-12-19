@@ -46,6 +46,9 @@ pub struct UpdateRuntime {
     pub latest_version: Option<String>,
     pub update_available: bool,
     pub downloading_version: Option<String>,
+    pub download_percent: Option<u8>,
+    pub download_total_bytes: Option<u64>,
+    pub download_downloaded_bytes: u64,
     pub error: Option<String>,
 }
 
@@ -57,6 +60,7 @@ pub struct UpdateStatus {
     pub latest_version: Option<String>,
     pub update_available: bool,
     pub pending_version: Option<String>,
+    pub download_percent: Option<u8>,
     pub error: Option<String>,
 }
 
@@ -182,6 +186,10 @@ pub async fn check_latest(
         let mut rt = runtime.lock().await;
         rt.stage = Stage::Checking;
         rt.error = None;
+        rt.downloading_version = None;
+        rt.download_percent = None;
+        rt.download_total_bytes = None;
+        rt.download_downloaded_bytes = 0;
     }
 
     let current = semver::Version::parse(env!("CARGO_PKG_VERSION")).ok();
@@ -221,6 +229,9 @@ pub async fn check_latest(
             rt.stage = Stage::Idle;
         }
         rt.downloading_version = None;
+        rt.download_percent = None;
+        rt.download_total_bytes = None;
+        rt.download_downloaded_bytes = 0;
     }
 
     UpdateCheck {
@@ -249,6 +260,11 @@ pub async fn get_status(
         latest_version: rt.latest_version.clone(),
         update_available: rt.update_available,
         pending_version,
+        download_percent: if rt.stage == Stage::Downloading {
+            rt.download_percent
+        } else {
+            None
+        },
         error: rt.error.clone(),
     }
 }
@@ -265,6 +281,9 @@ pub async fn spawn_download_latest(
         }
         rt.stage = Stage::Downloading;
         rt.error = None;
+        rt.download_percent = Some(0);
+        rt.download_total_bytes = None;
+        rt.download_downloaded_bytes = 0;
     }
 
     tokio::spawn(async move {
@@ -274,6 +293,9 @@ pub async fn spawn_download_latest(
             rt.stage = Stage::Error;
             rt.error = Some(e.to_string());
             rt.downloading_version = None;
+            rt.download_percent = None;
+            rt.download_total_bytes = None;
+            rt.download_downloaded_bytes = 0;
         }
     });
 
@@ -303,6 +325,7 @@ async fn download_to_file_with_sha256(
     client: &reqwest::Client,
     url: &str,
     out: &Path,
+    runtime: std::sync::Arc<tokio::sync::Mutex<UpdateRuntime>>,
 ) -> anyhow::Result<String> {
     use tokio::io::AsyncWriteExt as _;
 
@@ -322,6 +345,14 @@ async fn download_to_file_with_sha256(
         anyhow::bail!("download failed: {status} {body}");
     }
 
+    let total = res.content_length().filter(|t| *t > 0);
+    {
+        let mut rt = runtime.lock().await;
+        rt.download_total_bytes = total;
+        rt.download_downloaded_bytes = 0;
+        rt.download_percent = total.map(|_| 0);
+    }
+
     if let Some(parent) = out.parent() {
         tokio::fs::create_dir_all(parent)
             .await
@@ -334,13 +365,35 @@ async fn download_to_file_with_sha256(
 
     let mut hasher = sha2::Sha256::new();
     let mut stream = res.bytes_stream();
+    let mut downloaded: u64 = 0;
+    let mut last_percent: Option<u8> = None;
     use futures_util::StreamExt as _;
     while let Some(chunk) = stream.next().await {
         let chunk = chunk.with_context(|| "read download chunk failed")?;
+        downloaded = downloaded.saturating_add(chunk.len() as u64);
         hasher.update(&chunk);
         file.write_all(&chunk).await?;
+
+        if let Some(total) = total {
+            let mut percent = ((downloaded.saturating_mul(100)) / total) as u8;
+            if percent > 100 {
+                percent = 100;
+            }
+            if last_percent != Some(percent) {
+                last_percent = Some(percent);
+                let mut rt = runtime.lock().await;
+                rt.download_downloaded_bytes = downloaded;
+                rt.download_percent = Some(percent);
+            }
+        }
     }
     file.flush().await.ok();
+
+    if total.is_some() {
+        let mut rt = runtime.lock().await;
+        rt.download_downloaded_bytes = downloaded;
+        rt.download_percent = Some(100);
+    }
 
     Ok(hex::encode(hasher.finalize()))
 }
@@ -448,6 +501,9 @@ async fn download_latest_inner(
         rt.update_available = true;
         rt.stage = Stage::Ready;
         rt.downloading_version = None;
+        rt.download_percent = None;
+        rt.download_total_bytes = None;
+        rt.download_downloaded_bytes = 0;
         rt.error = None;
         return Ok(());
     }
@@ -465,6 +521,9 @@ async fn download_latest_inner(
         let mut rt = runtime.lock().await;
         rt.stage = Stage::Idle;
         rt.downloading_version = None;
+        rt.download_percent = None;
+        rt.download_total_bytes = None;
+        rt.download_downloaded_bytes = 0;
         rt.error = None;
         return Ok(());
     }
@@ -486,8 +545,13 @@ async fn download_latest_inner(
         None
     };
 
-    let actual_sha256 =
-        download_to_file_with_sha256(client, &asset.browser_download_url, &archive_path).await?;
+    let actual_sha256 = download_to_file_with_sha256(
+        client,
+        &asset.browser_download_url,
+        &archive_path,
+        runtime.clone(),
+    )
+    .await?;
     if let Some(expected) = expected_sha256
         && !expected.is_empty()
         && expected != actual_sha256
@@ -517,6 +581,9 @@ async fn download_latest_inner(
     let mut rt = runtime.lock().await;
     rt.stage = Stage::Ready;
     rt.downloading_version = None;
+    rt.download_percent = None;
+    rt.download_total_bytes = None;
+    rt.download_downloaded_bytes = 0;
     rt.error = None;
     Ok(())
 }

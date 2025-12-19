@@ -120,6 +120,7 @@ export type UpdateStatus = {
   latest_version: string | null;
   update_available: boolean;
   pending_version: string | null;
+  download_percent: number | null;
   error: string | null;
 };
 

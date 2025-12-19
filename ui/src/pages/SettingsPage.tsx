@@ -63,6 +63,27 @@ export function SettingsPage() {
       .catch(() => setUpdateStatus(null));
   }, []);
 
+  useEffect(() => {
+    if (updateStatus?.stage !== "downloading") return;
+    let stopped = false;
+
+    const poll = async () => {
+      try {
+        const st = await getUpdateStatus();
+        if (!stopped) setUpdateStatus(st);
+      } catch {
+        // ignore
+      }
+    };
+
+    void poll();
+    const id = window.setInterval(() => void poll(), 1000);
+    return () => {
+      stopped = true;
+      window.clearInterval(id);
+    };
+  }, [updateStatus?.stage]);
+
   const apiEndpoint = (() => {
     const env = (import.meta.env.VITE_BACKEND_URL as string | undefined)?.trim();
     if (env) return env.replace(/\/+$/, "");
@@ -92,6 +113,21 @@ export function SettingsPage() {
       : health?.status === "离线"
         ? t("status.offline")
         : health?.status ?? t("status.checking");
+
+  const updateServerVersion = updateStatus?.latest_version ?? updateCheckResult?.latest_version ?? null;
+  const updateDownloadingSuffix =
+    updateStatus && updateStatus.stage === "downloading"
+      ? updateStatus.download_percent !== null
+        ? t("settings.update.downloadingSuffix", { percent: updateStatus.download_percent })
+        : t("settings.update.downloadingSuffixUnknown")
+      : "";
+  const updateStatusText = updateStatus?.pending_version
+    ? t("settings.update.ready", { version: updateStatus.pending_version })
+    : updateStatus?.stage === "downloading"
+      ? `${t("settings.update.latest")}${updateDownloadingSuffix}`
+      : updateServerVersion
+        ? t("settings.update.latest")
+        : "-";
 
   return (
     <div className="space-y-4 pb-4">
@@ -638,7 +674,8 @@ export function SettingsPage() {
                   onClick={async () => {
                     setUpdateDownloading(true);
                     try {
-                      await downloadUpdate();
+                      const dl = await downloadUpdate();
+                      setUpdateStatus(dl.status);
                       toast.success(t("settings.update.downloading"));
                       setUpdatePromptOpen(false);
                     } catch (e) {
@@ -668,13 +705,14 @@ export function SettingsPage() {
                 setAppSettings({ ...appSettings, app_auto_update_enabled: v });
                 try {
                   const next = await updateSettings({ app_auto_update_enabled: v });
-                  setAppSettings(next);
-                  toast.success(t("settings.update.saved"));
-                  if (v) {
-                    await downloadUpdate();
-                    toast.success(t("settings.update.autoStarted"));
-                  }
-                } catch (e) {
+	                  setAppSettings(next);
+	                  toast.success(t("settings.update.saved"));
+	                  if (v) {
+	                    const dl = await downloadUpdate();
+	                    setUpdateStatus(dl.status);
+	                    toast.success(t("settings.update.autoStarted"));
+	                  }
+	                } catch (e) {
                   setAppSettings({ ...appSettings, app_auto_update_enabled: prev });
                   toast.error(t("settings.update.saveFail"), { description: String(e) });
                 }
@@ -686,12 +724,11 @@ export function SettingsPage() {
           <div className="flex items-center justify-between gap-4">
             <div>
               <div className="font-medium text-sm">{t("settings.update.status")}</div>
-              <div className="text-xs text-muted-foreground">
-                {updateStatus?.pending_version
-                  ? t("settings.update.ready", { version: updateStatus.pending_version })
-                  : updateStatus?.latest_version
-                    ? t("settings.update.latest", { version: updateStatus.latest_version })
-                    : "-"}
+              <div className="text-xs text-muted-foreground space-y-0.5">
+                <div>{updateStatusText}</div>
+                {updateServerVersion ? (
+                  <div>{t("settings.update.serverVersion", { version: updateServerVersion })}</div>
+                ) : null}
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -718,7 +755,9 @@ export function SettingsPage() {
                     if (!appSettings?.app_auto_update_enabled) {
                       setUpdatePromptOpen(true);
                     } else {
-                      await downloadUpdate();
+                      const dl = await downloadUpdate();
+                      setUpdateStatus(dl.status);
+                      if (dl.started) toast.success(t("settings.update.downloading"));
                     }
                   } catch (e) {
                     toast.error(t("settings.update.checkFail"), { description: String(e) });
