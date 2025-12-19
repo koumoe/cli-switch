@@ -1,16 +1,8 @@
 name: CI
 
 on:
-  push:
-    branches: [main]
   pull_request:
     branches: [main]
-  workflow_call:
-    inputs:
-      ref:
-        description: "Git ref (commit SHA / tag) to checkout when called as a reusable workflow"
-        required: false
-        type: string
   workflow_dispatch:
 
 permissions:
@@ -23,18 +15,7 @@ jobs:
       contents: read
 
     steps:
-      - name: Checkout (workflow_call ref)
-        if: ${{ github.event_name == 'workflow_call' && inputs.ref != '' }}
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.ref }}
-
-      - name: Checkout (workflow_call default)
-        if: ${{ github.event_name == 'workflow_call' && inputs.ref == '' }}
-        uses: actions/checkout@v4
-
-      - name: Checkout (default)
-        if: ${{ github.event_name != 'workflow_call' }}
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Setup Node.js

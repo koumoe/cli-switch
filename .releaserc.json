@@ -27,35 +27,10 @@
             { "type": "feat", "section": "Features" },
             { "type": "fix", "section": "Bug Fixes" },
             { "type": "perf", "section": "Performance" },
-            { "type": "refactor", "section": "Refactoring" },
-            { "type": "docs", "section": "Documentation", "hidden": true },
-            { "type": "style", "section": "Styles", "hidden": true },
-            { "type": "chore", "section": "Chores", "hidden": true },
-            { "type": "test", "section": "Tests", "hidden": true },
-            { "type": "ci", "section": "CI", "hidden": true }
+            { "type": "refactor", "section": "Refactoring" }
           ]
         }
       }
-    ],
-    [
-      "@semantic-release/changelog",
-      {
-        "changelogFile": "CHANGELOG.md"
-      }
-    ],
-    [
-      "@semantic-release/exec",
-      {
-        "prepareCmd": "node scripts/bump-version.mjs ${nextRelease.version}"
-      }
-    ],
-    [
-      "@semantic-release/git",
-      {
-        "assets": ["CHANGELOG.md", "Cargo.toml", "Cargo.lock", "ui/package.json"],
-        "message": "chore(release): v${nextRelease.version}"
-      }
-    ],
-    "@semantic-release/github"
+    ]
   ]
 }
