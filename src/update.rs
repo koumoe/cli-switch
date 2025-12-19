@@ -18,19 +18,14 @@ struct GitHubRelease {
     assets: Vec<GitHubAsset>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum Stage {
+    #[default]
     Idle,
     Checking,
     Downloading,
     Ready,
     Error,
-}
-
-impl Default for Stage {
-    fn default() -> Self {
-        Stage::Idle
-    }
 }
 
 impl Stage {
@@ -493,10 +488,11 @@ async fn download_latest_inner(
 
     let actual_sha256 =
         download_to_file_with_sha256(client, &asset.browser_download_url, &archive_path).await?;
-    if let Some(expected) = expected_sha256 {
-        if !expected.is_empty() && expected != actual_sha256 {
-            anyhow::bail!("sha256 校验失败：expected={expected} actual={actual_sha256}");
-        }
+    if let Some(expected) = expected_sha256
+        && !expected.is_empty()
+        && expected != actual_sha256
+    {
+        anyhow::bail!("sha256 校验失败：expected={expected} actual={actual_sha256}");
     }
 
     let staged_exe = tokio::task::spawn_blocking({

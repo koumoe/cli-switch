@@ -323,10 +323,10 @@ pub async fn get_app_settings(db_path: PathBuf) -> anyhow::Result<AppSettings> {
         if let Some(v) = get_setting(conn, KEY_PRICING_AUTO_UPDATE_ENABLED)? {
             out.pricing_auto_update_enabled = matches!(v.trim(), "1" | "true" | "TRUE" | "True");
         }
-        if let Some(v) = get_setting(conn, KEY_PRICING_AUTO_UPDATE_INTERVAL_HOURS)? {
-            if let Ok(n) = v.trim().parse::<i64>() {
-                out.pricing_auto_update_interval_hours = n;
-            }
+        if let Some(v) = get_setting(conn, KEY_PRICING_AUTO_UPDATE_INTERVAL_HOURS)?
+            && let Ok(n) = v.trim().parse::<i64>()
+        {
+            out.pricing_auto_update_interval_hours = n;
         }
         if let Some(v) = get_setting(conn, KEY_CLOSE_BEHAVIOR)? {
             match v.trim() {
@@ -345,20 +345,20 @@ pub async fn get_app_settings(db_path: PathBuf) -> anyhow::Result<AppSettings> {
         if let Some(v) = get_setting(conn, KEY_AUTO_DISABLE_ENABLED)? {
             out.auto_disable_enabled = matches!(v.trim(), "1" | "true" | "TRUE" | "True");
         }
-        if let Some(v) = get_setting(conn, KEY_AUTO_DISABLE_WINDOW_MINUTES)? {
-            if let Ok(n) = v.trim().parse::<i64>() {
-                out.auto_disable_window_minutes = n;
-            }
+        if let Some(v) = get_setting(conn, KEY_AUTO_DISABLE_WINDOW_MINUTES)?
+            && let Ok(n) = v.trim().parse::<i64>()
+        {
+            out.auto_disable_window_minutes = n;
         }
-        if let Some(v) = get_setting(conn, KEY_AUTO_DISABLE_FAILURE_TIMES)? {
-            if let Ok(n) = v.trim().parse::<i64>() {
-                out.auto_disable_failure_times = n;
-            }
+        if let Some(v) = get_setting(conn, KEY_AUTO_DISABLE_FAILURE_TIMES)?
+            && let Ok(n) = v.trim().parse::<i64>()
+        {
+            out.auto_disable_failure_times = n;
         }
-        if let Some(v) = get_setting(conn, KEY_AUTO_DISABLE_DISABLE_MINUTES)? {
-            if let Ok(n) = v.trim().parse::<i64>() {
-                out.auto_disable_disable_minutes = n;
-            }
+        if let Some(v) = get_setting(conn, KEY_AUTO_DISABLE_DISABLE_MINUTES)?
+            && let Ok(n) = v.trim().parse::<i64>()
+        {
+            out.auto_disable_disable_minutes = n;
         }
 
         Ok(out)
@@ -1518,18 +1518,18 @@ fn format_cost_usd(v: f64) -> Option<String> {
     }
 }
 
+type PricingModelPrices = (
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+);
+
 fn find_pricing_for_model(
     conn: &Connection,
     model: &str,
-) -> rusqlite::Result<
-    Option<(
-        Option<String>,
-        Option<String>,
-        Option<String>,
-        Option<String>,
-        Option<String>,
-    )>,
-> {
+) -> rusqlite::Result<Option<PricingModelPrices>> {
     let mut stmt = conn.prepare(
         r#"
         SELECT prompt_price, completion_price, request_price, cache_read_price, cache_write_price
@@ -1620,8 +1620,8 @@ fn estimate_cost_usd(
     };
 
     let c = completion_tokens.unwrap_or(0).max(0) as f64;
-    let cr = cache_read_tokens.unwrap_or(0).max(0) as i64;
-    let cw = cache_write_tokens.unwrap_or(0).max(0) as i64;
+    let cr = cache_read_tokens.unwrap_or(0).max(0);
+    let cw = cache_write_tokens.unwrap_or(0).max(0);
 
     let mut regular_prompt_tokens = prompt_tokens.unwrap_or(0).max(0);
     if cr <= regular_prompt_tokens {

@@ -54,16 +54,11 @@ struct DesktopState {
     locale: DesktopLocale,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 enum DesktopLocale {
+    #[default]
     ZhCN,
     EnUS,
-}
-
-impl Default for DesktopLocale {
-    fn default() -> Self {
-        DesktopLocale::ZhCN
-    }
 }
 
 impl DesktopLocale {
@@ -120,10 +115,7 @@ impl DesktopLocale {
     }
 }
 
-fn apply_desktop_locale(
-    locale: DesktopLocale,
-    menus: LocalizableMenus<'_>,
-) {
+fn apply_desktop_locale(locale: DesktopLocale, menus: LocalizableMenus<'_>) {
     menus.edit_menu.set_text(locale.edit_menu_title());
     menus.tray_show.set_text(locale.tray_show());
     menus.tray_hide.set_text(locale.tray_hide());

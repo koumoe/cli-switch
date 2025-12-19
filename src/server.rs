@@ -1091,33 +1091,33 @@ async fn update_settings(
 ) -> Result<impl IntoResponse, ApiError> {
     let auto_start_enabled = input.auto_start_enabled;
 
-    if let Some(h) = input.pricing_auto_update_interval_hours {
-        if !(1..=8760).contains(&h) {
-            return Err(ApiError::BadRequest(
-                "pricing_auto_update_interval_hours 必须在 1..=8760 之间".to_string(),
-            ));
-        }
+    if let Some(h) = input.pricing_auto_update_interval_hours
+        && !(1..=8760).contains(&h)
+    {
+        return Err(ApiError::BadRequest(
+            "pricing_auto_update_interval_hours 必须在 1..=8760 之间".to_string(),
+        ));
     }
-    if let Some(v) = input.auto_disable_window_minutes {
-        if v < 1 {
-            return Err(ApiError::BadRequest(
-                "auto_disable_window_minutes 必须 >= 1".to_string(),
-            ));
-        }
+    if let Some(v) = input.auto_disable_window_minutes
+        && v < 1
+    {
+        return Err(ApiError::BadRequest(
+            "auto_disable_window_minutes 必须 >= 1".to_string(),
+        ));
     }
-    if let Some(v) = input.auto_disable_failure_times {
-        if v < 1 {
-            return Err(ApiError::BadRequest(
-                "auto_disable_failure_times 必须 >= 1".to_string(),
-            ));
-        }
+    if let Some(v) = input.auto_disable_failure_times
+        && v < 1
+    {
+        return Err(ApiError::BadRequest(
+            "auto_disable_failure_times 必须 >= 1".to_string(),
+        ));
     }
-    if let Some(v) = input.auto_disable_disable_minutes {
-        if v < 1 {
-            return Err(ApiError::BadRequest(
-                "auto_disable_disable_minutes 必须 >= 1".to_string(),
-            ));
-        }
+    if let Some(v) = input.auto_disable_disable_minutes
+        && v < 1
+    {
+        return Err(ApiError::BadRequest(
+            "auto_disable_disable_minutes 必须 >= 1".to_string(),
+        ));
     }
 
     if let Some(enabled) = auto_start_enabled {
@@ -1260,10 +1260,10 @@ pub async fn serve_with_listener(
             let desired = settings.auto_start_enabled;
             let _ = tokio::task::spawn_blocking(move || {
                 let actual = autostart::is_enabled().unwrap_or(false);
-                if actual != desired {
-                    if let Err(e) = autostart::set_enabled(desired) {
-                        tracing::warn!(err = %e, desired, "apply autostart setting failed");
-                    }
+                if actual != desired
+                    && let Err(e) = autostart::set_enabled(desired)
+                {
+                    tracing::warn!(err = %e, desired, "apply autostart setting failed");
                 }
             })
             .await;

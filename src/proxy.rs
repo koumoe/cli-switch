@@ -201,17 +201,16 @@ pub async fn forward(
             continue;
         }
 
-        if status.is_success() {
-            if let Err(e) =
+        if status.is_success()
+            && let Err(e) =
                 storage::clear_channel_failures(db_path.clone(), channel.id.clone()).await
-            {
-                tracing::event!(
-                    tracing::Level::WARN,
-                    channel_id = %channel.id,
-                    err = %e,
-                    "clear channel failures failed"
-                );
-            }
+        {
+            tracing::event!(
+                tracing::Level::WARN,
+                channel_id = %channel.id,
+                err = %e,
+                "clear channel failures failed"
+            );
         }
 
         return proxy_upstream_response(
@@ -660,16 +659,16 @@ struct TokenUsage {
     cache_write_tokens: Option<i64>,
 }
 
+type TokenUsageEventFields = (
+    Option<i64>,
+    Option<i64>,
+    Option<i64>,
+    Option<i64>,
+    Option<i64>,
+);
+
 impl TokenUsage {
-    fn as_event_fields(
-        self,
-    ) -> (
-        Option<i64>,
-        Option<i64>,
-        Option<i64>,
-        Option<i64>,
-        Option<i64>,
-    ) {
+    fn as_event_fields(self) -> TokenUsageEventFields {
         let total = match (
             self.total_tokens,
             self.prompt_tokens,
