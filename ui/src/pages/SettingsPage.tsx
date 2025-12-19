@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Sun, Moon, Monitor, FolderOpen, Info, Database, Languages, DollarSign, RefreshCw, Shield } from "lucide-react";
+import { Sun, Moon, Monitor, FolderOpen, Info, Database, Languages, DollarSign, RefreshCw, Shield, Power } from "lucide-react";
 import { toast } from "sonner";
 import {
   Button,
@@ -9,6 +9,12 @@ import {
   CardHeader,
   CardTitle,
   Badge,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
   Input,
   Switch,
   Select,
@@ -20,7 +26,7 @@ import {
 import { useTheme, type Theme } from "@/lib/theme";
 import { type Locale, useI18n } from "@/lib/i18n";
 import { formatDateTime } from "../lib";
-import { getHealth, getSettings, pricingStatus, pricingSync, updateSettings, type AppSettings, type CloseBehavior, type Health, type PricingStatus } from "../api";
+import { checkUpdate, downloadUpdate, getHealth, getSettings, getUpdateStatus, pricingStatus, pricingSync, updateSettings, type AppSettings, type CloseBehavior, type Health, type PricingStatus, type UpdateCheck, type UpdateStatus } from "../api";
 
 export function SettingsPage() {
   const { theme, setTheme } = useTheme();
@@ -28,9 +34,15 @@ export function SettingsPage() {
   const [health, setHealth] = useState<Health | null>(null);
   const [pricing, setPricing] = useState<PricingStatus | null>(null);
   const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
+  const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null);
+  const [updateChecking, setUpdateChecking] = useState(false);
+  const [updatePromptOpen, setUpdatePromptOpen] = useState(false);
+  const [updateCheckResult, setUpdateCheckResult] = useState<UpdateCheck | null>(null);
+  const [updateDownloading, setUpdateDownloading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [autoDisableSaving, setAutoDisableSaving] = useState(false);
   const [closeSaving, setCloseSaving] = useState(false);
+  const [autoStartSaving, setAutoStartSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
@@ -45,6 +57,10 @@ export function SettingsPage() {
     getSettings()
       .then(setAppSettings)
       .catch(() => setAppSettings(null));
+
+    getUpdateStatus()
+      .then(setUpdateStatus)
+      .catch(() => setUpdateStatus(null));
   }, []);
 
   const apiEndpoint = (() => {
@@ -511,6 +527,45 @@ export function SettingsPage() {
         </CardContent>
       </Card>
 
+      {/* 开机自启动 */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Power className="h-4 w-4" />
+            {t("settings.startup.title")}
+          </CardTitle>
+          <CardDescription>{t("settings.startup.subtitle")}</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <div className="font-medium text-sm">{t("settings.startup.enable")}</div>
+              <div className="text-xs text-muted-foreground">{t("settings.startup.enableHint")}</div>
+            </div>
+            <Switch
+              checked={appSettings?.auto_start_enabled ?? false}
+              onCheckedChange={async (v) => {
+                if (!appSettings) return;
+                const prev = appSettings.auto_start_enabled;
+                setAppSettings({ ...appSettings, auto_start_enabled: v });
+                setAutoStartSaving(true);
+                try {
+                  const next = await updateSettings({ auto_start_enabled: v });
+                  setAppSettings(next);
+                  toast.success(t("settings.startup.saved"));
+                } catch (e) {
+                  setAppSettings({ ...appSettings, auto_start_enabled: prev });
+                  toast.error(t("settings.startup.saveFail"), { description: String(e) });
+                } finally {
+                  setAutoStartSaving(false);
+                }
+              }}
+              disabled={!appSettings || autoStartSaving}
+            />
+          </div>
+        </CardContent>
+      </Card>
+
       {/* 数据存储 */}
       <Card>
         <CardHeader>
@@ -547,6 +602,135 @@ export function SettingsPage() {
           <div className="space-y-2">
             <label className="text-sm font-medium">{t("settings.storage.dbFile")}</label>
             <Input value={health?.db_path ?? "-"} disabled className="font-mono text-sm" />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* 自动更新 */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <RefreshCw className="h-4 w-4" />
+            {t("settings.update.title")}
+          </CardTitle>
+          <CardDescription>{t("settings.update.subtitle")}</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <Dialog open={updatePromptOpen} onOpenChange={setUpdatePromptOpen}>
+            <DialogContent className="sm:max-w-[520px]">
+              <DialogHeader>
+                <DialogTitle>{t("settings.update.promptTitle")}</DialogTitle>
+                <DialogDescription>
+                  {t("settings.update.promptDesc", {
+                    version: updateCheckResult?.latest_version ?? "-",
+                  })}
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => setUpdatePromptOpen(false)}
+                  disabled={updateDownloading}
+                >
+                  {t("common.cancel")}
+                </Button>
+                <Button
+                  onClick={async () => {
+                    setUpdateDownloading(true);
+                    try {
+                      await downloadUpdate();
+                      toast.success(t("settings.update.downloading"));
+                      setUpdatePromptOpen(false);
+                    } catch (e) {
+                      toast.error(t("settings.update.downloadFail"), { description: String(e) });
+                    } finally {
+                      setUpdateDownloading(false);
+                    }
+                  }}
+                  disabled={updateDownloading}
+                >
+                  {t("settings.update.updateNow")}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <div className="font-medium text-sm">{t("settings.update.autoEnable")}</div>
+              <div className="text-xs text-muted-foreground">{t("settings.update.autoEnableHint")}</div>
+            </div>
+            <Switch
+              checked={appSettings?.app_auto_update_enabled ?? false}
+              onCheckedChange={async (v) => {
+                if (!appSettings) return;
+                const prev = appSettings.app_auto_update_enabled;
+                setAppSettings({ ...appSettings, app_auto_update_enabled: v });
+                try {
+                  const next = await updateSettings({ app_auto_update_enabled: v });
+                  setAppSettings(next);
+                  toast.success(t("settings.update.saved"));
+                  if (v) {
+                    await downloadUpdate();
+                    toast.success(t("settings.update.autoStarted"));
+                  }
+                } catch (e) {
+                  setAppSettings({ ...appSettings, app_auto_update_enabled: prev });
+                  toast.error(t("settings.update.saveFail"), { description: String(e) });
+                }
+              }}
+              disabled={!appSettings}
+            />
+          </div>
+
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <div className="font-medium text-sm">{t("settings.update.status")}</div>
+              <div className="text-xs text-muted-foreground">
+                {updateStatus?.pending_version
+                  ? t("settings.update.ready", { version: updateStatus.pending_version })
+                  : updateStatus?.latest_version
+                    ? t("settings.update.latest", { version: updateStatus.latest_version })
+                    : "-"}
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={async () => {
+                  setUpdateChecking(true);
+                  try {
+                    const res = await checkUpdate();
+                    setUpdateCheckResult(res);
+                    const st = await getUpdateStatus().catch(() => null);
+                    if (st) setUpdateStatus(st);
+
+                    if (!res.update_available) {
+                      toast.success(t("settings.update.uptodate"));
+                      return;
+                    }
+
+                    toast.success(
+                      t("settings.update.found", { version: res.latest_version ?? "-" })
+                    );
+
+                    if (!appSettings?.app_auto_update_enabled) {
+                      setUpdatePromptOpen(true);
+                    } else {
+                      await downloadUpdate();
+                    }
+                  } catch (e) {
+                    toast.error(t("settings.update.checkFail"), { description: String(e) });
+                  } finally {
+                    setUpdateChecking(false);
+                  }
+                }}
+                disabled={updateChecking}
+              >
+                {t("settings.update.check")}
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>

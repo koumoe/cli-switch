@@ -30,6 +30,7 @@
     "refresh": "刷新",
     "autoRefresh1m": "每分钟自动更新",
     "cancel": "取消",
+    "ok": "知道了",
     "save": "保存",
     "delete": "删除",
     "add": "添加",
@@ -355,6 +356,27 @@
       "saved": "设置已保存",
       "saveFail": "保存失败"
     },
+    "update": {
+      "title": "自动更新",
+      "subtitle": "自动检查并下载新版本（来自 GitHub Releases）",
+      "autoEnable": "开启自动更新",
+      "autoEnableHint": "开启后会定时检测并自动下载更新包",
+      "status": "更新状态",
+      "latest": "最新版本：v{{version}}",
+      "ready": "新版已准备好：v{{version}}（请重启更新）",
+      "check": "检查更新",
+      "checkFail": "检查更新失败",
+      "uptodate": "已是最新版本",
+      "found": "发现新版本：v{{version}}",
+      "promptTitle": "发现新版本",
+      "promptDesc": "检测到新版本 v{{version}}，是否现在更新？",
+      "updateNow": "立即更新",
+      "downloading": "已开始下载更新",
+      "downloadFail": "下载失败",
+      "saved": "设置已保存",
+      "saveFail": "保存失败",
+      "autoStarted": "已开始自动下载更新"
+    },
     "autoDisable": {
       "title": "自动禁用",
       "subtitle": "在短时间内连续失败时，临时禁用渠道",
@@ -381,6 +403,14 @@
       "saved": "关闭设置已保存",
       "saveFail": "保存失败"
     },
+    "startup": {
+      "title": "开机自启动",
+      "subtitle": "登录系统后自动启动 CliSwitch",
+      "enable": "开机自启动",
+      "enableHint": "开启后会将 CliSwitch 添加到系统的登录项",
+      "saved": "开机自启动设置已保存",
+      "saveFail": "保存失败"
+    },
     "storage": {
       "title": "数据存储",
       "subtitle": "应用数据和配置文件位置",
@@ -400,5 +430,10 @@
       "descText": "通用 AI CLI 配置管理平台",
       "intro": "CliSwitch 是一个本地多渠道 CLI 代理工具，用于管理和切换多个 AI API 服务。支持 Claude、Codex、Gemini 等终端入口，提供高可用性和自动故障转移。"
     }
+  },
+  "update": {
+    "readyTitle": "更新已准备好",
+    "readyDesc": "新版 v{{version}} 已下载完成，请重启应用以完成更新。",
+    "quitToUpdate": "退出以更新"
   }
 }

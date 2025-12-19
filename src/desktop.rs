@@ -2,7 +2,7 @@ use anyhow::Context as _;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::time::Duration;
 
-use cliswitch::{app, server, storage};
+use cliswitch::{app, server, storage, update};
 use muda::{Menu, MenuEvent, MenuId, MenuItem, PredefinedMenuItem, Submenu};
 use rusqlite::params;
 use tao::dpi::LogicalSize;
@@ -40,6 +40,10 @@ enum IpcMessage {
         action: CloseDecisionAction,
         remember: bool,
     },
+    #[serde(rename = "set-locale")]
+    SetLocale { locale: String },
+    #[serde(rename = "request-quit")]
+    RequestQuit,
 }
 
 #[derive(Debug, Default)]
@@ -47,6 +51,91 @@ struct DesktopState {
     window_visible: bool,
     close_request_inflight: bool,
     close_prompt_open: bool,
+    locale: DesktopLocale,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DesktopLocale {
+    ZhCN,
+    EnUS,
+}
+
+impl Default for DesktopLocale {
+    fn default() -> Self {
+        DesktopLocale::ZhCN
+    }
+}
+
+impl DesktopLocale {
+    fn from_str(input: &str) -> Self {
+        let lower = input.trim().to_ascii_lowercase();
+        if lower == "zh" || lower.starts_with("zh-") {
+            DesktopLocale::ZhCN
+        } else {
+            DesktopLocale::EnUS
+        }
+    }
+
+    fn detect() -> Self {
+        for key in ["LC_ALL", "LC_MESSAGES", "LANG"] {
+            if let Ok(v) = std::env::var(key) {
+                let lower = v.to_ascii_lowercase();
+                if lower.contains("zh") {
+                    return DesktopLocale::ZhCN;
+                }
+                if lower.contains("en") {
+                    return DesktopLocale::EnUS;
+                }
+            }
+        }
+        DesktopLocale::ZhCN
+    }
+
+    fn edit_menu_title(self) -> &'static str {
+        match self {
+            DesktopLocale::ZhCN => "编辑",
+            DesktopLocale::EnUS => "Edit",
+        }
+    }
+
+    fn tray_show(self) -> &'static str {
+        match self {
+            DesktopLocale::ZhCN => "显示窗口",
+            DesktopLocale::EnUS => "Show Window",
+        }
+    }
+
+    fn tray_hide(self) -> &'static str {
+        match self {
+            DesktopLocale::ZhCN => "隐藏窗口",
+            DesktopLocale::EnUS => "Hide Window",
+        }
+    }
+
+    fn tray_quit(self) -> &'static str {
+        match self {
+            DesktopLocale::ZhCN => "退出",
+            DesktopLocale::EnUS => "Quit",
+        }
+    }
+}
+
+fn apply_desktop_locale(
+    locale: DesktopLocale,
+    menus: LocalizableMenus<'_>,
+) {
+    menus.edit_menu.set_text(locale.edit_menu_title());
+    menus.tray_show.set_text(locale.tray_show());
+    menus.tray_hide.set_text(locale.tray_hide());
+    menus.tray_quit.set_text(locale.tray_quit());
+}
+
+#[derive(Clone, Copy)]
+struct LocalizableMenus<'a> {
+    edit_menu: &'a Submenu,
+    tray_show: &'a MenuItem,
+    tray_hide: &'a MenuItem,
+    tray_quit: &'a MenuItem,
 }
 
 fn apply_window_visible(
@@ -82,7 +171,14 @@ fn request_close_behavior(
     });
 }
 
-fn quit_app(server_handle: &tokio::task::JoinHandle<()>, control_flow: &mut ControlFlow) {
+fn quit_app(
+    data_dir: &std::path::Path,
+    server_handle: &tokio::task::JoinHandle<()>,
+    control_flow: &mut ControlFlow,
+) {
+    if let Err(e) = update::apply_pending_on_exit(data_dir) {
+        tracing::warn!(err = %e, "apply pending update on exit failed");
+    }
     server_handle.abort();
     *control_flow = ControlFlow::Exit;
 }
@@ -161,11 +257,14 @@ fn handle_user_event(
     state: &mut DesktopState,
     control_flow: &mut ControlFlow,
     server_handle: &tokio::task::JoinHandle<()>,
+    data_dir: &std::path::PathBuf,
     window: &tao::window::Window,
     webview: &wry::WebView,
     tray_id: &tray_icon::TrayIconId,
+    edit_menu: &Submenu,
     tray_show: &MenuItem,
     tray_hide: &MenuItem,
+    tray_quit: &MenuItem,
     tray_show_id: &MenuId,
     tray_hide_id: &MenuId,
     tray_quit_id: &MenuId,
@@ -194,14 +293,14 @@ fn handle_user_event(
             } else if &id == tray_hide_id {
                 apply_window_visible(window, state, tray_show, tray_hide, false, false);
             } else if &id == tray_quit_id {
-                quit_app(server_handle, control_flow);
+                quit_app(data_dir.as_path(), server_handle, control_flow);
             }
         }
         UserEvent::CloseRequested(settings) => {
             state.close_request_inflight = false;
             match settings.close_behavior {
                 storage::CloseBehavior::Quit => {
-                    quit_app(server_handle, control_flow);
+                    quit_app(data_dir.as_path(), server_handle, control_flow);
                 }
                 storage::CloseBehavior::MinimizeToTray => {
                     apply_window_visible(window, state, tray_show, tray_hide, false, false);
@@ -255,9 +354,27 @@ fn handle_user_event(
                                     storage::CloseBehavior::Quit,
                                 );
                             }
-                            quit_app(server_handle, control_flow);
+                            quit_app(data_dir.as_path(), server_handle, control_flow);
                         }
                     }
+                }
+                IpcMessage::SetLocale { locale } => {
+                    let next = DesktopLocale::from_str(&locale);
+                    if next != state.locale {
+                        state.locale = next;
+                        apply_desktop_locale(
+                            next,
+                            LocalizableMenus {
+                                edit_menu,
+                                tray_show,
+                                tray_hide,
+                                tray_quit,
+                            },
+                        );
+                    }
+                }
+                IpcMessage::RequestQuit => {
+                    quit_app(data_dir.as_path(), server_handle, control_flow);
                 }
             }
         }
@@ -290,7 +407,8 @@ pub async fn run(port: u16) -> anyhow::Result<()> {
 
     // 创建菜单
     let menu = Menu::new();
-    let edit_menu = Submenu::new("Edit", true);
+    let initial_locale = DesktopLocale::detect();
+    let edit_menu = Submenu::new(initial_locale.edit_menu_title(), true);
     edit_menu
         .append_items(&[
             &PredefinedMenuItem::undo(None),
@@ -340,9 +458,9 @@ pub async fn run(port: u16) -> anyhow::Result<()> {
     let window = window_builder.build(&event_loop).context("创建窗口失败")?;
 
     let tray_menu = Menu::new();
-    let tray_show = MenuItem::with_id("tray_show", "显示窗口", true, None);
-    let tray_hide = MenuItem::with_id("tray_hide", "隐藏窗口", true, None);
-    let tray_quit = MenuItem::with_id("tray_quit", "退出", true, None);
+    let tray_show = MenuItem::with_id("tray_show", initial_locale.tray_show(), true, None);
+    let tray_hide = MenuItem::with_id("tray_hide", initial_locale.tray_hide(), true, None);
+    let tray_quit = MenuItem::with_id("tray_quit", initial_locale.tray_quit(), true, None);
     tray_menu
         .append_items(&[
             &tray_show,
@@ -355,8 +473,8 @@ pub async fn run(port: u16) -> anyhow::Result<()> {
     let tray_icon = TrayIconBuilder::new()
         .with_menu(Box::new(tray_menu))
         .with_tooltip("CliSwitch")
-        .with_icon(build_default_tray_icon().context("创建托盘图标失败")?)
-        .with_icon_as_template(true)
+        .with_icon(build_tray_icon().context("创建托盘图标失败")?)
+        .with_icon_as_template(false)
         .with_menu_on_left_click(false)
         .build()
         .context("初始化托盘失败")?;
@@ -379,6 +497,7 @@ pub async fn run(port: u16) -> anyhow::Result<()> {
         window_visible: true,
         close_request_inflight: false,
         close_prompt_open: false,
+        locale: initial_locale,
     };
     tray_show.set_enabled(!state.window_visible);
     tray_hide.set_enabled(state.window_visible);
@@ -396,11 +515,14 @@ pub async fn run(port: u16) -> anyhow::Result<()> {
                 &mut state,
                 control_flow,
                 &server_handle,
+                &data_dir,
                 &window,
                 &webview,
                 &tray_id,
+                &edit_menu,
                 &tray_show,
                 &tray_hide,
+                &tray_quit,
                 &tray_show_id,
                 &tray_hide_id,
                 &tray_quit_id,
@@ -433,31 +555,22 @@ async fn wait_for_health(base_url: &str) -> anyhow::Result<()> {
     Err(anyhow::anyhow!("后端启动超时：{url}"))
 }
 
-fn build_default_tray_icon() -> Result<tray_icon::Icon, tray_icon::BadIcon> {
-    let size = 32u32;
-    let mut rgba = vec![0u8; (size * size * 4) as usize];
+fn build_tray_icon() -> anyhow::Result<tray_icon::Icon> {
+    let target_size = if cfg!(target_os = "macos") {
+        18u32
+    } else {
+        32u32
+    };
 
-    let cx = (size as f32 - 1.0) / 2.0;
-    let cy = (size as f32 - 1.0) / 2.0;
-    let r = 12.0f32;
-
-    for y in 0..size {
-        for x in 0..size {
-            let dx = x as f32 - cx;
-            let dy = y as f32 - cy;
-            let dist2 = dx * dx + dy * dy;
-            let inside = dist2 <= r * r;
-            let idx = ((y * size + x) * 4) as usize;
-            if inside {
-                rgba[idx] = 0;
-                rgba[idx + 1] = 0;
-                rgba[idx + 2] = 0;
-                rgba[idx + 3] = 255;
-            } else {
-                rgba[idx + 3] = 0;
-            }
-        }
-    }
-
-    tray_icon::Icon::from_rgba(rgba, size, size)
+    let bytes = include_bytes!("../assets/logo.png");
+    let img = image::load_from_memory(bytes).context("读取 assets/logo.png 失败")?;
+    let img = img.resize_exact(
+        target_size,
+        target_size,
+        image::imageops::FilterType::Lanczos3,
+    );
+    let rgba = img.to_rgba8().into_raw();
+    let icon = tray_icon::Icon::from_rgba(rgba, target_size, target_size)
+        .map_err(|e| anyhow::anyhow!("构造托盘 Icon 失败：{e}"))?;
+    Ok(icon)
 }

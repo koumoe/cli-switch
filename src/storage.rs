@@ -221,6 +221,8 @@ pub(crate) fn now_ms() -> i64 {
 const KEY_PRICING_AUTO_UPDATE_ENABLED: &str = "pricing_auto_update_enabled";
 const KEY_PRICING_AUTO_UPDATE_INTERVAL_HOURS: &str = "pricing_auto_update_interval_hours";
 const KEY_CLOSE_BEHAVIOR: &str = "close_behavior";
+const KEY_AUTO_START_ENABLED: &str = "auto_start_enabled";
+const KEY_APP_AUTO_UPDATE_ENABLED: &str = "app_auto_update_enabled";
 const KEY_AUTO_DISABLE_ENABLED: &str = "auto_disable_enabled";
 const KEY_AUTO_DISABLE_WINDOW_MINUTES: &str = "auto_disable_window_minutes";
 const KEY_AUTO_DISABLE_FAILURE_TIMES: &str = "auto_disable_failure_times";
@@ -249,6 +251,8 @@ pub struct AppSettings {
     pub pricing_auto_update_enabled: bool,
     pub pricing_auto_update_interval_hours: i64,
     pub close_behavior: CloseBehavior,
+    pub auto_start_enabled: bool,
+    pub app_auto_update_enabled: bool,
     pub auto_disable_enabled: bool,
     pub auto_disable_window_minutes: i64,
     pub auto_disable_failure_times: i64,
@@ -261,6 +265,8 @@ impl Default for AppSettings {
             pricing_auto_update_enabled: false,
             pricing_auto_update_interval_hours: 24,
             close_behavior: CloseBehavior::Ask,
+            auto_start_enabled: false,
+            app_auto_update_enabled: false,
             auto_disable_enabled: false,
             auto_disable_window_minutes: 3,
             auto_disable_failure_times: 5,
@@ -274,6 +280,8 @@ pub struct AppSettingsPatch {
     pub pricing_auto_update_enabled: Option<bool>,
     pub pricing_auto_update_interval_hours: Option<i64>,
     pub close_behavior: Option<CloseBehavior>,
+    pub auto_start_enabled: Option<bool>,
+    pub app_auto_update_enabled: Option<bool>,
     pub auto_disable_enabled: Option<bool>,
     pub auto_disable_window_minutes: Option<i64>,
     pub auto_disable_failure_times: Option<i64>,
@@ -328,6 +336,12 @@ pub async fn get_app_settings(db_path: PathBuf) -> anyhow::Result<AppSettings> {
                 _ => {}
             }
         }
+        if let Some(v) = get_setting(conn, KEY_AUTO_START_ENABLED)? {
+            out.auto_start_enabled = matches!(v.trim(), "1" | "true" | "TRUE" | "True");
+        }
+        if let Some(v) = get_setting(conn, KEY_APP_AUTO_UPDATE_ENABLED)? {
+            out.app_auto_update_enabled = matches!(v.trim(), "1" | "true" | "TRUE" | "True");
+        }
         if let Some(v) = get_setting(conn, KEY_AUTO_DISABLE_ENABLED)? {
             out.auto_disable_enabled = matches!(v.trim(), "1" | "true" | "TRUE" | "True");
         }
@@ -377,6 +391,22 @@ pub async fn update_app_settings(
         }
         if let Some(v) = patch.close_behavior {
             set_setting(conn, KEY_CLOSE_BEHAVIOR, v.as_str(), updated_at_ms)?;
+        }
+        if let Some(v) = patch.auto_start_enabled {
+            set_setting(
+                conn,
+                KEY_AUTO_START_ENABLED,
+                if v { "true" } else { "false" },
+                updated_at_ms,
+            )?;
+        }
+        if let Some(v) = patch.app_auto_update_enabled {
+            set_setting(
+                conn,
+                KEY_APP_AUTO_UPDATE_ENABLED,
+                if v { "true" } else { "false" },
+                updated_at_ms,
+            )?;
         }
         if let Some(v) = patch.auto_disable_enabled {
             set_setting(

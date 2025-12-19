@@ -26,7 +26,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui";
 import { toast } from "sonner";
-import { getHealth, pricingStatus, pricingSync } from "./api";
+import { getHealth, getUpdateStatus, pricingStatus, pricingSync } from "./api";
 
 import { OverviewPage } from "./pages/OverviewPage";
 import { ChannelsPage } from "./pages/ChannelsPage";
@@ -46,6 +46,7 @@ const NAV_ITEMS: { route: AppRoute; labelKey: string; icon: React.ElementType }[
 
 const SIDEBAR_KEY = "cliswitch-sidebar-collapsed";
 const PRICING_ONBOARDING_SHOWN_KEY = "cliswitch-pricing-onboarding-shown";
+const UPDATE_READY_SHOWN_KEY_PREFIX = "cliswitch-update-ready-shown:";
 
 function routeFromPath(pathname: string): AppRoute {
   if (pathname === "/") return "overview";
@@ -182,15 +183,50 @@ export default function App() {
     if (v === null) return true;
     return v === "true";
   });
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const [pricingOnboardingOpen, setPricingOnboardingOpen] = useState(false);
   const [pricingSyncing, setPricingSyncing] = useState(false);
+  const [updateReadyOpen, setUpdateReadyOpen] = useState(false);
+  const [updateReadyVersion, setUpdateReadyVersion] = useState<string | null>(null);
   const [closePromptOpen, setClosePromptOpen] = useState(false);
   const [closeRemember, setCloseRemember] = useState(false);
   const [closeDecisionSent, setCloseDecisionSent] = useState(false);
 
   // 确保主题在应用启动时被应用
   useTheme();
+
+  useEffect(() => {
+    postIpc({ type: "set-locale", locale });
+  }, [locale]);
+
+  useEffect(() => {
+    let stopped = false;
+
+    const poll = async () => {
+      try {
+        const st = await getUpdateStatus();
+        const version = st.pending_version;
+        if (!version) return;
+
+        const key = `${UPDATE_READY_SHOWN_KEY_PREFIX}${version}`;
+        if (localStorage.getItem(key) === "true") return;
+
+        if (stopped) return;
+        setUpdateReadyVersion(version);
+        setUpdateReadyOpen(true);
+        localStorage.setItem(key, "true");
+      } catch {
+        // ignore
+      }
+    };
+
+    void poll();
+    const id = window.setInterval(() => void poll(), 15_000);
+    return () => {
+      stopped = true;
+      window.clearInterval(id);
+    };
+  }, []);
 
   const toggleCollapsed = () => {
     setCollapsed((prev) => {
@@ -256,6 +292,30 @@ export default function App() {
 
   return (
     <div className="flex h-full bg-background text-foreground">
+      <Dialog open={updateReadyOpen} onOpenChange={setUpdateReadyOpen}>
+        <DialogContent className="sm:max-w-[520px]">
+          <DialogHeader>
+            <DialogTitle>{t("update.readyTitle")}</DialogTitle>
+            <DialogDescription>
+              {t("update.readyDesc", { version: updateReadyVersion ?? "-" })}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            {typeof (window as any)?.ipc?.postMessage === "function" ? (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  postIpc({ type: "request-quit" });
+                }}
+              >
+                {t("update.quitToUpdate")}
+              </Button>
+            ) : null}
+            <Button onClick={() => setUpdateReadyOpen(false)}>{t("common.ok")}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog
         open={closePromptOpen}
         onOpenChange={(open) => {

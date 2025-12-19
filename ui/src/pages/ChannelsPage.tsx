@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useReducer, useRef, useState } from "react";
 import {
   Plus,
   GripVertical,
@@ -79,6 +79,43 @@ function defaultBaseUrl(protocol: Protocol): string {
   }
 }
 
+type DragSnapshot = {
+  protocol: Protocol;
+  list: Channel[];
+};
+
+type DragState = {
+  dragId: string | null;
+  dragOverId: string | null;
+  snapshot: DragSnapshot | null;
+};
+
+type DragAction =
+  | { type: "start"; dragId: string; snapshot: DragSnapshot }
+  | { type: "over"; dragOverId: string | null }
+  | { type: "clear" };
+
+const initialDragState: DragState = {
+  dragId: null,
+  dragOverId: null,
+  snapshot: null,
+};
+
+function dragReducer(state: DragState, action: DragAction): DragState {
+  switch (action.type) {
+    case "start":
+      return { dragId: action.dragId, dragOverId: null, snapshot: action.snapshot };
+    case "over":
+      return { ...state, dragOverId: action.dragOverId };
+    case "clear":
+      return initialDragState;
+    default: {
+      const _exhaustive: never = action;
+      return state;
+    }
+  }
+}
+
 export function ChannelsPage() {
   const { t } = useI18n();
   const [activeProtocol, setActiveProtocol] = useState<Protocol>("openai");
@@ -86,7 +123,11 @@ export function ChannelsPage() {
     Record<Protocol, Channel[]>
   >({ openai: [], anthropic: [], gemini: [] });
   const [reordering, setReordering] = useState(false);
-  const [dragId, setDragId] = useState<string | null>(null);
+  const [dragState, dispatchDrag] = useReducer(dragReducer, initialDragState);
+  const dragId = dragState.dragId;
+  const dragOverId = dragState.dragOverId;
+  const dragSnapshot = dragState.snapshot;
+  const dragCommittedRef = useRef(false);
   const renderNowMs = Date.now();
 
   const [modalOpen, setModalOpen] = useState(false);
@@ -248,29 +289,66 @@ export function ChannelsPage() {
     }
   }
 
-  function moveByDrop(protocol: Protocol, fromId: string, toId: string) {
-    if (fromId === toId) return;
-    const list = channelsByProtocol[protocol];
+  function moveInList(list: Channel[], fromId: string, toId: string): Channel[] {
+    if (fromId === toId) return list;
     const fromIdx = list.findIndex((c) => c.id === fromId);
     const toIdx = list.findIndex((c) => c.id === toId);
-    if (fromIdx < 0 || toIdx < 0) return;
-
+    if (fromIdx < 0 || toIdx < 0) return list;
+    if (fromIdx === toIdx) return list;
     const next = [...list];
     const [item] = next.splice(fromIdx, 1);
     next.splice(toIdx, 0, item);
-    setChannelsByProtocol((m) => ({ ...m, [protocol]: next }));
-    void persistOrder(protocol, next);
+    return next;
   }
 
-  function moveToEnd(protocol: Protocol, fromId: string) {
-    const list = channelsByProtocol[protocol];
+  function moveToEndList(list: Channel[], fromId: string): Channel[] {
     const fromIdx = list.findIndex((c) => c.id === fromId);
-    if (fromIdx < 0) return;
+    if (fromIdx < 0) return list;
     const next = [...list];
     const [item] = next.splice(fromIdx, 1);
     next.push(item);
-    setChannelsByProtocol((m) => ({ ...m, [protocol]: next }));
-    void persistOrder(protocol, next);
+    return next;
+  }
+
+  function setChannelDragPreview(e: React.DragEvent, c: Channel) {
+    try {
+      const el = document.createElement("div");
+      el.style.position = "absolute";
+      el.style.top = "-10000px";
+      el.style.left = "-10000px";
+      el.style.padding = "10px 12px";
+      el.style.borderRadius = "10px";
+      el.style.border = "1px solid rgba(0,0,0,0.12)";
+      el.style.background = "white";
+      el.style.boxShadow = "0 12px 30px rgba(0,0,0,0.18)";
+      el.style.minWidth = "260px";
+      el.style.maxWidth = "360px";
+      el.style.pointerEvents = "none";
+
+      const title = document.createElement("div");
+      title.textContent = c.name;
+      title.style.fontSize = "13px";
+      title.style.fontWeight = "600";
+      title.style.color = "rgba(0,0,0,0.92)";
+
+      const meta = document.createElement("div");
+      meta.textContent = `${t("channels.table.priority")}: ${c.priority} · ${c.base_url}`;
+      meta.style.marginTop = "4px";
+      meta.style.fontSize = "11px";
+      meta.style.color = "rgba(0,0,0,0.6)";
+      meta.style.whiteSpace = "nowrap";
+      meta.style.overflow = "hidden";
+      meta.style.textOverflow = "ellipsis";
+
+      el.appendChild(title);
+      el.appendChild(meta);
+      document.body.appendChild(el);
+
+      e.dataTransfer.setDragImage(el, 16, 16);
+      window.setTimeout(() => el.remove(), 0);
+    } catch {
+      // ignore: fallback to browser default
+    }
   }
 
   function renderTable(protocol: Protocol) {
@@ -304,13 +382,23 @@ export function ChannelsPage() {
               </TableRow>
             </TableHeader>
             <TableBody
-              onDragOver={(e) => e.preventDefault()}
+              onDragOver={(e) => {
+                if (e.target !== e.currentTarget) return;
+                e.preventDefault();
+                if (dragOverId !== null) dispatchDrag({ type: "over", dragOverId: null });
+              }}
               onDrop={(e) => {
                 if (e.defaultPrevented) return;
                 e.preventDefault();
                 const fromId = e.dataTransfer.getData("text/plain");
-                if (fromId) moveToEnd(protocol, fromId);
-                setDragId(null);
+                if (fromId) {
+                  const current = channelsByProtocol[protocol];
+                  const next = moveToEndList(current, fromId);
+                  dragCommittedRef.current = true;
+                  setChannelsByProtocol((m) => ({ ...m, [protocol]: next }));
+                  void persistOrder(protocol, next);
+                }
+                dispatchDrag({ type: "clear" });
               }}
             >
               {tabChannels.length === 0 ? (
@@ -335,26 +423,64 @@ export function ChannelsPage() {
                   return (
                     <TableRow
                       key={c.id}
-                      onDragOver={(e) => e.preventDefault()}
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        if (!dragId || reordering) return;
+                        if (dragId === c.id) return;
+                        if (dragOverId === c.id) return;
+                        dispatchDrag({ type: "over", dragOverId: c.id });
+
+                        setChannelsByProtocol((m) => {
+                          const current = m[protocol];
+                          const next = moveInList(current, dragId, c.id);
+                          if (next === current) return m;
+                          return { ...m, [protocol]: next };
+                        });
+                      }}
+                      onDragLeave={() => {
+                        if (dragOverId === c.id) dispatchDrag({ type: "over", dragOverId: null });
+                      }}
                       onDrop={(e) => {
                         e.stopPropagation();
                         e.preventDefault();
                         const fromId = e.dataTransfer.getData("text/plain");
-                        if (fromId) moveByDrop(protocol, fromId, c.id);
-                        setDragId(null);
+                        if (fromId) {
+                          const current = channelsByProtocol[protocol];
+                          const next = moveInList(current, fromId, c.id);
+                          dragCommittedRef.current = true;
+                          setChannelsByProtocol((m) => ({ ...m, [protocol]: next }));
+                          void persistOrder(protocol, next);
+                        }
+                        dispatchDrag({ type: "clear" });
                       }}
-                      className={dragId === c.id ? "bg-accent/30" : undefined}
+                      className={[
+                        dragId === c.id ? "opacity-60" : "",
+                        dragOverId === c.id ? "bg-accent/30" : "",
+                      ]
+                        .filter(Boolean)
+                        .join(" ")}
                     >
                     <TableCell>
                       <button
                         className="text-muted-foreground hover:text-foreground cursor-grab active:cursor-grabbing"
                         draggable={!reordering}
                         onDragStart={(e) => {
+                          dragCommittedRef.current = false;
                           e.dataTransfer.setData("text/plain", c.id);
                           e.dataTransfer.effectAllowed = "move";
-                          setDragId(c.id);
+                          setChannelDragPreview(e, c);
+                          dispatchDrag({
+                            type: "start",
+                            dragId: c.id,
+                            snapshot: { protocol, list: channelsByProtocol[protocol] },
+                          });
                         }}
-                        onDragEnd={() => setDragId(null)}
+                        onDragEnd={() => {
+                          if (!dragCommittedRef.current && dragSnapshot?.protocol === protocol) {
+                            setChannelsByProtocol((m) => ({ ...m, [protocol]: dragSnapshot.list }));
+                          }
+                          dispatchDrag({ type: "clear" });
+                        }}
                         title={t("channels.actions.drag")}
                       >
                         <GripVertical className="h-4 w-4" />
@@ -457,7 +583,7 @@ export function ChannelsPage() {
         value={activeProtocol}
         onValueChange={(v) => {
           setActiveProtocol(v as Protocol);
-          setDragId(null);
+          dispatchDrag({ type: "clear" });
         }}
       >
         <TabsList>

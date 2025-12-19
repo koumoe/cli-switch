@@ -9,14 +9,18 @@ use axum::{
     routing::{any, get, post, put},
 };
 use serde::{Deserialize, Serialize};
-use std::{net::SocketAddr, path::PathBuf, sync::Arc};
+use std::{
+    net::SocketAddr,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 use tokio::sync::watch;
 use tokio::time::Duration;
 #[cfg(not(feature = "embed-ui"))]
 use tower_http::services::ServeDir;
 use tower_http::trace::TraceLayer;
 
-use crate::storage;
+use crate::{autostart, storage, update};
 use crate::{proxy, proxy::ProxyError};
 
 #[derive(Clone)]
@@ -25,6 +29,7 @@ pub struct AppState {
     pub db_path: Arc<PathBuf>,
     pub http_client: reqwest::Client,
     pub settings_notify: watch::Sender<u64>,
+    pub update_runtime: Arc<tokio::sync::Mutex<update::UpdateRuntime>>,
 }
 
 #[derive(Serialize)]
@@ -743,6 +748,52 @@ async fn pricing_auto_update_loop(
     }
 }
 
+async fn app_update_auto_loop(
+    db_path: PathBuf,
+    http_client: reqwest::Client,
+    mut notify: watch::Receiver<u64>,
+    update_runtime: Arc<tokio::sync::Mutex<update::UpdateRuntime>>,
+) {
+    let interval = Duration::from_secs(6 * 3600);
+
+    loop {
+        let settings = match storage::get_app_settings(db_path.clone()).await {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::warn!(err = %e, "load app settings failed");
+                storage::AppSettings::default()
+            }
+        };
+
+        if !settings.app_auto_update_enabled {
+            if notify.changed().await.is_err() {
+                break;
+            }
+            continue;
+        }
+
+        let data_dir = data_dir_from_db_path(db_path.as_path());
+        if update::load_pending_update(&data_dir).is_none() {
+            let _ = update::spawn_download_latest(
+                http_client.clone(),
+                update_runtime.clone(),
+                data_dir.clone(),
+            )
+            .await;
+        } else {
+            let _ = update::get_status(update_runtime.clone(), &data_dir, true).await;
+        }
+
+        tokio::select! {
+            _ = tokio::time::sleep(interval) => {}
+            changed = notify.changed() => {
+                if changed.is_err() { break; }
+                continue;
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 enum StatsRange {
     Today,
@@ -970,11 +1021,64 @@ async fn get_settings(State(state): State<AppState>) -> Result<impl IntoResponse
     Ok(Json(settings))
 }
 
+fn data_dir_from_db_path(db_path: &Path) -> PathBuf {
+    db_path
+        .parent()
+        .map(|p| p.to_path_buf())
+        .unwrap_or_default()
+}
+
+async fn update_status(State(state): State<AppState>) -> Result<impl IntoResponse, ApiError> {
+    let settings = storage::get_app_settings((*state.db_path).clone()).await?;
+    let data_dir = data_dir_from_db_path(state.db_path.as_path());
+    Ok(Json(
+        update::get_status(
+            state.update_runtime.clone(),
+            &data_dir,
+            settings.app_auto_update_enabled,
+        )
+        .await,
+    ))
+}
+
+async fn update_check(State(state): State<AppState>) -> Result<impl IntoResponse, ApiError> {
+    let data_dir = data_dir_from_db_path(state.db_path.as_path());
+    let res =
+        update::check_latest(&state.http_client, state.update_runtime.clone(), &data_dir).await;
+    Ok(Json(res))
+}
+
+#[derive(Serialize)]
+struct UpdateDownloadResponse {
+    started: bool,
+    status: update::UpdateStatus,
+}
+
+async fn update_download(State(state): State<AppState>) -> Result<impl IntoResponse, ApiError> {
+    let settings = storage::get_app_settings((*state.db_path).clone()).await?;
+    let data_dir = data_dir_from_db_path(state.db_path.as_path());
+    let started = update::spawn_download_latest(
+        state.http_client.clone(),
+        state.update_runtime.clone(),
+        data_dir.clone(),
+    )
+    .await;
+    let status = update::get_status(
+        state.update_runtime.clone(),
+        &data_dir,
+        settings.app_auto_update_enabled,
+    )
+    .await;
+    Ok(Json(UpdateDownloadResponse { started, status }))
+}
+
 #[derive(Debug, Deserialize)]
 struct UpdateSettingsInput {
     pricing_auto_update_enabled: Option<bool>,
     pricing_auto_update_interval_hours: Option<i64>,
     close_behavior: Option<storage::CloseBehavior>,
+    auto_start_enabled: Option<bool>,
+    app_auto_update_enabled: Option<bool>,
     auto_disable_enabled: Option<bool>,
     auto_disable_window_minutes: Option<i64>,
     auto_disable_failure_times: Option<i64>,
@@ -985,6 +1089,8 @@ async fn update_settings(
     State(state): State<AppState>,
     Json(input): Json<UpdateSettingsInput>,
 ) -> Result<impl IntoResponse, ApiError> {
+    let auto_start_enabled = input.auto_start_enabled;
+
     if let Some(h) = input.pricing_auto_update_interval_hours {
         if !(1..=8760).contains(&h) {
             return Err(ApiError::BadRequest(
@@ -1014,12 +1120,27 @@ async fn update_settings(
         }
     }
 
+    if let Some(enabled) = auto_start_enabled {
+        let res = tokio::task::spawn_blocking(move || autostart::set_enabled(enabled)).await;
+        match res {
+            Ok(Ok(())) => {}
+            Ok(Err(e)) => {
+                return Err(ApiError::BadRequest(format!("设置开机自启动失败：{e}")));
+            }
+            Err(e) => {
+                return Err(ApiError::BadRequest(format!("设置开机自启动失败：{e}")));
+            }
+        }
+    }
+
     let settings = storage::update_app_settings(
         (*state.db_path).clone(),
         storage::AppSettingsPatch {
             pricing_auto_update_enabled: input.pricing_auto_update_enabled,
             pricing_auto_update_interval_hours: input.pricing_auto_update_interval_hours,
             close_behavior: input.close_behavior,
+            auto_start_enabled,
+            app_auto_update_enabled: input.app_auto_update_enabled,
             auto_disable_enabled: input.auto_disable_enabled,
             auto_disable_window_minutes: input.auto_disable_window_minutes,
             auto_disable_failure_times: input.auto_disable_failure_times,
@@ -1038,6 +1159,9 @@ fn build_app(state: AppState) -> Router {
     let app = Router::new()
         .route("/api/health", get(health))
         .route("/api/settings", get(get_settings).put(update_settings))
+        .route("/api/update/status", get(update_status))
+        .route("/api/update/check", post(update_check))
+        .route("/api/update/download", post(update_download))
         .route("/api/channels", get(list_channels).post(create_channel))
         .route("/api/channels/reorder", post(reorder_channels))
         .route(
@@ -1097,20 +1221,54 @@ pub async fn serve_with_listener(
     let (settings_notify, settings_rx) = watch::channel(0u64);
     let http_client = reqwest::Client::builder().build()?;
     let db_path = Arc::new(db_path);
+    let update_runtime = Arc::new(tokio::sync::Mutex::new(update::UpdateRuntime::default()));
     let state = AppState {
         listen_addr: addr,
         db_path: db_path.clone(),
         http_client: http_client.clone(),
         settings_notify,
+        update_runtime: update_runtime.clone(),
     };
 
     let app = build_app(state);
 
+    let settings_rx2 = settings_rx.clone();
     tokio::spawn(pricing_auto_update_loop(
         (*db_path).clone(),
-        http_client,
+        http_client.clone(),
         settings_rx,
     ));
+
+    tokio::spawn(app_update_auto_loop(
+        (*db_path).clone(),
+        http_client.clone(),
+        settings_rx2,
+        update_runtime,
+    ));
+
+    tokio::spawn({
+        let db_path = (*db_path).clone();
+        async move {
+            let settings = match storage::get_app_settings(db_path).await {
+                Ok(s) => s,
+                Err(e) => {
+                    tracing::warn!(err = %e, "load app settings failed");
+                    storage::AppSettings::default()
+                }
+            };
+
+            let desired = settings.auto_start_enabled;
+            let _ = tokio::task::spawn_blocking(move || {
+                let actual = autostart::is_enabled().unwrap_or(false);
+                if actual != desired {
+                    if let Err(e) = autostart::set_enabled(desired) {
+                        tracing::warn!(err = %e, desired, "apply autostart setting failed");
+                    }
+                }
+            })
+            .await;
+        }
+    });
 
     if open_browser {
         let url = format!("http://{addr}");

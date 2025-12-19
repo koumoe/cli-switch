@@ -16,6 +16,8 @@ export type AppSettings = {
   pricing_auto_update_enabled: boolean;
   pricing_auto_update_interval_hours: number;
   close_behavior: CloseBehavior;
+  auto_start_enabled: boolean;
+  app_auto_update_enabled: boolean;
   auto_disable_enabled: boolean;
   auto_disable_window_minutes: number;
   auto_disable_failure_times: number;
@@ -109,6 +111,27 @@ export type PricingModel = {
 export type PricingSyncResponse = {
   updated: number;
   updated_at_ms: number;
+};
+
+export type UpdateStatus = {
+  current_version: string;
+  auto_update_enabled: boolean;
+  stage: "idle" | "checking" | "downloading" | "ready" | "error";
+  latest_version: string | null;
+  update_available: boolean;
+  pending_version: string | null;
+  error: string | null;
+};
+
+export type UpdateCheck = {
+  current_version: string;
+  latest_version: string | null;
+  update_available: boolean;
+};
+
+export type UpdateDownloadResponse = {
+  started: boolean;
+  status: UpdateStatus;
 };
 
 export type StatsSummary = {
@@ -298,6 +321,18 @@ export function pricingModels(query: string, limit = 200): Promise<PricingModel[
   if (query.trim().length > 0) p.set("query", query.trim());
   p.set("limit", String(limit));
   return http<PricingModel[]>("GET", `/api/pricing/models?${p.toString()}`);
+}
+
+export function getUpdateStatus(): Promise<UpdateStatus> {
+  return http<UpdateStatus>("GET", "/api/update/status");
+}
+
+export function checkUpdate(): Promise<UpdateCheck> {
+  return http<UpdateCheck>("POST", "/api/update/check");
+}
+
+export function downloadUpdate(): Promise<UpdateDownloadResponse> {
+  return http<UpdateDownloadResponse>("POST", "/api/update/download");
 }
 
 export function statsSummary(range: "today" | "month"): Promise<StatsSummary> {

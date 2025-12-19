@@ -30,6 +30,7 @@
     "refresh": "Refresh",
     "autoRefresh1m": "Auto updates every minute",
     "cancel": "Cancel",
+    "ok": "OK",
     "save": "Save",
     "delete": "Delete",
     "add": "Add",
@@ -355,6 +356,27 @@
       "saved": "Saved",
       "saveFail": "Save failed"
     },
+    "update": {
+      "title": "Updates",
+      "subtitle": "Automatically check and download new versions (from GitHub Releases)",
+      "autoEnable": "Enable auto update",
+      "autoEnableHint": "When enabled, periodically check and download updates automatically",
+      "status": "Update status",
+      "latest": "Latest version: v{{version}}",
+      "ready": "Update ready: v{{version}} (restart to apply)",
+      "check": "Check for updates",
+      "checkFail": "Update check failed",
+      "uptodate": "You're up to date",
+      "found": "New version found: v{{version}}",
+      "promptTitle": "Update available",
+      "promptDesc": "A new version v{{version}} is available. Update now?",
+      "updateNow": "Update now",
+      "downloading": "Update download started",
+      "downloadFail": "Download failed",
+      "saved": "Saved",
+      "saveFail": "Save failed",
+      "autoStarted": "Auto download started"
+    },
     "autoDisable": {
       "title": "Auto Disable",
       "subtitle": "Temporarily disable a channel after repeated failures",
@@ -381,6 +403,14 @@
       "saved": "Saved",
       "saveFail": "Save failed"
     },
+    "startup": {
+      "title": "Launch on Startup",
+      "subtitle": "Start CliSwitch automatically after you log in",
+      "enable": "Launch on startup",
+      "enableHint": "Adds CliSwitch to your system login items",
+      "saved": "Saved",
+      "saveFail": "Save failed"
+    },
     "storage": {
       "title": "Storage",
       "subtitle": "App data and config file locations",
@@ -400,5 +430,10 @@
       "descText": "Universal AI CLI configuration manager",
       "intro": "CliSwitch is a local multi-channel CLI proxy to manage and switch between multiple AI API services. It supports Claude, Codex, Gemini, and more, with high availability and automatic failover."
     }
+  },
+  "update": {
+    "readyTitle": "Update Ready",
+    "readyDesc": "Version v{{version}} has been downloaded. Restart the app to apply the update.",
+    "quitToUpdate": "Quit to update"
   }
 }
