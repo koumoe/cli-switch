@@ -105,39 +105,10 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
 
-      - name: Install semantic-release
-        run: |
-          npm install -g \
-            semantic-release \
-            @semantic-release/commit-analyzer \
-            @semantic-release/release-notes-generator \
-            conventional-changelog-conventionalcommits
-
       - name: Analyze commits
         id: analyze
-        env:
-          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
         run: |
-          # 运行 semantic-release dry-run 并捕获输出
-          set +e
-          output=$(npx semantic-release --dry-run 2>&1)
-          set -e
-
-          echo "=== semantic-release output ==="
-          echo "$output"
-          echo "==============================="
-
-          # 检查是否有新版本
-          if echo "$output" | grep -q "The next release version is"; then
-            version=$(echo "$output" | grep "The next release version is" | sed 's/.*The next release version is //' | tr -d '[:space:]')
-            echo "should_release=true" >> "$GITHUB_OUTPUT"
-            echo "version=${version}" >> "$GITHUB_OUTPUT"
-            echo "✅ New version detected: ${version}"
-          else
-            echo "should_release=false" >> "$GITHUB_OUTPUT"
-            echo "version=" >> "$GITHUB_OUTPUT"
-            echo "ℹ️ No new version to release"
-          fi
+          node scripts/analyze-next-version.mjs
 
   # =============================================================================
   # 3. 准备发布：更新版本文件 + commit + push
