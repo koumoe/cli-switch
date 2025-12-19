@@ -8,6 +8,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   NODE_VERSION: "25.2.1"
   RUST_VERSION: "1.92.0"
@@ -146,6 +150,7 @@ jobs:
     outputs:
       tag: ${{ steps.prepare.outputs.tag }}
       version: ${{ steps.prepare.outputs.version }}
+      ref: ${{ steps.prepare.outputs.ref }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -173,27 +178,18 @@ jobs:
           # 更新版本文件
           node scripts/bump-version.mjs "${VERSION}"
 
-          # 创建临时 package.json 供 conventional-changelog 使用
-          echo "{\"version\": \"${VERSION}\"}" > package.json
-
-          # 创建临时 tag 用于生成 CHANGELOG
-          git tag "v${VERSION}"
-
           # 生成 CHANGELOG（只追加新条目）
           npm install -g conventional-changelog-cli
-          conventional-changelog -p conventionalcommits -i CHANGELOG.md -s
-
-          # 删除临时文件和 tag
-          rm package.json
-          git tag -d "v${VERSION}"
+          conventional-changelog -p conventionalcommits -k ui/package.json -i CHANGELOG.md -s
 
           # 提交变更
-          git add Cargo.toml Cargo.lock ui/package.json CHANGELOG.md
-          git commit -m "chore(release): v${VERSION}"
+          git add Cargo.toml Cargo.lock ui/package.json ui/package-lock.json CHANGELOG.md
+          git commit -m "chore(release): v${VERSION} [skip ci]"
           git push
 
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "tag=v${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "ref=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           echo "✅ Version files updated and pushed"
 
   # =============================================================================
@@ -207,10 +203,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: main
-
-      - name: Pull latest
-        run: git pull origin main
+          ref: ${{ needs.prepare.outputs.ref }}
 
       - name: Install dependencies
         run: |
@@ -265,10 +258,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: main
-
-      - name: Pull latest
-        run: git pull origin main
+          ref: ${{ needs.prepare.outputs.ref }}
 
       - name: Install dependencies
         run: |
@@ -323,10 +313,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: main
-
-      - name: Pull latest
-        run: git pull origin main
+          ref: ${{ needs.prepare.outputs.ref }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -373,10 +360,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: main
-
-      - name: Pull latest
-        run: git pull origin main
+          ref: ${{ needs.prepare.outputs.ref }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -423,10 +407,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: main
-
-      - name: Pull latest
-        run: git pull origin main
+          ref: ${{ needs.prepare.outputs.ref }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -478,10 +459,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: main
-
-      - name: Pull latest
-        run: git pull origin main
+          ref: ${{ needs.prepare.outputs.ref }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -552,11 +530,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: main
+          ref: ${{ needs.prepare.outputs.ref }}
           token: ${{ secrets.RELEASE_TOKEN }}
-
-      - name: Pull latest
-        run: git pull origin main
 
       - name: Download artifacts
         uses: actions/download-artifact@v4
