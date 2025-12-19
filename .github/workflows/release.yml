@@ -29,7 +29,13 @@ jobs:
       - name: Check commit message
         id: check
         run: |
-          msg="${{ github.event.head_commit.message }}"
+          msg="$(python3 - <<'PY'
+          import json, os
+          with open(os.environ["GITHUB_EVENT_PATH"], "r", encoding="utf-8") as f:
+              event = json.load(f)
+          print((event.get("head_commit") or {}).get("message") or "")
+          PY
+          )"
           if [[ "$msg" == chore\(release\):* ]]; then
             echo "should_skip=true" >> "$GITHUB_OUTPUT"
             echo "⏭️ Skipping release workflow for release commit"
