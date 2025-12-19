@@ -626,6 +626,24 @@ pub fn apply_pending_on_exit(data_dir: &Path) -> anyhow::Result<bool> {
             )
         })?;
 
+        #[cfg(target_os = "macos")]
+        {
+            let app_dir = target
+                .parent()
+                .and_then(|p| p.parent())
+                .and_then(|p| p.parent());
+
+            if let Some(app_dir) = app_dir {
+                let _ = std::process::Command::new("codesign")
+                    .arg("--force")
+                    .arg("--deep")
+                    .arg("--sign")
+                    .arg("-")
+                    .arg(app_dir.as_os_str())
+                    .status();
+            }
+        }
+
         clear_pending_files(data_dir, &pending);
         Ok(true)
     }
