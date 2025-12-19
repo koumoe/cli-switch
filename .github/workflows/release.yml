@@ -1,447 +1,552 @@
 name: Release
 
 on:
-  release:
-    types: [published]
+  push:
+    branches: [main]
   workflow_dispatch:
-    inputs:
-      tag:
-        description: "Release tag (e.g. v0.2.0)"
-        required: true
-        type: string
 
 permissions:
   contents: write
 
+env:
+  NODE_VERSION: "25.2.1"
+  RUST_VERSION: "1.92.0"
+
 jobs:
-  prepare:
-    name: Prepare Release
+  # =============================================================================
+  # 1. CI 检查
+  # =============================================================================
+  ci:
+    name: CI
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+
+      - name: Build UI
+        working-directory: ui
+        run: npm ci && npm run build
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          components: rustfmt, clippy
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Rust fmt
+        run: cargo fmt --all -- --check
+
+      - name: Rust clippy
+        run: cargo clippy --no-default-features --features embed-ui --all-targets -- -D warnings
+
+      - name: Rust test
+        run: cargo test --no-default-features --features embed-ui
+
+      - name: Build
+        run: cargo build --release --no-default-features --features embed-ui
+
+  # =============================================================================
+  # 2. 分析 commits，确定是否需要发布
+  # =============================================================================
+  analyze:
+    name: Analyze
+    needs: ci
     runs-on: ubuntu-latest
     outputs:
-      version: ${{ steps.meta.outputs.version }}
-      tag: ${{ steps.meta.outputs.tag }}
+      should_release: ${{ steps.analyze.outputs.should_release }}
+      version: ${{ steps.analyze.outputs.version }}
     steps:
-      - name: Compute release metadata
-        id: meta
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [[ "${{ github.event_name }}" == "release" ]]; then
-            tag="${{ github.event.release.tag_name }}"
-          else
-            tag="${{ inputs.tag }}"
-          fi
-          if [[ ! "${tag}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.]+)?$ ]]; then
-            echo "Invalid tag format: ${tag} (expected vMAJOR.MINOR.PATCH[-PRERELEASE])" >&2
-            exit 1
-          fi
-          version="${tag#v}"
-          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
-          echo "version=${version}" >> "$GITHUB_OUTPUT"
-          echo "Release: ${tag} (version: ${version})"
-
-  validate_versions:
-    name: Validate versions match tag
-    needs: prepare
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout (tag)
+      - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ needs.prepare.outputs.tag }}
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_TOKEN }}
 
-      - name: Validate tag version matches manifests
-        shell: bash
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install semantic-release
         run: |
-          set -euo pipefail
-          version="${{ needs.prepare.outputs.version }}"
+          npm install -g \
+            semantic-release \
+            @semantic-release/commit-analyzer \
+            @semantic-release/release-notes-generator \
+            conventional-changelog-conventionalcommits
 
-          cargo_version="$(python - <<'PY'
-          import tomllib
-          print(tomllib.load(open("Cargo.toml","rb"))["package"]["version"])
-          PY
-          )"
+      - name: Analyze commits
+        id: analyze
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+        run: |
+          # 运行 semantic-release dry-run 并捕获输出
+          set +e
+          output=$(npx semantic-release --dry-run 2>&1)
+          set -e
 
-          ui_version="$(python - <<'PY'
-          import json
-          print(json.load(open("ui/package.json","r",encoding="utf-8"))["version"])
-          PY
-          )"
+          echo "=== semantic-release output ==="
+          echo "$output"
+          echo "==============================="
 
-          if [[ "${cargo_version}" != "${version}" ]]; then
-            echo "Cargo.toml version (${cargo_version}) != tag version (${version})" >&2
-            exit 1
+          # 检查是否有新版本
+          if echo "$output" | grep -q "The next release version is"; then
+            version=$(echo "$output" | grep "The next release version is" | sed 's/.*The next release version is //' | tr -d '[:space:]')
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+            echo "version=${version}" >> "$GITHUB_OUTPUT"
+            echo "✅ New version detected: ${version}"
+          else
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+            echo "version=" >> "$GITHUB_OUTPUT"
+            echo "ℹ️ No new version to release"
           fi
-          if [[ "${ui_version}" != "${version}" ]]; then
-            echo "ui/package.json version (${ui_version}) != tag version (${version})" >&2
-            exit 1
-          fi
 
-  ci_gate:
-    name: CI Gate
-    needs: [prepare, validate_versions]
-    uses: ./.github/workflows/ci.yml
-    with:
-      ref: ${{ needs.prepare.outputs.tag }}
-    secrets: inherit
+  # =============================================================================
+  # 3. 准备发布：更新版本文件 + commit + push
+  # =============================================================================
+  prepare:
+    name: Prepare
+    needs: analyze
+    if: needs.analyze.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.prepare.outputs.tag }}
+      version: ${{ steps.prepare.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_TOKEN }}
 
-  linux_desktop_amd64:
-    name: Linux Desktop (x86_64)
-    needs: [prepare, validate_versions, ci_gate]
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Configure git
+        run: |
+          git config --local user.name "github-actions[bot]"
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Update version files
+        id: prepare
+        env:
+          VERSION: ${{ needs.analyze.outputs.version }}
+        run: |
+          echo "📦 Updating to version ${VERSION}"
+
+          # 更新版本文件
+          node scripts/bump-version.mjs "${VERSION}"
+
+          # 生成 CHANGELOG
+          npm install -g conventional-changelog-cli
+          conventional-changelog -p conventionalcommits -i CHANGELOG.md -s -r 0
+
+          # 提交变更
+          git add Cargo.toml Cargo.lock ui/package.json CHANGELOG.md
+          git commit -m "chore(release): v${VERSION}"
+          git push
+
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=v${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "✅ Version files updated and pushed"
+
+  # =============================================================================
+  # 4. 并行构建各平台
+  # =============================================================================
+  build_linux_x64:
+    name: Linux x64
+    needs: prepare
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ needs.prepare.outputs.tag }}
+          ref: main
 
-      - name: Install Linux desktop dependencies
-        shell: bash
+      - name: Pull latest
+        run: git pull origin main
+
+      - name: Install dependencies
         run: |
-          set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y libgtk-3-dev libayatana-appindicator3-dev libxdo-dev
-          if ! sudo apt-get install -y libwebkit2gtk-4.1-dev; then
-            sudo apt-get install -y libwebkit2gtk-4.0-dev
-          fi
+          sudo apt-get install -y libwebkit2gtk-4.1-dev || sudo apt-get install -y libwebkit2gtk-4.0-dev
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "25.2.1"
+          node-version: ${{ env.NODE_VERSION }}
           cache: npm
           cache-dependency-path: ui/package-lock.json
 
-      - name: Install UI dependencies
-        working-directory: ui
-        run: npm ci
-
       - name: Build UI
         working-directory: ui
-        run: npm run build
+        run: npm ci && npm run build
 
-      - name: Setup Rust toolchain
+      - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: "1.92.0"
+          toolchain: ${{ env.RUST_VERSION }}
 
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
 
-      - name: Build (desktop default)
+      - name: Build
         run: cargo build --release
 
       - name: Package
-        shell: bash
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
         run: |
-          set -euo pipefail
-          version="${{ needs.prepare.outputs.version }}"
-          pkg="cliswitch-${version}-linux-x64"
-
-          rm -rf dist
+          pkg="cliswitch-${VERSION}-linux-x64"
           mkdir -p "dist/${pkg}"
-          cp "target/release/cliswitch" "dist/${pkg}/cliswitch"
+          cp target/release/cliswitch "dist/${pkg}/"
           cp README.md LICENSE "dist/${pkg}/"
-
           tar -C dist -czf "dist/${pkg}.tar.gz" "${pkg}"
           sha256sum "dist/${pkg}.tar.gz" | cut -d' ' -f1 > "dist/${pkg}.tar.gz.sha256"
 
-      - name: Upload dist artifacts
+      - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: dist-linux-desktop-x86_64
+          name: build-linux-x64
           path: dist/*.*
 
-  linux_desktop_arm64:
-    name: Linux Desktop (aarch64)
-    needs: [prepare, validate_versions, ci_gate]
+  build_linux_arm64:
+    name: Linux ARM64
+    needs: prepare
     runs-on: ubuntu-24.04-arm
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ needs.prepare.outputs.tag }}
+          ref: main
 
-      - name: Install Linux desktop dependencies
-        shell: bash
+      - name: Pull latest
+        run: git pull origin main
+
+      - name: Install dependencies
         run: |
-          set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y libgtk-3-dev libayatana-appindicator3-dev libxdo-dev
-          if ! sudo apt-get install -y libwebkit2gtk-4.1-dev; then
-            sudo apt-get install -y libwebkit2gtk-4.0-dev
-          fi
+          sudo apt-get install -y libwebkit2gtk-4.1-dev || sudo apt-get install -y libwebkit2gtk-4.0-dev
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "25.2.1"
+          node-version: ${{ env.NODE_VERSION }}
           cache: npm
           cache-dependency-path: ui/package-lock.json
 
-      - name: Install UI dependencies
-        working-directory: ui
-        run: npm ci
-
       - name: Build UI
         working-directory: ui
-        run: npm run build
+        run: npm ci && npm run build
 
-      - name: Setup Rust toolchain
+      - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: "1.92.0"
+          toolchain: ${{ env.RUST_VERSION }}
 
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
 
-      - name: Build (desktop default)
+      - name: Build
         run: cargo build --release
 
       - name: Package
-        shell: bash
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
         run: |
-          set -euo pipefail
-          version="${{ needs.prepare.outputs.version }}"
-          pkg="cliswitch-${version}-linux-arm64"
-
-          rm -rf dist
+          pkg="cliswitch-${VERSION}-linux-arm64"
           mkdir -p "dist/${pkg}"
-          cp "target/release/cliswitch" "dist/${pkg}/cliswitch"
+          cp target/release/cliswitch "dist/${pkg}/"
           cp README.md LICENSE "dist/${pkg}/"
-
           tar -C dist -czf "dist/${pkg}.tar.gz" "${pkg}"
           sha256sum "dist/${pkg}.tar.gz" | cut -d' ' -f1 > "dist/${pkg}.tar.gz.sha256"
 
-      - name: Upload dist artifacts
+      - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: dist-linux-desktop-aarch64
+          name: build-linux-arm64
           path: dist/*.*
 
-  macos_desktop:
-    name: macOS Desktop (${{ matrix.runs_on }})
-    needs: [prepare, validate_versions, ci_gate]
-    runs-on: ${{ matrix.runs_on }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - runs_on: macos-14
-            arch: arm64
-          - runs_on: macos-15-intel
-            arch: x64
-
+  build_macos_x64:
+    name: macOS x64
+    needs: prepare
+    runs-on: macos-15-intel
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ needs.prepare.outputs.tag }}
+          ref: main
+
+      - name: Pull latest
+        run: git pull origin main
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "25.2.1"
+          node-version: ${{ env.NODE_VERSION }}
           cache: npm
           cache-dependency-path: ui/package-lock.json
 
-      - name: Install UI dependencies
-        working-directory: ui
-        run: npm ci
-
       - name: Build UI
         working-directory: ui
-        run: npm run build
+        run: npm ci && npm run build
 
-      - name: Setup Rust toolchain
+      - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: "1.92.0"
+          toolchain: ${{ env.RUST_VERSION }}
 
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
 
-      - name: Build .app bundle
-        shell: bash
+      - name: Build
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
         run: |
-          set -euo pipefail
-          version="${{ needs.prepare.outputs.version }}"
-          pkg="CliSwitch-${version}-macos-${{ matrix.arch }}"
-
-          rm -rf dist
+          pkg="CliSwitch-${VERSION}-macos-x64"
           SKIP_UI=1 bash scripts/bundle-macos-app.sh
-
           mkdir -p "dist/${pkg}"
-          cp -R "dist/macos/CliSwitch.app" "dist/${pkg}/CliSwitch.app"
+          cp -R dist/macos/CliSwitch.app "dist/${pkg}/"
           cp README.md LICENSE "dist/${pkg}/"
-
           ditto -c -k --sequesterRsrc --keepParent "dist/${pkg}" "dist/${pkg}.zip"
           shasum -a 256 "dist/${pkg}.zip" | cut -d' ' -f1 > "dist/${pkg}.zip.sha256"
 
-      - name: Upload dist artifacts
+      - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: dist-macos-${{ matrix.arch }}
+          name: build-macos-x64
           path: dist/*.*
 
-  windows_desktop_amd64:
-    name: Windows Desktop (x86_64)
-    needs: [prepare, validate_versions, ci_gate]
+  build_macos_arm64:
+    name: macOS ARM64
+    needs: prepare
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Pull latest
+        run: git pull origin main
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+
+      - name: Build UI
+        working-directory: ui
+        run: npm ci && npm run build
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          pkg="CliSwitch-${VERSION}-macos-arm64"
+          SKIP_UI=1 bash scripts/bundle-macos-app.sh
+          mkdir -p "dist/${pkg}"
+          cp -R dist/macos/CliSwitch.app "dist/${pkg}/"
+          cp README.md LICENSE "dist/${pkg}/"
+          ditto -c -k --sequesterRsrc --keepParent "dist/${pkg}" "dist/${pkg}.zip"
+          shasum -a 256 "dist/${pkg}.zip" | cut -d' ' -f1 > "dist/${pkg}.zip.sha256"
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-macos-arm64
+          path: dist/*.*
+
+  build_windows_x64:
+    name: Windows x64
+    needs: prepare
     runs-on: windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ needs.prepare.outputs.tag }}
+          ref: main
+
+      - name: Pull latest
+        run: git pull origin main
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "25.2.1"
+          node-version: ${{ env.NODE_VERSION }}
           cache: npm
           cache-dependency-path: ui/package-lock.json
 
-      - name: Install UI dependencies
-        working-directory: ui
-        run: npm ci
-
       - name: Build UI
         working-directory: ui
-        run: npm run build
+        run: npm ci && npm run build
 
-      - name: Setup Rust toolchain
+      - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: "1.92.0"
+          toolchain: ${{ env.RUST_VERSION }}
           targets: x86_64-pc-windows-msvc
 
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
 
-      - name: Build (desktop default)
-        shell: pwsh
-        run: |
-          cargo build --release --target "x86_64-pc-windows-msvc"
+      - name: Build
+        run: cargo build --release --target x86_64-pc-windows-msvc
 
       - name: Package
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
         shell: pwsh
         run: |
-          $ErrorActionPreference = "Stop"
-          $version = "${{ needs.prepare.outputs.version }}"
-          $pkg = "CliSwitch-$version-windows-x64"
+          $pkg = "CliSwitch-$env:VERSION-windows-x64"
+          New-Item -ItemType Directory -Path "dist\$pkg" -Force | Out-Null
+          Copy-Item "target\x86_64-pc-windows-msvc\release\cliswitch.exe" "dist\$pkg\CliSwitch.exe"
+          Copy-Item "README.md","LICENSE" "dist\$pkg\"
+          Compress-Archive -Path "dist\$pkg" -DestinationPath "dist\$pkg.zip" -Force
+          $hash = (Get-FileHash -Algorithm SHA256 "dist\$pkg.zip").Hash.ToLower()
+          $hash | Out-File -FilePath "dist\$pkg.zip.sha256" -Encoding utf8 -NoNewline
 
-          if (Test-Path dist) { Remove-Item -Recurse -Force dist }
-          New-Item -ItemType Directory -Path "dist\\$pkg" | Out-Null
-
-          # GUI 子系统（不弹终端）的可执行文件
-          Copy-Item "target\\x86_64-pc-windows-msvc\\release\\cliswitch.exe" "dist\\$pkg\\CliSwitch.exe"
-          Copy-Item "README.md","LICENSE" "dist\\$pkg\\"
-
-          Compress-Archive -Path "dist\\$pkg" -DestinationPath "dist\\$pkg.zip" -Force
-          $hash = (Get-FileHash -Algorithm SHA256 "dist\\$pkg.zip").Hash.ToLower()
-          $hash | Out-File -FilePath "dist\\$pkg.zip.sha256" -Encoding utf8 -NoNewline
-
-      - name: Upload dist artifacts
+      - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: dist-windows-x64
+          name: build-windows-x64
           path: dist/*.*
 
-  windows_desktop_arm64:
-    name: Windows Desktop (aarch64)
-    needs: [prepare, validate_versions, ci_gate]
+  build_windows_arm64:
+    name: Windows ARM64
+    needs: prepare
     runs-on: windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ needs.prepare.outputs.tag }}
+          ref: main
+
+      - name: Pull latest
+        run: git pull origin main
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "25.2.1"
+          node-version: ${{ env.NODE_VERSION }}
           cache: npm
           cache-dependency-path: ui/package-lock.json
 
-      - name: Install UI dependencies
-        working-directory: ui
-        run: npm ci
-
       - name: Build UI
         working-directory: ui
-        run: npm run build
+        run: npm ci && npm run build
 
-      - name: Setup Rust toolchain
+      - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: "1.92.0"
+          toolchain: ${{ env.RUST_VERSION }}
           targets: aarch64-pc-windows-msvc
 
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
 
-      - name: Build (desktop, aarch64)
-        shell: pwsh
-        run: |
-          cargo build --release --target "aarch64-pc-windows-msvc"
+      - name: Build
+        run: cargo build --release --target aarch64-pc-windows-msvc
 
       - name: Package
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
         shell: pwsh
         run: |
-          $ErrorActionPreference = "Stop"
-          $version = "${{ needs.prepare.outputs.version }}"
-          $pkg = "CliSwitch-$version-windows-arm64"
+          $pkg = "CliSwitch-$env:VERSION-windows-arm64"
+          New-Item -ItemType Directory -Path "dist\$pkg" -Force | Out-Null
+          Copy-Item "target\aarch64-pc-windows-msvc\release\cliswitch.exe" "dist\$pkg\CliSwitch.exe"
+          Copy-Item "README.md","LICENSE" "dist\$pkg\"
+          Compress-Archive -Path "dist\$pkg" -DestinationPath "dist\$pkg.zip" -Force
+          $hash = (Get-FileHash -Algorithm SHA256 "dist\$pkg.zip").Hash.ToLower()
+          $hash | Out-File -FilePath "dist\$pkg.zip.sha256" -Encoding utf8 -NoNewline
 
-          if (Test-Path dist) { Remove-Item -Recurse -Force dist }
-          New-Item -ItemType Directory -Path "dist\\$pkg" | Out-Null
-          # GUI 子系统（不弹终端）的可执行文件
-          Copy-Item "target\\aarch64-pc-windows-msvc\\release\\cliswitch.exe" "dist\\$pkg\\CliSwitch.exe"
-          Copy-Item "README.md","LICENSE" "dist\\$pkg\\"
-
-          Compress-Archive -Path "dist\\$pkg" -DestinationPath "dist\\$pkg.zip" -Force
-          $hash = (Get-FileHash -Algorithm SHA256 "dist\\$pkg.zip").Hash.ToLower()
-          $hash | Out-File -FilePath "dist\\$pkg.zip.sha256" -Encoding utf8 -NoNewline
-
-      - name: Upload dist artifacts
+      - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: dist-windows-arm64
+          name: build-windows-arm64
           path: dist/*.*
 
+  # =============================================================================
+  # 5. 发布：创建 tag + Release + 上传 assets（原子操作）
+  # =============================================================================
   publish:
-    name: Upload Release Assets
-    if: >-
-      ${{
-        always() &&
-        needs.prepare.result == 'success' &&
-        needs.validate_versions.result == 'success' &&
-        needs.ci_gate.result == 'success' &&
-        needs.linux_desktop_amd64.result == 'success' &&
-        needs.linux_desktop_arm64.result == 'success' &&
-        needs.macos_desktop.result == 'success' &&
-        needs.windows_desktop_amd64.result == 'success' &&
-        needs.windows_desktop_arm64.result == 'success'
-      }}
+    name: Publish
     needs:
       - prepare
-      - validate_versions
-      - ci_gate
-      - linux_desktop_amd64
-      - linux_desktop_arm64
-      - macos_desktop
-      - windows_desktop_amd64
-      - windows_desktop_arm64
+      - build_linux_x64
+      - build_linux_arm64
+      - build_macos_x64
+      - build_macos_arm64
+      - build_windows_x64
+      - build_windows_arm64
+    if: |
+      always() &&
+      needs.prepare.result == 'success' &&
+      needs.build_linux_x64.result == 'success' &&
+      needs.build_linux_arm64.result == 'success' &&
+      needs.build_macos_x64.result == 'success' &&
+      needs.build_macos_arm64.result == 'success' &&
+      needs.build_windows_x64.result == 'success' &&
+      needs.build_windows_arm64.result == 'success'
     runs-on: ubuntu-latest
     steps:
-      - name: Download dist artifacts
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          token: ${{ secrets.RELEASE_TOKEN }}
+
+      - name: Pull latest
+        run: git pull origin main
+
+      - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
           path: dist
+          pattern: build-*
           merge-multiple: true
 
-      - name: Upload assets to release
+      - name: List artifacts
+        run: ls -la dist/
+
+      - name: Create tag
+        env:
+          TAG: ${{ needs.prepare.outputs.tag }}
+        run: |
+          git config --local user.name "github-actions[bot]"
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "${TAG}" -m "Release ${TAG}"
+          git push origin "${TAG}"
+
+      - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.prepare.outputs.tag }}
+          name: ${{ needs.prepare.outputs.tag }}
+          generate_release_notes: true
           files: dist/*
