@@ -1,3 +1,9 @@
+## [0.2.6](https://github.com/koumoe/cli-switch/compare/v0.2.5...v0.2.6) (2025-12-19)
+
+### Bug Fixes
+
+* log Gemini model and estimated cost ([31929e0](https://github.com/koumoe/cli-switch/commit/31929e01ddec8e4440463f85886f499b8b666279))
+* satisfy rustfmt in Gemini log test ([57b7050](https://github.com/koumoe/cli-switch/commit/57b70504114391b1d9932fae63e3347d638e385a))
 ## [0.2.5](https://github.com/koumoe/cli-switch/compare/v0.2.4...v0.2.5) (2025-12-19)
 
 ### Bug Fixes
