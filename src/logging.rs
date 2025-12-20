@@ -5,12 +5,12 @@ use std::{
     path::{Path, PathBuf},
     sync::OnceLock,
 };
+use time::{Date, OffsetDateTime};
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::fmt::writer::MakeWriterExt as _;
 use tracing_subscriber::{
     EnvFilter, layer::SubscriberExt as _, reload, util::SubscriberInitExt as _,
 };
-use time::{Date, OffsetDateTime};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -147,7 +147,8 @@ pub fn init(data_dir: &Path, settings_level: LogLevel) -> anyhow::Result<()> {
 
     let (filter_layer, filter_handle) = reload::Layer::new(env_filter);
 
-    let file_appender = LocalDailyFileAppender::new(log_dir.clone()).context("初始化日志文件写入器失败")?;
+    let file_appender =
+        LocalDailyFileAppender::new(log_dir.clone()).context("初始化日志文件写入器失败")?;
     let (file_writer, file_guard) = tracing_appender::non_blocking(file_appender);
 
     let console_layer = tracing_subscriber::fmt::layer()
