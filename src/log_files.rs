@@ -29,7 +29,9 @@ fn parse_date_suffix(file_name: &str) -> Option<Date> {
     if s.len() >= 10 {
         let prefix = s.get(0..10)?;
         let rest = s.get(10..).unwrap_or("");
-        if rest == ".log" && let Ok(d) = Date::parse(prefix, &fmt) {
+        if rest == ".log"
+            && let Ok(d) = Date::parse(prefix, &fmt)
+        {
             return Some(d);
         }
     }
