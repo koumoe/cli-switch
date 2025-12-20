@@ -1130,14 +1130,18 @@ async fn logs_clear(
                 .filter(|s| !s.is_empty());
 
             let start_raw = start_opt.or(end_opt).ok_or_else(|| {
-                ApiError::BadRequest("mode=date_range 时 start_date/end_date 至少填一个".to_string())
+                ApiError::BadRequest(
+                    "mode=date_range 时 start_date/end_date 至少填一个".to_string(),
+                )
             })?;
             let end_raw = end_opt.or(start_opt).unwrap_or(start_raw);
 
             let start = parse_ymd_date(start_raw)?;
             let end = parse_ymd_date(end_raw)?;
             if start > end {
-                return Err(ApiError::BadRequest("start_date 不能大于 end_date".to_string()));
+                return Err(ApiError::BadRequest(
+                    "start_date 不能大于 end_date".to_string(),
+                ));
             }
             log_files::LogsClearKind::DateRange { start, end }
         }

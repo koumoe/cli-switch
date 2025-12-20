@@ -331,7 +331,8 @@ async fn proxy_upstream_response(
             .map_err(|e| ProxyError::Upstream(e.to_string()))?;
 
         let response_text = match serde_json::from_slice::<serde_json::Value>(&bytes) {
-            Ok(v) => serde_json::to_string(&v).unwrap_or_else(|_| String::from_utf8_lossy(&bytes).to_string()),
+            Ok(v) => serde_json::to_string(&v)
+                .unwrap_or_else(|_| String::from_utf8_lossy(&bytes).to_string()),
             Err(_) => String::from_utf8_lossy(&bytes).to_string(),
         };
         let response_one_line = to_single_line(&response_text);

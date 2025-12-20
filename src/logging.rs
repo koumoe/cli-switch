@@ -7,7 +7,9 @@ use std::{
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_appender::rolling::Rotation;
 use tracing_subscriber::fmt::writer::MakeWriterExt as _;
-use tracing_subscriber::{EnvFilter, layer::SubscriberExt as _, reload, util::SubscriberInitExt as _};
+use tracing_subscriber::{
+    EnvFilter, layer::SubscriberExt as _, reload, util::SubscriberInitExt as _,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

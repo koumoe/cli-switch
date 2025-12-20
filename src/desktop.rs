@@ -379,8 +379,11 @@ fn handle_user_event(
     }
 }
 
-pub async fn run(port: u16, data_dir: std::path::PathBuf, db_path: std::path::PathBuf) -> anyhow::Result<()> {
-
+pub async fn run(
+    port: u16,
+    data_dir: std::path::PathBuf,
+    db_path: std::path::PathBuf,
+) -> anyhow::Result<()> {
     let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), port);
     let listener = tokio::net::TcpListener::bind(addr)
         .await
