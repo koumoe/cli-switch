@@ -3,6 +3,9 @@ use serde::{Deserialize, Serialize};
 use sha2::Digest as _;
 use std::path::{Path, PathBuf};
 
+#[cfg(not(target_os = "windows"))]
+use std::ffi::OsString;
+
 const GITHUB_OWNER: &str = "koumoe";
 const GITHUB_REPO: &str = "cli-switch";
 
@@ -708,9 +711,18 @@ copy /Y \"%SRC%\" \"%DST%\" >nul\r\n\
 if errorlevel 1 goto retry\r\n\
 del /F /Q \"%PENDING%\" >nul 2>nul\r\n\
 del /F /Q \"%STAGED%\" >nul 2>nul\r\n\
+{restart}\
 endlocal\r\n";
 
 pub fn apply_pending_on_exit(data_dir: &Path) -> anyhow::Result<bool> {
+    apply_pending_on_exit_inner(data_dir, false)
+}
+
+pub fn apply_pending_on_exit_and_restart(data_dir: &Path) -> anyhow::Result<bool> {
+    apply_pending_on_exit_inner(data_dir, true)
+}
+
+fn apply_pending_on_exit_inner(data_dir: &Path, restart: bool) -> anyhow::Result<bool> {
     let pending = match load_pending_update(data_dir) {
         Some(p) => p,
         None => return Ok(false),
@@ -736,6 +748,11 @@ pub fn apply_pending_on_exit(data_dir: &Path) -> anyhow::Result<bool> {
         }
 
         let escape_for_set = |s: &str| s.replace('"', "^\"");
+        let restart_snippet = if restart {
+            "start \"\" \"%DST%\"\r\n"
+        } else {
+            ""
+        };
         let script_body = WINDOWS_APPLY_SCRIPT_TEMPLATE
             .replace(
                 "{src}",
@@ -749,7 +766,8 @@ pub fn apply_pending_on_exit(data_dir: &Path) -> anyhow::Result<bool> {
             .replace(
                 "{staged}",
                 &escape_for_set(&pending.staged_executable.display().to_string()),
-            );
+            )
+            .replace("{restart}", restart_snippet);
         std::fs::write(&script, script_body.as_bytes())
             .with_context(|| format!("write apply script failed: {}", script.display()))?;
 
@@ -762,7 +780,7 @@ pub fn apply_pending_on_exit(data_dir: &Path) -> anyhow::Result<bool> {
         return Ok(true);
     }
 
-    #[cfg(not(target_os = "windows"))]
+#[cfg(not(target_os = "windows"))]
     {
         let now = crate::storage::now_ms();
         let file_name = target
@@ -819,6 +837,76 @@ pub fn apply_pending_on_exit(data_dir: &Path) -> anyhow::Result<bool> {
         }
 
         clear_pending_files(data_dir, &pending);
+        if restart {
+            spawn_restart_helper_after_exit(data_dir, &target)?;
+        }
         Ok(true)
     }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn spawn_restart_helper_after_exit(data_dir: &Path, target: &Path) -> anyhow::Result<()> {
+    use anyhow::Context as _;
+    use std::ffi::OsStr;
+
+    let parent_pid = std::process::id().to_string();
+    let args: Vec<OsString> = std::env::args_os().skip(1).collect();
+    let now = crate::storage::now_ms();
+
+    let app = {
+        #[cfg(target_os = "macos")]
+        {
+            let app_dir = target
+                .parent()
+                .and_then(|p| p.parent())
+                .and_then(|p| p.parent())
+                .filter(|p| p.extension().is_some_and(|ext| ext == OsStr::new("app")))
+                .map(|p| p.to_path_buf());
+            app_dir
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            None::<PathBuf>
+        }
+    };
+
+    let script = updates_dir(data_dir)
+        .join("apply")
+        .join(format!("restart-cliswitch.{now}.sh"));
+
+    let script_body = r#"#!/bin/sh
+TARGET="$1"
+APP="$2"
+PID="$3"
+shift 3
+
+while kill -0 "$PID" 2>/dev/null; do
+  sleep 1
+done
+
+rm -f "$0" >/dev/null 2>&1 || true
+
+if [ "$APP" != "-" ] && [ -n "$APP" ]; then
+  exec open -n "$APP" --args "$@"
+else
+  exec "$TARGET" "$@"
+fi
+"#;
+
+    if let Some(parent) = script.parent() {
+        std::fs::create_dir_all(parent)
+            .with_context(|| format!("create dir failed: {}", parent.display()))?;
+    }
+    std::fs::write(&script, script_body.as_bytes())
+        .with_context(|| format!("write restart helper failed: {}", script.display()))?;
+    set_executable_perm(&script)?;
+
+    let mut cmd = std::process::Command::new("sh");
+    cmd.arg(script.as_os_str())
+        .arg(target.as_os_str())
+        .arg(app.as_ref().map(|p| p.as_os_str()).unwrap_or(OsStr::new("-")))
+        .arg(parent_pid);
+    cmd.args(args);
+    cmd.spawn().with_context(|| "spawn restart helper failed")?;
+    Ok(())
 }
