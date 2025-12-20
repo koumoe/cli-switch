@@ -856,13 +856,12 @@ fn spawn_restart_helper_after_exit(data_dir: &Path, target: &Path) -> anyhow::Re
     let app = {
         #[cfg(target_os = "macos")]
         {
-            let app_dir = target
+            target
                 .parent()
                 .and_then(|p| p.parent())
                 .and_then(|p| p.parent())
                 .filter(|p| p.extension().is_some_and(|ext| ext == OsStr::new("app")))
-                .map(|p| p.to_path_buf());
-            app_dir
+                .map(|p| p.to_path_buf())
         }
         #[cfg(not(target_os = "macos"))]
         {
