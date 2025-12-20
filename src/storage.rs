@@ -5,6 +5,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use uuid::Uuid;
 
+use crate::logging::LogLevel;
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum Protocol {
@@ -227,6 +229,7 @@ const KEY_AUTO_DISABLE_ENABLED: &str = "auto_disable_enabled";
 const KEY_AUTO_DISABLE_WINDOW_MINUTES: &str = "auto_disable_window_minutes";
 const KEY_AUTO_DISABLE_FAILURE_TIMES: &str = "auto_disable_failure_times";
 const KEY_AUTO_DISABLE_DISABLE_MINUTES: &str = "auto_disable_disable_minutes";
+const KEY_LOG_LEVEL: &str = "log_level";
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -257,6 +260,7 @@ pub struct AppSettings {
     pub auto_disable_window_minutes: i64,
     pub auto_disable_failure_times: i64,
     pub auto_disable_disable_minutes: i64,
+    pub log_level: LogLevel,
 }
 
 impl Default for AppSettings {
@@ -271,6 +275,7 @@ impl Default for AppSettings {
             auto_disable_window_minutes: 3,
             auto_disable_failure_times: 5,
             auto_disable_disable_minutes: 30,
+            log_level: LogLevel::Warning,
         }
     }
 }
@@ -286,6 +291,7 @@ pub struct AppSettingsPatch {
     pub auto_disable_window_minutes: Option<i64>,
     pub auto_disable_failure_times: Option<i64>,
     pub auto_disable_disable_minutes: Option<i64>,
+    pub log_level: Option<LogLevel>,
 }
 
 fn get_setting(conn: &Connection, key: &str) -> rusqlite::Result<Option<String>> {
@@ -359,6 +365,16 @@ pub async fn get_app_settings(db_path: PathBuf) -> anyhow::Result<AppSettings> {
             && let Ok(n) = v.trim().parse::<i64>()
         {
             out.auto_disable_disable_minutes = n;
+        }
+        if let Some(v) = get_setting(conn, KEY_LOG_LEVEL)? {
+            match v.trim() {
+                "none" | "off" => out.log_level = LogLevel::None,
+                "debug" => out.log_level = LogLevel::Debug,
+                "info" => out.log_level = LogLevel::Info,
+                "warn" | "warning" => out.log_level = LogLevel::Warning,
+                "error" => out.log_level = LogLevel::Error,
+                _ => {}
+            }
         }
 
         Ok(out)
@@ -439,6 +455,9 @@ pub async fn update_app_settings(
                 &v.to_string(),
                 updated_at_ms,
             )?;
+        }
+        if let Some(v) = patch.log_level {
+            set_setting(conn, KEY_LOG_LEVEL, v.as_str(), updated_at_ms)?;
         }
         Ok(())
     })

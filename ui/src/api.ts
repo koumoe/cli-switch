@@ -1,4 +1,5 @@
 import { extractErrorMessage } from "@/lib/error";
+import { logger, type LogLevel } from "@/lib/logger";
 
 export type Protocol = "openai" | "anthropic" | "gemini";
 
@@ -22,6 +23,7 @@ export type AppSettings = {
   auto_disable_window_minutes: number;
   auto_disable_failure_times: number;
   auto_disable_disable_minutes: number;
+  log_level: LogLevel;
 };
 
 export type Channel = {
@@ -234,6 +236,14 @@ async function http<T>(method: string, path: string, body?: unknown): Promise<T>
   }
 
   const fallback = `${method} ${path} failed: ${res.status}`;
+  if (path !== "/api/logs/ingest") {
+    logger.error("api request failed", {
+      method,
+      path,
+      status: res.status,
+      error: msg ?? null
+    }, "api_request_failed");
+  }
   throw new Error(msg ? `${msg}` : fallback);
 }
 
@@ -400,4 +410,19 @@ export function clearRecords(input: {
   end_ms?: number;
 }): Promise<ClearRecordsResult> {
   return http<ClearRecordsResult>("POST", "/api/maintenance/records/clear", input);
+}
+
+export type LogsClearMode = "date_range" | "all";
+
+export type ClearLogsResult = {
+  deleted_files: number;
+  truncated_files: number;
+};
+
+export function clearLogs(input: {
+  mode: LogsClearMode;
+  start_date?: string;
+  end_date?: string;
+}): Promise<ClearLogsResult> {
+  return http<ClearLogsResult>("POST", "/api/maintenance/logs/clear", input);
 }

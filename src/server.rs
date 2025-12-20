@@ -19,8 +19,9 @@ use tokio::time::Duration;
 #[cfg(not(feature = "embed-ui"))]
 use tower_http::services::ServeDir;
 use tower_http::trace::TraceLayer;
+use tower_http::trace::{DefaultMakeSpan, DefaultOnFailure, DefaultOnResponse};
 
-use crate::{autostart, storage, update};
+use crate::{autostart, log_files, logging, storage, update};
 use crate::{proxy, proxy::ProxyError};
 
 #[derive(Clone)]
@@ -221,10 +222,13 @@ impl IntoResponse for ApiError {
             ApiError::NotFound(msg) => (StatusCode::NOT_FOUND, msg.clone()),
             ApiError::BadGateway(msg) => (StatusCode::BAD_GATEWAY, msg.clone()),
             ApiError::Unavailable(msg) => (StatusCode::SERVICE_UNAVAILABLE, msg.clone()),
-            ApiError::Internal(_) => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "internal error".to_string(),
-            ),
+            ApiError::Internal(err) => {
+                tracing::error!(err = %err, "api internal error");
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "internal error".to_string(),
+                )
+            }
         };
         (status, Json(ErrorBody { error: msg })).into_response()
     }
@@ -1053,7 +1057,163 @@ async fn records_clear(
     };
 
     let res = storage::clear_records((*state.db_path).clone(), kind).await?;
+    tracing::info!(
+        mode = ?input.mode,
+        usage_events_deleted = res.usage_events_deleted,
+        channel_failures_deleted = res.channel_failures_deleted,
+        vacuumed = res.vacuumed,
+        "records cleared"
+    );
     Ok(Json(res))
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum LogsClearMode {
+    DateRange,
+    All,
+}
+
+#[derive(Debug, Deserialize)]
+struct LogsClearInput {
+    mode: LogsClearMode,
+    start_date: Option<String>,
+    end_date: Option<String>,
+}
+
+fn parse_ymd_date(input: &str) -> Result<time::Date, ApiError> {
+    use std::sync::OnceLock;
+    use time::format_description::BorrowedFormatItem;
+
+    static FMT_DASH: OnceLock<Vec<BorrowedFormatItem<'static>>> = OnceLock::new();
+    static FMT_SLASH: OnceLock<Vec<BorrowedFormatItem<'static>>> = OnceLock::new();
+
+    let fmt_dash = FMT_DASH.get_or_init(|| {
+        time::format_description::parse("[year]-[month]-[day]").expect("valid format")
+    });
+    let fmt_slash = FMT_SLASH.get_or_init(|| {
+        time::format_description::parse("[year]/[month]/[day]").expect("valid format")
+    });
+
+    let s = input.trim();
+    if let Ok(d) = time::Date::parse(s, fmt_dash) {
+        return Ok(d);
+    }
+    if let Ok(d) = time::Date::parse(s, fmt_slash) {
+        return Ok(d);
+    }
+
+    Err(ApiError::BadRequest(
+        "日期格式非法，期望 YYYY-MM-DD 或 YYYY/MM/DD".to_string(),
+    ))
+}
+
+async fn logs_clear(
+    State(state): State<AppState>,
+    Json(input): Json<LogsClearInput>,
+) -> Result<impl IntoResponse, ApiError> {
+    let data_dir = data_dir_from_db_path(state.db_path.as_path());
+    let log_dir = crate::app::logs_dir(&data_dir);
+    let log_dir_display = log_dir.display().to_string();
+
+    let kind = match input.mode {
+        LogsClearMode::DateRange => {
+            let start_opt = input
+                .start_date
+                .as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty());
+            let end_opt = input
+                .end_date
+                .as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty());
+
+            let start_raw = start_opt.or(end_opt).ok_or_else(|| {
+                ApiError::BadRequest("mode=date_range 时 start_date/end_date 至少填一个".to_string())
+            })?;
+            let end_raw = end_opt.or(start_opt).unwrap_or(start_raw);
+
+            let start = parse_ymd_date(start_raw)?;
+            let end = parse_ymd_date(end_raw)?;
+            if start > end {
+                return Err(ApiError::BadRequest("start_date 不能大于 end_date".to_string()));
+            }
+            log_files::LogsClearKind::DateRange { start, end }
+        }
+        LogsClearMode::All => log_files::LogsClearKind::All,
+    };
+
+    let res = tokio::task::spawn_blocking(move || log_files::clear_logs(&log_dir, kind))
+        .await
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!(e)))??;
+    tracing::info!(
+        mode = ?input.mode,
+        log_dir = %log_dir_display,
+        deleted_files = res.deleted_files,
+        truncated_files = res.truncated_files,
+        "logs cleared"
+    );
+    Ok(Json(res))
+}
+
+#[derive(Debug, Deserialize)]
+struct FrontendLogIngestInput {
+    level: logging::LogLevel,
+    message: String,
+    event: Option<String>,
+    fields: Option<serde_json::Value>,
+    ts_ms: Option<i64>,
+}
+
+async fn frontend_log_ingest(
+    headers: axum::http::HeaderMap,
+    Json(input): Json<FrontendLogIngestInput>,
+) -> impl IntoResponse {
+    let ua = headers
+        .get(axum::http::header::USER_AGENT)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("-");
+    let ts_ms = input.ts_ms.unwrap_or_else(storage::now_ms);
+    let event = input.event.unwrap_or_else(|| "frontend_log".to_string());
+
+    match input.level {
+        logging::LogLevel::None => {}
+        logging::LogLevel::Debug => tracing::debug!(
+            target: "frontend",
+            ts_ms,
+            ua = %ua,
+            event = %event,
+            message = %input.message,
+            fields = ?input.fields
+        ),
+        logging::LogLevel::Info => tracing::info!(
+            target: "frontend",
+            ts_ms,
+            ua = %ua,
+            event = %event,
+            message = %input.message,
+            fields = ?input.fields
+        ),
+        logging::LogLevel::Warning => tracing::warn!(
+            target: "frontend",
+            ts_ms,
+            ua = %ua,
+            event = %event,
+            message = %input.message,
+            fields = ?input.fields
+        ),
+        logging::LogLevel::Error => tracing::error!(
+            target: "frontend",
+            ts_ms,
+            ua = %ua,
+            event = %event,
+            message = %input.message,
+            fields = ?input.fields
+        ),
+    }
+
+    StatusCode::NO_CONTENT
 }
 
 #[derive(Serialize)]
@@ -1155,6 +1315,7 @@ struct UpdateSettingsInput {
     auto_disable_window_minutes: Option<i64>,
     auto_disable_failure_times: Option<i64>,
     auto_disable_disable_minutes: Option<i64>,
+    log_level: Option<logging::LogLevel>,
 }
 
 async fn update_settings(
@@ -1162,6 +1323,37 @@ async fn update_settings(
     Json(input): Json<UpdateSettingsInput>,
 ) -> Result<impl IntoResponse, ApiError> {
     let auto_start_enabled = input.auto_start_enabled;
+    let mut changed: Vec<&'static str> = Vec::new();
+    if input.pricing_auto_update_enabled.is_some() {
+        changed.push("pricing_auto_update_enabled");
+    }
+    if input.pricing_auto_update_interval_hours.is_some() {
+        changed.push("pricing_auto_update_interval_hours");
+    }
+    if input.close_behavior.is_some() {
+        changed.push("close_behavior");
+    }
+    if input.auto_start_enabled.is_some() {
+        changed.push("auto_start_enabled");
+    }
+    if input.app_auto_update_enabled.is_some() {
+        changed.push("app_auto_update_enabled");
+    }
+    if input.auto_disable_enabled.is_some() {
+        changed.push("auto_disable_enabled");
+    }
+    if input.auto_disable_window_minutes.is_some() {
+        changed.push("auto_disable_window_minutes");
+    }
+    if input.auto_disable_failure_times.is_some() {
+        changed.push("auto_disable_failure_times");
+    }
+    if input.auto_disable_disable_minutes.is_some() {
+        changed.push("auto_disable_disable_minutes");
+    }
+    if input.log_level.is_some() {
+        changed.push("log_level");
+    }
 
     if let Some(h) = input.pricing_auto_update_interval_hours
         && !(1..=8760).contains(&h)
@@ -1197,9 +1389,11 @@ async fn update_settings(
         match res {
             Ok(Ok(())) => {}
             Ok(Err(e)) => {
+                tracing::warn!(desired = enabled, err = %e, "set autostart failed");
                 return Err(ApiError::BadRequest(format!("设置开机自启动失败：{e}")));
             }
             Err(e) => {
+                tracing::warn!(desired = enabled, err = %e, "set autostart failed");
                 return Err(ApiError::BadRequest(format!("设置开机自启动失败：{e}")));
             }
         }
@@ -1217,9 +1411,18 @@ async fn update_settings(
             auto_disable_window_minutes: input.auto_disable_window_minutes,
             auto_disable_failure_times: input.auto_disable_failure_times,
             auto_disable_disable_minutes: input.auto_disable_disable_minutes,
+            log_level: input.log_level,
         },
     )
     .await?;
+
+    if input.log_level.is_some() {
+        let _ = logging::set_level(settings.log_level);
+    }
+
+    if !changed.is_empty() {
+        tracing::info!(changed = ?changed, "settings updated");
+    }
 
     let next = *state.settings_notify.borrow() + 1;
     let _ = state.settings_notify.send(next);
@@ -1232,7 +1435,9 @@ fn build_app(state: AppState) -> Router {
         .route("/api/health", get(health))
         .route("/api/settings", get(get_settings).put(update_settings))
         .route("/api/maintenance/records/clear", post(records_clear))
+        .route("/api/maintenance/logs/clear", post(logs_clear))
         .route("/api/maintenance/db_size", get(db_size))
+        .route("/api/logs/ingest", post(frontend_log_ingest))
         .route("/api/update/status", get(update_status))
         .route("/api/update/check", post(update_check))
         .route("/api/update/download", post(update_download))
@@ -1264,7 +1469,12 @@ fn build_app(state: AppState) -> Router {
         .route("/v1beta/{*path}", any(proxy_gemini))
         .route("/v1/{*path}", any(proxy_openai))
         .with_state(state)
-        .layer(TraceLayer::new_for_http());
+        .layer(
+            TraceLayer::new_for_http()
+                .make_span_with(DefaultMakeSpan::new().level(tracing::Level::DEBUG))
+                .on_response(DefaultOnResponse::new().level(tracing::Level::DEBUG))
+                .on_failure(DefaultOnFailure::new().level(tracing::Level::WARN)),
+        );
 
     #[cfg(feature = "embed-ui")]
     let app = app.fallback(any(ui_fallback));
@@ -1303,6 +1513,8 @@ pub async fn serve_with_listener(
         settings_notify,
         update_runtime: update_runtime.clone(),
     };
+
+    tracing::info!(addr = %addr, open_browser, "backend server starting");
 
     let app = build_app(state);
 
