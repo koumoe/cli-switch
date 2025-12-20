@@ -8,6 +8,9 @@ import {
   CardHeader,
   CardTitle,
   Badge,
+  Tabs,
+  TabsList,
+  TabsTrigger,
 } from "@/components/ui";
 import { useI18n } from "@/lib/i18n";
 import {
@@ -180,9 +183,11 @@ function MultiLineTrendChart({
 function ChannelDistribution({
   stats,
   protocolLabel,
+  view,
 }: {
   stats: ChannelStats[];
   protocolLabel: (protocol: Protocol) => string;
+  view: "percent" | "usage";
 }) {
   const total = stats.reduce((sum, s) => sum + s.success, 0);
   if (total === 0) return null;
@@ -203,7 +208,7 @@ function ChannelDistribution({
                 <span className="truncate">{s.name}</span>
               </div>
               <span className="text-muted-foreground ml-2">
-                {percent}% ({s.success})
+                {view === "percent" ? `${percent}%` : s.success.toLocaleString()}
               </span>
             </div>
             <div className="h-2 bg-muted rounded-full overflow-hidden">
@@ -226,6 +231,9 @@ export function OverviewPage() {
   const [channelStats, setChannelStats] = useState<ChannelStats[]>([]);
   const [trendItems, setTrendItems] = useState<TrendPoint[]>([]);
   const [loading, setLoading] = useState(true);
+  const [distributionView, setDistributionView] = useState<"percent" | "usage">(
+    "percent",
+  );
 
   useEffect(() => {
     Promise.all([
@@ -393,9 +401,9 @@ export function OverviewPage() {
       </div>
 
       {/* 趋势图 + 渠道分布 */}
-      <div className="grid gap-3 md:grid-cols-2">
+      <div className="grid gap-3 md:grid-cols-4">
         {/* 本月请求趋势 */}
-        <Card className="flex flex-col">
+        <Card className="flex flex-col md:col-span-3">
           <CardHeader className="py-3 px-3">
             <CardTitle className="text-sm">{t("overview.trend.title")}</CardTitle>
             <CardDescription className="text-xs">
@@ -420,11 +428,28 @@ export function OverviewPage() {
         </Card>
 
         {/* 渠道使用分布 */}
-        <Card className="flex flex-col">
+        <Card className="flex flex-col md:col-span-1">
           <CardHeader className="py-3 px-3">
-            <CardTitle className="text-sm">
-              {t("overview.distribution.title")}
-            </CardTitle>
+            <div className="flex items-center justify-between gap-2">
+              <CardTitle className="text-sm">
+                {t("overview.distribution.title")}
+              </CardTitle>
+              <Tabs
+                value={distributionView}
+                onValueChange={(v) =>
+                  setDistributionView(v === "usage" ? "usage" : "percent")
+                }
+              >
+                <TabsList className="h-7 p-0.5">
+                  <TabsTrigger value="percent" className="px-2 py-0.5 text-xs">
+                    {t("overview.distribution.view.percent")}
+                  </TabsTrigger>
+                  <TabsTrigger value="usage" className="px-2 py-0.5 text-xs">
+                    {t("overview.distribution.view.usage")}
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
+            </div>
             <CardDescription className="text-xs">
               {t("overview.distribution.subtitle")}
             </CardDescription>
@@ -438,7 +463,11 @@ export function OverviewPage() {
               </p>
             ) : (
               <div className="max-h-72 overflow-y-auto pr-1">
-                <ChannelDistribution stats={channelStatsUsed} protocolLabel={protocolLabelText} />
+                <ChannelDistribution
+                  stats={channelStatsUsed}
+                  protocolLabel={protocolLabelText}
+                  view={distributionView}
+                />
               </div>
             )}
           </CardContent>
