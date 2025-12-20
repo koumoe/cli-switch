@@ -1,3 +1,8 @@
+## [0.4.0](https://github.com/koumoe/cli-switch/compare/v0.3.1...v0.4.0) (2025-12-20)
+
+### Features
+
+* **logging:** add structured logging, date-range picker, and cleanup APIs ([#22](https://github.com/koumoe/cli-switch/issues/22)) ([37bad59](https://github.com/koumoe/cli-switch/commit/37bad596f63b07900df1bacafee4261d643da871))
 ## [0.3.1](https://github.com/koumoe/cli-switch/compare/v0.3.0...v0.3.1) (2025-12-20)
 
 ### Bug Fixes
