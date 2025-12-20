@@ -167,8 +167,14 @@ fn quit_app(
     data_dir: &std::path::Path,
     server_handle: &tokio::task::JoinHandle<()>,
     control_flow: &mut ControlFlow,
+    restart_after_update: bool,
 ) {
-    if let Err(e) = update::apply_pending_on_exit(data_dir) {
+    let res = if restart_after_update {
+        update::apply_pending_on_exit_and_restart(data_dir)
+    } else {
+        update::apply_pending_on_exit(data_dir)
+    };
+    if let Err(e) = res {
         tracing::warn!(err = %e, "apply pending update on exit failed");
     }
     server_handle.abort();
@@ -285,14 +291,14 @@ fn handle_user_event(
             } else if &id == tray_hide_id {
                 apply_window_visible(window, state, tray_show, tray_hide, false, false);
             } else if &id == tray_quit_id {
-                quit_app(data_dir.as_path(), server_handle, control_flow);
+                quit_app(data_dir.as_path(), server_handle, control_flow, false);
             }
         }
         UserEvent::CloseRequested(settings) => {
             state.close_request_inflight = false;
             match settings.close_behavior {
                 storage::CloseBehavior::Quit => {
-                    quit_app(data_dir.as_path(), server_handle, control_flow);
+                    quit_app(data_dir.as_path(), server_handle, control_flow, false);
                 }
                 storage::CloseBehavior::MinimizeToTray => {
                     apply_window_visible(window, state, tray_show, tray_hide, false, false);
@@ -346,7 +352,7 @@ fn handle_user_event(
                                     storage::CloseBehavior::Quit,
                                 );
                             }
-                            quit_app(data_dir.as_path(), server_handle, control_flow);
+                            quit_app(data_dir.as_path(), server_handle, control_flow, false);
                         }
                     }
                 }
@@ -366,7 +372,7 @@ fn handle_user_event(
                     }
                 }
                 IpcMessage::RequestQuit => {
-                    quit_app(data_dir.as_path(), server_handle, control_flow);
+                    quit_app(data_dir.as_path(), server_handle, control_flow, true);
                 }
             }
         }
