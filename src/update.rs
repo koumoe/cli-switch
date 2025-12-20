@@ -780,7 +780,7 @@ fn apply_pending_on_exit_inner(data_dir: &Path, restart: bool) -> anyhow::Result
         return Ok(true);
     }
 
-#[cfg(not(target_os = "windows"))]
+    #[cfg(not(target_os = "windows"))]
     {
         let now = crate::storage::now_ms();
         let file_name = target
@@ -904,7 +904,11 @@ fi
     let mut cmd = std::process::Command::new("sh");
     cmd.arg(script.as_os_str())
         .arg(target.as_os_str())
-        .arg(app.as_ref().map(|p| p.as_os_str()).unwrap_or(OsStr::new("-")))
+        .arg(
+            app.as_ref()
+                .map(|p| p.as_os_str())
+                .unwrap_or(OsStr::new("-")),
+        )
         .arg(parent_pid);
     cmd.args(args);
     cmd.spawn().with_context(|| "spawn restart helper failed")?;
