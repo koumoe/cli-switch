@@ -28,8 +28,10 @@ pub fn set_enabled(enabled: bool) -> anyhow::Result<()> {
 
     if enabled {
         launcher.enable().map_err(|e| anyhow::anyhow!("{e}"))?;
+        tracing::info!("autostart enabled");
     } else {
         launcher.disable().map_err(|e| anyhow::anyhow!("{e}"))?;
+        tracing::info!("autostart disabled");
     }
 
     Ok(())

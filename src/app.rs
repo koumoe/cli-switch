@@ -11,3 +11,7 @@ pub fn default_data_dir() -> anyhow::Result<PathBuf> {
 pub fn db_path(data_dir: &Path) -> PathBuf {
     data_dir.join("cliswitch.sqlite3")
 }
+
+pub fn logs_dir(data_dir: &Path) -> PathBuf {
+    data_dir.join("logs")
+}

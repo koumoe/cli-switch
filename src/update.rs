@@ -399,6 +399,7 @@ pub async fn spawn_download_latest(
     tokio::spawn(async move {
         let res = download_latest_inner(&client, &data_dir, runtime.clone()).await;
         if let Err(e) = res {
+            tracing::warn!(err = %e, "update download failed");
             let mut rt = runtime.lock().await;
             rt.stage = Stage::Error;
             rt.error = Some(e.to_string());
@@ -666,6 +667,7 @@ async fn download_latest_inner(
         && !expected.is_empty()
         && expected != actual_sha256
     {
+        tracing::error!(expected = %expected, actual = %actual_sha256, "update sha256 checksum mismatch");
         anyhow::bail!("sha256 校验失败：expected={expected} actual={actual_sha256}");
     }
 
@@ -681,12 +683,13 @@ async fn download_latest_inner(
 
     let pending = PendingUpdate {
         version: latest.clone(),
-        staged_executable: staged_exe,
+        staged_executable: staged_exe.clone(),
         downloaded_at_ms: crate::storage::now_ms(),
         asset_name: asset.name.clone(),
     };
     let json = serde_json::to_vec_pretty(&pending)?;
     atomic_write(&pending_path(data_dir), &json)?;
+    tracing::info!(version = %latest, staged = %staged_exe.display(), "update download completed");
 
     let mut rt = runtime.lock().await;
     rt.stage = Stage::Ready;
@@ -729,11 +732,19 @@ fn apply_pending_on_exit_inner(data_dir: &Path, restart: bool) -> anyhow::Result
     };
 
     if !pending.staged_executable.is_file() {
+        tracing::error!(path = %pending.staged_executable.display(), "staged update file not found");
         anyhow::bail!(
             "已下载的更新文件不存在：{}",
             pending.staged_executable.display()
         );
     }
+
+    tracing::info!(
+        version = %pending.version,
+        restart,
+        staged = %pending.staged_executable.display(),
+        "applying pending update on exit"
+    );
 
     let target = std::env::current_exe().context("读取当前可执行文件路径失败")?;
 

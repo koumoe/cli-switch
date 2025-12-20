@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { toast } from "sonner";
+import type { DateRange } from "react-day-picker";
 import {
   Button,
   Card,
@@ -9,6 +10,8 @@ import {
   CardHeader,
   CardTitle,
   Badge,
+  DateRangePicker,
+  dateRangeToMs,
   Input,
   Select,
   SelectContent,
@@ -41,25 +44,8 @@ import {
 } from "../api";
 import { clampStr, formatDateTime, formatDuration, protocolLabel, protocolLabelKey } from "../lib";
 
-function parseLocalDateStartMs(s: string): number | undefined {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s.trim());
-  if (!m) return undefined;
-  const y = Number(m[1]);
-  const mo = Number(m[2]) - 1;
-  const d = Number(m[3]);
-  const dt = new Date(y, mo, d, 0, 0, 0, 0);
-  const ms = dt.getTime();
-  return Number.isFinite(ms) ? ms : undefined;
-}
-
-function parseLocalDateEndMs(s: string): number | undefined {
-  const start = parseLocalDateStartMs(s);
-  if (start === undefined) return undefined;
-  return start + 86_399_999;
-}
-
 export function LogsPage() {
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
   const [events, setEvents] = useState<UsageEvent[]>([]);
   const [channels, setChannels] = useState<Channel[]>([]);
   const [loading, setLoading] = useState(false);
@@ -68,8 +54,7 @@ export function LogsPage() {
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailEvent, setDetailEvent] = useState<UsageEvent | null>(null);
 
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [protocol, setProtocol] = useState<Protocol | "all">("all");
   const [channelId, setChannelId] = useState<string>("all");
   const [model, setModel] = useState("");
@@ -93,8 +78,7 @@ export function LogsPage() {
   async function refresh(
     nextPage = page,
     overrides?: Partial<{
-      startDate: string;
-      endDate: string;
+      dateRange: DateRange | undefined;
       protocol: Protocol | "all";
       channelId: string;
       model: string;
@@ -105,23 +89,21 @@ export function LogsPage() {
     setLoading(true);
     try {
       loadingRef.current = true;
-      const sStartDate = overrides?.startDate ?? startDate;
-      const sEndDate = overrides?.endDate ?? endDate;
+      const sDateRange = overrides?.dateRange !== undefined ? overrides.dateRange : dateRange;
       const sProtocol = overrides?.protocol ?? protocol;
       const sChannelId = overrides?.channelId ?? channelId;
       const sModel = overrides?.model ?? model;
       const sRequestId = overrides?.requestId ?? requestId;
       const sStatus = overrides?.status ?? status;
 
-      const start_ms = parseLocalDateStartMs(sStartDate);
-      const end_ms = parseLocalDateEndMs(sEndDate);
+      const msRange = dateRangeToMs(sDateRange);
       const safePageSize = Number.isFinite(pageSize) && pageSize > 0 ? pageSize : 50;
       const rawOffset = (nextPage - 1) * safePageSize;
       const safeOffset = Number.isFinite(rawOffset) && rawOffset >= 0 ? rawOffset : 0;
 
       const res = await usageList({
-        start_ms,
-        end_ms,
+        start_ms: msRange?.start_ms,
+        end_ms: msRange?.end_ms,
         protocol: sProtocol === "all" ? undefined : sProtocol,
         channel_id: sChannelId === "all" ? undefined : sChannelId,
         model: sModel.trim().length > 0 ? sModel.trim() : undefined,
@@ -159,7 +141,7 @@ export function LogsPage() {
       void refresh(page);
     }, 60_000);
     return () => window.clearInterval(id);
-  }, [page, pageSize, startDate, endDate, protocol, channelId, model, requestId, status]);
+  }, [page, pageSize, dateRange, protocol, channelId, model, requestId, status]);
 
   return (
     <div className="flex flex-col gap-4 h-full min-h-0">
@@ -282,21 +264,13 @@ export function LogsPage() {
 
           <div className="flex flex-wrap items-end gap-2 pt-2">
             <div className="space-y-1">
-              <div className="text-xs text-muted-foreground">{t("logs.filters.startDate")}</div>
-              <Input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="h-8 w-[150px]"
-              />
-            </div>
-            <div className="space-y-1">
-              <div className="text-xs text-muted-foreground">{t("logs.filters.endDate")}</div>
-              <Input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="h-8 w-[150px]"
+              <div className="text-xs text-muted-foreground">{t("logs.filters.dateRange")}</div>
+              <DateRangePicker
+                value={dateRange}
+                onChange={setDateRange}
+                placeholder={t("logs.filters.selectDateRange")}
+                className="h-8"
+                locale={locale}
               />
             </div>
             <div className="space-y-1">
@@ -382,16 +356,14 @@ export function LogsPage() {
                 variant="ghost"
                 onClick={() => {
                   const next = {
-                    startDate: "",
-                    endDate: "",
+                    dateRange: undefined as DateRange | undefined,
                     protocol: "all" as const,
                     channelId: "all",
                     model: "",
                     requestId: "",
                     status: "all" as const,
                   };
-                  setStartDate(next.startDate);
-                  setEndDate(next.endDate);
+                  setDateRange(next.dateRange);
                   setProtocol(next.protocol);
                   setChannelId(next.channelId);
                   setModel(next.model);

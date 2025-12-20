@@ -26,7 +26,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui";
 import { toast } from "sonner";
-import { getHealth, getUpdateStatus, pricingStatus, pricingSync } from "./api";
+import { getHealth, getSettings, getUpdateStatus, pricingStatus, pricingSync } from "./api";
+import { logger, setLogLevel } from "@/lib/logger";
 
 import { OverviewPage } from "./pages/OverviewPage";
 import { ChannelsPage } from "./pages/ChannelsPage";
@@ -250,6 +251,23 @@ export default function App() {
       })
       .catch(() => {
         if (!cancelled) setHealth("离线");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    getSettings()
+      .then((s) => {
+        if (cancelled) return;
+        setLogLevel(s.log_level);
+        logger.info("ui settings loaded", { log_level: s.log_level }, "ui_settings_loaded");
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        logger.warn("load settings failed", { error: String(e) }, "ui_settings_load_failed");
       });
     return () => {
       cancelled = true;

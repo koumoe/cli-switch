@@ -62,8 +62,7 @@ pub async fn forward(
             ($err:expr, $msg:literal) => {{
                 let err = $err;
                 maybe_record_failure(db_path.clone(), &settings, &channel.id).await;
-                tracing::event!(
-                    tracing::Level::WARN,
+                tracing::warn!(
                     protocol = protocol.as_str(),
                     channel_id = %channel.id,
                     attempt = idx + 1,
@@ -79,8 +78,7 @@ pub async fn forward(
             }};
         }
 
-        tracing::event!(
-            tracing::Level::DEBUG,
+        tracing::debug!(
             protocol = protocol.as_str(),
             channel_id = %channel.id,
             attempt = idx + 1,
@@ -108,8 +106,7 @@ pub async fn forward(
             Ok(r) => r,
             Err(e) => {
                 maybe_record_failure(db_path.clone(), &settings, &channel.id).await;
-                tracing::event!(
-                    tracing::Level::WARN,
+                tracing::warn!(
                     protocol = protocol.as_str(),
                     channel_id = %channel.id,
                     attempt = idx + 1,
@@ -158,8 +155,7 @@ pub async fn forward(
             maybe_record_failure(db_path.clone(), &settings, &channel.id).await;
         }
         if !status.is_success() && !is_last {
-            tracing::event!(
-                tracing::Level::WARN,
+            tracing::warn!(
                 protocol = protocol.as_str(),
                 channel_id = %channel.id,
                 attempt = idx + 1,
@@ -205,8 +201,7 @@ pub async fn forward(
             && let Err(e) =
                 storage::clear_channel_failures(db_path.clone(), channel.id.clone()).await
         {
-            tracing::event!(
-                tracing::Level::WARN,
+            tracing::warn!(
                 channel_id = %channel.id,
                 err = %e,
                 "clear channel failures failed"
@@ -285,8 +280,7 @@ async fn maybe_record_failure(
     .await
     {
         Ok(Some(until_ms)) => {
-            tracing::event!(
-                tracing::Level::WARN,
+            tracing::warn!(
                 channel_id = channel_id,
                 disabled_until_ms = until_ms,
                 "channel auto disabled"
@@ -294,8 +288,7 @@ async fn maybe_record_failure(
         }
         Ok(None) => {}
         Err(e) => {
-            tracing::event!(
-                tracing::Level::WARN,
+            tracing::warn!(
                 channel_id = channel_id,
                 err = %e,
                 "record channel failure failed"
@@ -337,6 +330,14 @@ async fn proxy_upstream_response(
             .await
             .map_err(|e| ProxyError::Upstream(e.to_string()))?;
 
+        let response_text = match serde_json::from_slice::<serde_json::Value>(&bytes) {
+            Ok(v) => serde_json::to_string(&v)
+                .unwrap_or_else(|_| String::from_utf8_lossy(&bytes).to_string()),
+            Err(_) => String::from_utf8_lossy(&bytes).to_string(),
+        };
+        let response_one_line = to_single_line(&response_text);
+        let response_preview = truncate(&response_one_line, 4096);
+
         let duration_ms = ctx.started.elapsed().as_millis() as i64;
         let usage = parse_usage_from_json(ctx.protocol, &bytes);
         let (prompt_tokens, completion_tokens, total_tokens, cache_read_tokens, cache_write_tokens) =
@@ -350,6 +351,35 @@ async fn proxy_upstream_response(
                 .unwrap_or_else(|| String::from_utf8_lossy(&bytes).to_string());
             truncate(&msg, 2000)
         });
+
+        tracing::debug!(
+            protocol = ctx.protocol.as_str(),
+            request_id = %ctx.request_id,
+            channel_id = %ctx.channel_id,
+            model = ctx.model.as_deref().unwrap_or("-"),
+            http_status = status.as_u16(),
+            duration_ms,
+            prompt_tokens = prompt_tokens.unwrap_or(-1),
+            completion_tokens = completion_tokens.unwrap_or(-1),
+            total_tokens = total_tokens.unwrap_or(-1),
+            success,
+            error_kind = error_kind.as_deref().unwrap_or("-"),
+            response_preview = %response_preview,
+            "proxy request result"
+        );
+
+        tracing::debug!(
+            target: "proxy_body",
+            protocol = ctx.protocol.as_str(),
+            request_id = %ctx.request_id,
+            channel_id = %ctx.channel_id,
+            model = ctx.model.as_deref().unwrap_or("-"),
+            http_status = status.as_u16(),
+            duration_ms,
+            response = %response_one_line,
+            body = true,
+            "proxy request result"
+        );
 
         spawn_usage_event(
             storage::CreateUsageEvent {
@@ -911,7 +941,9 @@ fn extract_gemini_usage(v: &serde_json::Value) -> TokenUsage {
 
 fn spawn_usage_event(input: storage::CreateUsageEvent, db_path: std::path::PathBuf) {
     tokio::spawn(async move {
-        let _ = storage::insert_usage_event(db_path, input).await;
+        if let Err(e) = storage::insert_usage_event(db_path, input).await {
+            tracing::warn!(err = %e, "insert usage event failed");
+        }
     });
 }
 
@@ -935,6 +967,8 @@ struct InstrumentedStream {
     ttft_ms: Option<i64>,
     usage: TokenUsage,
     sse_buf: Vec<u8>,
+    sse_log_buf: Vec<u8>,
+    sse_log_truncated: bool,
     err_body_buf: Vec<u8>,
     stream_error: Option<String>,
 }
@@ -951,6 +985,8 @@ impl InstrumentedStream {
             ttft_ms: None,
             usage: TokenUsage::default(),
             sse_buf: Vec::new(),
+            sse_log_buf: Vec::new(),
+            sse_log_truncated: false,
             err_body_buf: Vec::new(),
             stream_error: None,
         }
@@ -958,6 +994,7 @@ impl InstrumentedStream {
 
     fn on_chunk(&mut self, bytes: &Bytes) {
         const MAX_ERR_BODY_BUF: usize = 256 * 1024;
+        const MAX_SSE_LOG_BUF: usize = 1024 * 1024;
         if self.ttft_ms.is_none() {
             self.ttft_ms = Some(self.ctx.started.elapsed().as_millis() as i64);
         }
@@ -967,6 +1004,16 @@ impl InstrumentedStream {
                 .extend_from_slice(&bytes[..bytes.len().min(remain)]);
         }
         if self.ctx.parse_sse {
+            if !self.sse_log_truncated && self.sse_log_buf.len() < MAX_SSE_LOG_BUF {
+                let remain = MAX_SSE_LOG_BUF - self.sse_log_buf.len();
+                self.sse_log_buf
+                    .extend_from_slice(&bytes[..bytes.len().min(remain)]);
+                if bytes.len() > remain {
+                    self.sse_log_truncated = true;
+                }
+            } else if self.sse_log_buf.len() >= MAX_SSE_LOG_BUF {
+                self.sse_log_truncated = true;
+            }
             self.consume_sse(bytes);
         }
     }
@@ -1032,15 +1079,42 @@ impl InstrumentedStream {
             None
         };
 
-        tracing::event!(
-            tracing::Level::DEBUG,
+        let response_sse = to_single_line(&String::from_utf8_lossy(&self.sse_log_buf));
+        let response_sse_preview = truncate(&response_sse, 4096);
+
+        tracing::debug!(
             protocol = self.ctx.protocol.as_str(),
+            request_id = %self.ctx.request_id,
             channel_id = %self.ctx.channel_id,
+            model = self.ctx.model.as_deref().unwrap_or("-"),
             http_status = self.ctx.http_status,
             ttft_ms = self.ttft_ms.unwrap_or(-1),
             duration_ms,
-            "proxy request finished"
+            prompt_tokens = prompt_tokens.unwrap_or(-1),
+            completion_tokens = completion_tokens.unwrap_or(-1),
+            total_tokens = total_tokens.unwrap_or(-1),
+            success,
+            error_kind = error_kind.as_deref().unwrap_or("-"),
+            response_preview = %response_sse_preview,
+            "proxy request result"
         );
+
+        if self.ctx.parse_sse {
+            tracing::debug!(
+                target: "proxy_body",
+                protocol = self.ctx.protocol.as_str(),
+                request_id = %self.ctx.request_id,
+                channel_id = %self.ctx.channel_id,
+                model = self.ctx.model.as_deref().unwrap_or("-"),
+                http_status = self.ctx.http_status,
+                ttft_ms = self.ttft_ms.unwrap_or(-1),
+                duration_ms,
+                response_sse = %response_sse,
+                response_sse_truncated = self.sse_log_truncated,
+                body = true,
+                "proxy request result"
+            );
+        }
 
         spawn_usage_event(
             storage::CreateUsageEvent {
@@ -1104,5 +1178,18 @@ fn truncate(s: &str, max_len: usize) -> String {
         out.push(ch);
     }
     out.push('…');
+    out
+}
+
+fn to_single_line(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for ch in s.chars() {
+        match ch {
+            '\r' => out.push_str("\\r"),
+            '\n' => out.push_str("\\n"),
+            '\t' => out.push_str("\\t"),
+            _ => out.push(ch),
+        }
+    }
     out
 }

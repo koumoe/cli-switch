@@ -2,7 +2,7 @@ use anyhow::Context as _;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::time::Duration;
 
-use cliswitch::{app, server, storage, update};
+use cliswitch::{server, storage, update};
 use muda::{Menu, MenuEvent, MenuId, MenuItem, PredefinedMenuItem, Submenu};
 use rusqlite::params;
 use tao::dpi::LogicalSize;
@@ -379,20 +379,18 @@ fn handle_user_event(
     }
 }
 
-pub async fn run(port: u16) -> anyhow::Result<()> {
-    let data_dir = app::default_data_dir()?;
-    std::fs::create_dir_all(&data_dir)
-        .with_context(|| format!("创建数据目录失败：{}", data_dir.display()))?;
-
-    let db_path = app::db_path(&data_dir);
-    storage::init_db(&db_path).with_context(|| "初始化 SQLite 失败")?;
-
+pub async fn run(
+    port: u16,
+    data_dir: std::path::PathBuf,
+    db_path: std::path::PathBuf,
+) -> anyhow::Result<()> {
     let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), port);
     let listener = tokio::net::TcpListener::bind(addr)
         .await
         .with_context(|| format!("绑定监听地址失败：{addr}"))?;
     let actual_addr = listener.local_addr().context("读取监听地址失败")?;
     let base_url = format!("http://{actual_addr}");
+    tracing::info!(addr = %actual_addr, base_url = %base_url, "desktop backend ready");
 
     let server_db_path = db_path.clone();
     let server_handle = tokio::spawn(async move {
