@@ -74,17 +74,17 @@ fn format_ymd(date: Date) -> anyhow::Result<String> {
     let fmt = FMT.get_or_init(|| {
         time::format_description::parse("[year]-[month]-[day]").expect("valid format")
     });
-    Ok(date.format(fmt).context("格式化日期失败")?)
+    date.format(fmt).context("格式化日期失败")
 }
 
 fn open_daily_log_file(log_dir: &Path, date: Date) -> anyhow::Result<File> {
     let name = format!("{}.log", format_ymd(date)?);
     let path = log_dir.join(name);
-    Ok(std::fs::OpenOptions::new()
+    std::fs::OpenOptions::new()
         .create(true)
         .append(true)
         .open(&path)
-        .with_context(|| format!("打开日志文件失败：{}", path.display()))?)
+        .with_context(|| format!("打开日志文件失败：{}", path.display()))
 }
 
 struct LocalDailyFileAppender {
@@ -118,7 +118,7 @@ impl LocalDailyFileAppender {
 impl std::io::Write for LocalDailyFileAppender {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         if let Err(e) = self.maybe_rollover() {
-            return Err(std::io::Error::new(std::io::ErrorKind::Other, e));
+            return Err(std::io::Error::other(e));
         }
         std::io::Write::write(&mut self.file, buf)
     }
