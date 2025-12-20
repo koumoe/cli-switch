@@ -1,3 +1,9 @@
+## [0.3.1](https://github.com/koumoe/cli-switch/compare/v0.3.0...v0.3.1) (2025-12-20)
+
+### Bug Fixes
+
+* relaunch app after applying update ([6bbd98a](https://github.com/koumoe/cli-switch/commit/6bbd98a3c0be923d560518e291606f5c9b76755f))
+* satisfy clippy in updater relaunch ([ef9769d](https://github.com/koumoe/cli-switch/commit/ef9769d25b25e0d0b9a416198878cafc2dd0fd27))
 ## [0.3.0](https://github.com/koumoe/cli-switch/compare/v0.2.9...v0.3.0) (2025-12-20)
 
 ### Features
