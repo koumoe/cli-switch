@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Sun, Moon, Monitor, FolderOpen, Info, Database, Languages, DollarSign, RefreshCw, Shield, Power } from "lucide-react";
+import { Sun, Moon, Monitor, FolderOpen, Info, Database, Languages, DollarSign, RefreshCw, Shield, Power, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   Button,
@@ -25,13 +25,31 @@ import {
 } from "@/components/ui";
 import { useTheme, type Theme } from "@/lib/theme";
 import { type Locale, useI18n } from "@/lib/i18n";
-import { formatDateTime } from "../lib";
-import { checkUpdate, downloadUpdate, getHealth, getSettings, getUpdateStatus, pricingStatus, pricingSync, updateSettings, type AppSettings, type CloseBehavior, type Health, type PricingStatus, type UpdateCheck, type UpdateStatus } from "../api";
+import { formatBytes, formatDateTime } from "../lib";
+import { checkUpdate, clearRecords, downloadUpdate, getDbSize, getHealth, getSettings, getUpdateStatus, pricingStatus, pricingSync, updateSettings, type AppSettings, type CloseBehavior, type DbSize, type Health, type PricingStatus, type UpdateCheck, type UpdateStatus } from "../api";
+
+function parseLocalDateStartMs(s: string): number | undefined {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s.trim());
+  if (!m) return undefined;
+  const y = Number(m[1]);
+  const mo = Number(m[2]) - 1;
+  const d = Number(m[3]);
+  const dt = new Date(y, mo, d, 0, 0, 0, 0);
+  const ms = dt.getTime();
+  return Number.isFinite(ms) ? ms : undefined;
+}
+
+function parseLocalDateEndMs(s: string): number | undefined {
+  const start = parseLocalDateStartMs(s);
+  if (start === undefined) return undefined;
+  return start + 86_399_999;
+}
 
 export function SettingsPage() {
   const { theme, setTheme } = useTheme();
   const { locale, setLocale, locales, t } = useI18n();
   const [health, setHealth] = useState<Health | null>(null);
+  const [dbSize, setDbSize] = useState<DbSize | null>(null);
   const [pricing, setPricing] = useState<PricingStatus | null>(null);
   const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null);
@@ -44,11 +62,32 @@ export function SettingsPage() {
   const [closeSaving, setCloseSaving] = useState(false);
   const [autoStartSaving, setAutoStartSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [dbSizeLoading, setDbSizeLoading] = useState(false);
+  const [clearDate, setClearDate] = useState("");
+  const [clearMode, setClearMode] = useState<"date_range" | "errors" | "all" | null>(null);
+  const [clearPromptOpen, setClearPromptOpen] = useState(false);
+  const [clearing, setClearing] = useState(false);
+
+  async function refreshDbSize() {
+    setDbSizeLoading(true);
+    try {
+      const next = await getDbSize();
+      setDbSize(next);
+    } catch (e) {
+      toast.error(t("settings.storage.dbSizeFail"), { description: String(e) });
+    } finally {
+      setDbSizeLoading(false);
+    }
+  }
 
   useEffect(() => {
     getHealth()
       .then(setHealth)
       .catch(() => setHealth({ status: "离线" }));
+
+    getDbSize()
+      .then(setDbSize)
+      .catch(() => setDbSize(null));
 
     pricingStatus()
       .then(setPricing)
@@ -128,6 +167,13 @@ export function SettingsPage() {
       : updateServerVersion
         ? t("settings.update.latest")
         : "-";
+
+  const clearPromptDescKey =
+    clearMode === "date_range"
+      ? "settings.records.confirmDate"
+      : clearMode === "errors"
+        ? "settings.records.confirmErrors"
+        : "settings.records.confirmAll";
 
   return (
     <div className="space-y-4 pb-4">
@@ -638,6 +684,176 @@ export function SettingsPage() {
           <div className="space-y-2">
             <label className="text-sm font-medium">{t("settings.storage.dbFile")}</label>
             <Input value={health?.db_path ?? "-"} disabled className="font-mono text-sm" />
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">{t("settings.storage.dbSize")}</label>
+            <div className="flex gap-2">
+              <Input
+                value={dbSize ? formatBytes(dbSize.total_bytes) : "-"}
+                disabled
+                className="font-mono text-sm"
+              />
+              <Button variant="outline" onClick={() => void refreshDbSize()} disabled={dbSizeLoading}>
+                {t("common.refresh")}
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {dbSize
+                ? t("settings.storage.dbSizeHint", {
+                  db: formatBytes(dbSize.db_bytes),
+                  wal: formatBytes(dbSize.wal_bytes),
+                  shm: formatBytes(dbSize.shm_bytes),
+                })
+                : t("settings.storage.dbSizeHintEmpty")}
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* 记录清理 */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Trash2 className="h-4 w-4" />
+            {t("settings.records.title")}
+          </CardTitle>
+          <CardDescription>{t("settings.records.subtitle")}</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <Dialog
+            open={clearPromptOpen}
+            onOpenChange={(v) => {
+              if (clearing) return;
+              setClearPromptOpen(v);
+              if (!v) setClearMode(null);
+            }}
+          >
+            <DialogContent className="sm:max-w-[520px]">
+              <DialogHeader>
+                <DialogTitle>{t("settings.records.confirmTitle")}</DialogTitle>
+                <DialogDescription>
+                  {t(clearPromptDescKey, {
+                    date: clearDate.trim().length > 0 ? clearDate.trim() : "-",
+                  })}
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => setClearPromptOpen(false)}
+                  disabled={clearing}
+                >
+                  {t("common.cancel")}
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={async () => {
+                    if (!clearMode) return;
+                    setClearing(true);
+                    try {
+                      const start_ms =
+                        clearMode === "date_range" ? parseLocalDateStartMs(clearDate) : undefined;
+                      const end_ms =
+                        clearMode === "date_range" ? parseLocalDateEndMs(clearDate) : undefined;
+
+                      if (clearMode === "date_range" && (start_ms === undefined || end_ms === undefined)) {
+                        toast.error(t("settings.records.invalidDate"));
+                        return;
+                      }
+
+                      const res = await clearRecords({
+                        mode: clearMode,
+                        start_ms,
+                        end_ms,
+                      });
+                      toast.success(t("settings.records.cleared"), {
+                        description: t("settings.records.clearedDetail", {
+                          usage: res.usage_events_deleted.toLocaleString(),
+                          failures: res.channel_failures_deleted.toLocaleString(),
+                        }),
+                      });
+                      setClearPromptOpen(false);
+                      await refreshDbSize();
+                    } catch (e) {
+                      toast.error(t("settings.records.clearFail"), { description: String(e) });
+                    } finally {
+                      setClearing(false);
+                    }
+                  }}
+                  disabled={clearing}
+                >
+                  {clearing ? t("settings.records.clearing") : t("settings.records.clear")}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <div className="font-medium text-sm">{t("settings.records.date")}</div>
+              <div className="text-xs text-muted-foreground">{t("settings.records.dateHint")}</div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Input
+                type="date"
+                value={clearDate}
+                onChange={(e) => setClearDate(e.target.value)}
+                className="w-[160px]"
+              />
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => {
+                  const start = parseLocalDateStartMs(clearDate);
+                  const end = parseLocalDateEndMs(clearDate);
+                  if (start === undefined || end === undefined) {
+                    toast.error(t("settings.records.invalidDate"));
+                    return;
+                  }
+                  setClearMode("date_range");
+                  setClearPromptOpen(true);
+                }}
+                disabled={clearing}
+              >
+                {t("settings.records.clear")}
+              </Button>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <div className="font-medium text-sm">{t("settings.records.errors")}</div>
+              <div className="text-xs text-muted-foreground">{t("settings.records.errorsHint")}</div>
+            </div>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => {
+                setClearMode("errors");
+                setClearPromptOpen(true);
+              }}
+              disabled={clearing}
+            >
+              {t("settings.records.clear")}
+            </Button>
+          </div>
+
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <div className="font-medium text-sm">{t("settings.records.all")}</div>
+              <div className="text-xs text-muted-foreground">{t("settings.records.allHint")}</div>
+            </div>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => {
+                setClearMode("all");
+                setClearPromptOpen(true);
+              }}
+              disabled={clearing}
+            >
+              {t("settings.records.clear")}
+            </Button>
           </div>
         </CardContent>
       </Card>

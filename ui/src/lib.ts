@@ -31,6 +31,21 @@ export function formatDuration(ms: number | null | undefined): string {
   return `${(ms / 60_000).toFixed(2)}m`;
 }
 
+export function formatBytes(bytes: number | null | undefined): string {
+  if (bytes === null || bytes === undefined) return "-";
+  if (!Number.isFinite(bytes)) return "-";
+  const b = Math.max(0, bytes);
+  const units = ["B", "KB", "MB", "GB", "TB"] as const;
+  let v = b;
+  let i = 0;
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024;
+    i += 1;
+  }
+  const n = i === 0 ? String(Math.round(v)) : v.toFixed(v >= 10 ? 1 : 2);
+  return `${n}${units[i]}`;
+}
+
 export function clampStr(s: string, max: number): string {
   if (s.length <= max) return s;
   return `${s.slice(0, Math.max(0, max - 1))}…`;

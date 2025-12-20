@@ -373,3 +373,31 @@ export function usageList(
   if (query.offset !== undefined) p.set("offset", String(query.offset));
   return http<UsageListResult>("GET", `/api/usage/list?${p.toString()}`);
 }
+
+export type DbSize = {
+  path: string;
+  db_bytes: number;
+  wal_bytes: number;
+  shm_bytes: number;
+  total_bytes: number;
+};
+
+export function getDbSize(): Promise<DbSize> {
+  return http<DbSize>("GET", "/api/maintenance/db_size");
+}
+
+export type RecordsClearMode = "date_range" | "errors" | "all";
+
+export type ClearRecordsResult = {
+  usage_events_deleted: number;
+  channel_failures_deleted: number;
+  vacuumed: boolean;
+};
+
+export function clearRecords(input: {
+  mode: RecordsClearMode;
+  start_ms?: number;
+  end_ms?: number;
+}): Promise<ClearRecordsResult> {
+  return http<ClearRecordsResult>("POST", "/api/maintenance/records/clear", input);
+}
