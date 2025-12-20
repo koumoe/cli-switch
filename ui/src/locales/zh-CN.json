@@ -59,7 +59,11 @@
     "distribution": {
       "title": "渠道使用分布",
       "subtitle": "本月各渠道成功请求占比",
-      "empty": "暂无请求数据"
+      "empty": "暂无请求数据",
+      "view": {
+        "percent": "百分比",
+        "usage": "用量"
+      }
     },
     "activeChannels": {
       "title": "活跃渠道",

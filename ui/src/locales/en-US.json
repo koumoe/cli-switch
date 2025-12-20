@@ -59,7 +59,11 @@
     "distribution": {
       "title": "Channel Usage",
       "subtitle": "This month's successful request share by channel",
-      "empty": "No request data"
+      "empty": "No request data",
+      "view": {
+        "percent": "Percent",
+        "usage": "Usage"
+      }
     },
     "activeChannels": {
       "title": "Active Channels",
