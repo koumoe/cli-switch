@@ -1,3 +1,13 @@
+## [0.3.0](https://github.com/koumoe/cli-switch/compare/v0.2.9...v0.3.0) (2025-12-20)
+
+### Features
+
+* **maintenance:** add record clearing and db size APIs ([97a75a9](https://github.com/koumoe/cli-switch/commit/97a75a912e765e3547df3af000ad7896ca991e23))
+* **ui:** add settings record clearing and db size display ([97a82d9](https://github.com/koumoe/cli-switch/commit/97a82d9e9c71ae27249d13112a8d01fca44a887d))
+
+### Bug Fixes
+
+* adjust overview layout and distribution view ([8c17259](https://github.com/koumoe/cli-switch/commit/8c1725967e7c8dd976d077aab51c28ab8f4e924a))
 ## [0.2.9](https://github.com/koumoe/cli-switch/compare/v0.2.8...v0.2.9) (2025-12-19)
 
 ### Bug Fixes
