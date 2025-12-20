@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from "react";
-import { Sun, Moon, Monitor, FolderOpen, Info, Database, Languages, DollarSign, RefreshCw, Shield, Power, Trash2 } from "lucide-react";
+import { Sun, Moon, Monitor, FolderOpen, Info, Database, Languages, DollarSign, RefreshCw, Shield, Power, ScrollText, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { format } from "date-fns";
+import type { DateRange } from "react-day-picker";
 import {
   Button,
   Card,
@@ -9,6 +11,9 @@ import {
   CardHeader,
   CardTitle,
   Badge,
+  DateRangePicker,
+  dateRangeToStrings,
+  dateRangeToMs,
   Dialog,
   DialogContent,
   DialogDescription,
@@ -25,24 +30,14 @@ import {
 } from "@/components/ui";
 import { useTheme, type Theme } from "@/lib/theme";
 import { type Locale, useI18n } from "@/lib/i18n";
+import { setLogLevel } from "@/lib/logger";
 import { formatBytes, formatDateTime } from "../lib";
-import { checkUpdate, clearRecords, downloadUpdate, getDbSize, getHealth, getSettings, getUpdateStatus, pricingStatus, pricingSync, updateSettings, type AppSettings, type CloseBehavior, type DbSize, type Health, type PricingStatus, type UpdateCheck, type UpdateStatus } from "../api";
+import { checkUpdate, clearLogs, clearRecords, downloadUpdate, getDbSize, getHealth, getSettings, getUpdateStatus, pricingStatus, pricingSync, updateSettings, type AppSettings, type CloseBehavior, type DbSize, type Health, type PricingStatus, type UpdateCheck, type UpdateStatus } from "../api";
 
-function parseLocalDateStartMs(s: string): number | undefined {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s.trim());
-  if (!m) return undefined;
-  const y = Number(m[1]);
-  const mo = Number(m[2]) - 1;
-  const d = Number(m[3]);
-  const dt = new Date(y, mo, d, 0, 0, 0, 0);
-  const ms = dt.getTime();
-  return Number.isFinite(ms) ? ms : undefined;
-}
-
-function parseLocalDateEndMs(s: string): number | undefined {
-  const start = parseLocalDateStartMs(s);
-  if (start === undefined) return undefined;
-  return start + 86_399_999;
+function joinPath(base: string, sub: string): string {
+  const sep = base.includes("\\") ? "\\" : "/";
+  if (base.endsWith(sep)) return `${base}${sub}`;
+  return `${base}${sep}${sub}`;
 }
 
 export function SettingsPage() {
@@ -63,10 +58,17 @@ export function SettingsPage() {
   const [autoStartSaving, setAutoStartSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [dbSizeLoading, setDbSizeLoading] = useState(false);
-  const [clearDate, setClearDate] = useState("");
+  // Records clear state
+  const [recordsDateRange, setRecordsDateRange] = useState<DateRange | undefined>(undefined);
   const [clearMode, setClearMode] = useState<"date_range" | "errors" | "all" | null>(null);
   const [clearPromptOpen, setClearPromptOpen] = useState(false);
   const [clearing, setClearing] = useState(false);
+  // Logs clear state
+  const [logSaving, setLogSaving] = useState(false);
+  const [logsDateRange, setLogsDateRange] = useState<DateRange | undefined>(undefined);
+  const [logsClearMode, setLogsClearMode] = useState<"date_range" | "all" | null>(null);
+  const [logsClearPromptOpen, setLogsClearPromptOpen] = useState(false);
+  const [logsClearing, setLogsClearing] = useState(false);
 
   async function refreshDbSize() {
     setDbSizeLoading(true);
@@ -94,7 +96,10 @@ export function SettingsPage() {
       .catch(() => setPricing(null));
 
     getSettings()
-      .then(setAppSettings)
+      .then((s) => {
+        setAppSettings(s);
+        setLogLevel(s.log_level);
+      })
       .catch(() => setAppSettings(null));
 
     getUpdateStatus()
@@ -170,10 +175,23 @@ export function SettingsPage() {
 
   const clearPromptDescKey =
     clearMode === "date_range"
-      ? "settings.records.confirmDate"
+      ? "settings.records.confirmDateRange"
       : clearMode === "errors"
         ? "settings.records.confirmErrors"
         : "settings.records.confirmAll";
+
+  const recordsDateStr = recordsDateRange?.from
+    ? `${format(recordsDateRange.from, "yyyy-MM-dd")}${recordsDateRange.to ? ` ~ ${format(recordsDateRange.to, "yyyy-MM-dd")}` : ""}`
+    : "-";
+
+  const logsPromptDescKey =
+    logsClearMode === "date_range"
+      ? "settings.logging.confirmDateRange"
+      : "settings.logging.confirmAll";
+
+  const logsDateStr = logsDateRange?.from
+    ? `${format(logsDateRange.from, "yyyy-MM-dd")}${logsDateRange.to ? ` ~ ${format(logsDateRange.to, "yyyy-MM-dd")}` : ""}`
+    : "-";
 
   return (
     <div className="space-y-4 pb-4">
@@ -710,6 +728,177 @@ export function SettingsPage() {
         </CardContent>
       </Card>
 
+      {/* 应用日志 */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <ScrollText className="h-4 w-4" />
+            {t("settings.logging.title")}
+          </CardTitle>
+          <CardDescription>{t("settings.logging.subtitle")}</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <div className="font-medium text-sm">{t("settings.logging.level")}</div>
+              <div className="text-xs text-muted-foreground">{t("settings.logging.levelHint")}</div>
+            </div>
+            <Select
+              value={appSettings?.log_level ?? "warning"}
+              onValueChange={async (v) => {
+                if (!appSettings) return;
+                const prev = appSettings.log_level;
+                setAppSettings({ ...appSettings, log_level: v as any });
+                setLogSaving(true);
+                try {
+                  const next = await updateSettings({ log_level: v as any });
+                  setAppSettings(next);
+                  setLogLevel(next.log_level);
+                  toast.success(t("settings.logging.saved"));
+                } catch (e) {
+                  setAppSettings({ ...appSettings, log_level: prev });
+                  toast.error(t("settings.logging.saveFail"), { description: String(e) });
+                } finally {
+                  setLogSaving(false);
+                }
+              }}
+              disabled={!appSettings || logSaving}
+            >
+              <SelectTrigger className="w-[180px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">{t("settings.logging.levelNone")}</SelectItem>
+                <SelectItem value="debug">{t("settings.logging.levelDebug")}</SelectItem>
+                <SelectItem value="info">{t("settings.logging.levelInfo")}</SelectItem>
+                <SelectItem value="warning">{t("settings.logging.levelWarning")}</SelectItem>
+                <SelectItem value="error">{t("settings.logging.levelError")}</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium">{t("settings.logging.dir")}</label>
+            <Input
+              value={health?.data_dir ? joinPath(health.data_dir, "logs") : "-"}
+              disabled
+              className="font-mono text-sm"
+            />
+            <p className="text-xs text-muted-foreground">{t("settings.logging.dirHint")}</p>
+          </div>
+
+          <Dialog
+            open={logsClearPromptOpen}
+            onOpenChange={(v) => {
+              if (logsClearing) return;
+              setLogsClearPromptOpen(v);
+              if (!v) setLogsClearMode(null);
+            }}
+          >
+            <DialogContent className="sm:max-w-[520px]">
+              <DialogHeader>
+                <DialogTitle>{t("settings.logging.confirmTitle")}</DialogTitle>
+                <DialogDescription>
+                  {t(logsPromptDescKey, { range: logsDateStr })}
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => setLogsClearPromptOpen(false)}
+                  disabled={logsClearing}
+                >
+                  {t("common.cancel")}
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={async () => {
+                    if (!logsClearMode) return;
+                    setLogsClearing(true);
+                    try {
+                      if (logsClearMode === "date_range") {
+                        const r = dateRangeToStrings(logsDateRange);
+                        if (!r) {
+                          toast.error(t("settings.logging.invalidDate"));
+                          return;
+                        }
+                        const res = await clearLogs({ mode: "date_range", start_date: r.start, end_date: r.end });
+                        toast.success(t("settings.logging.cleared"), {
+                          description: t("settings.logging.clearedDetail", {
+                            deleted: res.deleted_files,
+                            truncated: res.truncated_files,
+                          }),
+                        });
+                      } else {
+                        const res = await clearLogs({ mode: "all" });
+                        toast.success(t("settings.logging.cleared"), {
+                          description: t("settings.logging.clearedDetail", {
+                            deleted: res.deleted_files,
+                            truncated: res.truncated_files,
+                          }),
+                        });
+                      }
+                      setLogsClearPromptOpen(false);
+                      setLogsDateRange(undefined);
+                    } catch (e) {
+                      toast.error(t("settings.logging.clearFail"), { description: String(e) });
+                    } finally {
+                      setLogsClearing(false);
+                    }
+                  }}
+                  disabled={logsClearing}
+                >
+                  {logsClearing ? t("settings.logging.clearing") : t("settings.logging.clear")}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex-1 min-w-0">
+              <div className="font-medium text-sm">{t("settings.logging.clearLogs")}</div>
+              <div className="text-xs text-muted-foreground">{t("settings.logging.clearLogsHint")}</div>
+            </div>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <DateRangePicker
+                value={logsDateRange}
+                onChange={setLogsDateRange}
+                placeholder={t("settings.logging.selectRange")}
+                className="w-[280px]"
+                disabled={logsClearing}
+                locale={locale}
+              />
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => {
+                  if (!logsDateRange?.from) {
+                    toast.error(t("settings.logging.invalidDate"));
+                    return;
+                  }
+                  setLogsClearMode("date_range");
+                  setLogsClearPromptOpen(true);
+                }}
+                disabled={logsClearing || !logsDateRange?.from}
+              >
+                {t("settings.logging.clear")}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setLogsClearMode("all");
+                  setLogsClearPromptOpen(true);
+                }}
+                disabled={logsClearing}
+              >
+                {t("settings.logging.clearAll")}
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* 记录清理 */}
       <Card>
         <CardHeader>
@@ -732,9 +921,7 @@ export function SettingsPage() {
               <DialogHeader>
                 <DialogTitle>{t("settings.records.confirmTitle")}</DialogTitle>
                 <DialogDescription>
-                  {t(clearPromptDescKey, {
-                    date: clearDate.trim().length > 0 ? clearDate.trim() : "-",
-                  })}
+                  {t(clearPromptDescKey, { range: recordsDateStr })}
                 </DialogDescription>
               </DialogHeader>
               <DialogFooter>
@@ -751,20 +938,17 @@ export function SettingsPage() {
                     if (!clearMode) return;
                     setClearing(true);
                     try {
-                      const start_ms =
-                        clearMode === "date_range" ? parseLocalDateStartMs(clearDate) : undefined;
-                      const end_ms =
-                        clearMode === "date_range" ? parseLocalDateEndMs(clearDate) : undefined;
+                      const msRange = clearMode === "date_range" ? dateRangeToMs(recordsDateRange) : null;
 
-                      if (clearMode === "date_range" && (start_ms === undefined || end_ms === undefined)) {
+                      if (clearMode === "date_range" && !msRange) {
                         toast.error(t("settings.records.invalidDate"));
                         return;
                       }
 
                       const res = await clearRecords({
                         mode: clearMode,
-                        start_ms,
-                        end_ms,
+                        start_ms: msRange?.start_ms,
+                        end_ms: msRange?.end_ms,
                       });
                       toast.success(t("settings.records.cleared"), {
                         description: t("settings.records.clearedDetail", {
@@ -773,6 +957,7 @@ export function SettingsPage() {
                         }),
                       });
                       setClearPromptOpen(false);
+                      setRecordsDateRange(undefined);
                       await refreshDbSize();
                     } catch (e) {
                       toast.error(t("settings.records.clearFail"), { description: String(e) });
@@ -789,31 +974,31 @@ export function SettingsPage() {
           </Dialog>
 
           <div className="flex items-center justify-between gap-4">
-            <div>
-              <div className="font-medium text-sm">{t("settings.records.date")}</div>
-              <div className="text-xs text-muted-foreground">{t("settings.records.dateHint")}</div>
+            <div className="flex-1 min-w-0">
+              <div className="font-medium text-sm">{t("settings.records.clearRecords")}</div>
+              <div className="text-xs text-muted-foreground">{t("settings.records.clearRecordsHint")}</div>
             </div>
-            <div className="flex items-center gap-2">
-              <Input
-                type="date"
-                value={clearDate}
-                onChange={(e) => setClearDate(e.target.value)}
-                className="w-[160px]"
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <DateRangePicker
+                value={recordsDateRange}
+                onChange={setRecordsDateRange}
+                placeholder={t("settings.records.selectRange")}
+                className="w-[280px]"
+                disabled={clearing}
+                locale={locale}
               />
               <Button
                 variant="destructive"
                 size="sm"
                 onClick={() => {
-                  const start = parseLocalDateStartMs(clearDate);
-                  const end = parseLocalDateEndMs(clearDate);
-                  if (start === undefined || end === undefined) {
+                  if (!recordsDateRange?.from) {
                     toast.error(t("settings.records.invalidDate"));
                     return;
                   }
                   setClearMode("date_range");
                   setClearPromptOpen(true);
                 }}
-                disabled={clearing}
+                disabled={clearing || !recordsDateRange?.from}
               >
                 {t("settings.records.clear")}
               </Button>
@@ -821,39 +1006,34 @@ export function SettingsPage() {
           </div>
 
           <div className="flex items-center justify-between gap-4">
-            <div>
+            <div className="flex-1 min-w-0">
               <div className="font-medium text-sm">{t("settings.records.errors")}</div>
               <div className="text-xs text-muted-foreground">{t("settings.records.errorsHint")}</div>
             </div>
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={() => {
-                setClearMode("errors");
-                setClearPromptOpen(true);
-              }}
-              disabled={clearing}
-            >
-              {t("settings.records.clear")}
-            </Button>
-          </div>
-
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <div className="font-medium text-sm">{t("settings.records.all")}</div>
-              <div className="text-xs text-muted-foreground">{t("settings.records.allHint")}</div>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => {
+                  setClearMode("errors");
+                  setClearPromptOpen(true);
+                }}
+                disabled={clearing}
+              >
+                {t("settings.records.clearErrors")}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setClearMode("all");
+                  setClearPromptOpen(true);
+                }}
+                disabled={clearing}
+              >
+                {t("settings.records.clearAll")}
+              </Button>
             </div>
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={() => {
-                setClearMode("all");
-                setClearPromptOpen(true);
-              }}
-              disabled={clearing}
-            >
-              {t("settings.records.clear")}
-            </Button>
           </div>
         </CardContent>
       </Card>
