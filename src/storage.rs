@@ -521,6 +521,74 @@ pub async fn clear_channel_failures(db_path: PathBuf, channel_id: String) -> any
     .await
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum RecordsClearKind {
+    DateRange { start_ms: i64, end_ms: i64 },
+    Errors,
+    All,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ClearRecordsResult {
+    pub usage_events_deleted: i64,
+    pub channel_failures_deleted: i64,
+    pub vacuumed: bool,
+}
+
+pub async fn clear_records(
+    db_path: PathBuf,
+    kind: RecordsClearKind,
+) -> anyhow::Result<ClearRecordsResult> {
+    with_conn(db_path, move |conn| {
+        conn.busy_timeout(std::time::Duration::from_secs(5))?;
+
+        let usage_events_deleted: i64 = match kind {
+            RecordsClearKind::DateRange { start_ms, end_ms } => conn
+                .execute(
+                    r#"DELETE FROM usage_events WHERE ts_ms >= ?1 AND ts_ms <= ?2"#,
+                    params![start_ms, end_ms],
+                )?
+                .try_into()
+                .unwrap_or(i64::MAX),
+            RecordsClearKind::Errors => conn
+                .execute(r#"DELETE FROM usage_events WHERE success = 0"#, [])?
+                .try_into()
+                .unwrap_or(i64::MAX),
+            RecordsClearKind::All => conn
+                .execute(r#"DELETE FROM usage_events"#, [])?
+                .try_into()
+                .unwrap_or(i64::MAX),
+        };
+
+        let channel_failures_deleted: i64 = match kind {
+            RecordsClearKind::DateRange { start_ms, end_ms } => conn
+                .execute(
+                    r#"DELETE FROM channel_failures WHERE at_ms >= ?1 AND at_ms <= ?2"#,
+                    params![start_ms, end_ms],
+                )?
+                .try_into()
+                .unwrap_or(i64::MAX),
+            RecordsClearKind::Errors | RecordsClearKind::All => conn
+                .execute(r#"DELETE FROM channel_failures"#, [])?
+                .try_into()
+                .unwrap_or(i64::MAX),
+        };
+
+        let vacuumed = matches!(kind, RecordsClearKind::Errors | RecordsClearKind::All);
+        conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);")?;
+        if vacuumed {
+            conn.execute_batch("VACUUM;")?;
+        }
+
+        Ok(ClearRecordsResult {
+            usage_events_deleted,
+            channel_failures_deleted,
+            vacuumed,
+        })
+    })
+    .await
+}
+
 async fn with_conn<T, F>(db_path: PathBuf, f: F) -> anyhow::Result<T>
 where
     T: Send + 'static,

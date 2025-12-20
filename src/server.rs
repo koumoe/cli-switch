@@ -1016,6 +1016,78 @@ async fn usage_list(
     Ok(Json(res))
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum RecordsClearMode {
+    DateRange,
+    Errors,
+    All,
+}
+
+#[derive(Debug, Deserialize)]
+struct RecordsClearInput {
+    mode: RecordsClearMode,
+    start_ms: Option<i64>,
+    end_ms: Option<i64>,
+}
+
+async fn records_clear(
+    State(state): State<AppState>,
+    Json(input): Json<RecordsClearInput>,
+) -> Result<impl IntoResponse, ApiError> {
+    let kind = match input.mode {
+        RecordsClearMode::DateRange => {
+            let start_ms = input.start_ms.ok_or_else(|| {
+                ApiError::BadRequest("mode=date_range 时 start_ms 必填".to_string())
+            })?;
+            let end_ms = input.end_ms.ok_or_else(|| {
+                ApiError::BadRequest("mode=date_range 时 end_ms 必填".to_string())
+            })?;
+            if start_ms > end_ms {
+                return Err(ApiError::BadRequest("start_ms 不能大于 end_ms".to_string()));
+            }
+            storage::RecordsClearKind::DateRange { start_ms, end_ms }
+        }
+        RecordsClearMode::Errors => storage::RecordsClearKind::Errors,
+        RecordsClearMode::All => storage::RecordsClearKind::All,
+    };
+
+    let res = storage::clear_records((*state.db_path).clone(), kind).await?;
+    Ok(Json(res))
+}
+
+#[derive(Serialize)]
+struct DbSizeResponse {
+    path: String,
+    db_bytes: u64,
+    wal_bytes: u64,
+    shm_bytes: u64,
+    total_bytes: u64,
+}
+
+async fn db_size(State(state): State<AppState>) -> Result<impl IntoResponse, ApiError> {
+    fn file_len(p: &Path) -> u64 {
+        std::fs::metadata(p).map(|m| m.len()).unwrap_or(0)
+    }
+
+    let db_path = state.db_path.as_path();
+    let wal_path = PathBuf::from(format!("{}-wal", db_path.display()));
+    let shm_path = PathBuf::from(format!("{}-shm", db_path.display()));
+
+    let db_bytes = file_len(db_path);
+    let wal_bytes = file_len(&wal_path);
+    let shm_bytes = file_len(&shm_path);
+    let total_bytes = db_bytes.saturating_add(wal_bytes).saturating_add(shm_bytes);
+
+    Ok(Json(DbSizeResponse {
+        path: db_path.display().to_string(),
+        db_bytes,
+        wal_bytes,
+        shm_bytes,
+        total_bytes,
+    }))
+}
+
 async fn get_settings(State(state): State<AppState>) -> Result<impl IntoResponse, ApiError> {
     let settings = storage::get_app_settings((*state.db_path).clone()).await?;
     Ok(Json(settings))
@@ -1159,6 +1231,8 @@ fn build_app(state: AppState) -> Router {
     let app = Router::new()
         .route("/api/health", get(health))
         .route("/api/settings", get(get_settings).put(update_settings))
+        .route("/api/maintenance/records/clear", post(records_clear))
+        .route("/api/maintenance/db_size", get(db_size))
         .route("/api/update/status", get(update_status))
         .route("/api/update/check", post(update_check))
         .route("/api/update/download", post(update_download))
