@@ -163,7 +163,7 @@ pub fn init(data_dir: &Path, settings_level: LogLevel) -> anyhow::Result<()> {
     let file_layer = tracing_subscriber::fmt::layer()
         .json()
         .with_target(false)
-        .with_current_span(false)
+        .with_current_span(true)
         .with_span_list(false)
         .with_thread_ids(false)
         .with_thread_names(false)

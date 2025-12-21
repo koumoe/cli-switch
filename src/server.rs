@@ -1,5 +1,6 @@
 use axum::Router;
 use axum::routing::{any, get, post, put};
+use http::Method;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -8,7 +9,7 @@ use tokio::sync::watch;
 #[cfg(not(feature = "embed-ui"))]
 use tower_http::services::ServeDir;
 use tower_http::trace::TraceLayer;
-use tower_http::trace::{DefaultMakeSpan, DefaultOnFailure, DefaultOnResponse};
+use tower_http::trace::{DefaultOnFailure, DefaultOnResponse};
 
 use crate::update;
 
@@ -20,8 +21,141 @@ mod ui;
 
 pub use state::AppState;
 
+fn request_endpoint_template(method: &Method, path: &str) -> Option<&'static str> {
+    match (method.as_str(), path) {
+        ("GET", "/api/health") => Some("/api/health"),
+        ("GET", "/api/settings") => Some("/api/settings"),
+        ("PUT", "/api/settings") => Some("/api/settings"),
+        ("POST", "/api/maintenance/records/clear") => Some("/api/maintenance/records/clear"),
+        ("POST", "/api/maintenance/logs/clear") => Some("/api/maintenance/logs/clear"),
+        ("GET", "/api/maintenance/db_size") => Some("/api/maintenance/db_size"),
+        ("POST", "/api/logs/ingest") => Some("/api/logs/ingest"),
+        ("GET", "/api/update/status") => Some("/api/update/status"),
+        ("POST", "/api/update/check") => Some("/api/update/check"),
+        ("POST", "/api/update/download") => Some("/api/update/download"),
+        ("GET", "/api/channels") => Some("/api/channels"),
+        ("POST", "/api/channels") => Some("/api/channels"),
+        ("POST", "/api/channels/reorder") => Some("/api/channels/reorder"),
+        ("GET", "/api/routes") => Some("/api/routes"),
+        ("POST", "/api/routes") => Some("/api/routes"),
+        ("GET", "/api/pricing/status") => Some("/api/pricing/status"),
+        ("GET", "/api/pricing/models") => Some("/api/pricing/models"),
+        ("POST", "/api/pricing/sync") => Some("/api/pricing/sync"),
+        ("GET", "/api/stats/summary") => Some("/api/stats/summary"),
+        ("GET", "/api/stats/channels") => Some("/api/stats/channels"),
+        ("GET", "/api/stats/trend") => Some("/api/stats/trend"),
+        ("GET", "/api/usage/list") => Some("/api/usage/list"),
+        _ => {
+            let segments: Vec<_> = path.split('/').filter(|s| !s.is_empty()).collect();
+            match segments.as_slice() {
+                ["api", "channels", _, "enable"] if method == Method::POST => {
+                    Some("/api/channels/{id}/enable")
+                }
+                ["api", "channels", _, "disable"] if method == Method::POST => {
+                    Some("/api/channels/{id}/disable")
+                }
+                ["api", "channels", _, "test"] if method == Method::POST => {
+                    Some("/api/channels/{id}/test")
+                }
+                ["api", "channels", _] if method == Method::PUT => Some("/api/channels/{id}"),
+                ["api", "channels", _] if method == Method::DELETE => Some("/api/channels/{id}"),
+                ["api", "routes", _] if method == Method::PUT => Some("/api/routes/{id}"),
+                ["api", "routes", _] if method == Method::DELETE => Some("/api/routes/{id}"),
+                ["api", "routes", _, "channels"] if method == Method::GET => {
+                    Some("/api/routes/{id}/channels")
+                }
+                ["api", "routes", _, "channels", "reorder"] if method == Method::POST => {
+                    Some("/api/routes/{id}/channels/reorder")
+                }
+                ["v1", "messages", ..] => Some("/v1/messages/{*path}"),
+                ["v1beta", ..] => Some("/v1beta/{*path}"),
+                ["v1", ..] => Some("/v1/{*path}"),
+                _ => None,
+            }
+        }
+    }
+}
+
+fn request_purpose(method: &Method, path: &str) -> &'static str {
+    match (method.as_str(), path) {
+        ("GET", "/api/health") => "handlers::health",
+        ("GET", "/api/settings") => "handlers::get_settings",
+        ("PUT", "/api/settings") => "handlers::update_settings",
+        ("POST", "/api/maintenance/records/clear") => "handlers::records_clear",
+        ("POST", "/api/maintenance/logs/clear") => "handlers::logs_clear",
+        ("GET", "/api/maintenance/db_size") => "handlers::db_size",
+        ("POST", "/api/logs/ingest") => "handlers::frontend_log_ingest",
+        ("GET", "/api/update/status") => "handlers::update_status",
+        ("POST", "/api/update/check") => "handlers::update_check",
+        ("POST", "/api/update/download") => "handlers::update_download",
+        ("GET", "/api/channels") => "handlers::list_channels",
+        ("POST", "/api/channels") => "handlers::create_channel",
+        ("POST", "/api/channels/reorder") => "handlers::reorder_channels",
+        ("GET", "/api/routes") => "handlers::list_routes",
+        ("POST", "/api/routes") => "handlers::create_route",
+        ("GET", "/api/pricing/status") => "handlers::pricing_status",
+        ("GET", "/api/pricing/models") => "handlers::pricing_models",
+        ("POST", "/api/pricing/sync") => "handlers::pricing_sync",
+        ("GET", "/api/stats/summary") => "handlers::stats_summary",
+        ("GET", "/api/stats/channels") => "handlers::stats_channels",
+        ("GET", "/api/stats/trend") => "handlers::stats_trend",
+        ("GET", "/api/usage/list") => "handlers::usage_list",
+        _ => {
+            let segments: Vec<_> = path.split('/').filter(|s| !s.is_empty()).collect();
+            match segments.as_slice() {
+                ["api", "channels", _, "enable"] if method == Method::POST => {
+                    "handlers::enable_channel"
+                }
+                ["api", "channels", _, "disable"] if method == Method::POST => {
+                    "handlers::disable_channel"
+                }
+                ["api", "channels", _, "test"] if method == Method::POST => {
+                    "handlers::test_channel"
+                }
+                ["api", "channels", _] if method == Method::PUT => "handlers::update_channel",
+                ["api", "channels", _] if method == Method::DELETE => "handlers::delete_channel",
+                ["api", "routes", _] if method == Method::PUT => "handlers::update_route",
+                ["api", "routes", _] if method == Method::DELETE => "handlers::delete_route",
+                ["api", "routes", _, "channels"] if method == Method::GET => {
+                    "handlers::list_route_channels"
+                }
+                ["api", "routes", _, "channels", "reorder"] if method == Method::POST => {
+                    "handlers::reorder_route_channels"
+                }
+                ["v1", "messages", ..] => "handlers::proxy_anthropic",
+                ["v1beta", ..] => "handlers::proxy_gemini",
+                ["v1", ..] => "handlers::proxy_openai",
+                ["assets", ..] => "ServeDir",
+                ["api", ..] => "unknown_api",
+                _ => "ui",
+            }
+        }
+    }
+}
+
 fn build_app(state: AppState) -> Router {
-    let app = Router::new()
+    let trace_layer = TraceLayer::new_for_http()
+        .make_span_with(|request: &http::Request<_>| {
+            let method = request.method();
+            let uri = request.uri();
+            let path = uri.path();
+            let endpoint = request_endpoint_template(method, path).unwrap_or(path);
+            let purpose = request_purpose(method, path);
+
+            tracing::span!(
+                tracing::Level::DEBUG,
+                "http.request",
+                method = %method,
+                uri = %uri,
+                path = %path,
+                endpoint = endpoint,
+                purpose = purpose
+            )
+        })
+        .on_response(DefaultOnResponse::new().level(tracing::Level::DEBUG))
+        .on_failure(DefaultOnFailure::new().level(tracing::Level::WARN));
+
+    let traced_api = Router::new()
         .route("/api/health", get(handlers::health))
         .route(
             "/api/settings",
@@ -79,13 +213,9 @@ fn build_app(state: AppState) -> Router {
         .route("/v1/messages/{*path}", any(handlers::proxy_anthropic))
         .route("/v1beta/{*path}", any(handlers::proxy_gemini))
         .route("/v1/{*path}", any(handlers::proxy_openai))
-        .with_state(state)
-        .layer(
-            TraceLayer::new_for_http()
-                .make_span_with(DefaultMakeSpan::new().level(tracing::Level::DEBUG))
-                .on_response(DefaultOnResponse::new().level(tracing::Level::DEBUG))
-                .on_failure(DefaultOnFailure::new().level(tracing::Level::WARN)),
-        );
+        .layer(trace_layer);
+
+    let app = Router::new().merge(traced_api).with_state(state);
 
     #[cfg(feature = "embed-ui")]
     let app = app.fallback(any(ui::ui_fallback));
