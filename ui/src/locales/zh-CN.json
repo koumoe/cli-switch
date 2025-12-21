@@ -28,7 +28,7 @@
   "common": {
     "loading": "加载中...",
     "refresh": "刷新",
-    "autoRefresh1m": "每分钟自动更新",
+    "autoRefresh1m": "有新数据时自动更新",
     "cancel": "取消",
     "ok": "知道了",
     "save": "保存",

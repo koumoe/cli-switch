@@ -6,6 +6,8 @@ use std::path::{Path, PathBuf};
 #[cfg(not(target_os = "windows"))]
 use std::ffi::{OsStr, OsString};
 
+use crate::events::{self, AppEvent};
+
 const GITHUB_OWNER: &str = "koumoe";
 const GITHUB_REPO: &str = "cli-switch";
 
@@ -66,7 +68,7 @@ impl UpdateRuntime {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UpdateStatus {
     pub current_version: String,
     pub auto_update_enabled: bool,
@@ -76,6 +78,27 @@ pub struct UpdateStatus {
     pub pending_version: Option<String>,
     pub download_percent: Option<u8>,
     pub error: Option<String>,
+}
+
+fn snapshot_status(rt: &UpdateRuntime, pending_version: Option<String>) -> UpdateStatus {
+    UpdateStatus {
+        current_version: env!("CARGO_PKG_VERSION").to_string(),
+        auto_update_enabled: false,
+        stage: rt.stage.as_str().to_string(),
+        latest_version: rt.latest_version.clone(),
+        update_available: rt.update_available,
+        pending_version,
+        download_percent: if rt.stage == Stage::Downloading {
+            rt.download_percent
+        } else {
+            None
+        },
+        error: rt.error.clone(),
+    }
+}
+
+fn publish_status(rt: &UpdateRuntime, pending_version: Option<String>) {
+    events::publish(AppEvent::UpdateStatus(snapshot_status(rt, pending_version)));
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -237,6 +260,7 @@ pub async fn check_latest(
     }
 
     let pending = load_pending_update(data_dir);
+    let pending_version = pending.as_ref().map(|p| p.version.clone());
     {
         let mut rt = runtime.lock().await;
         rt.latest_version = latest_str.clone();
@@ -250,6 +274,7 @@ pub async fn check_latest(
             rt.stage = Stage::Idle;
         }
         rt.reset_download_state();
+        publish_status(&rt, pending_version);
     }
 
     UpdateCheck {
@@ -310,10 +335,12 @@ pub async fn spawn_download_latest(
         Ok(r) => r,
         Err(e) => {
             tracing::warn!(err = %e, "update download check failed: github latest release");
+            let pending_version = load_pending_update(&data_dir).map(|p| p.version);
             let mut rt = runtime.lock().await;
             rt.stage = Stage::Error;
             rt.error = Some(e.to_string());
             rt.reset_download_state();
+            publish_status(&rt, pending_version);
             return false;
         }
     };
@@ -335,6 +362,7 @@ pub async fn spawn_download_latest(
         rt.stage = Stage::Error;
         rt.error = Some(err);
         rt.reset_download_state();
+        publish_status(&rt, load_pending_update(&data_dir).map(|p| p.version));
         return false;
     }
 
@@ -347,6 +375,7 @@ pub async fn spawn_download_latest(
         rt.stage = Stage::Ready;
         rt.error = None;
         rt.reset_download_state();
+        publish_status(&rt, pending.map(|p| p.version));
         return false;
     }
 
@@ -358,6 +387,7 @@ pub async fn spawn_download_latest(
         rt.stage = Stage::Idle;
         rt.error = None;
         rt.reset_download_state();
+        publish_status(&rt, load_pending_update(&data_dir).map(|p| p.version));
         return false;
     }
 
@@ -369,6 +399,7 @@ pub async fn spawn_download_latest(
         rt.stage = Stage::Error;
         rt.error = Some("未找到适配当前平台的 Release 资源".to_string());
         rt.reset_download_state();
+        publish_status(&rt, load_pending_update(&data_dir).map(|p| p.version));
         return false;
     }
 
@@ -382,16 +413,19 @@ pub async fn spawn_download_latest(
         rt.download_percent = Some(0);
         rt.download_total_bytes = None;
         rt.download_downloaded_bytes = 0;
+        publish_status(&rt, None);
     }
 
     tokio::spawn(async move {
         let res = download_latest_inner(&client, &data_dir, runtime.clone()).await;
         if let Err(e) = res {
             tracing::warn!(err = %e, "update download failed");
+            let pending_version = load_pending_update(&data_dir).map(|p| p.version);
             let mut rt = runtime.lock().await;
             rt.stage = Stage::Error;
             rt.error = Some(e.to_string());
             rt.reset_download_state();
+            publish_status(&rt, pending_version);
         }
     });
 
@@ -477,18 +511,26 @@ async fn download_to_file_with_sha256(
             }
             if last_percent != Some(percent) {
                 last_percent = Some(percent);
-                let mut rt = runtime.lock().await;
-                rt.download_downloaded_bytes = downloaded;
-                rt.download_percent = Some(percent);
+                let status = {
+                    let mut rt = runtime.lock().await;
+                    rt.download_downloaded_bytes = downloaded;
+                    rt.download_percent = Some(percent);
+                    snapshot_status(&rt, None)
+                };
+                events::publish(AppEvent::UpdateStatus(status));
             }
         }
     }
     file.flush().await.ok();
 
     if total.is_some() {
-        let mut rt = runtime.lock().await;
-        rt.download_downloaded_bytes = downloaded;
-        rt.download_percent = Some(100);
+        let status = {
+            let mut rt = runtime.lock().await;
+            rt.download_downloaded_bytes = downloaded;
+            rt.download_percent = Some(100);
+            snapshot_status(&rt, None)
+        };
+        events::publish(AppEvent::UpdateStatus(status));
     }
 
     Ok(hex::encode(hasher.finalize()))
@@ -653,6 +695,7 @@ async fn download_latest_inner(
     {
         let mut rt = runtime.lock().await;
         rt.stage = Stage::Staging;
+        publish_status(&rt, load_pending_update(data_dir).map(|p| p.version));
     }
 
     let staged_exe = tokio::task::spawn_blocking({
@@ -679,6 +722,7 @@ async fn download_latest_inner(
     rt.stage = Stage::Ready;
     rt.reset_download_state();
     rt.error = None;
+    publish_status(&rt, Some(latest.clone()));
     Ok(())
 }
 

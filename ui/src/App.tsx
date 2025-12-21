@@ -26,8 +26,9 @@ import {
   TooltipTrigger,
 } from "@/components/ui";
 import { toast } from "sonner";
-import { getHealth, getSettings, getUpdateStatus, pricingStatus, pricingSync } from "./api";
+import { getHealth, getSettings, pricingStatus, pricingSync } from "./api";
 import { logger, setLogLevel } from "@/lib/logger";
+import type { CliswitchUpdateStatusEvent } from "@/lib/cliswitchEvents";
 
 import { OverviewPage } from "./pages/OverviewPage";
 import { ChannelsPage } from "./pages/ChannelsPage";
@@ -201,31 +202,22 @@ export default function App() {
   }, [locale]);
 
   useEffect(() => {
-    let stopped = false;
+    const onUpdateStatus = (e: Event) => {
+      const st = (e as CliswitchUpdateStatusEvent).detail;
+      const version = st?.pending_version;
+      if (!version) return;
 
-    const poll = async () => {
-      try {
-        const st = await getUpdateStatus();
-        const version = st.pending_version;
-        if (!version) return;
+      const key = `${UPDATE_READY_SHOWN_KEY_PREFIX}${version}`;
+      if (localStorage.getItem(key) === "true") return;
 
-        const key = `${UPDATE_READY_SHOWN_KEY_PREFIX}${version}`;
-        if (localStorage.getItem(key) === "true") return;
-
-        if (stopped) return;
-        setUpdateReadyVersion(version);
-        setUpdateReadyOpen(true);
-        localStorage.setItem(key, "true");
-      } catch {
-        // ignore
-      }
+      setUpdateReadyVersion(version);
+      setUpdateReadyOpen(true);
+      localStorage.setItem(key, "true");
     };
-
-    void poll();
-    const id = window.setInterval(() => void poll(), 2_000);
+    window.addEventListener("cliswitch-update-status", onUpdateStatus as EventListener);
+    postIpc({ type: "ui-ready" });
     return () => {
-      stopped = true;
-      window.clearInterval(id);
+      window.removeEventListener("cliswitch-update-status", onUpdateStatus as EventListener);
     };
   }, []);
 

@@ -2,9 +2,11 @@ use anyhow::Context as _;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::time::Duration;
 
-use cliswitch::{server, storage, update};
+use cliswitch::events::AppEvent;
+use cliswitch::{events, server, storage, update};
 use muda::{Menu, MenuEvent, MenuId, MenuItem, PredefinedMenuItem, Submenu};
 use rusqlite::params;
+use serde::Serialize;
 use tao::dpi::LogicalSize;
 #[cfg(target_os = "macos")]
 use tao::platform::macos::{EventLoopWindowTargetExtMacOS, WindowBuilderExtMacOS};
@@ -22,6 +24,7 @@ enum UserEvent {
     Menu(MenuEvent),
     Ipc(String),
     CloseRequested(storage::AppSettings),
+    BackendEvent(AppEvent),
 }
 
 #[derive(Debug, Clone, Copy, serde::Deserialize)]
@@ -44,6 +47,8 @@ enum IpcMessage {
     SetLocale { locale: String },
     #[serde(rename = "request-quit")]
     RequestQuit,
+    #[serde(rename = "ui-ready")]
+    UiReady,
 }
 
 #[derive(Debug, Default)]
@@ -53,6 +58,30 @@ struct DesktopState {
     close_request_inflight: bool,
     close_prompt_open: bool,
     locale: DesktopLocale,
+    ui_ready: bool,
+}
+
+fn dispatch_custom_event<T: Serialize>(webview: &wry::WebView, name: &str, detail: &T) {
+    let detail_json = match serde_json::to_string(detail) {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::warn!(err = %e, event = name, "serialize webview event detail failed");
+            return;
+        }
+    };
+    let detail_json_str = match serde_json::to_string(&detail_json) {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::warn!(err = %e, event = name, "escape webview event detail json failed");
+            return;
+        }
+    };
+    let script = format!(
+        r#"try {{ window.dispatchEvent(new CustomEvent({name:?}, {{ detail: JSON.parse({detail_json_str}) }})); }} catch (e) {{}}"#,
+    );
+    if let Err(e) = webview.evaluate_script(&script) {
+        tracing::warn!(err = %e, event = name, "webview evaluate_script failed");
+    }
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -260,6 +289,7 @@ fn handle_user_event(
     ev: UserEvent,
     state: &mut DesktopState,
     control_flow: &mut ControlFlow,
+    proxy: &tao::event_loop::EventLoopProxy<UserEvent>,
     server_handle: &tokio::task::JoinHandle<()>,
     data_dir: &std::path::PathBuf,
     window: &tao::window::Window,
@@ -380,6 +410,30 @@ fn handle_user_event(
                 IpcMessage::RequestQuit => {
                     quit_app(data_dir.as_path(), server_handle, control_flow, true);
                 }
+                IpcMessage::UiReady => {
+                    state.ui_ready = true;
+                    if let Some(status) = events::last_update_status() {
+                        let _ = proxy
+                            .send_event(UserEvent::BackendEvent(AppEvent::UpdateStatus(status)));
+                    }
+                }
+            }
+        }
+        UserEvent::BackendEvent(ev) => {
+            if !state.ui_ready {
+                return;
+            }
+            match ev {
+                AppEvent::UpdateStatus(status) => {
+                    dispatch_custom_event(webview, "cliswitch-update-status", &status);
+                }
+                AppEvent::UsageChanged { at_ms } => {
+                    dispatch_custom_event(
+                        webview,
+                        "cliswitch-usage-changed",
+                        &serde_json::json!({ "at_ms": at_ms }),
+                    );
+                }
             }
         }
     }
@@ -491,6 +545,31 @@ pub async fn run(
         .build(&window)
         .context("创建 WebView 失败")?;
 
+    {
+        let proxy = proxy.clone();
+        tokio::spawn(async move {
+            let mut rx = events::subscribe();
+            let mut last_usage_emit = tokio::time::Instant::now() - Duration::from_secs(10);
+            loop {
+                let ev = match rx.recv().await {
+                    Ok(e) => e,
+                    Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+                    Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                };
+
+                if let AppEvent::UsageChanged { .. } = ev {
+                    let now = tokio::time::Instant::now();
+                    if now.duration_since(last_usage_emit) < Duration::from_secs(1) {
+                        continue;
+                    }
+                    last_usage_emit = now;
+                }
+
+                let _ = proxy.send_event(UserEvent::BackendEvent(ev));
+            }
+        });
+    }
+
     let tray_show_id = tray_show.id().clone();
     let tray_hide_id = tray_hide.id().clone();
     let tray_quit_id = tray_quit.id().clone();
@@ -501,6 +580,7 @@ pub async fn run(
         close_request_inflight: false,
         close_prompt_open: false,
         locale: initial_locale,
+        ui_ready: false,
     };
     tray_show.set_enabled(!state.window_visible);
     tray_hide.set_enabled(state.window_visible);
@@ -517,6 +597,7 @@ pub async fn run(
                 ev,
                 &mut state,
                 control_flow,
+                &proxy,
                 &server_handle,
                 &data_dir,
                 &window,

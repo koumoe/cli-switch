@@ -33,6 +33,7 @@ import { type Locale, useI18n } from "@/lib/i18n";
 import { setLogLevel } from "@/lib/logger";
 import { formatBytes, formatDateTime } from "../lib";
 import { checkUpdate, clearLogs, clearRecords, downloadUpdate, getDbSize, getHealth, getSettings, getUpdateStatus, pricingStatus, pricingSync, updateSettings, type AppSettings, type CloseBehavior, type DbSize, type Health, type PricingStatus, type UpdateCheck, type UpdateStatus } from "../api";
+import type { CliswitchUpdateStatusEvent } from "@/lib/cliswitchEvents";
 
 function joinPath(base: string, sub: string): string {
   const sep = base.includes("\\") ? "\\" : "/";
@@ -108,25 +109,16 @@ export function SettingsPage() {
   }, []);
 
   useEffect(() => {
-    if (updateStatus?.stage !== "downloading" && updateStatus?.stage !== "staging") return;
-    let stopped = false;
-
-    const poll = async () => {
-      try {
-        const st = await getUpdateStatus();
-        if (!stopped) setUpdateStatus(st);
-      } catch {
-        // ignore
-      }
+    const onUpdateStatus = (e: Event) => {
+      const st = (e as CliswitchUpdateStatusEvent).detail;
+      if (!st) return;
+      setUpdateStatus(st);
     };
-
-    void poll();
-    const id = window.setInterval(() => void poll(), 1000);
+    window.addEventListener("cliswitch-update-status", onUpdateStatus as EventListener);
     return () => {
-      stopped = true;
-      window.clearInterval(id);
+      window.removeEventListener("cliswitch-update-status", onUpdateStatus as EventListener);
     };
-  }, [updateStatus?.stage]);
+  }, []);
 
   const apiEndpoint = (() => {
     const env = (import.meta.env.VITE_BACKEND_URL as string | undefined)?.trim();

@@ -28,7 +28,7 @@
   "common": {
     "loading": "Loading...",
     "refresh": "Refresh",
-    "autoRefresh1m": "Auto updates every minute",
+    "autoRefresh1m": "Auto updates when new data arrives",
     "cancel": "Cancel",
     "ok": "OK",
     "save": "Save",

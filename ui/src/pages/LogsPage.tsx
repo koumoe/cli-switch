@@ -35,6 +35,7 @@ import {
 } from "@/components/ui";
 import { humanizeErrorText } from "@/lib/error";
 import { useI18n } from "@/lib/i18n";
+import { useWindowEvent } from "@/lib/useWindowEvent";
 import {
   listChannels,
   usageList,
@@ -134,14 +135,10 @@ export function LogsPage() {
     refresh(1);
   }, [pageSize]);
 
-  // 自动刷新：每分钟一次（保留手动刷新按钮）
-  useEffect(() => {
-    const id = window.setInterval(() => {
-      if (loadingRef.current) return;
-      void refresh(page);
-    }, 60_000);
-    return () => window.clearInterval(id);
-  }, [page, pageSize, dateRange, protocol, channelId, model, requestId, status]);
+  useWindowEvent("cliswitch-usage-changed", () => {
+    if (loadingRef.current) return;
+    void refresh(page);
+  });
 
   return (
     <div className="flex flex-col gap-4 h-full min-h-0">
