@@ -4,6 +4,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use uuid::Uuid;
 
+use crate::events::{self, AppEvent};
+
 use super::{Protocol, with_conn};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -52,7 +54,8 @@ pub struct CreateUsageEvent {
 }
 
 pub async fn insert_usage_event(db_path: PathBuf, input: CreateUsageEvent) -> anyhow::Result<()> {
-    with_conn(db_path, move |conn| {
+    let at_ms = input.ts_ms;
+    let res = with_conn(db_path, move |conn| {
         let id = Uuid::new_v4().to_string();
         let CreateUsageEvent {
             request_id,
@@ -124,7 +127,11 @@ pub async fn insert_usage_event(db_path: PathBuf, input: CreateUsageEvent) -> an
         )?;
         Ok(())
     })
-    .await
+    .await;
+    if res.is_ok() {
+        events::publish(AppEvent::UsageChanged { at_ms });
+    }
+    res
 }
 
 fn parse_price_usd(s: &str) -> Option<f64> {

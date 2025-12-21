@@ -12,6 +12,8 @@ use tower_http::trace::TraceLayer;
 use tower_http::trace::{DefaultOnFailure, DefaultOnResponse};
 
 use crate::update;
+use crate::{events, storage};
+use crate::events::AppEvent;
 
 mod error;
 mod handlers;
@@ -258,6 +260,19 @@ pub async fn serve_with_listener(
     tracing::info!(addr = %addr, open_browser, "backend server starting");
 
     let app = build_app(state);
+
+    {
+        let db_path = (*db_path).clone();
+        let http_runtime = update_runtime.clone();
+        tokio::spawn(async move {
+            let settings = storage::get_app_settings(db_path.clone())
+                .await
+                .unwrap_or_default();
+            let data_dir = crate::server::state::data_dir_from_db_path(&db_path);
+            let status = update::get_status(http_runtime, &data_dir, settings.app_auto_update_enabled).await;
+            events::publish(AppEvent::UpdateStatus(status));
+        });
+    }
 
     let settings_rx2 = settings_rx.clone();
     tokio::spawn(tasks::pricing_auto_update_loop(

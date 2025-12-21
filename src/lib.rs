@@ -1,5 +1,6 @@
 pub mod app;
 pub mod autostart;
+pub mod events;
 pub mod log_files;
 pub mod logging;
 pub mod proxy;
