@@ -1,3 +1,9 @@
+## [0.4.5](https://github.com/koumoe/cli-switch/compare/v0.4.4...v0.4.5) (2025-12-21)
+
+### Bug Fixes
+
+* ignore anthropic count_tokens errors ([#28](https://github.com/koumoe/cli-switch/issues/28)) ([8c935bd](https://github.com/koumoe/cli-switch/commit/8c935bd661bbee7fce92c7eb30eaf5a2d1a1d6e7))
+* reduce update-ready prompt delay ([#27](https://github.com/koumoe/cli-switch/issues/27)) ([2169591](https://github.com/koumoe/cli-switch/commit/216959138fdac0548cc87992f8ac01b25ad47bc4))
 ## [0.4.4](https://github.com/koumoe/cli-switch/compare/v0.4.3...v0.4.4) (2025-12-21)
 ## [0.4.3](https://github.com/koumoe/cli-switch/compare/v0.4.2...v0.4.3) (2025-12-21)
 ## [0.4.2](https://github.com/koumoe/cli-switch/compare/v0.4.1...v0.4.2) (2025-12-21)
