@@ -22,6 +22,7 @@ import {
   TableRow,
 } from "@/components/ui";
 import { useI18n } from "@/lib/i18n";
+import { useWindowEvent } from "@/lib/useWindowEvent";
 import {
   statsSummary,
   statsChannels,
@@ -73,14 +74,10 @@ export function MonitorPage() {
     refresh();
   }, [range]);
 
-  // 自动刷新：每分钟一次（保留手动刷新按钮）
-  useEffect(() => {
-    const id = window.setInterval(() => {
-      if (loadingRef.current) return;
-      void refresh();
-    }, 60_000);
-    return () => window.clearInterval(id);
-  }, [range]);
+  useWindowEvent("cliswitch-usage-changed", () => {
+    if (loadingRef.current) return;
+    void refresh();
+  });
 
   const successRate =
     stats && stats.requests > 0
