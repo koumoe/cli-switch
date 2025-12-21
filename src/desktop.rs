@@ -413,7 +413,8 @@ fn handle_user_event(
                 IpcMessage::UiReady => {
                     state.ui_ready = true;
                     if let Some(status) = events::last_update_status() {
-                        let _ = proxy.send_event(UserEvent::BackendEvent(AppEvent::UpdateStatus(status)));
+                        let _ = proxy
+                            .send_event(UserEvent::BackendEvent(AppEvent::UpdateStatus(status)));
                     }
                 }
             }
@@ -427,7 +428,11 @@ fn handle_user_event(
                     dispatch_custom_event(webview, "cliswitch-update-status", &status);
                 }
                 AppEvent::UsageChanged { at_ms } => {
-                    dispatch_custom_event(webview, "cliswitch-usage-changed", &serde_json::json!({ "at_ms": at_ms }));
+                    dispatch_custom_event(
+                        webview,
+                        "cliswitch-usage-changed",
+                        &serde_json::json!({ "at_ms": at_ms }),
+                    );
                 }
             }
         }

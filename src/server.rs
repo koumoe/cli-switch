@@ -11,9 +11,9 @@ use tower_http::services::ServeDir;
 use tower_http::trace::TraceLayer;
 use tower_http::trace::{DefaultOnFailure, DefaultOnResponse};
 
+use crate::events::AppEvent;
 use crate::update;
 use crate::{events, storage};
-use crate::events::AppEvent;
 
 mod error;
 mod handlers;
@@ -269,7 +269,8 @@ pub async fn serve_with_listener(
                 .await
                 .unwrap_or_default();
             let data_dir = crate::server::state::data_dir_from_db_path(&db_path);
-            let status = update::get_status(http_runtime, &data_dir, settings.app_auto_update_enabled).await;
+            let status =
+                update::get_status(http_runtime, &data_dir, settings.app_auto_update_enabled).await;
             events::publish(AppEvent::UpdateStatus(status));
         });
     }
