@@ -17,6 +17,7 @@ pub(super) struct StreamRecordContext {
     pub(super) status_is_success: bool,
     pub(super) started: Instant,
     pub(super) parse_sse: bool,
+    pub(super) record_usage: bool,
 }
 
 pub(super) struct InstrumentedStream {
@@ -111,6 +112,9 @@ impl InstrumentedStream {
             return;
         }
         self.finalized = true;
+        if !self.ctx.record_usage {
+            return;
+        }
 
         let duration_ms = self.ctx.started.elapsed().as_millis() as i64;
         let (prompt_tokens, completion_tokens, total_tokens, cache_read_tokens, cache_write_tokens) =
