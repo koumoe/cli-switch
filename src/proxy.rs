@@ -1,6 +1,6 @@
 use axum::body::{Body, to_bytes};
 use axum::http::{HeaderMap, HeaderName, Request, Response};
-use bytes::Bytes;
+use bytes::{Bytes, BytesMut};
 use futures_util::StreamExt as _;
 use reqwest::Url;
 use std::pin::Pin;
@@ -12,6 +12,8 @@ use uuid::Uuid;
 use crate::storage::{self, Channel, Protocol};
 
 const MAX_INBOUND_BODY_BYTES: usize = 64 * 1024 * 1024;
+const MAX_JSON_CAPTURE_BYTES: usize = 8 * 1024 * 1024;
+const MAX_ERROR_DETAIL_BYTES: usize = 256 * 1024;
 
 #[derive(thiserror::Error, Debug)]
 pub enum ProxyError {
@@ -163,14 +165,7 @@ pub async fn forward(
                 http_status = status.as_u16(),
                 "proxy attempt got non-2xx, retry next channel"
             );
-            let error_detail = match upstream.content_length().unwrap_or(0) {
-                1..=262_144 => upstream.bytes().await.ok().map(|b| {
-                    let msg = parse_error_message(protocol, &b)
-                        .unwrap_or_else(|| String::from_utf8_lossy(&b).to_string());
-                    truncate(&msg, 2000)
-                }),
-                _ => None,
-            };
+            let error_detail = read_error_detail(protocol, upstream).await;
             spawn_usage_event(
                 storage::CreateUsageEvent {
                     request_id: Some(request_id.clone()),
@@ -324,89 +319,106 @@ async fn proxy_upstream_response(
         }
     }
 
-    if !is_sse && is_json && upstream.content_length().unwrap_or(0) <= 8 * 1024 * 1024 {
-        let bytes = upstream
-            .bytes()
-            .await
-            .map_err(|e| ProxyError::Upstream(e.to_string()))?;
+    let can_capture_json = match upstream.content_length() {
+        Some(n) => (n as usize) <= MAX_JSON_CAPTURE_BYTES,
+        None => true,
+    };
+    if !is_sse && is_json && can_capture_json {
+        let (captured, remainder) =
+            read_stream_prefix_or_all(upstream.bytes_stream().boxed(), MAX_JSON_CAPTURE_BYTES)
+                .await
+                .map_err(|e| ProxyError::Upstream(e.to_string()))?;
 
-        let response_text = match serde_json::from_slice::<serde_json::Value>(&bytes) {
-            Ok(v) => serde_json::to_string(&v)
-                .unwrap_or_else(|_| String::from_utf8_lossy(&bytes).to_string()),
-            Err(_) => String::from_utf8_lossy(&bytes).to_string(),
-        };
-        let response_one_line = to_single_line(&response_text);
-        let response_preview = truncate(&response_one_line, 4096);
+        let Some(remainder) = remainder else {
+            let bytes = captured;
 
-        let duration_ms = ctx.started.elapsed().as_millis() as i64;
-        let usage = parse_usage_from_json(ctx.protocol, &bytes);
-        let (prompt_tokens, completion_tokens, total_tokens, cache_read_tokens, cache_write_tokens) =
-            usage.as_event_fields();
+            let response_text = match serde_json::from_slice::<serde_json::Value>(&bytes) {
+                Ok(v) => serde_json::to_string(&v)
+                    .unwrap_or_else(|_| String::from_utf8_lossy(&bytes).to_string()),
+                Err(_) => String::from_utf8_lossy(&bytes).to_string(),
+            };
+            let response_one_line = to_single_line(&response_text);
+            let response_preview = truncate(&response_one_line, 4096);
 
-        let http_status = Some(status.as_u16() as i64);
-        let success = status.is_success();
-        let error_kind = (!success).then(|| format!("upstream_http:{}", status.as_u16()));
-        let error_detail = (!success).then(|| {
-            let msg = parse_error_message(ctx.protocol, &bytes)
-                .unwrap_or_else(|| String::from_utf8_lossy(&bytes).to_string());
-            truncate(&msg, 2000)
-        });
+            let duration_ms = ctx.started.elapsed().as_millis() as i64;
+            let usage = parse_usage_from_json(ctx.protocol, &bytes);
+            let (prompt_tokens, completion_tokens, total_tokens, cache_read_tokens, cache_write_tokens) =
+                usage.as_event_fields();
 
-        tracing::debug!(
-            protocol = ctx.protocol.as_str(),
-            request_id = %ctx.request_id,
-            channel_id = %ctx.channel_id,
-            model = ctx.model.as_deref().unwrap_or("-"),
-            http_status = status.as_u16(),
-            duration_ms,
-            prompt_tokens = prompt_tokens.unwrap_or(-1),
-            completion_tokens = completion_tokens.unwrap_or(-1),
-            total_tokens = total_tokens.unwrap_or(-1),
-            success,
-            error_kind = error_kind.as_deref().unwrap_or("-"),
-            response_preview = %response_preview,
-            "proxy request result"
-        );
+            let http_status = Some(status.as_u16() as i64);
+            let success = status.is_success();
+            let error_kind = (!success).then(|| format!("upstream_http:{}", status.as_u16()));
+            let error_detail = (!success).then(|| {
+                let msg = parse_error_message(ctx.protocol, &bytes)
+                    .unwrap_or_else(|| String::from_utf8_lossy(&bytes).to_string());
+                truncate(&msg, 2000)
+            });
 
-        tracing::debug!(
-            target: "proxy_body",
-            protocol = ctx.protocol.as_str(),
-            request_id = %ctx.request_id,
-            channel_id = %ctx.channel_id,
-            model = ctx.model.as_deref().unwrap_or("-"),
-            http_status = status.as_u16(),
-            duration_ms,
-            response = %response_one_line,
-            body = true,
-            "proxy request result"
-        );
-
-        spawn_usage_event(
-            storage::CreateUsageEvent {
-                request_id: Some(ctx.request_id.clone()),
-                ts_ms: storage::now_ms(),
-                protocol: ctx.protocol,
-                route_id: None,
-                channel_id: ctx.channel_id.clone(),
-                model: ctx.model.clone(),
+            tracing::debug!(
+                protocol = ctx.protocol.as_str(),
+                request_id = %ctx.request_id,
+                channel_id = %ctx.channel_id,
+                model = ctx.model.as_deref().unwrap_or("-"),
+                http_status = status.as_u16(),
+                duration_ms,
+                prompt_tokens = prompt_tokens.unwrap_or(-1),
+                completion_tokens = completion_tokens.unwrap_or(-1),
+                total_tokens = total_tokens.unwrap_or(-1),
                 success,
-                http_status,
-                error_kind,
-                error_detail,
-                latency_ms: duration_ms,
-                ttft_ms: None,
-                prompt_tokens,
-                completion_tokens,
-                total_tokens,
-                cache_read_tokens,
-                cache_write_tokens,
-                estimated_cost_usd: None,
-            },
-            ctx.db_path.clone(),
-        );
+                error_kind = error_kind.as_deref().unwrap_or("-"),
+                response_preview = %response_preview,
+                "proxy request result"
+            );
 
+            tracing::debug!(
+                target: "proxy_body",
+                protocol = ctx.protocol.as_str(),
+                request_id = %ctx.request_id,
+                channel_id = %ctx.channel_id,
+                model = ctx.model.as_deref().unwrap_or("-"),
+                http_status = status.as_u16(),
+                duration_ms,
+                response = %response_one_line,
+                body = true,
+                "proxy request result"
+            );
+
+            spawn_usage_event(
+                storage::CreateUsageEvent {
+                    request_id: Some(ctx.request_id.clone()),
+                    ts_ms: storage::now_ms(),
+                    protocol: ctx.protocol,
+                    route_id: None,
+                    channel_id: ctx.channel_id.clone(),
+                    model: ctx.model.clone(),
+                    success,
+                    http_status,
+                    error_kind,
+                    error_detail,
+                    latency_ms: duration_ms,
+                    ttft_ms: None,
+                    prompt_tokens,
+                    completion_tokens,
+                    total_tokens,
+                    cache_read_tokens,
+                    cache_write_tokens,
+                    estimated_cost_usd: None,
+                },
+                ctx.db_path.clone(),
+            );
+
+            return resp
+                .body(Body::from(bytes))
+                .map_err(|e| ProxyError::Upstream(e.to_string()));
+        };
+
+        let prefix = captured;
+        let combined = futures_util::stream::once(async move { Ok::<Bytes, reqwest::Error>(prefix) })
+            .chain(remainder)
+            .boxed();
+        let stream = InstrumentedStream::new(combined, ctx);
         return resp
-            .body(Body::from(bytes))
+            .body(Body::from_stream(stream))
             .map_err(|e| ProxyError::Upstream(e.to_string()));
     }
 
@@ -468,6 +480,9 @@ fn filtered_headers(src: &HeaderMap) -> HeaderMap {
         if name == axum::http::header::HOST || name == axum::http::header::CONTENT_LENGTH {
             continue;
         }
+        if name == axum::http::header::ACCEPT_ENCODING {
+            continue;
+        }
 
         let lname = name.as_str().to_ascii_lowercase();
         if connection_tokens.iter().any(|t| t == &lname) {
@@ -478,6 +493,55 @@ fn filtered_headers(src: &HeaderMap) -> HeaderMap {
     }
 
     out
+}
+
+async fn read_error_detail(protocol: Protocol, upstream: reqwest::Response) -> Option<String> {
+    let bytes = read_response_prefix_bytes(upstream, MAX_ERROR_DETAIL_BYTES).await?;
+    let msg = parse_error_message(protocol, &bytes)
+        .unwrap_or_else(|| String::from_utf8_lossy(&bytes).to_string());
+    Some(truncate(&msg, 2000))
+}
+
+async fn read_response_prefix_bytes(
+    upstream: reqwest::Response,
+    max_bytes: usize,
+) -> Option<Bytes> {
+    let mut stream = upstream.bytes_stream();
+    let mut buf = BytesMut::new();
+    while let Some(item) = stream.next().await {
+        let chunk = item.ok()?;
+        if buf.len() >= max_bytes {
+            break;
+        }
+        let remain = max_bytes - buf.len();
+        buf.extend_from_slice(&chunk[..chunk.len().min(remain)]);
+        if chunk.len() > remain {
+            break;
+        }
+    }
+    Some(buf.freeze())
+}
+
+async fn read_stream_prefix_or_all(
+    mut stream: futures_util::stream::BoxStream<'static, Result<Bytes, reqwest::Error>>,
+    max_bytes: usize,
+) -> Result<
+    (
+        Bytes,
+        Option<futures_util::stream::BoxStream<'static, Result<Bytes, reqwest::Error>>>,
+    ),
+    reqwest::Error,
+> {
+    let mut buf = BytesMut::new();
+    while let Some(item) = stream.next().await {
+        let chunk = item?;
+        if buf.len() + chunk.len() > max_bytes {
+            buf.extend_from_slice(&chunk);
+            return Ok((buf.freeze(), Some(stream)));
+        }
+        buf.extend_from_slice(&chunk);
+    }
+    Ok((buf.freeze(), None))
 }
 
 fn is_hop_by_hop(name: &HeaderName) -> bool {
