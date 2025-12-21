@@ -11,20 +11,22 @@ fn current_exe_utf8() -> anyhow::Result<String> {
     Ok(exe)
 }
 
+fn build_launcher(exe: &str) -> anyhow::Result<auto_launch::AutoLaunch> {
+    let mut builder = auto_launch::AutoLaunchBuilder::new();
+    builder.set_app_name(AUTO_START_APP_NAME);
+    builder.set_app_path(exe);
+    #[cfg(target_os = "macos")]
+    builder.set_use_launch_agent(true);
+    builder.build().map_err(|e| anyhow::anyhow!("{e}"))
+}
+
 pub fn set_enabled(enabled: bool) -> anyhow::Result<()> {
     if !auto_launch::AutoLaunch::is_support() {
         return Ok(());
     }
 
     let exe = current_exe_utf8()?;
-
-    let mut builder = auto_launch::AutoLaunchBuilder::new();
-    builder.set_app_name(AUTO_START_APP_NAME);
-    builder.set_app_path(&exe);
-    #[cfg(target_os = "macos")]
-    builder.set_use_launch_agent(true);
-
-    let launcher = builder.build().map_err(|e| anyhow::anyhow!("{e}"))?;
+    let launcher = build_launcher(&exe)?;
 
     if enabled {
         launcher.enable().map_err(|e| anyhow::anyhow!("{e}"))?;
@@ -43,13 +45,7 @@ pub fn is_enabled() -> anyhow::Result<bool> {
     }
 
     let exe = current_exe_utf8()?;
-
-    let mut builder = auto_launch::AutoLaunchBuilder::new();
-    builder.set_app_name(AUTO_START_APP_NAME);
-    builder.set_app_path(&exe);
-    #[cfg(target_os = "macos")]
-    builder.set_use_launch_agent(true);
-    let launcher = builder.build().map_err(|e| anyhow::anyhow!("{e}"))?;
+    let launcher = build_launcher(&exe)?;
 
     launcher.is_enabled().map_err(|e| anyhow::anyhow!("{e}"))
 }
