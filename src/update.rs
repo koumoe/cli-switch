@@ -4,7 +4,7 @@ use sha2::Digest as _;
 use std::path::{Path, PathBuf};
 
 #[cfg(not(target_os = "windows"))]
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 
 const GITHUB_OWNER: &str = "koumoe";
 const GITHUB_REPO: &str = "cli-switch";
@@ -27,6 +27,7 @@ pub enum Stage {
     Idle,
     Checking,
     Downloading,
+    Staging,
     Ready,
     Error,
 }
@@ -37,6 +38,7 @@ impl Stage {
             Stage::Idle => "idle",
             Stage::Checking => "checking",
             Stage::Downloading => "downloading",
+            Stage::Staging => "staging",
             Stage::Ready => "ready",
             Stage::Error => "error",
         }
@@ -135,11 +137,6 @@ fn atomic_write(path: &Path, bytes: &[u8]) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn clear_pending_files(data_dir: &Path, pending: &PendingUpdate) {
-    let _ = std::fs::remove_file(pending_path(data_dir));
-    let _ = std::fs::remove_file(&pending.staged_executable);
-}
-
 async fn github_latest_release(client: &reqwest::Client) -> anyhow::Result<GitHubRelease> {
     let url = format!("https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/releases/latest");
     let res = client
@@ -196,7 +193,10 @@ pub async fn check_latest(
 ) -> UpdateCheck {
     {
         let rt = runtime.lock().await;
-        if matches!(rt.stage, Stage::Checking | Stage::Downloading) {
+        if matches!(
+            rt.stage,
+            Stage::Checking | Stage::Downloading | Stage::Staging
+        ) {
             tracing::debug!(stage = ?rt.stage, "update check skipped: runtime busy");
             return UpdateCheck {
                 current_version: env!("CARGO_PKG_VERSION").to_string(),
@@ -294,7 +294,10 @@ pub async fn spawn_download_latest(
 ) -> bool {
     {
         let mut rt = runtime.lock().await;
-        if matches!(rt.stage, Stage::Checking | Stage::Downloading) {
+        if matches!(
+            rt.stage,
+            Stage::Checking | Stage::Downloading | Stage::Staging
+        ) {
             tracing::debug!(stage = ?rt.stage, "update download skipped: runtime busy");
             return false;
         }
@@ -647,6 +650,11 @@ async fn download_latest_inner(
         anyhow::bail!("sha256 校验失败：expected={expected} actual={actual_sha256}");
     }
 
+    {
+        let mut rt = runtime.lock().await;
+        rt.stage = Stage::Staging;
+    }
+
     let staged_exe = tokio::task::spawn_blocking({
         let archive_path = archive_path.clone();
         let asset_name = asset.name.clone();
@@ -766,76 +774,33 @@ fn apply_pending_on_exit_inner(data_dir: &Path, restart: bool) -> anyhow::Result
 
     #[cfg(not(target_os = "windows"))]
     {
-        let now = crate::storage::now_ms();
-        let file_name = target
-            .file_name()
-            .and_then(|s| s.to_str())
-            .unwrap_or("cliswitch");
-        let parent = target
-            .parent()
-            .ok_or_else(|| anyhow::anyhow!("invalid exe path: {}", target.display()))?;
-
-        let backup = parent.join(format!("{file_name}.bak.{now}"));
-        let temp = parent.join(format!("{file_name}.new.{now}"));
-
-        std::fs::copy(&pending.staged_executable, &temp).with_context(|| {
-            format!(
-                "copy staged exe failed: {} -> {}",
-                pending.staged_executable.display(),
-                temp.display()
-            )
-        })?;
-        set_executable_perm(&temp)?;
-
-        std::fs::rename(&target, &backup).with_context(|| {
-            format!(
-                "backup exe failed: {} -> {}",
-                target.display(),
-                backup.display()
-            )
-        })?;
-        std::fs::rename(&temp, &target).with_context(|| {
-            format!(
-                "replace exe failed: {} -> {}",
-                temp.display(),
-                target.display()
-            )
-        })?;
-
-        #[cfg(target_os = "macos")]
-        {
-            let app_dir = target
-                .parent()
-                .and_then(|p| p.parent())
-                .and_then(|p| p.parent());
-
-            if let Some(app_dir) = app_dir {
-                let _ = std::process::Command::new("codesign")
-                    .arg("--force")
-                    .arg("--deep")
-                    .arg("--sign")
-                    .arg("-")
-                    .arg(app_dir.as_os_str())
-                    .status();
-            }
-        }
-
-        clear_pending_files(data_dir, &pending);
-        if restart {
-            spawn_restart_helper_after_exit(data_dir, &target)?;
-        }
+        spawn_apply_helper_after_exit(data_dir, &target, &pending, restart)?;
         Ok(true)
     }
 }
 
 #[cfg(not(target_os = "windows"))]
-fn spawn_restart_helper_after_exit(data_dir: &Path, target: &Path) -> anyhow::Result<()> {
+fn spawn_apply_helper_after_exit(
+    data_dir: &Path,
+    target: &Path,
+    pending: &PendingUpdate,
+    restart: bool,
+) -> anyhow::Result<()> {
     use anyhow::Context as _;
-    use std::ffi::OsStr;
 
     let parent_pid = std::process::id().to_string();
     let args: Vec<OsString> = std::env::args_os().skip(1).collect();
     let now = crate::storage::now_ms();
+
+    let file_name = target
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("cliswitch");
+    let parent = target
+        .parent()
+        .ok_or_else(|| anyhow::anyhow!("invalid exe path: {}", target.display()))?;
+    let backup = parent.join(format!("{file_name}.bak.{now}"));
+    let temp = parent.join(format!("{file_name}.new.{now}"));
 
     let app = {
         #[cfg(target_os = "macos")]
@@ -855,25 +820,111 @@ fn spawn_restart_helper_after_exit(data_dir: &Path, target: &Path) -> anyhow::Re
 
     let script = updates_dir(data_dir)
         .join("apply")
-        .join(format!("restart-cliswitch.{now}.sh"));
+        .join(format!("apply-cliswitch.{}.{}.sh", pending.version, now));
+    let log = updates_dir(data_dir)
+        .join("apply")
+        .join(format!("apply-cliswitch.{}.{}.log", pending.version, now));
+
+    let pending_json = pending_path(data_dir);
+    let staged = pending.staged_executable.clone();
+    let restart_flag = if restart { "1" } else { "0" };
 
     let script_body = r#"#!/bin/sh
+set -u
+
 TARGET="$1"
 APP="$2"
 PID="$3"
-shift 3
+PENDING="$4"
+STAGED="$5"
+BACKUP="$6"
+TEMP="$7"
+RESTART="$8"
+LOG="$9"
+shift 9
+
+mkdir -p "$(dirname "$LOG")" >/dev/null 2>&1 || true
+exec >>"$LOG" 2>&1
+
+echo "[apply] started at $(date)"
+echo "[apply] target=$TARGET"
+echo "[apply] app=$APP"
+echo "[apply] pid=$PID"
+echo "[apply] pending=$PENDING"
+echo "[apply] staged=$STAGED"
+echo "[apply] backup=$BACKUP"
+echo "[apply] temp=$TEMP"
+echo "[apply] restart=$RESTART"
 
 while kill -0 "$PID" 2>/dev/null; do
   sleep 1
 done
 
-rm -f "$0" >/dev/null 2>&1 || true
+echo "[apply] parent exited at $(date)"
+
+attempt=0
+while :; do
+  attempt=$((attempt+1))
+
+  rm -f "$TEMP" >/dev/null 2>&1 || true
+
+  if ! cp -f "$STAGED" "$TEMP"; then
+    echo "[apply] copy staged failed (attempt=$attempt)"
+  else
+    chmod 755 "$TEMP" >/dev/null 2>&1 || true
+
+    if ! mv -f "$TARGET" "$BACKUP"; then
+      echo "[apply] backup current exe failed (attempt=$attempt)"
+    else
+      if mv -f "$TEMP" "$TARGET"; then
+        break
+      fi
+      echo "[apply] replace current exe failed (attempt=$attempt)"
+      mv -f "$BACKUP" "$TARGET" >/dev/null 2>&1 || true
+    fi
+  fi
+
+  if [ $attempt -ge 60 ]; then
+    echo "[apply] apply failed after $attempt attempts"
+    exit 1
+  fi
+  sleep 1
+done
+
+echo "[apply] replace ok at $(date)"
 
 if [ "$APP" != "-" ] && [ -n "$APP" ]; then
-  exec open -n "$APP" --args "$@"
-else
-  exec "$TARGET" "$@"
+  if command -v codesign >/dev/null 2>&1; then
+    echo "[apply] codesign started at $(date)"
+    start=$(date +%s)
+    if ! codesign --force --sign - "$APP"; then
+      echo "[apply] codesign (no --deep) failed, retry with --deep"
+      codesign --force --deep --sign - "$APP" || true
+    fi
+    end=$(date +%s)
+    echo "[apply] codesign finished in $((end-start))s at $(date)"
+  else
+    echo "[apply] codesign not found, skipped"
+  fi
 fi
+
+rm -f "$PENDING" >/dev/null 2>&1 || true
+rm -f "$STAGED" >/dev/null 2>&1 || true
+rm -f "$0" >/dev/null 2>&1 || true
+
+echo "[apply] cleanup done at $(date)"
+
+if [ "$RESTART" = "1" ]; then
+  echo "[apply] restarting at $(date)"
+  if [ "$APP" != "-" ] && [ -n "$APP" ]; then
+    exec open -n "$APP" --args "$@"
+  else
+    exec "$TARGET" "$@"
+  fi
+fi
+
+echo "[apply] exit at $(date)"
+exit 0
 "#;
 
     if let Some(parent) = script.parent() {
@@ -881,7 +932,7 @@ fi
             .with_context(|| format!("create dir failed: {}", parent.display()))?;
     }
     std::fs::write(&script, script_body.as_bytes())
-        .with_context(|| format!("write restart helper failed: {}", script.display()))?;
+        .with_context(|| format!("write apply helper failed: {}", script.display()))?;
     set_executable_perm(&script)?;
 
     let mut cmd = std::process::Command::new("sh");
@@ -892,8 +943,20 @@ fi
                 .map(|p| p.as_os_str())
                 .unwrap_or(OsStr::new("-")),
         )
-        .arg(parent_pid);
+        .arg(parent_pid)
+        .arg(pending_json.as_os_str())
+        .arg(staged.as_os_str())
+        .arg(backup.as_os_str())
+        .arg(temp.as_os_str())
+        .arg(restart_flag)
+        .arg(log.as_os_str());
     cmd.args(args);
-    cmd.spawn().with_context(|| "spawn restart helper failed")?;
+    cmd.spawn().with_context(|| "spawn apply helper failed")?;
+    tracing::info!(
+        script = %script.display(),
+        log = %log.display(),
+        restart,
+        "spawned update apply helper"
+    );
     Ok(())
 }
