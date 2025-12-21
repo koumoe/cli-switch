@@ -1,0 +1,454 @@
+use rusqlite::{OptionalExtension as _, params};
+use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
+use uuid::Uuid;
+
+use super::protocol::normalize_base_url;
+use super::{Protocol, now_ms, with_conn};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Channel {
+    pub id: String,
+    pub name: String,
+    pub protocol: Protocol,
+    pub base_url: String,
+    pub auth_type: String,
+    pub auth_ref: String,
+    pub priority: i64,
+    pub enabled: bool,
+    pub auto_disabled_until_ms: i64,
+    pub created_at_ms: i64,
+    pub updated_at_ms: i64,
+}
+
+pub fn channel_is_auto_disabled(channel: &Channel, now_ms: i64) -> bool {
+    channel.auto_disabled_until_ms > now_ms
+}
+
+pub async fn record_channel_failure_and_maybe_disable(
+    db_path: PathBuf,
+    channel_id: String,
+    now_ms: i64,
+    window_minutes: i64,
+    failure_times: i64,
+    disable_minutes: i64,
+) -> anyhow::Result<Option<i64>> {
+    if window_minutes < 1 || disable_minutes < 1 || failure_times < 1 {
+        anyhow::bail!(
+            "auto_disable 配置非法：window_minutes={window_minutes}, failure_times={failure_times}, disable_minutes={disable_minutes}"
+        );
+    }
+    let window_ms = window_minutes.saturating_mul(60_000);
+    let disable_ms = disable_minutes.saturating_mul(60_000);
+
+    with_conn(db_path, move |conn| {
+        let tx = conn.unchecked_transaction()?;
+        let cutoff_ms = now_ms.saturating_sub(window_ms);
+
+        tx.execute(
+            r#"DELETE FROM channel_failures WHERE channel_id = ?1 AND at_ms < ?2"#,
+            params![channel_id, cutoff_ms],
+        )?;
+        tx.execute(
+            r#"INSERT INTO channel_failures (channel_id, at_ms) VALUES (?1, ?2)"#,
+            params![channel_id, now_ms],
+        )?;
+
+        let cnt: i64 = tx.query_row(
+            r#"SELECT COUNT(*) FROM channel_failures WHERE channel_id = ?1 AND at_ms >= ?2"#,
+            params![channel_id, cutoff_ms],
+            |row| row.get(0),
+        )?;
+
+        if cnt < failure_times {
+            tx.commit()?;
+            return Ok(None);
+        }
+
+        let disabled_until_ms = now_ms.saturating_add(disable_ms);
+        tx.execute(
+            r#"
+            UPDATE channels
+            SET auto_disabled_until_ms = ?2, updated_at_ms = ?3
+            WHERE id = ?1
+            "#,
+            params![channel_id, disabled_until_ms, now_ms],
+        )?;
+        tx.execute(
+            r#"DELETE FROM channel_failures WHERE channel_id = ?1"#,
+            params![channel_id],
+        )?;
+        tx.commit()?;
+        Ok(Some(disabled_until_ms))
+    })
+    .await
+}
+
+pub async fn clear_channel_failures(db_path: PathBuf, channel_id: String) -> anyhow::Result<()> {
+    with_conn(db_path, move |conn| {
+        conn.execute(
+            r#"DELETE FROM channel_failures WHERE channel_id = ?1"#,
+            params![channel_id],
+        )?;
+        Ok(())
+    })
+    .await
+}
+
+pub async fn list_channels(db_path: PathBuf) -> anyhow::Result<Vec<Channel>> {
+    with_conn(db_path, |conn| {
+        let mut stmt = conn.prepare(
+            r#"
+            SELECT id, name, protocol, base_url, auth_type, auth_ref, priority, enabled, auto_disabled_until_ms, created_at_ms, updated_at_ms
+            FROM channels
+            ORDER BY CASE protocol
+              WHEN 'openai' THEN 0
+              WHEN 'anthropic' THEN 1
+              WHEN 'gemini' THEN 2
+              ELSE 9
+            END, priority DESC, name ASC
+            "#,
+        )?;
+        let rows = stmt.query_map([], |row| {
+            let protocol: Protocol = row.get(2)?;
+            let base_url: String = row.get(3)?;
+            Ok(Channel {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                protocol,
+                base_url: normalize_base_url(protocol, &base_url),
+                auth_type: row.get(4)?,
+                auth_ref: row.get(5)?,
+                priority: row.get(6)?,
+                enabled: row.get::<_, i64>(7)? != 0,
+                auto_disabled_until_ms: row.get::<_, Option<i64>>(8)?.unwrap_or(0),
+                created_at_ms: row.get(9)?,
+                updated_at_ms: row.get(10)?,
+            })
+        })?;
+
+        rows.collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(Into::into)
+    })
+    .await
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct CreateChannel {
+    pub name: String,
+    pub protocol: Protocol,
+    pub base_url: String,
+    pub auth_type: Option<String>,
+    pub auth_ref: String,
+    #[serde(default)]
+    pub priority: i64,
+    pub enabled: bool,
+}
+
+pub async fn create_channel(db_path: PathBuf, input: CreateChannel) -> anyhow::Result<Channel> {
+    with_conn(db_path, move |conn| {
+        let ts = now_ms();
+        let id = Uuid::new_v4().to_string();
+        let auth_type = input
+            .auth_type
+            .unwrap_or_else(|| "auto".to_string())
+            .trim()
+            .to_string();
+        let base_url = normalize_base_url(input.protocol, &input.base_url);
+        conn.execute(
+            r#"
+            INSERT INTO channels (id, name, protocol, base_url, auth_type, auth_ref, priority, enabled, created_at_ms, updated_at_ms)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+            "#,
+            params![
+                id,
+                input.name,
+                input.protocol.as_str(),
+                base_url,
+                auth_type,
+                input.auth_ref,
+                input.priority,
+                if input.enabled { 1 } else { 0 },
+                ts,
+                ts,
+            ],
+        )?;
+
+        Ok(Channel {
+            id,
+            name: input.name,
+            protocol: input.protocol,
+            base_url,
+            auth_type,
+            auth_ref: input.auth_ref,
+            priority: input.priority,
+            enabled: input.enabled,
+            auto_disabled_until_ms: 0,
+            created_at_ms: ts,
+            updated_at_ms: ts,
+        })
+    })
+    .await
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct UpdateChannel {
+    pub name: Option<String>,
+    pub base_url: Option<String>,
+    pub auth_type: Option<String>,
+    pub auth_ref: Option<String>,
+    pub priority: Option<i64>,
+    pub enabled: Option<bool>,
+}
+
+pub async fn update_channel(
+    db_path: PathBuf,
+    channel_id: String,
+    input: UpdateChannel,
+) -> anyhow::Result<()> {
+    with_conn(db_path, move |conn| {
+        let ts = now_ms();
+        let clear_failures = input.enabled == Some(true);
+
+        let mut channel: Channel = {
+            let mut stmt = conn.prepare(
+                r#"
+                SELECT id, name, protocol, base_url, auth_type, auth_ref, priority, enabled, auto_disabled_until_ms, created_at_ms, updated_at_ms
+                FROM channels
+                WHERE id = ?1
+                "#,
+            )?;
+            let row = stmt.query_row([&channel_id], |row| {
+                let protocol: Protocol = row.get(2)?;
+                let base_url: String = row.get(3)?;
+                Ok(Channel {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    protocol,
+                    base_url: normalize_base_url(protocol, &base_url),
+                    auth_type: row.get(4)?,
+                    auth_ref: row.get(5)?,
+                    priority: row.get(6)?,
+                    enabled: row.get::<_, i64>(7)? != 0,
+                    auto_disabled_until_ms: row.get::<_, Option<i64>>(8)?.unwrap_or(0),
+                    created_at_ms: row.get(9)?,
+                    updated_at_ms: row.get(10)?,
+                })
+            });
+
+            match row {
+                Ok(v) => v,
+                Err(rusqlite::Error::QueryReturnedNoRows) => {
+                    return Err(anyhow::anyhow!("channel not found: {channel_id}"));
+                }
+                Err(e) => return Err(e.into()),
+            }
+        };
+
+        if let Some(v) = input.name {
+            channel.name = v;
+        }
+        if let Some(v) = input.base_url {
+            channel.base_url = normalize_base_url(channel.protocol, &v);
+        }
+        if let Some(v) = input.auth_type {
+            channel.auth_type = v;
+        }
+        if let Some(v) = input.auth_ref {
+            channel.auth_ref = v;
+        }
+        if let Some(v) = input.priority {
+            channel.priority = v;
+        }
+        if let Some(v) = input.enabled {
+            channel.enabled = v;
+            if v {
+                channel.auto_disabled_until_ms = 0;
+            }
+        }
+        channel.updated_at_ms = ts;
+
+        let tx = conn.unchecked_transaction()?;
+        tx.execute(
+            r#"
+            UPDATE channels
+            SET name = ?2, base_url = ?3, auth_type = ?4, auth_ref = ?5, priority = ?6, enabled = ?7, auto_disabled_until_ms = ?8, updated_at_ms = ?9
+            WHERE id = ?1
+            "#,
+            params![
+                channel.id,
+                channel.name,
+                channel.base_url,
+                channel.auth_type,
+                channel.auth_ref,
+                channel.priority,
+                if channel.enabled { 1 } else { 0 },
+                channel.auto_disabled_until_ms,
+                channel.updated_at_ms,
+            ],
+        )?;
+        if clear_failures {
+            tx.execute(
+                r#"DELETE FROM channel_failures WHERE channel_id = ?1"#,
+                params![channel.id],
+            )?;
+        }
+        tx.commit()?;
+
+        Ok(())
+    })
+    .await
+}
+
+pub async fn set_channel_enabled(
+    db_path: PathBuf,
+    channel_id: String,
+    enabled: bool,
+) -> anyhow::Result<()> {
+    with_conn(db_path, move |conn| {
+        let ts = now_ms();
+        let tx = conn.unchecked_transaction()?;
+        let updated = if enabled {
+            tx.execute(
+                r#"
+                UPDATE channels
+                SET enabled = ?2, auto_disabled_until_ms = 0, updated_at_ms = ?3
+                WHERE id = ?1
+                "#,
+                params![channel_id, 1i64, ts],
+            )?
+        } else {
+            tx.execute(
+                r#"
+                UPDATE channels
+                SET enabled = ?2, updated_at_ms = ?3
+                WHERE id = ?1
+                "#,
+                params![channel_id, 0i64, ts],
+            )?
+        };
+        if enabled {
+            tx.execute(
+                r#"DELETE FROM channel_failures WHERE channel_id = ?1"#,
+                params![channel_id],
+            )?;
+        }
+        tx.commit()?;
+
+        if updated == 0 {
+            return Err(anyhow::anyhow!("channel not found"));
+        }
+        Ok(())
+    })
+    .await
+}
+
+pub async fn get_channel(db_path: PathBuf, channel_id: String) -> anyhow::Result<Option<Channel>> {
+    with_conn(db_path, move |conn| {
+        let mut stmt = conn.prepare(
+            r#"
+            SELECT id, name, protocol, base_url, auth_type, auth_ref, priority, enabled, auto_disabled_until_ms, created_at_ms, updated_at_ms
+            FROM channels
+            WHERE id = ?1
+            "#,
+        )?;
+
+        stmt.query_row([channel_id], |row| {
+            let protocol: Protocol = row.get(2)?;
+            let base_url: String = row.get(3)?;
+            Ok(Channel {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                protocol,
+                base_url: normalize_base_url(protocol, &base_url),
+                auth_type: row.get(4)?,
+                auth_ref: row.get(5)?,
+                priority: row.get(6)?,
+                enabled: row.get::<_, i64>(7)? != 0,
+                auto_disabled_until_ms: row.get::<_, Option<i64>>(8)?.unwrap_or(0),
+                created_at_ms: row.get(9)?,
+                updated_at_ms: row.get(10)?,
+            })
+        })
+        .optional()
+        .map_err(Into::into)
+    })
+    .await
+}
+
+pub async fn reorder_channels(
+    db_path: PathBuf,
+    protocol: Option<Protocol>,
+    channel_ids_in_priority_order: Vec<String>,
+) -> anyhow::Result<()> {
+    with_conn(db_path, move |conn| {
+        let mut all_ids = Vec::<String>::new();
+        if let Some(p) = protocol {
+            let mut stmt = conn.prepare(r#"SELECT id FROM channels WHERE protocol = ?1"#)?;
+            let mut rows = stmt.query([p.as_str()])?;
+            while let Some(row) = rows.next()? {
+                all_ids.push(row.get::<_, String>(0)?);
+            }
+        } else {
+            let mut stmt = conn.prepare(r#"SELECT id FROM channels"#)?;
+            let mut rows = stmt.query([])?;
+            while let Some(row) = rows.next()? {
+                all_ids.push(row.get::<_, String>(0)?);
+            }
+        }
+
+        if all_ids.len() != channel_ids_in_priority_order.len() {
+            return Err(anyhow::anyhow!("channel reorder mismatch: length"));
+        }
+
+        let all_set = all_ids
+            .into_iter()
+            .collect::<std::collections::HashSet<String>>();
+        let incoming_set = channel_ids_in_priority_order
+            .iter()
+            .cloned()
+            .collect::<std::collections::HashSet<String>>();
+        if incoming_set != all_set {
+            if incoming_set.is_subset(&all_set) {
+                return Err(anyhow::anyhow!("channel reorder mismatch: coverage"));
+            }
+            return Err(anyhow::anyhow!("channel not found"));
+        }
+
+        let ts = now_ms();
+        let tx = conn.unchecked_transaction()?;
+        let n = channel_ids_in_priority_order.len() as i64;
+        for (idx, channel_id) in channel_ids_in_priority_order.into_iter().enumerate() {
+            let priority = n - (idx as i64);
+            tx.execute(
+                r#"
+                UPDATE channels
+                SET priority = ?2, updated_at_ms = ?3
+                WHERE id = ?1
+                "#,
+                params![channel_id, priority, ts],
+            )?;
+        }
+        tx.commit()?;
+        Ok(())
+    })
+    .await
+}
+
+pub async fn delete_channel(db_path: PathBuf, channel_id: String) -> anyhow::Result<()> {
+    with_conn(db_path, move |conn| {
+        let tx = conn.unchecked_transaction()?;
+        tx.execute(
+            r#"DELETE FROM route_channels WHERE channel_id = ?1"#,
+            params![channel_id],
+        )?;
+        let deleted = tx.execute(r#"DELETE FROM channels WHERE id = ?1"#, params![channel_id])?;
+        tx.commit()?;
+
+        if deleted == 0 {
+            return Err(anyhow::anyhow!("channel not found"));
+        }
+        Ok(())
+    })
+    .await
+}
