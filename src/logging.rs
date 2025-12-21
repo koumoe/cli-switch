@@ -1,11 +1,12 @@
 use anyhow::Context as _;
 use serde::{Deserialize, Serialize};
 use std::{
+    fs::File,
     path::{Path, PathBuf},
     sync::OnceLock,
 };
+use time::{Date, OffsetDateTime};
 use tracing_appender::non_blocking::WorkerGuard;
-use tracing_appender::rolling::Rotation;
 use tracing_subscriber::fmt::writer::MakeWriterExt as _;
 use tracing_subscriber::{
     EnvFilter, layer::SubscriberExt as _, reload, util::SubscriberInitExt as _,
@@ -62,6 +63,71 @@ struct LoggingRuntime {
 
 static LOGGING: OnceLock<LoggingRuntime> = OnceLock::new();
 
+fn today_local() -> Date {
+    OffsetDateTime::now_local()
+        .unwrap_or_else(|_| OffsetDateTime::now_utc())
+        .date()
+}
+
+fn format_ymd(date: Date) -> anyhow::Result<String> {
+    static FMT: OnceLock<Vec<time::format_description::FormatItem<'static>>> = OnceLock::new();
+    let fmt = FMT.get_or_init(|| {
+        time::format_description::parse("[year]-[month]-[day]").expect("valid format")
+    });
+    date.format(fmt).context("格式化日期失败")
+}
+
+fn open_daily_log_file(log_dir: &Path, date: Date) -> anyhow::Result<File> {
+    let name = format!("{}.log", format_ymd(date)?);
+    let path = log_dir.join(name);
+    std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+        .with_context(|| format!("打开日志文件失败：{}", path.display()))
+}
+
+struct LocalDailyFileAppender {
+    log_dir: PathBuf,
+    current_date: Date,
+    file: File,
+}
+
+impl LocalDailyFileAppender {
+    fn new(log_dir: PathBuf) -> anyhow::Result<Self> {
+        let current_date = today_local();
+        let file = open_daily_log_file(&log_dir, current_date)?;
+        Ok(Self {
+            log_dir,
+            current_date,
+            file,
+        })
+    }
+
+    fn maybe_rollover(&mut self) -> anyhow::Result<()> {
+        let now = OffsetDateTime::now_local().unwrap_or_else(|_| OffsetDateTime::now_utc());
+        let date = now.date();
+        if date != self.current_date {
+            self.current_date = date;
+            self.file = open_daily_log_file(&self.log_dir, date)?;
+        }
+        Ok(())
+    }
+}
+
+impl std::io::Write for LocalDailyFileAppender {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        if let Err(e) = self.maybe_rollover() {
+            return Err(std::io::Error::other(e));
+        }
+        std::io::Write::write(&mut self.file, buf)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        std::io::Write::flush(&mut self.file)
+    }
+}
+
 pub fn log_dir(data_dir: &Path) -> PathBuf {
     data_dir.join("logs")
 }
@@ -81,12 +147,8 @@ pub fn init(data_dir: &Path, settings_level: LogLevel) -> anyhow::Result<()> {
 
     let (filter_layer, filter_handle) = reload::Layer::new(env_filter);
 
-    let file_appender = tracing_appender::rolling::RollingFileAppender::builder()
-        .rotation(Rotation::DAILY)
-        .filename_prefix("")
-        .filename_suffix("log")
-        .build(&log_dir)
-        .context("初始化日志轮转失败")?;
+    let file_appender =
+        LocalDailyFileAppender::new(log_dir.clone()).context("初始化日志文件写入器失败")?;
     let (file_writer, file_guard) = tracing_appender::non_blocking(file_appender);
 
     let console_layer = tracing_subscriber::fmt::layer()
