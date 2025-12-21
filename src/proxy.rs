@@ -342,8 +342,13 @@ async fn proxy_upstream_response(
 
             let duration_ms = ctx.started.elapsed().as_millis() as i64;
             let usage = parse_usage_from_json(ctx.protocol, &bytes);
-            let (prompt_tokens, completion_tokens, total_tokens, cache_read_tokens, cache_write_tokens) =
-                usage.as_event_fields();
+            let (
+                prompt_tokens,
+                completion_tokens,
+                total_tokens,
+                cache_read_tokens,
+                cache_write_tokens,
+            ) = usage.as_event_fields();
 
             let http_status = Some(status.as_u16() as i64);
             let success = status.is_success();
@@ -413,9 +418,10 @@ async fn proxy_upstream_response(
         };
 
         let prefix = captured;
-        let combined = futures_util::stream::once(async move { Ok::<Bytes, reqwest::Error>(prefix) })
-            .chain(remainder)
-            .boxed();
+        let combined =
+            futures_util::stream::once(async move { Ok::<Bytes, reqwest::Error>(prefix) })
+                .chain(remainder)
+                .boxed();
         let stream = InstrumentedStream::new(combined, ctx);
         return resp
             .body(Body::from_stream(stream))
