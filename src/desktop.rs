@@ -181,14 +181,6 @@ fn quit_app(
     *control_flow = ControlFlow::Exit;
 }
 
-fn now_ms() -> i64 {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis() as i64)
-        .unwrap_or(0)
-}
-
 fn persist_close_behavior_sync(db_path: &std::path::Path, behavior: storage::CloseBehavior) {
     let value = match behavior {
         storage::CloseBehavior::Ask => "ask",
@@ -209,7 +201,7 @@ fn persist_close_behavior_sync(db_path: &std::path::Path, behavior: storage::Clo
             [],
         )?;
 
-        let updated_at_ms = now_ms();
+        let updated_at_ms = storage::now_ms();
         conn.execute(
             r#"
             INSERT INTO app_settings (key, value, updated_at_ms)
