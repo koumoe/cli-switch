@@ -222,7 +222,7 @@ export default function App() {
     };
 
     void poll();
-    const id = window.setInterval(() => void poll(), 15_000);
+    const id = window.setInterval(() => void poll(), 2_000);
     return () => {
       stopped = true;
       window.clearInterval(id);

@@ -108,7 +108,7 @@ export function SettingsPage() {
   }, []);
 
   useEffect(() => {
-    if (updateStatus?.stage !== "downloading") return;
+    if (updateStatus?.stage !== "downloading" && updateStatus?.stage !== "staging") return;
     let stopped = false;
 
     const poll = async () => {
@@ -167,6 +167,8 @@ export function SettingsPage() {
       : "";
   const updateStatusText = updateStatus?.pending_version
     ? t("settings.update.ready", { version: updateStatus.pending_version })
+    : updateStatus?.stage === "staging"
+      ? t("settings.update.staging")
     : updateStatus?.stage === "downloading"
       ? `${t("settings.update.latest")}${updateDownloadingSuffix}`
       : updateServerVersion

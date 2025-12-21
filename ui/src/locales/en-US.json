@@ -370,6 +370,7 @@
       "serverVersion": "Server version: v{{version}}",
       "downloadingSuffix": " (Downloading: {{percent}}%)",
       "downloadingSuffixUnknown": " (Downloading)",
+      "staging": "Download complete, preparing update...",
       "ready": "Update ready: v{{version}} (restart to apply)",
       "check": "Check for updates",
       "checkFail": "Update check failed",
@@ -494,6 +495,6 @@
   "update": {
     "readyTitle": "Update Ready",
     "readyDesc": "Version v{{version}} has been downloaded. Restart the app to apply the update.",
-    "quitToUpdate": "Quit to update"
+    "quitToUpdate": "Restart to update"
   }
 }
