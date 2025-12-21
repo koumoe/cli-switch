@@ -118,7 +118,7 @@ export type PricingSyncResponse = {
 export type UpdateStatus = {
   current_version: string;
   auto_update_enabled: boolean;
-  stage: "idle" | "checking" | "downloading" | "ready" | "error";
+  stage: "idle" | "checking" | "downloading" | "staging" | "ready" | "error";
   latest_version: string | null;
   update_available: boolean;
   pending_version: string | null;

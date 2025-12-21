@@ -370,6 +370,7 @@
       "serverVersion": "服务器版本：v{{version}}",
       "downloadingSuffix": " (下载中:{{percent}}%)",
       "downloadingSuffixUnknown": " (下载中)",
+      "staging": "下载完成，正在准备更新...",
       "ready": "新版已准备好：v{{version}}（请重启更新）",
       "check": "检查更新",
       "checkFail": "检查更新失败",
@@ -494,6 +495,6 @@
   "update": {
     "readyTitle": "更新已准备好",
     "readyDesc": "新版 v{{version}} 已下载完成，请重启应用以完成更新。",
-    "quitToUpdate": "退出以更新"
+    "quitToUpdate": "重启以更新"
   }
 }
