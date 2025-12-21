@@ -7,7 +7,7 @@ use muda::{Menu, MenuEvent, MenuId, MenuItem, PredefinedMenuItem, Submenu};
 use rusqlite::params;
 use tao::dpi::LogicalSize;
 #[cfg(target_os = "macos")]
-use tao::platform::macos::WindowBuilderExtMacOS;
+use tao::platform::macos::{EventLoopWindowTargetExtMacOS, WindowBuilderExtMacOS};
 use tao::{
     event::{Event, WindowEvent},
     event_loop::{ControlFlow, EventLoopBuilder},
@@ -49,6 +49,7 @@ enum IpcMessage {
 #[derive(Debug, Default)]
 struct DesktopState {
     window_visible: bool,
+    dock_visible: bool,
     close_request_inflight: bool,
     close_prompt_open: bool,
     locale: DesktopLocale,
@@ -145,6 +146,19 @@ fn apply_window_visible(
     }
     tray_show.set_enabled(!visible);
     tray_hide.set_enabled(visible);
+}
+
+#[cfg(target_os = "macos")]
+fn sync_macos_dock_visibility(
+    target: &tao::event_loop::EventLoopWindowTarget<UserEvent>,
+    state: &mut DesktopState,
+) {
+    let desired = state.window_visible;
+    if state.dock_visible == desired {
+        return;
+    }
+    target.set_dock_visibility(desired);
+    state.dock_visible = desired;
 }
 
 fn request_close_behavior(
@@ -483,6 +497,7 @@ pub async fn run(
     let tray_id = tray_icon.id().clone();
     let mut state = DesktopState {
         window_visible: true,
+        dock_visible: true,
         close_request_inflight: false,
         close_prompt_open: false,
         locale: initial_locale,
@@ -490,7 +505,7 @@ pub async fn run(
     tray_show.set_enabled(!state.window_visible);
     tray_hide.set_enabled(state.window_visible);
 
-    event_loop.run(move |event, _, control_flow| {
+    event_loop.run(move |event, event_loop_target, control_flow| {
         *control_flow = ControlFlow::Wait;
 
         if handle_close_requested(&event, &mut state, &proxy, &db_path) {
@@ -517,6 +532,9 @@ pub async fn run(
                 &db_path,
             );
         }
+
+        #[cfg(target_os = "macos")]
+        sync_macos_dock_visibility(event_loop_target, &mut state);
 
         let _ = &webview;
         let _ = &menu;
