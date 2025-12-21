@@ -140,7 +140,7 @@ fn ensure_column(
     Ok(())
 }
 
-pub(crate) fn now_ms() -> i64 {
+pub fn now_ms() -> i64 {
     use std::time::{SystemTime, UNIX_EPOCH};
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
