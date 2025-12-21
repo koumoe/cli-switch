@@ -35,10 +35,10 @@ pub fn last_update_status() -> Option<update::UpdateStatus> {
 }
 
 pub fn publish(event: AppEvent) {
-    if let AppEvent::UpdateStatus(ref status) = event {
-        if let Ok(mut guard) = last_update_status_cell().lock() {
-            *guard = Some(status.clone());
-        }
+    if let AppEvent::UpdateStatus(ref status) = event
+        && let Ok(mut guard) = last_update_status_cell().lock()
+    {
+        *guard = Some(status.clone());
     }
     let _ = sender().send(event);
 }
