@@ -1,3 +1,12 @@
+## [0.5.0](https://github.com/koumoe/cli-switch/compare/v0.4.5...v0.5.0) (2025-12-21)
+
+### Features
+
+* **macos:** hide dock icon when minimized to tray ([#29](https://github.com/koumoe/cli-switch/issues/29)) ([902db22](https://github.com/koumoe/cli-switch/commit/902db220fc4de3a946eab041e82a88b5cf11cf99))
+
+### Bug Fixes
+
+* add endpoint and purpose to request logs ([#30](https://github.com/koumoe/cli-switch/issues/30)) ([e4b0e3c](https://github.com/koumoe/cli-switch/commit/e4b0e3c91b1a296e255926796df4b5191c114245))
 ## [0.4.5](https://github.com/koumoe/cli-switch/compare/v0.4.4...v0.4.5) (2025-12-21)
 
 ### Bug Fixes
