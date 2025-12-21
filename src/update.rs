@@ -55,6 +55,15 @@ pub struct UpdateRuntime {
     pub error: Option<String>,
 }
 
+impl UpdateRuntime {
+    fn reset_download_state(&mut self) {
+        self.downloading_version = None;
+        self.download_percent = None;
+        self.download_total_bytes = None;
+        self.download_downloaded_bytes = 0;
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct UpdateStatus {
     pub current_version: String,
@@ -201,10 +210,7 @@ pub async fn check_latest(
         let mut rt = runtime.lock().await;
         rt.stage = Stage::Checking;
         rt.error = None;
-        rt.downloading_version = None;
-        rt.download_percent = None;
-        rt.download_total_bytes = None;
-        rt.download_downloaded_bytes = 0;
+        rt.reset_download_state();
     }
 
     let current = semver::Version::parse(env!("CARGO_PKG_VERSION")).ok();
@@ -243,10 +249,7 @@ pub async fn check_latest(
         } else {
             rt.stage = Stage::Idle;
         }
-        rt.downloading_version = None;
-        rt.download_percent = None;
-        rt.download_total_bytes = None;
-        rt.download_downloaded_bytes = 0;
+        rt.reset_download_state();
     }
 
     UpdateCheck {
@@ -297,10 +300,7 @@ pub async fn spawn_download_latest(
         }
         rt.stage = Stage::Checking;
         rt.error = None;
-        rt.downloading_version = None;
-        rt.download_percent = None;
-        rt.download_total_bytes = None;
-        rt.download_downloaded_bytes = 0;
+        rt.reset_download_state();
     }
 
     let release = match github_latest_release(&client).await {
@@ -310,10 +310,7 @@ pub async fn spawn_download_latest(
             let mut rt = runtime.lock().await;
             rt.stage = Stage::Error;
             rt.error = Some(e.to_string());
-            rt.downloading_version = None;
-            rt.download_percent = None;
-            rt.download_total_bytes = None;
-            rt.download_downloaded_bytes = 0;
+            rt.reset_download_state();
             return false;
         }
     };
@@ -334,10 +331,7 @@ pub async fn spawn_download_latest(
         rt.update_available = false;
         rt.stage = Stage::Error;
         rt.error = Some(err);
-        rt.downloading_version = None;
-        rt.download_percent = None;
-        rt.download_total_bytes = None;
-        rt.download_downloaded_bytes = 0;
+        rt.reset_download_state();
         return false;
     }
 
@@ -349,10 +343,7 @@ pub async fn spawn_download_latest(
         rt.update_available = available;
         rt.stage = Stage::Ready;
         rt.error = None;
-        rt.downloading_version = None;
-        rt.download_percent = None;
-        rt.download_total_bytes = None;
-        rt.download_downloaded_bytes = 0;
+        rt.reset_download_state();
         return false;
     }
 
@@ -363,10 +354,7 @@ pub async fn spawn_download_latest(
         rt.update_available = false;
         rt.stage = Stage::Idle;
         rt.error = None;
-        rt.downloading_version = None;
-        rt.download_percent = None;
-        rt.download_total_bytes = None;
-        rt.download_downloaded_bytes = 0;
+        rt.reset_download_state();
         return false;
     }
 
@@ -377,10 +365,7 @@ pub async fn spawn_download_latest(
         rt.update_available = true;
         rt.stage = Stage::Error;
         rt.error = Some("未找到适配当前平台的 Release 资源".to_string());
-        rt.downloading_version = None;
-        rt.download_percent = None;
-        rt.download_total_bytes = None;
-        rt.download_downloaded_bytes = 0;
+        rt.reset_download_state();
         return false;
     }
 
@@ -403,10 +388,7 @@ pub async fn spawn_download_latest(
             let mut rt = runtime.lock().await;
             rt.stage = Stage::Error;
             rt.error = Some(e.to_string());
-            rt.downloading_version = None;
-            rt.download_percent = None;
-            rt.download_total_bytes = None;
-            rt.download_downloaded_bytes = 0;
+            rt.reset_download_state();
         }
     });
 
@@ -611,10 +593,7 @@ async fn download_latest_inner(
         let mut rt = runtime.lock().await;
         rt.update_available = true;
         rt.stage = Stage::Ready;
-        rt.downloading_version = None;
-        rt.download_percent = None;
-        rt.download_total_bytes = None;
-        rt.download_downloaded_bytes = 0;
+        rt.reset_download_state();
         rt.error = None;
         return Ok(());
     }
@@ -631,10 +610,7 @@ async fn download_latest_inner(
     if !available {
         let mut rt = runtime.lock().await;
         rt.stage = Stage::Idle;
-        rt.downloading_version = None;
-        rt.download_percent = None;
-        rt.download_total_bytes = None;
-        rt.download_downloaded_bytes = 0;
+        rt.reset_download_state();
         rt.error = None;
         return Ok(());
     }
@@ -693,10 +669,7 @@ async fn download_latest_inner(
 
     let mut rt = runtime.lock().await;
     rt.stage = Stage::Ready;
-    rt.downloading_version = None;
-    rt.download_percent = None;
-    rt.download_total_bytes = None;
-    rt.download_downloaded_bytes = 0;
+    rt.reset_download_state();
     rt.error = None;
     Ok(())
 }
