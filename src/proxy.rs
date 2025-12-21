@@ -3,6 +3,7 @@ use axum::http::{HeaderMap, HeaderName, Request, Response};
 use bytes::{Bytes, BytesMut};
 use futures_util::StreamExt as _;
 use reqwest::Url;
+use std::path::Path;
 use std::sync::Arc;
 use std::time::Instant;
 use uuid::Uuid;
@@ -16,6 +17,29 @@ use stream::{InstrumentedStream, StreamRecordContext};
 const MAX_INBOUND_BODY_BYTES: usize = 64 * 1024 * 1024;
 const MAX_JSON_CAPTURE_BYTES: usize = 8 * 1024 * 1024;
 const MAX_ERROR_DETAIL_BYTES: usize = 256 * 1024;
+
+struct AttemptCtx<'a> {
+    db_path: &'a Path,
+    settings: &'a storage::AppSettings,
+    protocol: Protocol,
+    channel_id: &'a str,
+    attempt: usize,
+    total: usize,
+}
+
+impl AttemptCtx<'_> {
+    async fn fail(&self, err: &ProxyError, msg: &'static str) {
+        maybe_record_failure(self.db_path, self.settings, self.channel_id).await;
+        tracing::warn!(
+            protocol = self.protocol.as_str(),
+            channel_id = %self.channel_id,
+            attempt = self.attempt,
+            total = self.total,
+            err = %err,
+            "{msg}"
+        );
+    }
+}
 
 #[derive(thiserror::Error, Debug)]
 pub enum ProxyError {
@@ -40,6 +64,7 @@ pub async fn forward(
     protocol_root: &'static str,
     req: Request<Body>,
 ) -> Result<Response<Body>, ProxyError> {
+    let db_path_ref = db_path.as_path();
     let request_id: Arc<str> = Arc::from(Uuid::new_v4().to_string());
     let settings = storage::get_app_settings(db_path.clone()).await?;
     let now_ms = storage::now_ms();
@@ -62,26 +87,14 @@ pub async fn forward(
         let is_last = idx + 1 >= total_channels;
         let started = Instant::now();
 
-        async fn fail_attempt(
-            db_path: &std::path::PathBuf,
-            settings: &storage::AppSettings,
-            protocol: Protocol,
-            channel_id: &str,
-            attempt: usize,
-            total: usize,
-            err: &ProxyError,
-            msg: &'static str,
-        ) {
-            maybe_record_failure(db_path.clone(), settings, channel_id).await;
-            tracing::warn!(
-                protocol = protocol.as_str(),
-                channel_id = %channel_id,
-                attempt,
-                total,
-                err = %err,
-                "{msg}"
-            );
-        }
+        let attempt_ctx = AttemptCtx {
+            db_path: db_path_ref,
+            settings: &settings,
+            protocol,
+            channel_id: channel.id.as_str(),
+            attempt: idx + 1,
+            total: total_channels,
+        };
 
         tracing::debug!(
             protocol = protocol.as_str(),
@@ -94,17 +107,9 @@ pub async fn forward(
         let mut url = match build_upstream_url(&channel.base_url, &parts.uri, protocol_root) {
             Ok(v) => v,
             Err(e) => {
-                fail_attempt(
-                    &db_path,
-                    &settings,
-                    protocol,
-                    &channel.id,
-                    idx + 1,
-                    total_channels,
-                    &e,
-                    "proxy attempt failed (build url)",
-                )
-                .await;
+                attempt_ctx
+                    .fail(&e, "proxy attempt failed (build url)")
+                    .await;
                 last_err = Some(e);
                 if is_last {
                     break;
@@ -115,17 +120,9 @@ pub async fn forward(
 
         let mut out_headers = filtered_headers(&parts.headers);
         if let Err(e) = apply_auth(&channel, protocol, &mut url, &mut out_headers) {
-            fail_attempt(
-                &db_path,
-                &settings,
-                protocol,
-                &channel.id,
-                idx + 1,
-                total_channels,
-                &e,
-                "proxy attempt failed (apply auth)",
-            )
-            .await;
+            attempt_ctx
+                .fail(&e, "proxy attempt failed (apply auth)")
+                .await;
             last_err = Some(e);
             if is_last {
                 break;
@@ -142,7 +139,7 @@ pub async fn forward(
         {
             Ok(r) => r,
             Err(e) => {
-                maybe_record_failure(db_path.clone(), &settings, &channel.id).await;
+                maybe_record_failure(db_path_ref, &settings, &channel.id).await;
                 tracing::warn!(
                     protocol = protocol.as_str(),
                     channel_id = %channel.id,
@@ -152,19 +149,22 @@ pub async fn forward(
                     "proxy attempt failed (request error)"
                 );
                 spawn_usage_event(
-                    build_usage_event(
-                        Some(request_id.clone()),
+                    build_usage_event(UsageEventParams {
+                        request_id: Some(request_id.clone()),
                         protocol,
-                        channel.id.clone(),
-                        model.clone(),
-                        false,
-                        None,
-                        Some(format!("upstream_error:{}", truncate(&e.to_string(), 240))),
-                        Some(truncate(&e.to_string(), 2000)),
-                        started.elapsed().as_millis() as i64,
-                        None,
-                        (None, None, None, None, None),
-                    ),
+                        channel_id: channel.id.clone(),
+                        model: model.clone(),
+                        success: false,
+                        http_status: None,
+                        error_kind: Some(format!(
+                            "upstream_error:{}",
+                            truncate(&e.to_string(), 240)
+                        )),
+                        error_detail: Some(truncate(&e.to_string(), 2000)),
+                        latency_ms: started.elapsed().as_millis() as i64,
+                        ttft_ms: None,
+                        tokens: (None, None, None, None, None),
+                    }),
                     db_path.clone(),
                 );
 
@@ -179,7 +179,7 @@ pub async fn forward(
 
         let status = upstream.status();
         if !status.is_success() {
-            maybe_record_failure(db_path.clone(), &settings, &channel.id).await;
+            maybe_record_failure(db_path_ref, &settings, &channel.id).await;
         }
         if !status.is_success() && !is_last {
             tracing::warn!(
@@ -192,19 +192,19 @@ pub async fn forward(
             );
             let error_detail = read_error_detail(protocol, upstream).await;
             spawn_usage_event(
-                build_usage_event(
-                    Some(request_id.clone()),
+                build_usage_event(UsageEventParams {
+                    request_id: Some(request_id.clone()),
                     protocol,
-                    channel.id.clone(),
-                    model.clone(),
-                    false,
-                    Some(status.as_u16() as i64),
-                    Some(format!("upstream_http:{}", status.as_u16())),
+                    channel_id: channel.id.clone(),
+                    model: model.clone(),
+                    success: false,
+                    http_status: Some(status.as_u16() as i64),
+                    error_kind: Some(format!("upstream_http:{}", status.as_u16())),
                     error_detail,
-                    started.elapsed().as_millis() as i64,
-                    None,
-                    (None, None, None, None, None),
-                ),
+                    latency_ms: started.elapsed().as_millis() as i64,
+                    ttft_ms: None,
+                    tokens: (None, None, None, None, None),
+                }),
                 db_path.clone(),
             );
             continue;
@@ -270,17 +270,13 @@ async fn list_available_channels(
     Ok(out)
 }
 
-async fn maybe_record_failure(
-    db_path: std::path::PathBuf,
-    settings: &storage::AppSettings,
-    channel_id: &str,
-) {
+async fn maybe_record_failure(db_path: &Path, settings: &storage::AppSettings, channel_id: &str) {
     if !settings.auto_disable_enabled {
         return;
     }
     let now_ms = storage::now_ms();
     match storage::record_channel_failure_and_maybe_disable(
-        db_path,
+        db_path.to_path_buf(),
         channel_id.to_string(),
         now_ms,
         settings.auto_disable_window_minutes,
@@ -404,25 +400,25 @@ async fn proxy_upstream_response(
             );
 
             spawn_usage_event(
-                build_usage_event(
-                    Some(ctx.request_id.clone()),
-                    ctx.protocol,
-                    ctx.channel_id.clone(),
-                    ctx.model.clone(),
+                build_usage_event(UsageEventParams {
+                    request_id: Some(ctx.request_id.clone()),
+                    protocol: ctx.protocol,
+                    channel_id: ctx.channel_id.clone(),
+                    model: ctx.model.clone(),
                     success,
                     http_status,
                     error_kind,
                     error_detail,
-                    duration_ms,
-                    None,
-                    (
+                    latency_ms: duration_ms,
+                    ttft_ms: None,
+                    tokens: (
                         prompt_tokens,
                         completion_tokens,
                         total_tokens,
                         cache_read_tokens,
                         cache_write_tokens,
                     ),
-                ),
+                }),
                 ctx.db_path.clone(),
             );
 
@@ -1031,32 +1027,36 @@ pub(super) fn spawn_usage_event(input: storage::CreateUsageEvent, db_path: std::
     });
 }
 
-pub(super) fn build_usage_event(
-    request_id: Option<Arc<str>>,
-    protocol: Protocol,
-    channel_id: String,
-    model: Option<String>,
-    success: bool,
-    http_status: Option<i64>,
-    error_kind: Option<String>,
-    error_detail: Option<String>,
-    latency_ms: i64,
-    ttft_ms: Option<i64>,
-    (prompt_tokens, completion_tokens, total_tokens, cache_read_tokens, cache_write_tokens): TokenUsageEventFields,
-) -> storage::CreateUsageEvent {
+pub(super) struct UsageEventParams {
+    pub(super) request_id: Option<Arc<str>>,
+    pub(super) protocol: Protocol,
+    pub(super) channel_id: String,
+    pub(super) model: Option<String>,
+    pub(super) success: bool,
+    pub(super) http_status: Option<i64>,
+    pub(super) error_kind: Option<String>,
+    pub(super) error_detail: Option<String>,
+    pub(super) latency_ms: i64,
+    pub(super) ttft_ms: Option<i64>,
+    pub(super) tokens: TokenUsageEventFields,
+}
+
+pub(super) fn build_usage_event(params: UsageEventParams) -> storage::CreateUsageEvent {
+    let (prompt_tokens, completion_tokens, total_tokens, cache_read_tokens, cache_write_tokens) =
+        params.tokens;
     storage::CreateUsageEvent {
-        request_id,
+        request_id: params.request_id,
         ts_ms: storage::now_ms(),
-        protocol,
+        protocol: params.protocol,
         route_id: None,
-        channel_id,
-        model,
-        success,
-        http_status,
-        error_kind,
-        error_detail,
-        latency_ms,
-        ttft_ms,
+        channel_id: params.channel_id,
+        model: params.model,
+        success: params.success,
+        http_status: params.http_status,
+        error_kind: params.error_kind,
+        error_detail: params.error_detail,
+        latency_ms: params.latency_ms,
+        ttft_ms: params.ttft_ms,
         prompt_tokens,
         completion_tokens,
         total_tokens,

@@ -175,25 +175,25 @@ impl InstrumentedStream {
             );
         }
 
-        let event = super::build_usage_event(
-            Some(self.ctx.request_id.clone()),
-            self.ctx.protocol,
-            self.ctx.channel_id.clone(),
-            self.ctx.model.clone(),
+        let event = super::build_usage_event(super::UsageEventParams {
+            request_id: Some(self.ctx.request_id.clone()),
+            protocol: self.ctx.protocol,
+            channel_id: self.ctx.channel_id.clone(),
+            model: self.ctx.model.clone(),
             success,
-            Some(self.ctx.http_status),
+            http_status: Some(self.ctx.http_status),
             error_kind,
             error_detail,
-            duration_ms,
-            self.ttft_ms,
-            (
+            latency_ms: duration_ms,
+            ttft_ms: self.ttft_ms,
+            tokens: (
                 prompt_tokens,
                 completion_tokens,
                 total_tokens,
                 cache_read_tokens,
                 cache_write_tokens,
             ),
-        );
+        });
         super::spawn_usage_event(event, self.ctx.db_path.clone());
     }
 }

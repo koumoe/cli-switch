@@ -46,4 +46,3 @@ fn main() {
         println!("cargo:warning=failed to write ui/dist/index.html: {e}");
     }
 }
-
