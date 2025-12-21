@@ -2,6 +2,7 @@ use axum::body::{Body, to_bytes};
 use axum::http::{HeaderMap, HeaderName, Request, Response};
 use bytes::{Bytes, BytesMut};
 use futures_util::StreamExt as _;
+use futures_util::TryStreamExt as _;
 use reqwest::Url;
 use std::path::Path;
 use std::sync::Arc;
@@ -72,6 +73,8 @@ pub async fn forward(
     let total_channels = channels.len();
 
     let (parts, body) = req.into_parts();
+    let is_count_tokens = protocol == Protocol::Anthropic
+        && parts.uri.path().trim_end_matches('/') == "/v1/messages/count_tokens";
     let body_bytes = to_bytes(body, MAX_INBOUND_BODY_BYTES)
         .await
         .map_err(|e| ProxyError::ReadBody(e.to_string()))?;
@@ -96,22 +99,26 @@ pub async fn forward(
             total: total_channels,
         };
 
-        tracing::debug!(
-            protocol = protocol.as_str(),
-            channel_id = %channel.id,
-            attempt = idx + 1,
-            total = total_channels,
-            "proxy attempt start"
-        );
+        if !is_count_tokens {
+            tracing::debug!(
+                protocol = protocol.as_str(),
+                channel_id = %channel.id,
+                attempt = idx + 1,
+                total = total_channels,
+                "proxy attempt start"
+            );
+        }
 
         let mut url = match build_upstream_url(&channel.base_url, &parts.uri, protocol_root) {
             Ok(v) => v,
             Err(e) => {
-                attempt_ctx
-                    .fail(&e, "proxy attempt failed (build url)")
-                    .await;
+                if !is_count_tokens {
+                    attempt_ctx
+                        .fail(&e, "proxy attempt failed (build url)")
+                        .await;
+                }
                 last_err = Some(e);
-                if is_last {
+                if is_count_tokens || is_last {
                     break;
                 }
                 continue;
@@ -120,11 +127,13 @@ pub async fn forward(
 
         let mut out_headers = filtered_headers(&parts.headers);
         if let Err(e) = apply_auth(&channel, protocol, &mut url, &mut out_headers) {
-            attempt_ctx
-                .fail(&e, "proxy attempt failed (apply auth)")
-                .await;
+            if !is_count_tokens {
+                attempt_ctx
+                    .fail(&e, "proxy attempt failed (apply auth)")
+                    .await;
+            }
             last_err = Some(e);
-            if is_last {
+            if is_count_tokens || is_last {
                 break;
             }
             continue;
@@ -139,38 +148,40 @@ pub async fn forward(
         {
             Ok(r) => r,
             Err(e) => {
-                maybe_record_failure(db_path_ref, &settings, &channel.id).await;
-                tracing::warn!(
-                    protocol = protocol.as_str(),
-                    channel_id = %channel.id,
-                    attempt = idx + 1,
-                    total = total_channels,
-                    err = %e,
-                    "proxy attempt failed (request error)"
-                );
-                spawn_usage_event(
-                    build_usage_event(UsageEventParams {
-                        request_id: Some(request_id.clone()),
-                        protocol,
-                        channel_id: channel.id.clone(),
-                        model: model.clone(),
-                        success: false,
-                        http_status: None,
-                        error_kind: Some(format!(
-                            "upstream_error:{}",
-                            truncate(&e.to_string(), 240)
-                        )),
-                        error_detail: Some(truncate(&e.to_string(), 2000)),
-                        latency_ms: started.elapsed().as_millis() as i64,
-                        ttft_ms: None,
-                        tokens: (None, None, None, None, None),
-                    }),
-                    db_path.clone(),
-                );
+                if !is_count_tokens {
+                    maybe_record_failure(db_path_ref, &settings, &channel.id).await;
+                    tracing::warn!(
+                        protocol = protocol.as_str(),
+                        channel_id = %channel.id,
+                        attempt = idx + 1,
+                        total = total_channels,
+                        err = %e,
+                        "proxy attempt failed (request error)"
+                    );
+                    spawn_usage_event(
+                        build_usage_event(UsageEventParams {
+                            request_id: Some(request_id.clone()),
+                            protocol,
+                            channel_id: channel.id.clone(),
+                            model: model.clone(),
+                            success: false,
+                            http_status: None,
+                            error_kind: Some(format!(
+                                "upstream_error:{}",
+                                truncate(&e.to_string(), 240)
+                            )),
+                            error_detail: Some(truncate(&e.to_string(), 2000)),
+                            latency_ms: started.elapsed().as_millis() as i64,
+                            ttft_ms: None,
+                            tokens: (None, None, None, None, None),
+                        }),
+                        db_path.clone(),
+                    );
+                }
 
                 let err = ProxyError::Upstream(e.to_string());
                 last_err = Some(err);
-                if is_last {
+                if is_count_tokens || is_last {
                     break;
                 }
                 continue;
@@ -178,10 +189,10 @@ pub async fn forward(
         };
 
         let status = upstream.status();
-        if !status.is_success() {
+        if !is_count_tokens && !status.is_success() {
             maybe_record_failure(db_path_ref, &settings, &channel.id).await;
         }
-        if !status.is_success() && !is_last {
+        if !is_count_tokens && !status.is_success() && !is_last {
             tracing::warn!(
                 protocol = protocol.as_str(),
                 channel_id = %channel.id,
@@ -210,7 +221,8 @@ pub async fn forward(
             continue;
         }
 
-        if status.is_success()
+        if !is_count_tokens
+            && status.is_success()
             && let Err(e) =
                 storage::clear_channel_failures(db_path.clone(), channel.id.clone()).await
         {
@@ -233,6 +245,7 @@ pub async fn forward(
                 status_is_success: false,
                 started,
                 parse_sse: false, // 将在内部按 Content-Type 决定
+                record_usage: !is_count_tokens,
             },
         )
         .await;
@@ -328,6 +341,16 @@ async fn proxy_upstream_response(
         for (k, v) in headers.iter() {
             h.append(k, v.clone());
         }
+    }
+
+    if !ctx.record_usage {
+        let stream = upstream
+            .bytes_stream()
+            .map_err(std::io::Error::other)
+            .boxed();
+        return resp
+            .body(Body::from_stream(stream))
+            .map_err(|e| ProxyError::Upstream(e.to_string()));
     }
 
     let can_capture_json = match upstream.content_length() {
