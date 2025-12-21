@@ -5,7 +5,10 @@ use axum::{
     routing::any,
 };
 use cliswitch::{proxy, storage};
-use std::sync::{Arc, atomic::{AtomicUsize, Ordering}};
+use std::sync::{
+    Arc,
+    atomic::{AtomicUsize, Ordering},
+};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::time::{Duration, sleep};
 
@@ -88,7 +91,11 @@ async fn assert_no_usage_events(db_path: std::path::PathBuf) {
     let events = storage::list_usage_events_recent(db_path, 10)
         .await
         .expect("list usage events");
-    assert!(events.is_empty(), "expected no usage events, got {}", events.len());
+    assert!(
+        events.is_empty(),
+        "expected no usage events, got {}",
+        events.len()
+    );
 }
 
 #[tokio::test]
@@ -298,8 +305,7 @@ async fn anthropic_count_tokens_no_failover_and_no_usage_log() {
         r#"{"error":{"message":"count_tokens endpoint is not enabled","type":"permission_error"},"type":"error"}"#,
     )
     .await;
-    let (base2, c2_calls) =
-        spawn_upstream_counted(StatusCode::OK, r#"{"input_tokens":123}"#).await;
+    let (base2, c2_calls) = spawn_upstream_counted(StatusCode::OK, r#"{"input_tokens":123}"#).await;
 
     let db_path = temp_db_path();
     storage::init_db(&db_path).expect("init_db");
