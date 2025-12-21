@@ -1,3 +1,8 @@
+## [0.6.0](https://github.com/koumoe/cli-switch/compare/v0.5.0...v0.6.0) (2025-12-21)
+
+### Features
+
+* IPC-driven UI updates ([#31](https://github.com/koumoe/cli-switch/issues/31)) ([741b05e](https://github.com/koumoe/cli-switch/commit/741b05ebb93f33d40bf9b2af50e31d39bdeeaa88))
 ## [0.5.0](https://github.com/koumoe/cli-switch/compare/v0.4.5...v0.5.0) (2025-12-21)
 
 ### Features
