@@ -1,3 +1,8 @@
+## [0.4.1](https://github.com/koumoe/cli-switch/compare/v0.4.0...v0.4.1) (2025-12-21)
+
+### Bug Fixes
+
+* rotate log files by local date ([#23](https://github.com/koumoe/cli-switch/issues/23)) ([73faf89](https://github.com/koumoe/cli-switch/commit/73faf89e82b71fbb320b8b0bf34f82ed1e8f3918))
 ## [0.4.0](https://github.com/koumoe/cli-switch/compare/v0.3.1...v0.4.0) (2025-12-20)
 
 ### Features
