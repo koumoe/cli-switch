@@ -1,3 +1,8 @@
+## [0.4.2](https://github.com/koumoe/cli-switch/compare/v0.4.1...v0.4.2) (2025-12-21)
+
+### Bug Fixes
+
+* handle compressed upstream responses ([813f510](https://github.com/koumoe/cli-switch/commit/813f510ea9ca4fc4cc91992e22f3b80deecb2c50))
 ## [0.4.1](https://github.com/koumoe/cli-switch/compare/v0.4.0...v0.4.1) (2025-12-21)
 
 ### Bug Fixes
