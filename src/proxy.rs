@@ -3,13 +3,15 @@ use axum::http::{HeaderMap, HeaderName, Request, Response};
 use bytes::{Bytes, BytesMut};
 use futures_util::StreamExt as _;
 use reqwest::Url;
-use std::pin::Pin;
 use std::sync::Arc;
-use std::task::{Context, Poll};
 use std::time::Instant;
 use uuid::Uuid;
 
 use crate::storage::{self, Channel, Protocol};
+
+mod stream;
+
+use stream::{InstrumentedStream, StreamRecordContext};
 
 const MAX_INBOUND_BODY_BYTES: usize = 64 * 1024 * 1024;
 const MAX_JSON_CAPTURE_BYTES: usize = 8 * 1024 * 1024;
@@ -60,24 +62,25 @@ pub async fn forward(
         let is_last = idx + 1 >= total_channels;
         let started = Instant::now();
 
-        macro_rules! fail_attempt {
-            ($err:expr, $msg:literal) => {{
-                let err = $err;
-                maybe_record_failure(db_path.clone(), &settings, &channel.id).await;
-                tracing::warn!(
-                    protocol = protocol.as_str(),
-                    channel_id = %channel.id,
-                    attempt = idx + 1,
-                    total = total_channels,
-                    err = %err,
-                    $msg
-                );
-                last_err = Some(err);
-                if is_last {
-                    break;
-                }
-                continue;
-            }};
+        async fn fail_attempt(
+            db_path: &std::path::PathBuf,
+            settings: &storage::AppSettings,
+            protocol: Protocol,
+            channel_id: &str,
+            attempt: usize,
+            total: usize,
+            err: &ProxyError,
+            msg: &'static str,
+        ) {
+            maybe_record_failure(db_path.clone(), settings, channel_id).await;
+            tracing::warn!(
+                protocol = protocol.as_str(),
+                channel_id = %channel_id,
+                attempt,
+                total,
+                err = %err,
+                "{msg}"
+            );
         }
 
         tracing::debug!(
@@ -90,12 +93,44 @@ pub async fn forward(
 
         let mut url = match build_upstream_url(&channel.base_url, &parts.uri, protocol_root) {
             Ok(v) => v,
-            Err(e) => fail_attempt!(e, "proxy attempt failed (build url)"),
+            Err(e) => {
+                fail_attempt(
+                    &db_path,
+                    &settings,
+                    protocol,
+                    &channel.id,
+                    idx + 1,
+                    total_channels,
+                    &e,
+                    "proxy attempt failed (build url)",
+                )
+                .await;
+                last_err = Some(e);
+                if is_last {
+                    break;
+                }
+                continue;
+            }
         };
 
         let mut out_headers = filtered_headers(&parts.headers);
         if let Err(e) = apply_auth(&channel, protocol, &mut url, &mut out_headers) {
-            fail_attempt!(e, "proxy attempt failed (apply auth)");
+            fail_attempt(
+                &db_path,
+                &settings,
+                protocol,
+                &channel.id,
+                idx + 1,
+                total_channels,
+                &e,
+                "proxy attempt failed (apply auth)",
+            )
+            .await;
+            last_err = Some(e);
+            if is_last {
+                break;
+            }
+            continue;
         }
 
         let upstream = match client
@@ -117,29 +152,19 @@ pub async fn forward(
                     "proxy attempt failed (request error)"
                 );
                 spawn_usage_event(
-                    storage::CreateUsageEvent {
-                        request_id: Some(request_id.clone()),
-                        ts_ms: storage::now_ms(),
+                    build_usage_event(
+                        Some(request_id.clone()),
                         protocol,
-                        route_id: None,
-                        channel_id: channel.id.clone(),
-                        model: model.clone(),
-                        success: false,
-                        http_status: None,
-                        error_kind: Some(format!(
-                            "upstream_error:{}",
-                            truncate(&e.to_string(), 240)
-                        )),
-                        error_detail: Some(truncate(&e.to_string(), 2000)),
-                        latency_ms: started.elapsed().as_millis() as i64,
-                        ttft_ms: None,
-                        prompt_tokens: None,
-                        completion_tokens: None,
-                        total_tokens: None,
-                        cache_read_tokens: None,
-                        cache_write_tokens: None,
-                        estimated_cost_usd: None,
-                    },
+                        channel.id.clone(),
+                        model.clone(),
+                        false,
+                        None,
+                        Some(format!("upstream_error:{}", truncate(&e.to_string(), 240))),
+                        Some(truncate(&e.to_string(), 2000)),
+                        started.elapsed().as_millis() as i64,
+                        None,
+                        (None, None, None, None, None),
+                    ),
                     db_path.clone(),
                 );
 
@@ -167,26 +192,19 @@ pub async fn forward(
             );
             let error_detail = read_error_detail(protocol, upstream).await;
             spawn_usage_event(
-                storage::CreateUsageEvent {
-                    request_id: Some(request_id.clone()),
-                    ts_ms: storage::now_ms(),
+                build_usage_event(
+                    Some(request_id.clone()),
                     protocol,
-                    route_id: None,
-                    channel_id: channel.id.clone(),
-                    model: model.clone(),
-                    success: false,
-                    http_status: Some(status.as_u16() as i64),
-                    error_kind: Some(format!("upstream_http:{}", status.as_u16())),
+                    channel.id.clone(),
+                    model.clone(),
+                    false,
+                    Some(status.as_u16() as i64),
+                    Some(format!("upstream_http:{}", status.as_u16())),
                     error_detail,
-                    latency_ms: started.elapsed().as_millis() as i64,
-                    ttft_ms: None,
-                    prompt_tokens: None,
-                    completion_tokens: None,
-                    total_tokens: None,
-                    cache_read_tokens: None,
-                    cache_write_tokens: None,
-                    estimated_cost_usd: None,
-                },
+                    started.elapsed().as_millis() as i64,
+                    None,
+                    (None, None, None, None, None),
+                ),
                 db_path.clone(),
             );
             continue;
@@ -242,13 +260,10 @@ async fn list_available_channels(
         return Ok(enabled);
     }
 
-    let mut out = Vec::new();
-    for c in enabled {
-        if storage::channel_is_auto_disabled(&c, now_ms) {
-            continue;
-        }
-        out.push(c);
-    }
+    let out: Vec<Channel> = enabled
+        .into_iter()
+        .filter(|c| !storage::channel_is_auto_disabled(c, now_ms))
+        .collect();
     if out.is_empty() {
         return Err(ProxyError::NoAvailableChannel(protocol));
     }
@@ -389,26 +404,25 @@ async fn proxy_upstream_response(
             );
 
             spawn_usage_event(
-                storage::CreateUsageEvent {
-                    request_id: Some(ctx.request_id.clone()),
-                    ts_ms: storage::now_ms(),
-                    protocol: ctx.protocol,
-                    route_id: None,
-                    channel_id: ctx.channel_id.clone(),
-                    model: ctx.model.clone(),
+                build_usage_event(
+                    Some(ctx.request_id.clone()),
+                    ctx.protocol,
+                    ctx.channel_id.clone(),
+                    ctx.model.clone(),
                     success,
                     http_status,
                     error_kind,
                     error_detail,
-                    latency_ms: duration_ms,
-                    ttft_ms: None,
-                    prompt_tokens,
-                    completion_tokens,
-                    total_tokens,
-                    cache_read_tokens,
-                    cache_write_tokens,
-                    estimated_cost_usd: None,
-                },
+                    duration_ms,
+                    None,
+                    (
+                        prompt_tokens,
+                        completion_tokens,
+                        total_tokens,
+                        cache_read_tokens,
+                        cache_write_tokens,
+                    ),
+                ),
                 ctx.db_path.clone(),
             );
 
@@ -1009,7 +1023,7 @@ fn extract_gemini_usage(v: &serde_json::Value) -> TokenUsage {
     TokenUsage::default()
 }
 
-fn spawn_usage_event(input: storage::CreateUsageEvent, db_path: std::path::PathBuf) {
+pub(super) fn spawn_usage_event(input: storage::CreateUsageEvent, db_path: std::path::PathBuf) {
     tokio::spawn(async move {
         if let Err(e) = storage::insert_usage_event(db_path, input).await {
             tracing::warn!(err = %e, "insert usage event failed");
@@ -1017,221 +1031,38 @@ fn spawn_usage_event(input: storage::CreateUsageEvent, db_path: std::path::PathB
     });
 }
 
-#[derive(Clone)]
-struct StreamRecordContext {
-    db_path: std::path::PathBuf,
+pub(super) fn build_usage_event(
+    request_id: Option<Arc<str>>,
     protocol: Protocol,
     channel_id: String,
     model: Option<String>,
-    request_id: Arc<str>,
-    http_status: i64,
-    status_is_success: bool,
-    started: Instant,
-    parse_sse: bool,
-}
-
-struct InstrumentedStream {
-    inner: futures_util::stream::BoxStream<'static, Result<Bytes, reqwest::Error>>,
-    ctx: StreamRecordContext,
-    finalized: bool,
+    success: bool,
+    http_status: Option<i64>,
+    error_kind: Option<String>,
+    error_detail: Option<String>,
+    latency_ms: i64,
     ttft_ms: Option<i64>,
-    usage: TokenUsage,
-    sse_buf: Vec<u8>,
-    sse_log_buf: Vec<u8>,
-    sse_log_truncated: bool,
-    err_body_buf: Vec<u8>,
-    stream_error: Option<String>,
-}
-
-impl InstrumentedStream {
-    fn new(
-        inner: futures_util::stream::BoxStream<'static, Result<Bytes, reqwest::Error>>,
-        ctx: StreamRecordContext,
-    ) -> Self {
-        Self {
-            inner,
-            ctx,
-            finalized: false,
-            ttft_ms: None,
-            usage: TokenUsage::default(),
-            sse_buf: Vec::new(),
-            sse_log_buf: Vec::new(),
-            sse_log_truncated: false,
-            err_body_buf: Vec::new(),
-            stream_error: None,
-        }
-    }
-
-    fn on_chunk(&mut self, bytes: &Bytes) {
-        const MAX_ERR_BODY_BUF: usize = 256 * 1024;
-        const MAX_SSE_LOG_BUF: usize = 1024 * 1024;
-        if self.ttft_ms.is_none() {
-            self.ttft_ms = Some(self.ctx.started.elapsed().as_millis() as i64);
-        }
-        if !self.ctx.status_is_success && self.err_body_buf.len() < MAX_ERR_BODY_BUF {
-            let remain = MAX_ERR_BODY_BUF - self.err_body_buf.len();
-            self.err_body_buf
-                .extend_from_slice(&bytes[..bytes.len().min(remain)]);
-        }
-        if self.ctx.parse_sse {
-            if !self.sse_log_truncated && self.sse_log_buf.len() < MAX_SSE_LOG_BUF {
-                let remain = MAX_SSE_LOG_BUF - self.sse_log_buf.len();
-                self.sse_log_buf
-                    .extend_from_slice(&bytes[..bytes.len().min(remain)]);
-                if bytes.len() > remain {
-                    self.sse_log_truncated = true;
-                }
-            } else if self.sse_log_buf.len() >= MAX_SSE_LOG_BUF {
-                self.sse_log_truncated = true;
-            }
-            self.consume_sse(bytes);
-        }
-    }
-
-    fn consume_sse(&mut self, bytes: &Bytes) {
-        const MAX_SSE_BUF: usize = 256 * 1024;
-        if self.sse_buf.len() < MAX_SSE_BUF {
-            let remain = MAX_SSE_BUF - self.sse_buf.len();
-            self.sse_buf
-                .extend_from_slice(&bytes[..bytes.len().min(remain)]);
-        }
-
-        while let Some(nl) = self.sse_buf.iter().position(|b| *b == b'\n') {
-            let line = self.sse_buf.drain(..=nl).collect::<Vec<u8>>();
-            let Ok(mut s) = std::str::from_utf8(&line) else {
-                continue;
-            };
-            s = s.trim();
-            if !s.starts_with("data:") {
-                continue;
-            }
-            let data = s["data:".len()..].trim();
-            if data.is_empty() || data == "[DONE]" {
-                continue;
-            }
-            let Ok(v) = serde_json::from_str::<serde_json::Value>(data) else {
-                continue;
-            };
-            self.usage
-                .merge(extract_usage_from_value(self.ctx.protocol, &v));
-        }
-    }
-
-    fn finalize(&mut self) {
-        if self.finalized {
-            return;
-        }
-        self.finalized = true;
-
-        let duration_ms = self.ctx.started.elapsed().as_millis() as i64;
-        let (prompt_tokens, completion_tokens, total_tokens, cache_read_tokens, cache_write_tokens) =
-            self.usage.as_event_fields();
-
-        let success = self.ctx.status_is_success && self.stream_error.is_none();
-        let error_kind = if success {
-            None
-        } else if !self.ctx.status_is_success {
-            Some(format!("upstream_http:{}", self.ctx.http_status))
-        } else if let Some(err) = self.stream_error.as_deref() {
-            Some(format!("stream_error:{}", truncate(err, 240)))
-        } else {
-            Some("upstream_error".to_string())
-        };
-        let error_detail = if success {
-            None
-        } else if let Some(err) = self.stream_error.as_deref() {
-            Some(truncate(err, 2000))
-        } else if !self.ctx.status_is_success && !self.err_body_buf.is_empty() {
-            let msg = parse_error_message(self.ctx.protocol, &self.err_body_buf)
-                .unwrap_or_else(|| String::from_utf8_lossy(&self.err_body_buf).to_string());
-            Some(truncate(&msg, 2000))
-        } else {
-            None
-        };
-
-        let response_sse = to_single_line(&String::from_utf8_lossy(&self.sse_log_buf));
-        let response_sse_preview = truncate(&response_sse, 4096);
-
-        tracing::debug!(
-            protocol = self.ctx.protocol.as_str(),
-            request_id = %self.ctx.request_id,
-            channel_id = %self.ctx.channel_id,
-            model = self.ctx.model.as_deref().unwrap_or("-"),
-            http_status = self.ctx.http_status,
-            ttft_ms = self.ttft_ms.unwrap_or(-1),
-            duration_ms,
-            prompt_tokens = prompt_tokens.unwrap_or(-1),
-            completion_tokens = completion_tokens.unwrap_or(-1),
-            total_tokens = total_tokens.unwrap_or(-1),
-            success,
-            error_kind = error_kind.as_deref().unwrap_or("-"),
-            response_preview = %response_sse_preview,
-            "proxy request result"
-        );
-
-        if self.ctx.parse_sse {
-            tracing::debug!(
-                target: "proxy_body",
-                protocol = self.ctx.protocol.as_str(),
-                request_id = %self.ctx.request_id,
-                channel_id = %self.ctx.channel_id,
-                model = self.ctx.model.as_deref().unwrap_or("-"),
-                http_status = self.ctx.http_status,
-                ttft_ms = self.ttft_ms.unwrap_or(-1),
-                duration_ms,
-                response_sse = %response_sse,
-                response_sse_truncated = self.sse_log_truncated,
-                body = true,
-                "proxy request result"
-            );
-        }
-
-        spawn_usage_event(
-            storage::CreateUsageEvent {
-                request_id: Some(self.ctx.request_id.clone()),
-                ts_ms: storage::now_ms(),
-                protocol: self.ctx.protocol,
-                route_id: None,
-                channel_id: self.ctx.channel_id.clone(),
-                model: self.ctx.model.clone(),
-                success,
-                http_status: Some(self.ctx.http_status),
-                error_kind,
-                error_detail,
-                latency_ms: duration_ms,
-                ttft_ms: self.ttft_ms,
-                prompt_tokens,
-                completion_tokens,
-                total_tokens,
-                cache_read_tokens,
-                cache_write_tokens,
-                estimated_cost_usd: None,
-            },
-            self.ctx.db_path.clone(),
-        );
-    }
-}
-
-impl futures_util::Stream for InstrumentedStream {
-    type Item = Result<Bytes, std::io::Error>;
-
-    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        let polled = self.inner.as_mut().poll_next(cx);
-        match polled {
-            Poll::Ready(Some(Ok(bytes))) => {
-                self.on_chunk(&bytes);
-                Poll::Ready(Some(Ok(bytes)))
-            }
-            Poll::Ready(Some(Err(e))) => {
-                self.stream_error = Some(e.to_string());
-                Poll::Ready(Some(Err(std::io::Error::other(e))))
-            }
-            Poll::Ready(None) => {
-                self.finalize();
-                Poll::Ready(None)
-            }
-            Poll::Pending => Poll::Pending,
-        }
+    (prompt_tokens, completion_tokens, total_tokens, cache_read_tokens, cache_write_tokens): TokenUsageEventFields,
+) -> storage::CreateUsageEvent {
+    storage::CreateUsageEvent {
+        request_id,
+        ts_ms: storage::now_ms(),
+        protocol,
+        route_id: None,
+        channel_id,
+        model,
+        success,
+        http_status,
+        error_kind,
+        error_detail,
+        latency_ms,
+        ttft_ms,
+        prompt_tokens,
+        completion_tokens,
+        total_tokens,
+        cache_read_tokens,
+        cache_write_tokens,
+        estimated_cost_usd: None,
     }
 }
 
