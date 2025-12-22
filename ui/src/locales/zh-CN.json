@@ -416,6 +416,11 @@
       "subtitle": "登录系统后自动启动 CliSwitch",
       "enable": "开机自启动",
       "enableHint": "开启后会将 CliSwitch 添加到系统的登录项",
+      "launchMode": "开机自启后",
+      "launchModeHint": "选择登录后自动启动时的窗口展示方式",
+      "launchShow": "展示主界面",
+      "launchMinimize": "缩到状态栏/托盘",
+      "launchSaved": "启动方式已保存",
       "saved": "开机自启动设置已保存",
       "saveFail": "保存失败"
     },

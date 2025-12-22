@@ -32,7 +32,7 @@ import { useTheme, type Theme } from "@/lib/theme";
 import { type Locale, useI18n } from "@/lib/i18n";
 import { setLogLevel } from "@/lib/logger";
 import { formatBytes, formatDateTime } from "../lib";
-import { checkUpdate, clearLogs, clearRecords, downloadUpdate, getDbSize, getHealth, getSettings, getUpdateStatus, pricingStatus, pricingSync, updateSettings, type AppSettings, type CloseBehavior, type DbSize, type Health, type PricingStatus, type UpdateCheck, type UpdateStatus } from "../api";
+import { checkUpdate, clearLogs, clearRecords, downloadUpdate, getDbSize, getHealth, getSettings, getUpdateStatus, pricingStatus, pricingSync, updateSettings, type AppSettings, type AutoStartLaunchMode, type CloseBehavior, type DbSize, type Health, type PricingStatus, type UpdateCheck, type UpdateStatus } from "../api";
 import type { CliswitchUpdateStatusEvent } from "@/lib/cliswitchEvents";
 
 function joinPath(base: string, sub: string): string {
@@ -57,6 +57,7 @@ export function SettingsPage() {
   const [autoDisableSaving, setAutoDisableSaving] = useState(false);
   const [closeSaving, setCloseSaving] = useState(false);
   const [autoStartSaving, setAutoStartSaving] = useState(false);
+  const [autoStartLaunchSaving, setAutoStartLaunchSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [dbSizeLoading, setDbSizeLoading] = useState(false);
   // Records clear state
@@ -657,6 +658,45 @@ export function SettingsPage() {
               disabled={!appSettings || autoStartSaving}
             />
           </div>
+
+          {(appSettings?.auto_start_enabled ?? false) && (
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <div className="font-medium text-sm">{t("settings.startup.launchMode")}</div>
+                <div className="text-xs text-muted-foreground">{t("settings.startup.launchModeHint")}</div>
+              </div>
+              <div className="w-[220px]">
+                <Select
+                  value={(appSettings?.auto_start_launch_mode ?? "show_window") as AutoStartLaunchMode}
+                  onValueChange={async (v) => {
+                    if (!appSettings) return;
+                    const prev = appSettings.auto_start_launch_mode;
+                    setAppSettings({ ...appSettings, auto_start_launch_mode: v as AutoStartLaunchMode });
+                    setAutoStartLaunchSaving(true);
+                    try {
+                      const next = await updateSettings({ auto_start_launch_mode: v as AutoStartLaunchMode });
+                      setAppSettings(next);
+                      toast.success(t("settings.startup.launchSaved"));
+                    } catch (e) {
+                      setAppSettings({ ...appSettings, auto_start_launch_mode: prev });
+                      toast.error(t("settings.startup.saveFail"), { description: String(e) });
+                    } finally {
+                      setAutoStartLaunchSaving(false);
+                    }
+                  }}
+                  disabled={!appSettings || autoStartSaving || autoStartLaunchSaving}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="show_window">{t("settings.startup.launchShow")}</SelectItem>
+                    <SelectItem value="minimize_to_tray">{t("settings.startup.launchMinimize")}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 

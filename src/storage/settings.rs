@@ -10,6 +10,7 @@ const KEY_PRICING_AUTO_UPDATE_ENABLED: &str = "pricing_auto_update_enabled";
 const KEY_PRICING_AUTO_UPDATE_INTERVAL_HOURS: &str = "pricing_auto_update_interval_hours";
 const KEY_CLOSE_BEHAVIOR: &str = "close_behavior";
 const KEY_AUTO_START_ENABLED: &str = "auto_start_enabled";
+const KEY_AUTO_START_LAUNCH_MODE: &str = "auto_start_launch_mode";
 const KEY_APP_AUTO_UPDATE_ENABLED: &str = "app_auto_update_enabled";
 const KEY_AUTO_DISABLE_ENABLED: &str = "auto_disable_enabled";
 const KEY_AUTO_DISABLE_WINDOW_MINUTES: &str = "auto_disable_window_minutes";
@@ -35,12 +36,29 @@ impl CloseBehavior {
     }
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AutoStartLaunchMode {
+    ShowWindow,
+    MinimizeToTray,
+}
+
+impl AutoStartLaunchMode {
+    fn as_str(self) -> &'static str {
+        match self {
+            AutoStartLaunchMode::ShowWindow => "show_window",
+            AutoStartLaunchMode::MinimizeToTray => "minimize_to_tray",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppSettings {
     pub pricing_auto_update_enabled: bool,
     pub pricing_auto_update_interval_hours: i64,
     pub close_behavior: CloseBehavior,
     pub auto_start_enabled: bool,
+    pub auto_start_launch_mode: AutoStartLaunchMode,
     pub app_auto_update_enabled: bool,
     pub auto_disable_enabled: bool,
     pub auto_disable_window_minutes: i64,
@@ -56,6 +74,7 @@ impl Default for AppSettings {
             pricing_auto_update_interval_hours: 24,
             close_behavior: CloseBehavior::Ask,
             auto_start_enabled: false,
+            auto_start_launch_mode: AutoStartLaunchMode::ShowWindow,
             app_auto_update_enabled: false,
             auto_disable_enabled: false,
             auto_disable_window_minutes: 3,
@@ -72,6 +91,7 @@ pub struct AppSettingsPatch {
     pub pricing_auto_update_interval_hours: Option<i64>,
     pub close_behavior: Option<CloseBehavior>,
     pub auto_start_enabled: Option<bool>,
+    pub auto_start_launch_mode: Option<AutoStartLaunchMode>,
     pub app_auto_update_enabled: Option<bool>,
     pub auto_disable_enabled: Option<bool>,
     pub auto_disable_window_minutes: Option<i64>,
@@ -135,6 +155,15 @@ pub async fn get_app_settings(db_path: PathBuf) -> anyhow::Result<AppSettings> {
         }
         if let Some(v) = get_setting(conn, KEY_AUTO_START_ENABLED)? {
             out.auto_start_enabled = parse_bool(&v);
+        }
+        if let Some(v) = get_setting(conn, KEY_AUTO_START_LAUNCH_MODE)? {
+            match v.trim() {
+                "show_window" => out.auto_start_launch_mode = AutoStartLaunchMode::ShowWindow,
+                "minimize_to_tray" => {
+                    out.auto_start_launch_mode = AutoStartLaunchMode::MinimizeToTray;
+                }
+                _ => {}
+            }
         }
         if let Some(v) = get_setting(conn, KEY_APP_AUTO_UPDATE_ENABLED)? {
             out.app_auto_update_enabled = parse_bool(&v);
@@ -206,6 +235,9 @@ pub async fn update_app_settings(
                 if v { "true" } else { "false" },
                 updated_at_ms,
             )?;
+        }
+        if let Some(v) = patch.auto_start_launch_mode {
+            set_setting(conn, KEY_AUTO_START_LAUNCH_MODE, v.as_str(), updated_at_ms)?;
         }
         if let Some(v) = patch.app_auto_update_enabled {
             set_setting(

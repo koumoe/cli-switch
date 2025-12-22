@@ -13,11 +13,14 @@ export type Health = {
 
 export type CloseBehavior = "ask" | "minimize_to_tray" | "quit";
 
+export type AutoStartLaunchMode = "show_window" | "minimize_to_tray";
+
 export type AppSettings = {
   pricing_auto_update_enabled: boolean;
   pricing_auto_update_interval_hours: number;
   close_behavior: CloseBehavior;
   auto_start_enabled: boolean;
+  auto_start_launch_mode: AutoStartLaunchMode;
   app_auto_update_enabled: boolean;
   auto_disable_enabled: boolean;
   auto_disable_window_minutes: number;
