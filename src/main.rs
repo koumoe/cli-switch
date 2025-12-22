@@ -33,6 +33,8 @@ fn maybe_disable_macos_debug_system_logs() {
     about = "Local CLI proxy + routing + stats"
 )]
 struct Cli {
+    #[arg(long, hide = true, default_value_t = false)]
+    autostart: bool,
     #[command(subcommand)]
     command: Option<Command>,
 }
@@ -78,6 +80,7 @@ fn main() -> anyhow::Result<()> {
 
 async fn async_main() -> anyhow::Result<()> {
     let cli = Cli::parse();
+    let launched_by_autostart = cli.autostart;
 
     let cmd = cli.command.unwrap_or_else(default_command);
 
@@ -105,7 +108,7 @@ async fn async_main() -> anyhow::Result<()> {
             server::serve(addr, db_path, open).await
         }
         #[cfg(feature = "desktop")]
-        Command::Desktop { port } => desktop::run(port, data_dir, db_path).await,
+        Command::Desktop { port } => desktop::run(port, data_dir, db_path, launched_by_autostart).await,
         Command::Migrate => {
             println!("ok: {}", db_path.display());
             Ok(())

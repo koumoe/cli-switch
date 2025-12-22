@@ -443,7 +443,15 @@ pub async fn run(
     port: u16,
     data_dir: std::path::PathBuf,
     db_path: std::path::PathBuf,
+    launched_by_autostart: bool,
 ) -> anyhow::Result<()> {
+    let settings = storage::get_app_settings(db_path.clone())
+        .await
+        .unwrap_or_default();
+    let start_hidden = launched_by_autostart
+        && settings.auto_start_launch_mode == storage::AutoStartLaunchMode::MinimizeToTray;
+    let initial_window_visible = !start_hidden;
+
     let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), port);
     let listener = tokio::net::TcpListener::bind(addr)
         .await
@@ -506,7 +514,8 @@ pub async fn run(
         .with_max_inner_size(fixed_size)
         .with_resizable(false)
         .with_maximizable(false)
-        .with_minimizable(true);
+        .with_minimizable(true)
+        .with_visible(initial_window_visible);
 
     #[cfg(target_os = "macos")]
     let window_builder = window_builder.with_automatic_window_tabbing(false);
@@ -575,7 +584,7 @@ pub async fn run(
     let tray_quit_id = tray_quit.id().clone();
     let tray_id = tray_icon.id().clone();
     let mut state = DesktopState {
-        window_visible: true,
+        window_visible: initial_window_visible,
         dock_visible: true,
         close_request_inflight: false,
         close_prompt_open: false,
