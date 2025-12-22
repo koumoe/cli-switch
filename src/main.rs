@@ -108,7 +108,9 @@ async fn async_main() -> anyhow::Result<()> {
             server::serve(addr, db_path, open).await
         }
         #[cfg(feature = "desktop")]
-        Command::Desktop { port } => desktop::run(port, data_dir, db_path, launched_by_autostart).await,
+        Command::Desktop { port } => {
+            desktop::run(port, data_dir, db_path, launched_by_autostart).await
+        }
         Command::Migrate => {
             println!("ok: {}", db_path.display());
             Ok(())
