@@ -130,7 +130,6 @@ pub fn clear_logs_by_retention_days(
         .unwrap_or(Date::MIN);
 
     let mut deleted_files = 0_u64;
-    let mut truncated_files = 0_u64;
 
     for entry in std::fs::read_dir(log_dir)
         .with_context(|| format!("读取日志目录失败：{}", log_dir.display()))?
@@ -152,20 +151,14 @@ pub fn clear_logs_by_retention_days(
             continue;
         }
 
-        if date == today {
-            let _ = std::fs::OpenOptions::new()
-                .write(true)
-                .truncate(true)
-                .open(&path)?;
-            truncated_files = truncated_files.saturating_add(1);
-        } else if std::fs::remove_file(&path).is_ok() {
+        if std::fs::remove_file(&path).is_ok() {
             deleted_files = deleted_files.saturating_add(1);
         }
     }
 
     Ok(ClearLogsResult {
         deleted_files,
-        truncated_files,
+        truncated_files: 0,
     })
 }
 
