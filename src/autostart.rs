@@ -15,6 +15,7 @@ fn build_launcher(exe: &str) -> anyhow::Result<auto_launch::AutoLaunch> {
     let mut builder = auto_launch::AutoLaunchBuilder::new();
     builder.set_app_name(AUTO_START_APP_NAME);
     builder.set_app_path(exe);
+    builder.set_args(&["--autostart"]);
     #[cfg(target_os = "macos")]
     builder.set_use_launch_agent(true);
     builder.build().map_err(|e| anyhow::anyhow!("{e}"))

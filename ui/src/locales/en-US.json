@@ -416,6 +416,11 @@
       "subtitle": "Start CliSwitch automatically after you log in",
       "enable": "Launch on startup",
       "enableHint": "Adds CliSwitch to your system login items",
+      "launchMode": "On startup",
+      "launchModeHint": "Choose how the window behaves when launched on login",
+      "launchShow": "Show window",
+      "launchMinimize": "Minimize to tray",
+      "launchSaved": "Saved",
       "saved": "Saved",
       "saveFail": "Save failed"
     },

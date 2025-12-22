@@ -27,7 +27,8 @@ pub use route::{
     list_route_channels, list_routes, set_route_channels, update_route,
 };
 pub use settings::{
-    AppSettings, AppSettingsPatch, CloseBehavior, get_app_settings, update_app_settings,
+    AppSettings, AppSettingsPatch, AutoStartLaunchMode, CloseBehavior, get_app_settings,
+    update_app_settings,
 };
 pub use stats::{
     ChannelStats, StatsSummary, TrendPoint, stats_channels, stats_summary,
