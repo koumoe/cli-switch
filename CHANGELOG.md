@@ -1,3 +1,13 @@
+## [0.7.0](https://github.com/koumoe/cli-switch/compare/v0.6.0...v0.7.0) (2025-12-22)
+
+### Features
+
+* **autostart:** launch minimized to tray ([a2127e6](https://github.com/koumoe/cli-switch/commit/a2127e68ddca54f917edf8aaaf3f60b0b9c094dd))
+* **settings:** add autostart launch mode ([528d832](https://github.com/koumoe/cli-switch/commit/528d83247b4c5b7f7ed514f0c99d3782b76fa50f))
+
+### Bug Fixes
+
+* **ci:** avoid unused autostart flag ([2873c01](https://github.com/koumoe/cli-switch/commit/2873c01e8507db3a865e0b4aec3a83418af43cc9))
 ## [0.6.0](https://github.com/koumoe/cli-switch/compare/v0.5.0...v0.6.0) (2025-12-21)
 
 ### Features
