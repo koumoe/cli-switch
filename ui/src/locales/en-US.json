@@ -90,7 +90,7 @@
       "baseUrl": "Base URL",
       "status": "Status",
       "updatedAt": "Updated At",
-      "empty": "No channels. Click “New Channel” to add one."
+      "empty": "No channels. Click 'New Channel' to add one."
     },
     "actions": {
       "drag": "Drag to reorder",
@@ -151,7 +151,7 @@
       "modelMatch": "Model Match",
       "status": "Status",
       "updatedAt": "Updated At",
-      "empty": "No routes. Click “New Route” to add one."
+      "empty": "No routes. Click 'New Route' to add one."
     },
     "actions": {
       "channels": "Channels",
@@ -321,6 +321,13 @@
   "settings": {
     "title": "Settings",
     "subtitle": "App configuration and system information",
+    "tabs": {
+      "appearance": "Appearance",
+      "channel": "Channel",
+      "application": "App",
+      "data": "Data",
+      "system": "System"
+    },
     "appearance": {
       "title": "Appearance",
       "subtitle": "Customize the look and feel",
@@ -332,27 +339,31 @@
       "subtitle": "Switch UI language",
       "label": "UI language"
     },
-    "proxy": {
-      "title": "Proxy Settings",
-      "subtitle": "Configure the CLI API endpoint",
-      "host": "Host",
-      "hostHint": "Hostname / IP the CLI connects to",
-      "port": "Port",
-      "portHint": "Port number the CLI connects to",
-      "endpoint": "API Endpoint:",
-      "endpointHint": "Use this as the API endpoint in your AI tools.",
-      "backendListen": "Backend listen:"
+    "channelProtection": {
+      "title": "Channel Protection",
+      "subtitle": "Automatically pause channels after repeated failures",
+      "enable": "Enable channel protection",
+      "enableHint": "When triggered, the channel will be skipped temporarily",
+      "windowMinutes": "Detection window",
+      "windowMinutesHint": "Count failures within this time window (minutes)",
+      "failureTimes": "Failure threshold",
+      "failureTimesHint": "Trigger protection after this many failures",
+      "pauseMinutes": "Pause duration",
+      "pauseMinutesHint": "Auto-resume after this period (minutes)",
+      "invalid": "Invalid channel protection parameters",
+      "saved": "Saved",
+      "saveFail": "Save failed"
     },
-    "pricing": {
-      "title": "Pricing",
+    "pricingData": {
+      "title": "Pricing Data",
       "subtitle": "Used for per-log cost calculation and cost stats",
       "status": "Sync status",
       "count": "Models: {{count}}",
       "lastSync": "Last sync: {{time}}",
-      "sync": "Sync pricing",
+      "sync": "Sync",
       "syncOk": "Pricing synced",
       "syncFail": "Failed to sync pricing",
-      "autoUpdate": "Scheduled pricing sync",
+      "autoUpdate": "Auto update",
       "autoUpdateHint": "When enabled, periodically sync pricing from llm-metadata",
       "intervalHours": "Interval (hours)",
       "intervalHoursHint": "1–8760 hours",
@@ -360,8 +371,32 @@
       "saved": "Saved",
       "saveFail": "Save failed"
     },
+    "windowClose": {
+      "title": "Window Close",
+      "subtitle": "Choose what happens when you click the window close button",
+      "behavior": "On close",
+      "behaviorHint": "Ask every time / Minimize to tray / Quit",
+      "ask": "Ask every time",
+      "minimize": "Minimize to tray",
+      "quit": "Quit",
+      "saved": "Saved",
+      "saveFail": "Save failed"
+    },
+    "startup": {
+      "title": "Launch on Startup",
+      "subtitle": "Start CliSwitch automatically after you log in",
+      "enable": "Launch on startup",
+      "enableHint": "Adds CliSwitch to your system login items",
+      "launchMode": "After launch",
+      "launchModeHint": "Choose how the window appears when auto-started",
+      "launchShow": "Show main window",
+      "launchMinimize": "Minimize to tray",
+      "launchSaved": "Launch mode saved",
+      "saved": "Saved",
+      "saveFail": "Save failed"
+    },
     "update": {
-      "title": "Updates",
+      "title": "Auto Update",
       "subtitle": "Automatically check and download new versions",
       "autoEnable": "Enable auto update",
       "autoEnableHint": "When enabled, periodically check and download updates automatically",
@@ -385,45 +420,6 @@
       "saveFail": "Save failed",
       "autoStarted": "Auto download started"
     },
-    "autoDisable": {
-      "title": "Auto Disable",
-      "subtitle": "Temporarily disable a channel after repeated failures",
-      "enable": "Enable auto disable",
-      "enableHint": "When triggered, the channel will be skipped temporarily",
-      "windowMinutes": "Window (minutes)",
-      "windowMinutesHint": "Count failures within X minutes",
-      "failureTimes": "Failures",
-      "failureTimesHint": "Disable after Y failures",
-      "disableMinutes": "Disable duration (minutes)",
-      "disableMinutesHint": "Re-enable automatically after Z minutes",
-      "invalid": "Invalid auto disable parameters",
-      "saved": "Saved",
-      "saveFail": "Save failed"
-    },
-    "close": {
-      "title": "Close Behavior",
-      "subtitle": "Choose what happens when you click the window close button",
-      "behavior": "On close",
-      "behaviorHint": "Ask every time / Minimize to tray / Quit",
-      "ask": "Ask every time",
-      "minimize": "Minimize to tray",
-      "quit": "Quit",
-      "saved": "Saved",
-      "saveFail": "Save failed"
-    },
-    "startup": {
-      "title": "Launch on Startup",
-      "subtitle": "Start CliSwitch automatically after you log in",
-      "enable": "Launch on startup",
-      "enableHint": "Adds CliSwitch to your system login items",
-      "launchMode": "On startup",
-      "launchModeHint": "Choose how the window behaves when launched on login",
-      "launchShow": "Show window",
-      "launchMinimize": "Minimize to tray",
-      "launchSaved": "Saved",
-      "saved": "Saved",
-      "saveFail": "Save failed"
-    },
     "storage": {
       "title": "Storage",
       "subtitle": "App data and config file locations",
@@ -438,10 +434,10 @@
       "openInDevDesc": "Open-folder support will be available in a future version"
     },
     "logging": {
-      "title": "App logs",
-      "subtitle": "Structured logs are written to the data directory and rotated daily",
+      "title": "App Logs",
+      "subtitle": "Manage application logs and storage",
       "level": "Log level",
-      "levelHint": "Controls the minimum level written to log files/console",
+      "levelHint": "Record logs at this level and above",
       "levelNone": "None",
       "levelDebug": "Debug",
       "levelInfo": "Info",
@@ -466,15 +462,15 @@
       "clearFail": "Clear failed"
     },
     "records": {
-      "title": "Clear records",
-      "subtitle": "Clear logs and error records (may take some time)",
+      "title": "Request Records",
+      "subtitle": "Manage request records and error logs",
       "clear": "Clear",
       "clearRecords": "Clear by range",
       "clearRecordsHint": "Select date range to clear request records",
       "selectRange": "Select date range",
-      "errors": "Other actions",
-      "errorsHint": "Clear failed requests or all records, and vacuum the database",
-      "clearErrors": "Clear errors",
+      "quickActions": "Quick actions",
+      "quickActionsHint": "Clear errors or all records, and vacuum the database",
+      "clearErrors": "Clear errors only",
       "clearAll": "Clear all",
       "confirmTitle": "Confirm clear",
       "confirmDateRange": "This will clear records for {{range}}. Continue?",
@@ -485,6 +481,17 @@
       "cleared": "Cleared",
       "clearedDetail": "Logs: {{usage}}, failures: {{failures}}",
       "clearFail": "Clear failed"
+    },
+    "serviceInfo": {
+      "title": "Service Info",
+      "subtitle": "Service address for CLI tools to connect",
+      "host": "Hostname",
+      "hostHint": "Hostname / IP address for CLI connection",
+      "port": "Port",
+      "portHint": "Port number for CLI connection",
+      "endpoint": "API Endpoint:",
+      "endpointHint": "Use this as the API endpoint in your AI tools.",
+      "backendListen": "Backend listen:"
     },
     "about": {
       "title": "About",
