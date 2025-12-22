@@ -27,6 +27,7 @@ export type AppSettings = {
   auto_disable_failure_times: number;
   auto_disable_disable_minutes: number;
   log_level: LogLevel;
+  log_retention_days: number;
 };
 
 export type Channel = {
@@ -397,6 +398,16 @@ export type DbSize = {
 
 export function getDbSize(): Promise<DbSize> {
   return http<DbSize>("GET", "/api/maintenance/db_size");
+}
+
+export type LogsSize = {
+  path: string;
+  total_bytes: number;
+  file_count: number;
+};
+
+export function getLogsSize(): Promise<LogsSize> {
+  return http<LogsSize>("GET", "/api/maintenance/logs/size");
 }
 
 export type RecordsClearMode = "date_range" | "errors" | "all";
