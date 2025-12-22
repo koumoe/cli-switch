@@ -80,6 +80,7 @@ fn main() -> anyhow::Result<()> {
 
 async fn async_main() -> anyhow::Result<()> {
     let cli = Cli::parse();
+    #[cfg(feature = "desktop")]
     let launched_by_autostart = cli.autostart;
 
     let cmd = cli.command.unwrap_or_else(default_command);
