@@ -1,3 +1,14 @@
+## [0.9.0](https://github.com/koumoe/cli-switch/compare/v0.8.0...v0.9.0) (2025-12-22)
+
+### Features
+
+* **logging:** add log retention days and cleanup ([ae32d75](https://github.com/koumoe/cli-switch/commit/ae32d753079dc5127fdab6c3b827f00cca954a7b))
+* **ui:** add maintenance subpage and log retention setting ([22ffa2a](https://github.com/koumoe/cli-switch/commit/22ffa2a8cb10cf53e657ccfd9a55a82122a62d1e))
+
+### Bug Fixes
+
+* **i18n:** update settings texts ([053d87b](https://github.com/koumoe/cli-switch/commit/053d87b20d68a7460bc2b6a249b48e021b34ff57))
+* **logging:** remove dead branch in retention cleanup ([816a385](https://github.com/koumoe/cli-switch/commit/816a38528ee35a76bdc7896eba5ed00c9aedc3b2))
 ## [0.8.0](https://github.com/koumoe/cli-switch/compare/v0.7.0...v0.8.0) (2025-12-22)
 
 ### Features
