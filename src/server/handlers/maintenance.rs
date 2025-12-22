@@ -150,6 +150,31 @@ pub(in crate::server) async fn logs_clear(
     Ok(Json(res))
 }
 
+#[derive(Serialize)]
+struct LogsSizeResponse {
+    path: String,
+    total_bytes: u64,
+    file_count: u64,
+}
+
+pub(in crate::server) async fn logs_size(
+    State(state): State<AppState>,
+) -> Result<impl IntoResponse, ApiError> {
+    let data_dir = state.data_dir();
+    let log_dir = crate::app::logs_dir(&data_dir);
+    let log_dir_display = log_dir.display().to_string();
+
+    let res = tokio::task::spawn_blocking(move || log_files::logs_size(&log_dir))
+        .await
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!(e)))??;
+
+    Ok(Json(LogsSizeResponse {
+        path: log_dir_display,
+        total_bytes: res.total_bytes,
+        file_count: res.file_count,
+    }))
+}
+
 #[derive(Debug, Deserialize)]
 pub(in crate::server) struct FrontendLogIngestInput {
     level: logging::LogLevel,

@@ -30,6 +30,7 @@ fn request_endpoint_template(method: &Method, path: &str) -> Option<&'static str
         ("PUT", "/api/settings") => Some("/api/settings"),
         ("POST", "/api/maintenance/records/clear") => Some("/api/maintenance/records/clear"),
         ("POST", "/api/maintenance/logs/clear") => Some("/api/maintenance/logs/clear"),
+        ("GET", "/api/maintenance/logs/size") => Some("/api/maintenance/logs/size"),
         ("GET", "/api/maintenance/db_size") => Some("/api/maintenance/db_size"),
         ("POST", "/api/logs/ingest") => Some("/api/logs/ingest"),
         ("GET", "/api/update/status") => Some("/api/update/status"),
@@ -85,6 +86,7 @@ fn request_purpose(method: &Method, path: &str) -> &'static str {
         ("PUT", "/api/settings") => "handlers::update_settings",
         ("POST", "/api/maintenance/records/clear") => "handlers::records_clear",
         ("POST", "/api/maintenance/logs/clear") => "handlers::logs_clear",
+        ("GET", "/api/maintenance/logs/size") => "handlers::logs_size",
         ("GET", "/api/maintenance/db_size") => "handlers::db_size",
         ("POST", "/api/logs/ingest") => "handlers::frontend_log_ingest",
         ("GET", "/api/update/status") => "handlers::update_status",
@@ -168,6 +170,7 @@ fn build_app(state: AppState) -> Router {
             post(handlers::records_clear),
         )
         .route("/api/maintenance/logs/clear", post(handlers::logs_clear))
+        .route("/api/maintenance/logs/size", get(handlers::logs_size))
         .route("/api/maintenance/db_size", get(handlers::db_size))
         .route("/api/logs/ingest", post(handlers::frontend_log_ingest))
         .route("/api/update/status", get(handlers::update_status))
@@ -276,6 +279,7 @@ pub async fn serve_with_listener(
     }
 
     let settings_rx2 = settings_rx.clone();
+    let settings_rx3 = settings_rx.clone();
     tokio::spawn(tasks::pricing_auto_update_loop(
         (*db_path).clone(),
         http_client.clone(),
@@ -287,6 +291,11 @@ pub async fn serve_with_listener(
         http_client.clone(),
         settings_rx2,
         update_runtime,
+    ));
+
+    tokio::spawn(tasks::logs_retention_cleanup_loop(
+        (*db_path).clone(),
+        settings_rx3,
     ));
 
     tokio::spawn(tasks::apply_autostart_setting((*db_path).clone()));

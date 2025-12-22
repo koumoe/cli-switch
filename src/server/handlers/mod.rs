@@ -14,7 +14,7 @@ pub(super) use channel::{
     reorder_channels, test_channel, update_channel,
 };
 pub(super) use health::health;
-pub(super) use maintenance::{db_size, frontend_log_ingest, logs_clear, records_clear};
+pub(super) use maintenance::{db_size, frontend_log_ingest, logs_clear, logs_size, records_clear};
 pub(super) use pricing::{pricing_models, pricing_status, pricing_sync};
 pub(super) use proxy::{proxy_anthropic, proxy_gemini, proxy_openai};
 pub(super) use route::{

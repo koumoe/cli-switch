@@ -17,6 +17,7 @@ const KEY_AUTO_DISABLE_WINDOW_MINUTES: &str = "auto_disable_window_minutes";
 const KEY_AUTO_DISABLE_FAILURE_TIMES: &str = "auto_disable_failure_times";
 const KEY_AUTO_DISABLE_DISABLE_MINUTES: &str = "auto_disable_disable_minutes";
 const KEY_LOG_LEVEL: &str = "log_level";
+const KEY_LOG_RETENTION_DAYS: &str = "log_retention_days";
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -65,6 +66,7 @@ pub struct AppSettings {
     pub auto_disable_failure_times: i64,
     pub auto_disable_disable_minutes: i64,
     pub log_level: LogLevel,
+    pub log_retention_days: i64,
 }
 
 impl Default for AppSettings {
@@ -81,6 +83,7 @@ impl Default for AppSettings {
             auto_disable_failure_times: 5,
             auto_disable_disable_minutes: 30,
             log_level: LogLevel::Warning,
+            log_retention_days: 30,
         }
     }
 }
@@ -98,6 +101,7 @@ pub struct AppSettingsPatch {
     pub auto_disable_failure_times: Option<i64>,
     pub auto_disable_disable_minutes: Option<i64>,
     pub log_level: Option<LogLevel>,
+    pub log_retention_days: Option<i64>,
 }
 
 fn get_setting(conn: &Connection, key: &str) -> rusqlite::Result<Option<String>> {
@@ -196,6 +200,11 @@ pub async fn get_app_settings(db_path: PathBuf) -> anyhow::Result<AppSettings> {
                 _ => {}
             }
         }
+        if let Some(v) = get_setting(conn, KEY_LOG_RETENTION_DAYS)?
+            && let Ok(n) = v.trim().parse::<i64>()
+        {
+            out.log_retention_days = n;
+        }
 
         Ok(out)
     })
@@ -281,6 +290,9 @@ pub async fn update_app_settings(
         }
         if let Some(v) = patch.log_level {
             set_setting(conn, KEY_LOG_LEVEL, v.as_str(), updated_at_ms)?;
+        }
+        if let Some(v) = patch.log_retention_days {
+            set_setting(conn, KEY_LOG_RETENTION_DAYS, &v.to_string(), updated_at_ms)?;
         }
         Ok(())
     })
