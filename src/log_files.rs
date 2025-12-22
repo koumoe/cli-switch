@@ -15,6 +15,12 @@ pub struct ClearLogsResult {
     pub truncated_files: u64,
 }
 
+#[derive(Debug, Serialize)]
+pub struct LogsSizeResult {
+    pub total_bytes: u64,
+    pub file_count: u64,
+}
+
 fn today_local() -> Date {
     OffsetDateTime::now_local()
         .unwrap_or_else(|_| OffsetDateTime::now_utc())
@@ -97,5 +103,98 @@ pub fn clear_logs(log_dir: &Path, kind: LogsClearKind) -> anyhow::Result<ClearLo
     Ok(ClearLogsResult {
         deleted_files,
         truncated_files,
+    })
+}
+
+pub fn clear_logs_by_retention_days(
+    log_dir: &Path,
+    retention_days: i64,
+) -> anyhow::Result<ClearLogsResult> {
+    if retention_days <= 0 {
+        return Ok(ClearLogsResult {
+            deleted_files: 0,
+            truncated_files: 0,
+        });
+    }
+
+    if !log_dir.is_dir() {
+        return Ok(ClearLogsResult {
+            deleted_files: 0,
+            truncated_files: 0,
+        });
+    }
+
+    let today = today_local();
+    let cutoff = today
+        .checked_sub(time::Duration::days(retention_days))
+        .unwrap_or(Date::MIN);
+
+    let mut deleted_files = 0_u64;
+
+    for entry in std::fs::read_dir(log_dir)
+        .with_context(|| format!("读取日志目录失败：{}", log_dir.display()))?
+    {
+        let entry = entry?;
+        let path: PathBuf = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        let name = match path.file_name().and_then(|n| n.to_str()) {
+            Some(v) => v,
+            None => continue,
+        };
+        let date = match parse_date_suffix(name) {
+            Some(v) => v,
+            None => continue,
+        };
+        if date > cutoff {
+            continue;
+        }
+
+        if std::fs::remove_file(&path).is_ok() {
+            deleted_files = deleted_files.saturating_add(1);
+        }
+    }
+
+    Ok(ClearLogsResult {
+        deleted_files,
+        truncated_files: 0,
+    })
+}
+
+pub fn logs_size(log_dir: &Path) -> anyhow::Result<LogsSizeResult> {
+    if !log_dir.is_dir() {
+        return Ok(LogsSizeResult {
+            total_bytes: 0,
+            file_count: 0,
+        });
+    }
+
+    let mut total_bytes = 0_u64;
+    let mut file_count = 0_u64;
+
+    for entry in std::fs::read_dir(log_dir)
+        .with_context(|| format!("读取日志目录失败：{}", log_dir.display()))?
+    {
+        let entry = entry?;
+        let path: PathBuf = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        let name = match path.file_name().and_then(|n| n.to_str()) {
+            Some(v) => v,
+            None => continue,
+        };
+        if parse_date_suffix(name).is_none() {
+            continue;
+        }
+        let len = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+        total_bytes = total_bytes.saturating_add(len);
+        file_count = file_count.saturating_add(1);
+    }
+
+    Ok(LogsSizeResult {
+        total_bytes,
+        file_count,
     })
 }

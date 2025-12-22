@@ -27,6 +27,7 @@ pub(in crate::server) struct UpdateSettingsInput {
     auto_disable_failure_times: Option<i64>,
     auto_disable_disable_minutes: Option<i64>,
     log_level: Option<logging::LogLevel>,
+    log_retention_days: Option<i64>,
 }
 
 pub(in crate::server) async fn update_settings(
@@ -69,6 +70,7 @@ pub(in crate::server) async fn update_settings(
             input.auto_disable_disable_minutes.is_some(),
         ),
         ("log_level", input.log_level.is_some()),
+        ("log_retention_days", input.log_retention_days.is_some()),
     ]
     .into_iter()
     .filter_map(|(name, is_changed)| is_changed.then_some(name))
@@ -102,6 +104,13 @@ pub(in crate::server) async fn update_settings(
             "auto_disable_disable_minutes 必须 >= 1".to_string(),
         ));
     }
+    if let Some(v) = input.log_retention_days
+        && !(1..=3650).contains(&v)
+    {
+        return Err(ApiError::BadRequest(
+            "log_retention_days 必须在 1..=3650 之间".to_string(),
+        ));
+    }
 
     let auto_start_enabled = input.auto_start_enabled;
     if let Some(enabled) = auto_start_enabled {
@@ -133,6 +142,7 @@ pub(in crate::server) async fn update_settings(
             auto_disable_failure_times: input.auto_disable_failure_times,
             auto_disable_disable_minutes: input.auto_disable_disable_minutes,
             log_level: input.log_level,
+            log_retention_days: input.log_retention_days,
         },
     )
     .await?;

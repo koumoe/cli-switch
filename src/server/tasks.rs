@@ -4,7 +4,7 @@ use std::sync::Arc;
 use tokio::sync::watch;
 use tokio::time::Duration;
 
-use crate::{autostart, storage, update};
+use crate::{autostart, log_files, storage, update};
 
 use super::handlers::pricing::run_pricing_sync;
 use super::state::data_dir_from_db_path;
@@ -110,4 +110,59 @@ pub(crate) async fn apply_autostart_setting(db_path: PathBuf) {
         }
     })
     .await;
+}
+
+pub(crate) async fn logs_retention_cleanup_loop(
+    db_path: PathBuf,
+    mut notify: watch::Receiver<u64>,
+) {
+    let interval = Duration::from_secs(24 * 3600);
+
+    loop {
+        let settings = match storage::get_app_settings(db_path.clone()).await {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::warn!(err = %e, "load app settings failed");
+                storage::AppSettings::default()
+            }
+        };
+
+        let retention_days = settings.log_retention_days.clamp(1, 3650);
+        let data_dir = data_dir_from_db_path(db_path.as_path());
+        let log_dir = crate::app::logs_dir(&data_dir);
+        let log_dir_display = log_dir.display().to_string();
+
+        let res = tokio::task::spawn_blocking(move || {
+            log_files::clear_logs_by_retention_days(&log_dir, retention_days)
+        })
+        .await;
+
+        match res {
+            Ok(Ok(r)) => {
+                if r.deleted_files > 0 || r.truncated_files > 0 {
+                    tracing::info!(
+                        log_dir = %log_dir_display,
+                        retention_days,
+                        deleted_files = r.deleted_files,
+                        truncated_files = r.truncated_files,
+                        "logs retention cleanup done"
+                    );
+                }
+            }
+            Ok(Err(e)) => {
+                tracing::warn!(log_dir = %log_dir_display, retention_days, err = %e, "logs retention cleanup failed")
+            }
+            Err(e) => {
+                tracing::warn!(log_dir = %log_dir_display, retention_days, err = %e, "logs retention cleanup task join failed")
+            }
+        }
+
+        tokio::select! {
+            _ = tokio::time::sleep(interval) => {}
+            changed = notify.changed() => {
+                if changed.is_err() { break; }
+                continue;
+            }
+        }
+    }
 }
