@@ -1,3 +1,8 @@
+## [0.8.0](https://github.com/koumoe/cli-switch/compare/v0.7.0...v0.8.0) (2025-12-22)
+
+### Features
+
+* **ui:** refactor settings page with tabs layout ([36f3dcc](https://github.com/koumoe/cli-switch/commit/36f3dcc3d3eacac3f4dd2d72d23184293ba302a4))
 ## [0.7.0](https://github.com/koumoe/cli-switch/compare/v0.6.0...v0.7.0) (2025-12-22)
 
 ### Features
