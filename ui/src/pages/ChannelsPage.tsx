@@ -40,7 +40,7 @@ import {
   TabsTrigger,
 } from "@/components/ui";
 import { useI18n } from "@/lib/i18n";
-import { useCurrency, formatDecimal } from "@/lib/currency";
+import { useCurrency } from "@/lib/currency";
 import {
   listChannels,
   createChannel,
@@ -67,10 +67,23 @@ function emptyDraft(): ChannelDraft {
     auth_ref: "",
     priority: 0,
     recharge_currency: "CNY",
-    recharge_multiplier: 1,
     real_multiplier: 1,
     enabled: true,
   };
+}
+
+function formatFixed2(n: number): string {
+  if (!Number.isFinite(n)) return "1.00";
+  return n.toFixed(2);
+}
+
+function hasMoreThanTwoDecimals(raw: string): boolean {
+  const s = raw.trim();
+  if (!s) return false;
+  if (s.includes("e") || s.includes("E")) return true;
+  const dot = s.indexOf(".");
+  if (dot < 0) return false;
+  return s.length - dot - 1 > 2;
 }
 
 function defaultBaseUrl(protocol: Protocol): string {
@@ -140,6 +153,8 @@ export function ChannelsPage() {
   const [modalMode, setModalMode] = useState<"create" | "edit">("create");
   const [editId, setEditId] = useState<string | null>(null);
   const [draft, setDraft] = useState<ChannelDraft>(emptyDraft());
+  const [realMultiplierInput, setRealMultiplierInput] = useState(() => formatFixed2(1));
+  const [realMultiplierTip, setRealMultiplierTip] = useState<string | null>(null);
   const [testing, setTesting] = useState<Record<string, boolean>>({});
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Channel | null>(null);
@@ -163,11 +178,9 @@ export function ChannelsPage() {
   }, []);
 
   function effectiveCostFactor(c: Channel): number {
-    const recharge = Number(c.recharge_multiplier ?? 1);
     const real = Number(c.real_multiplier ?? 1);
-    if (!Number.isFinite(recharge) || recharge <= 0) return Number.POSITIVE_INFINITY;
-    if (!Number.isFinite(real) || real <= 0) return Number.POSITIVE_INFINITY;
-    return real / recharge;
+    if (!Number.isFinite(real) || real < 0) return Number.POSITIVE_INFINITY;
+    return real;
   }
 
   const autoSortCurrent = channelsByProtocol[activeProtocol] ?? [];
@@ -216,6 +229,8 @@ export function ChannelsPage() {
       base_url: defaultBaseUrl(activeProtocol),
       recharge_currency: currency,
     });
+    setRealMultiplierInput(formatFixed2(1));
+    setRealMultiplierTip(null);
     setModalOpen(true);
   }
 
@@ -230,10 +245,11 @@ export function ChannelsPage() {
       auth_ref: c.auth_ref,
       priority: c.priority ?? 0,
       recharge_currency: c.recharge_currency ?? "CNY",
-      recharge_multiplier: c.recharge_multiplier ?? 1,
       real_multiplier: c.real_multiplier ?? 1,
       enabled: c.enabled,
     });
+    setRealMultiplierInput(formatFixed2(Number(c.real_multiplier ?? 1)));
+    setRealMultiplierTip(null);
     setModalOpen(true);
   }
 
@@ -241,10 +257,10 @@ export function ChannelsPage() {
     try {
       if (!draft.name.trim()) throw new Error(t("channels.toast.nameRequired"));
       if (!draft.base_url.trim()) throw new Error(t("channels.toast.baseUrlRequired"));
-      if (!Number.isFinite(draft.recharge_multiplier) || draft.recharge_multiplier <= 0) {
-        throw new Error(t("channels.toast.rechargeMultiplierInvalid"));
-      }
-      if (!Number.isFinite(draft.real_multiplier) || draft.real_multiplier <= 0) {
+      const real = Number(draft.real_multiplier);
+      const scaled = real * 100;
+      const twoDecimalsOk = Number.isFinite(real) && Math.abs(scaled - Math.round(scaled)) < 1e-9;
+      if (!Number.isFinite(real) || real < 0 || !twoDecimalsOk) {
         throw new Error(t("channels.toast.realMultiplierInvalid"));
       }
 
@@ -260,7 +276,6 @@ export function ChannelsPage() {
           auth_ref: draft.auth_ref,
           priority: draft.priority,
           recharge_currency: draft.recharge_currency,
-          recharge_multiplier: draft.recharge_multiplier,
           real_multiplier: draft.real_multiplier,
           enabled: draft.enabled,
         });
@@ -752,7 +767,7 @@ export function ChannelsPage() {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-4">
               <div className="space-y-2">
                 <label className="text-sm font-medium">
                   {t("channels.modal.rechargeCurrency")}
@@ -772,51 +787,59 @@ export function ChannelsPage() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">{t("channels.modal.rechargeMultiplier")}</label>
-                <Input
-                  type="number"
-                  step="0.000001"
-                  min={0}
-                  value={String(draft.recharge_multiplier ?? 1)}
-                  onChange={(e) => {
-                    const raw = e.target.value;
-                    if (!raw.trim()) {
-                      setDraft((d) => ({ ...d, recharge_multiplier: 1 }));
-                      return;
-                    }
-                    const n = Number(raw);
-                    setDraft((d) => ({
-                      ...d,
-                      recharge_multiplier: Number.isFinite(n) ? n : d.recharge_multiplier,
-                    }));
-                  }}
-                  placeholder="1"
-                />
-              </div>
             </div>
 
-            <div className="space-y-2">
-              <label className="text-sm font-medium">{t("channels.modal.realMultiplier")}</label>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">{t("channels.modal.realMultiplier")}</label>
               <Input
-                type="number"
-                step="0.000001"
-                min={0}
-                value={String(draft.real_multiplier ?? 1)}
+                type="text"
+                inputMode="decimal"
+                value={realMultiplierInput}
                 onChange={(e) => {
                   const raw = e.target.value;
+                  setRealMultiplierInput(raw);
                   if (!raw.trim()) {
-                    setDraft((d) => ({ ...d, real_multiplier: 1 }));
+                    setRealMultiplierTip(null);
+                    return;
+                  }
+                  if (hasMoreThanTwoDecimals(raw)) {
+                    setRealMultiplierTip(t("channels.modal.realMultiplierTooManyDecimals"));
                     return;
                   }
                   const n = Number(raw);
-                  setDraft((d) => ({
-                    ...d,
-                    real_multiplier: Number.isFinite(n) ? n : d.real_multiplier,
-                  }));
+                  if (!Number.isFinite(n) || n < 0) {
+                    setRealMultiplierTip(null);
+                    return;
+                  }
+                  setRealMultiplierTip(null);
+                  setDraft((d) => ({ ...d, real_multiplier: n }));
                 }}
-                placeholder="1"
+                onBlur={() => {
+                  const raw = realMultiplierInput.trim();
+                  if (!raw) {
+                    setDraft((d) => ({ ...d, real_multiplier: 1 }));
+                    setRealMultiplierInput(formatFixed2(1));
+                    setRealMultiplierTip(null);
+                    return;
+                  }
+                  if (hasMoreThanTwoDecimals(raw)) {
+                    setRealMultiplierInput(formatFixed2(Number(draft.real_multiplier)));
+                    return;
+                  }
+                  const n = Number(raw);
+                  if (!Number.isFinite(n) || n < 0) {
+                    setRealMultiplierInput(formatFixed2(Number(draft.real_multiplier)));
+                    return;
+                  }
+                  setDraft((d) => ({ ...d, real_multiplier: n }));
+                  setRealMultiplierInput(formatFixed2(n));
+                  setRealMultiplierTip(null);
+                }}
+                placeholder="1.00"
               />
+              <p className="text-xs text-muted-foreground">
+                {realMultiplierTip ?? t("channels.modal.realMultiplierHint")}
+              </p>
               </div>
 
             <div className="space-y-2">
@@ -900,7 +923,7 @@ export function ChannelsPage() {
                           </div>
                         </TableCell>
                         <TableCell className="font-mono text-xs text-muted-foreground">
-                          {Number.isFinite(factor) ? formatDecimal(factor, 6) : "-"}
+                          {Number.isFinite(factor) ? formatFixed2(factor) : "-"}
                         </TableCell>
                       </TableRow>
                     );

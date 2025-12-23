@@ -129,8 +129,9 @@
         "cny": "人民币（CNY）",
         "usd": "美元（USD）"
       },
-      "rechargeMultiplier": "充值实际倍率",
       "realMultiplier": "真实倍率",
+      "realMultiplierHint": "支持 0 表示免费渠道，最多 2 位小数",
+      "realMultiplierTooManyDecimals": "最多只能输入 2 位小数",
       "baseUrl": "Base URL",
       "apiKey": "API Key / Token",
       "enabled": "启用"
@@ -153,8 +154,7 @@
       "testFail": "测试失败",
       "nameRequired": "名称不能为空",
       "baseUrlRequired": "Base URL 不能为空",
-      "rechargeMultiplierInvalid": "充值实际倍率必须是 > 0 的数字",
-      "realMultiplierInvalid": "真实倍率必须是 > 0 的数字",
+      "realMultiplierInvalid": "真实倍率必须是 >= 0 的数字，且最多 2 位小数",
       "testReachableOkTitle": "{{name}} 连通正常",
       "testReachableOkDesc": "状态: {{status}}, 延迟: {{latency}}ms",
       "testReachableBadTitle": "{{name}} 可达但返回异常",
@@ -303,12 +303,6 @@
       "cost": "官方额度",
       "result": "状态"
     },
-    "details": {
-      "routeId": "路由 ID",
-      "errorKind": "错误类型",
-      "errorDetail": "错误详情",
-      "estimatedSpend": "预估费用"
-    },
     "cell": {
       "duration": "耗时",
       "ttft": "首字",
@@ -323,7 +317,8 @@
       "requestId": "请求 ID",
       "routeId": "路由 ID",
       "errorKind": "错误类型",
-      "errorDetail": "错误详情"
+      "errorDetail": "错误详情",
+      "estimatedSpend": "预估费用"
     },
     "empty": "暂无请求记录",
     "toast": {

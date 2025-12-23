@@ -129,8 +129,9 @@
         "cny": "CNY (RMB)",
         "usd": "USD"
       },
-      "rechargeMultiplier": "Recharge rate",
       "realMultiplier": "Real multiplier",
+      "realMultiplierHint": "0 means free channel; up to 2 decimals",
+      "realMultiplierTooManyDecimals": "Up to 2 decimal places",
       "baseUrl": "Base URL",
       "apiKey": "API Key / Token",
       "enabled": "Enabled"
@@ -153,8 +154,7 @@
       "testFail": "Test failed",
       "nameRequired": "Name is required",
       "baseUrlRequired": "Base URL is required",
-      "rechargeMultiplierInvalid": "Recharge rate must be a finite number > 0",
-      "realMultiplierInvalid": "Real multiplier must be a finite number > 0",
+      "realMultiplierInvalid": "Real multiplier must be a finite number >= 0 with up to 2 decimals",
       "testReachableOkTitle": "{{name}} is reachable",
       "testReachableOkDesc": "Status: {{status}}, Latency: {{latency}}ms",
       "testReachableBadTitle": "{{name}} reachable but returned an error",

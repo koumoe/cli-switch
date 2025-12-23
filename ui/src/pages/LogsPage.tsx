@@ -230,12 +230,10 @@ export function LogsPage() {
                   {(() => {
                     const est = parseDecimalLike(detailEvent.estimated_cost_usd);
                     const ch = channelsById.get(detailEvent.channel_id);
-                    const recharge = Number(ch?.recharge_multiplier ?? 1);
                     const real = Number(ch?.real_multiplier ?? 1);
                     if (!est || est <= 0) return "-";
-                    if (!Number.isFinite(recharge) || recharge <= 0) return "-";
-                    if (!Number.isFinite(real) || real <= 0) return "-";
-                    return formatMoney(est * (real / recharge), currency);
+                    if (!Number.isFinite(real) || real < 0) return "-";
+                    return formatMoney(est * real, currency);
                   })()}
                 </div>
               </div>

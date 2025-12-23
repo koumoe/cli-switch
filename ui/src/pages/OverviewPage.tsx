@@ -279,17 +279,17 @@ export function OverviewPage() {
     if (!channelStats.length || !channels.length) return null;
     const byId = new Map(channels.map((c) => [c.id, c] as const));
     let sum = 0;
+    let hasAny = false;
     for (const s of channelStats) {
       const est = parseDecimalLike(s.estimated_cost_usd);
       if (!est || est <= 0) continue;
       const ch = byId.get(s.channel_id);
-      const recharge = Number(ch?.recharge_multiplier ?? 1);
       const real = Number(ch?.real_multiplier ?? 1);
-      if (!Number.isFinite(recharge) || recharge <= 0) continue;
-      if (!Number.isFinite(real) || real <= 0) continue;
-      sum += est * (real / recharge);
+      if (!Number.isFinite(real) || real < 0) continue;
+      hasAny = true;
+      sum += est * real;
     }
-    return sum > 0 ? sum : null;
+    return hasAny ? sum : null;
   }, [channels, channelStats]);
 
   const channelStatsUsed = useMemo(
@@ -393,7 +393,7 @@ export function OverviewPage() {
           </CardHeader>
           <CardContent className="pb-3 px-3">
             <div className="text-xl font-bold">
-              ${stats?.estimated_cost_usd ?? "-"}
+              {formatMoney(parseDecimalLike(stats?.estimated_cost_usd), "USD")}
             </div>
           </CardContent>
         </Card>
