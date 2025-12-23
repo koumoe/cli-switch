@@ -1,3 +1,12 @@
+## [0.12.0](https://github.com/koumoe/cli-switch/compare/v0.11.1...v0.12.0) (2025-12-23)
+
+### Features
+
+* **update:** retain last two update artifacts ([5294f08](https://github.com/koumoe/cli-switch/commit/5294f08f2e22b936ee1b4c4b6a2913aac7fcc7d1))
+
+### Bug Fixes
+
+* **ui:** reopen update-ready dialog on manual check ([1cf2245](https://github.com/koumoe/cli-switch/commit/1cf2245911f5c816f7bf39469d4b26aea560f4ca))
 ## [0.11.1](https://github.com/koumoe/cli-switch/compare/v0.11.0...v0.11.1) (2025-12-23)
 
 ### Bug Fixes
