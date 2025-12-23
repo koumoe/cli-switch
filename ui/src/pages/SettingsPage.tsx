@@ -29,6 +29,7 @@ import {
 } from "@/components/ui";
 import { useTheme, type Theme } from "@/lib/theme";
 import { type Locale, useI18n } from "@/lib/i18n";
+import { useCurrency, type CurrencyMode } from "@/lib/currency";
 import { setLogLevel } from "@/lib/logger";
 import { formatDateTime } from "../lib";
 import { checkUpdate, downloadUpdate, getHealth, getSettings, getUpdateStatus, pricingStatus, pricingSync, updateSettings, type AppSettings, type AutoStartLaunchMode, type CloseBehavior, type Health, type PricingStatus, type UpdateCheck, type UpdateStatus } from "../api";
@@ -50,6 +51,7 @@ function navigate(to: string) {
 export function SettingsPage({ pathname }: { pathname?: string }) {
   const { theme, setTheme } = useTheme();
   const { locale, setLocale, locales, t } = useI18n();
+  const { currencyMode, setCurrencyMode } = useCurrency();
   const [health, setHealth] = useState<Health | null>(null);
   const [pricing, setPricing] = useState<PricingStatus | null>(null);
   const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
@@ -251,6 +253,37 @@ export function SettingsPage({ pathname }: { pathname?: string }) {
                           {l.label}
                         </SelectItem>
                       ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* 货币单位 */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <DollarSign className="h-4 w-4" />
+                {t("settings.currency.title")}
+              </CardTitle>
+              <CardDescription>{t("settings.currency.subtitle")}</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between gap-4">
+                <div className="font-medium text-sm">{t("settings.currency.label")}</div>
+                <div className="w-[220px]">
+                  <Select
+                    value={currencyMode}
+                    onValueChange={(v) => setCurrencyMode(v as CurrencyMode)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="auto">{t("settings.currency.options.auto")}</SelectItem>
+                      <SelectItem value="CNY">{t("settings.currency.options.cny")}</SelectItem>
+                      <SelectItem value="USD">{t("settings.currency.options.usd")}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
