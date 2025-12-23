@@ -1,3 +1,15 @@
+## [0.10.0](https://github.com/koumoe/cli-switch/compare/v0.9.0...v0.10.0) (2025-12-23)
+
+### Features
+
+* **channels:** add multipliers and auto-sort preview ([f449688](https://github.com/koumoe/cli-switch/commit/f44968808ce18f1939ab78e390a98761a268ef4c))
+* **i18n:** update currency and spend labels ([558079d](https://github.com/koumoe/cli-switch/commit/558079d5b5076b95b540b81dd163b33d6e1b137d))
+* **settings:** add currency display mode ([176d962](https://github.com/koumoe/cli-switch/commit/176d962c1acb58d7583da990b33f6a9ebdf7bf29))
+* **ui:** distinguish estimated cost and actual spend ([a82d12e](https://github.com/koumoe/cli-switch/commit/a82d12e7e6ca5fccb676696790f8bd4190985f4c))
+
+### Bug Fixes
+
+* apply rustfmt ([87d9418](https://github.com/koumoe/cli-switch/commit/87d94185520c270c4e95a54d95b03a0eaaafbc1c))
 ## [0.9.0](https://github.com/koumoe/cli-switch/compare/v0.8.0...v0.9.0) (2025-12-22)
 
 ### Features

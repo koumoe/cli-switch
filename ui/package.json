@@ -1,7 +1,7 @@
 {
   "name": "cliswitch-ui",
   "private": true,
-  "version": "0.9.0",
+  "version": "0.10.0",
   "type": "module",
   "engines": {
     "node": ">=25.2.1"
