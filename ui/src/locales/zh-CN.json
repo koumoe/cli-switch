@@ -303,12 +303,6 @@
       "cost": "官方额度",
       "result": "状态"
     },
-    "details": {
-      "routeId": "路由 ID",
-      "errorKind": "错误类型",
-      "errorDetail": "错误详情",
-      "estimatedSpend": "预估费用"
-    },
     "cell": {
       "duration": "耗时",
       "ttft": "首字",
@@ -323,7 +317,8 @@
       "requestId": "请求 ID",
       "routeId": "路由 ID",
       "errorKind": "错误类型",
-      "errorDetail": "错误详情"
+      "errorDetail": "错误详情",
+      "estimatedSpend": "预估费用"
     },
     "empty": "暂无请求记录",
     "toast": {
