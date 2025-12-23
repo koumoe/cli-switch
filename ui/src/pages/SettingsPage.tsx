@@ -39,6 +39,7 @@ import { setLogLevel } from "@/lib/logger";
 import { formatBytes, formatDateTime } from "../lib";
 import { checkUpdate, clearLogs, clearRecords, downloadUpdate, getDbSize, getHealth, getLogsSize, getSettings, getUpdateStatus, pricingStatus, pricingSync, updateSettings, type AppSettings, type AutoStartLaunchMode, type CloseBehavior, type DbSize, type Health, type LogsSize, type PricingStatus, type UpdateCheck, type UpdateStatus } from "../api";
 import type { CliswitchUpdateStatusEvent } from "@/lib/cliswitchEvents";
+import { clearUpdateReadyShown } from "@/lib/updateReadyPrompt";
 
 function joinPath(base: string, sub: string): string {
   const sep = base.includes("\\") ? "\\" : "/";
@@ -199,6 +200,13 @@ export function SettingsPage() {
   const logsDateStr = logsDateRange?.from
     ? `${format(logsDateRange.from, "yyyy-MM-dd")}${logsDateRange.to ? ` ~ ${format(logsDateRange.to, "yyyy-MM-dd")}` : ""}`
     : "-";
+
+  function reopenUpdateReadyPrompt(status: UpdateStatus) {
+    const version = status.pending_version;
+    if (!version) return;
+    clearUpdateReadyShown(version);
+    window.dispatchEvent(new CustomEvent<UpdateStatus>("cliswitch-update-status", { detail: status }));
+  }
 
   return (
     <div className="space-y-4 pb-4">
@@ -835,6 +843,11 @@ export function SettingsPage() {
                         setUpdateCheckResult(res);
                         const st = await getUpdateStatus().catch(() => null);
                         if (st) setUpdateStatus(st);
+
+                        if (st?.pending_version) {
+                          reopenUpdateReadyPrompt(st);
+                          return;
+                        }
 
                         if (!res.update_available) {
                           toast.success(t("settings.update.uptodate"));

@@ -29,6 +29,7 @@ import { toast } from "sonner";
 import { getHealth, getSettings, pricingStatus, pricingSync } from "./api";
 import { logger, setLogLevel } from "@/lib/logger";
 import type { CliswitchUpdateStatusEvent } from "@/lib/cliswitchEvents";
+import { isUpdateReadyShown, markUpdateReadyShown } from "@/lib/updateReadyPrompt";
 
 import { OverviewPage } from "./pages/OverviewPage";
 import { ChannelsPage } from "./pages/ChannelsPage";
@@ -48,7 +49,6 @@ const NAV_ITEMS: { route: AppRoute; labelKey: string; icon: React.ElementType }[
 
 const SIDEBAR_KEY = "cliswitch-sidebar-collapsed";
 const PRICING_ONBOARDING_SHOWN_KEY = "cliswitch-pricing-onboarding-shown";
-const UPDATE_READY_SHOWN_KEY_PREFIX = "cliswitch-update-ready-shown:";
 
 function routeFromPath(pathname: string): AppRoute {
   if (pathname === "/") return "overview";
@@ -207,12 +207,11 @@ export default function App() {
       const version = st?.pending_version;
       if (!version) return;
 
-      const key = `${UPDATE_READY_SHOWN_KEY_PREFIX}${version}`;
-      if (localStorage.getItem(key) === "true") return;
+      if (isUpdateReadyShown(version)) return;
 
       setUpdateReadyVersion(version);
       setUpdateReadyOpen(true);
-      localStorage.setItem(key, "true");
+      markUpdateReadyShown(version);
     };
     window.addEventListener("cliswitch-update-status", onUpdateStatus as EventListener);
     postIpc({ type: "ui-ready" });
