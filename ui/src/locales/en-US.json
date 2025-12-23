@@ -48,8 +48,9 @@
     "cards": {
       "todayRequests": "This Month Requests",
       "totalTokens": "This Month Tokens",
-      "estimatedCost": "Est. Cost",
-      "avgLatency": "Avg Latency"
+      "estimatedCost": "Est. Cost (official)",
+      "avgLatency": "Avg Latency",
+      "actualSpend": "Actual Spend"
     },
     "trend": {
       "title": "This Month Request Trend",
@@ -78,6 +79,19 @@
     "title": "Channels",
     "subtitle": "Manage upstream API channel configuration and connectivity",
     "new": "New Channel",
+    "autoSort": {
+      "button": "Sort by multiplier (preview)",
+      "title": "Auto sort preview",
+      "description": "Generate a suggested order for {{terminal}} based on multipliers (factor = real_multiplier / recharge_multiplier). It only applies after confirmation.",
+      "noChange": "No changes needed for current order",
+      "apply": "Apply",
+      "headers": {
+        "from": "From",
+        "to": "To",
+        "channel": "Channel",
+        "factor": "Factor"
+      }
+    },
     "tabs": {
       "codex": "Codex",
       "claude": "Claude",
@@ -110,6 +124,10 @@
       "name": "Name",
       "terminal": "Terminal",
       "priority": "Priority (higher wins)",
+      "rechargeMultiplier": "Recharge rate (USD credits per 1 {{currency}} paid)",
+      "rechargeMultiplierHint": "Example: {{currency}}1 → USD{{v}}",
+      "realMultiplier": "Real multiplier (multiply official cost by this)",
+      "realMultiplierHint": "Example: official cost × {{v}}",
       "baseUrl": "Base URL",
       "apiKey": "API Key / Token",
       "enabled": "Enabled"
@@ -132,6 +150,8 @@
       "testFail": "Test failed",
       "nameRequired": "Name is required",
       "baseUrlRequired": "Base URL is required",
+      "rechargeMultiplierInvalid": "Recharge rate must be a finite number > 0",
+      "realMultiplierInvalid": "Real multiplier must be a finite number > 0",
       "testReachableOkTitle": "{{name}} is reachable",
       "testReachableOkDesc": "Status: {{status}}, Latency: {{latency}}ms",
       "testReachableBadTitle": "{{name}} reachable but returned an error",
@@ -205,7 +225,8 @@
       "totalRequests": "Total Requests",
       "successRate": "Success Rate",
       "failed": "Failures",
-      "estimatedCost": "Estimated Cost"
+      "estimatedCost": "Amount (official)",
+      "actualSpend": "Spend (actual)"
     },
     "channelStats": {
       "title": "Channel Stats",
@@ -216,7 +237,8 @@
         "requests": "Requests",
         "success": "Success",
         "failed": "Failed",
-        "cost": "Cost",
+        "estimatedCost": "Amount (official)",
+        "actualSpend": "Spend (actual)",
         "avgLatency": "Avg Duration"
       }
     },
@@ -338,6 +360,16 @@
       "title": "Language",
       "subtitle": "Switch UI language",
       "label": "UI language"
+    },
+    "currency": {
+      "title": "Currency",
+      "subtitle": "Used for displaying units like Actual Spend (Est. Cost is always calculated in official USD)",
+      "label": "Default currency",
+      "options": {
+        "auto": "Auto (follow language)",
+        "cny": "CNY (RMB)",
+        "usd": "USD"
+      }
     },
     "channelProtection": {
       "title": "Channel Protection",
