@@ -1,3 +1,9 @@
+## [0.11.1](https://github.com/koumoe/cli-switch/compare/v0.11.0...v0.11.1) (2025-12-23)
+
+### Bug Fixes
+
+* repair logs locale key override ([40f76af](https://github.com/koumoe/cli-switch/commit/40f76afb55275220a09f0073fe678c835f530b5e))
+* simplify recharge settings and validate real multiplier ([83dc8a1](https://github.com/koumoe/cli-switch/commit/83dc8a12d1f59a42c89f79e75faf29b56fefe88a))
 ## [0.11.0](https://github.com/koumoe/cli-switch/compare/v0.10.1...v0.11.0) (2025-12-23)
 
 ### Features
