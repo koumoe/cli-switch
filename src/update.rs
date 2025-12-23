@@ -149,7 +149,9 @@ fn update_staged_dir(data_dir: &Path) -> PathBuf {
     updates_dir(data_dir).join("staged")
 }
 
-fn collect_update_versions(data_dir: &Path) -> anyhow::Result<std::collections::HashMap<String, SystemTime>> {
+fn collect_update_versions(
+    data_dir: &Path,
+) -> anyhow::Result<std::collections::HashMap<String, SystemTime>> {
     fn collect_from(
         dir: &Path,
         acc: &mut std::collections::HashMap<String, SystemTime>,
@@ -161,7 +163,8 @@ fn collect_update_versions(data_dir: &Path) -> anyhow::Result<std::collections::
         };
 
         for entry in entries {
-            let entry = entry.with_context(|| format!("read dir entry failed: {}", dir.display()))?;
+            let entry =
+                entry.with_context(|| format!("read dir entry failed: {}", dir.display()))?;
             let ty = entry
                 .file_type()
                 .with_context(|| format!("read file type failed: {}", entry.path().display()))?;
@@ -225,11 +228,14 @@ fn cleanup_update_artifacts_with_keep(
         let entries = match std::fs::read_dir(root) {
             Ok(rd) => rd,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
-            Err(e) => return Err(e).with_context(|| format!("read dir failed: {}", root.display())),
+            Err(e) => {
+                return Err(e).with_context(|| format!("read dir failed: {}", root.display()));
+            }
         };
 
         for entry in entries {
-            let entry = entry.with_context(|| format!("read dir entry failed: {}", root.display()))?;
+            let entry =
+                entry.with_context(|| format!("read dir entry failed: {}", root.display()))?;
             let path = entry.path();
             let ty = entry
                 .file_type()
@@ -1188,8 +1194,8 @@ mod tests {
 
     #[test]
     fn cleanup_update_artifacts_removes_old_versions() {
-        let data_dir = std::env::temp_dir()
-            .join(format!("cliswitch-update-test-{}", uuid::Uuid::new_v4()));
+        let data_dir =
+            std::env::temp_dir().join(format!("cliswitch-update-test-{}", uuid::Uuid::new_v4()));
         let _ = std::fs::remove_dir_all(&data_dir);
 
         let versions = ["0.9.0", "1.0.0", "1.1.0"];
@@ -1199,8 +1205,9 @@ mod tests {
         }
         std::fs::write(update_downloads_dir(&data_dir).join("keep.txt"), b"ok").unwrap();
 
-        let keep: std::collections::HashSet<String> =
-            ["1.1.0".to_string(), "1.0.0".to_string()].into_iter().collect();
+        let keep: std::collections::HashSet<String> = ["1.1.0".to_string(), "1.0.0".to_string()]
+            .into_iter()
+            .collect();
         cleanup_update_artifacts_with_keep(&data_dir, &keep).unwrap();
 
         assert!(update_downloads_dir(&data_dir).join("1.1.0").is_dir());
