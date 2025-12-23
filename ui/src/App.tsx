@@ -472,7 +472,7 @@ export default function App() {
             ) : route === "logs" ? (
               <LogsPage />
             ) : (
-              <SettingsPage pathname={pathname} />
+              <SettingsPage />
             )}
           </div>
         </main>

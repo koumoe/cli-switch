@@ -494,14 +494,8 @@
       "clearFail": "清理失败"
     },
     "maintenance": {
-      "title": "数据维护",
-      "subtitle": "数据库与日志大小、清理",
-      "hint": "将数据库大小/清理与日志大小/清理集中管理",
-      "back": "返回设置",
       "databaseTitle": "数据库",
       "databaseSubtitle": "查看大小并清理请求记录",
-      "logsTitle": "系统日志",
-      "logsSubtitle": "查看日志大小并清理 .log 文件",
       "logsSize": "日志大小",
       "logsSizeFail": "获取日志大小失败",
       "clearRecords": "清理记录",
