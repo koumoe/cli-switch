@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from "react";
-import { Sun, Moon, Monitor, FolderOpen, Info, Database, Languages, DollarSign, RefreshCw, Shield, Power, ScrollText, Trash2, Palette, Settings2, HardDrive, Cpu } from "lucide-react";
+import { Sun, Moon, Monitor, FolderOpen, Info, Database, Languages, DollarSign, RefreshCw, Shield, Power, ScrollText, Palette, Settings2, Cpu } from "lucide-react";
 import { toast } from "sonner";
+import { format } from "date-fns";
+import type { DateRange } from "react-day-picker";
 import {
   Button,
   Card,
@@ -9,6 +11,9 @@ import {
   CardHeader,
   CardTitle,
   Badge,
+  DateRangePicker,
+  dateRangeToMs,
+  dateRangeToStrings,
   Dialog,
   DialogContent,
   DialogDescription,
@@ -31,10 +36,9 @@ import { useTheme, type Theme } from "@/lib/theme";
 import { type Locale, useI18n } from "@/lib/i18n";
 import { useCurrency, type CurrencyMode } from "@/lib/currency";
 import { setLogLevel } from "@/lib/logger";
-import { formatDateTime } from "../lib";
-import { checkUpdate, downloadUpdate, getHealth, getSettings, getUpdateStatus, pricingStatus, pricingSync, updateSettings, type AppSettings, type AutoStartLaunchMode, type CloseBehavior, type Health, type PricingStatus, type UpdateCheck, type UpdateStatus } from "../api";
+import { formatBytes, formatDateTime } from "../lib";
+import { checkUpdate, clearLogs, clearRecords, downloadUpdate, getDbSize, getHealth, getLogsSize, getSettings, getUpdateStatus, pricingStatus, pricingSync, updateSettings, type AppSettings, type AutoStartLaunchMode, type CloseBehavior, type DbSize, type Health, type LogsSize, type PricingStatus, type UpdateCheck, type UpdateStatus } from "../api";
 import type { CliswitchUpdateStatusEvent } from "@/lib/cliswitchEvents";
-import { SettingsMaintenancePage } from "./SettingsMaintenancePage";
 
 function joinPath(base: string, sub: string): string {
   const sep = base.includes("\\") ? "\\" : "/";
@@ -42,13 +46,7 @@ function joinPath(base: string, sub: string): string {
   return `${base}${sep}${sub}`;
 }
 
-function navigate(to: string) {
-  if (window.location.pathname === to) return;
-  window.history.pushState({}, "", to);
-  window.dispatchEvent(new PopStateEvent("popstate"));
-}
-
-export function SettingsPage({ pathname }: { pathname?: string }) {
+export function SettingsPage() {
   const { theme, setTheme } = useTheme();
   const { locale, setLocale, locales, t } = useI18n();
   const { currencyMode, setCurrencyMode } = useCurrency();
@@ -68,6 +66,46 @@ export function SettingsPage({ pathname }: { pathname?: string }) {
   const [syncing, setSyncing] = useState(false);
   const [logSaving, setLogSaving] = useState(false);
   const [logRetentionDraft, setLogRetentionDraft] = useState<string>("");
+
+  // 数据库相关 state
+  const [dbSize, setDbSize] = useState<DbSize | null>(null);
+  const [dbSizeLoading, setDbSizeLoading] = useState(false);
+  const [recordsScope, setRecordsScope] = useState<"all" | "date_range">("all");
+  const [recordsDateRange, setRecordsDateRange] = useState<DateRange | undefined>(undefined);
+  const [recordsPromptOpen, setRecordsPromptOpen] = useState(false);
+  const [recordsClearing, setRecordsClearing] = useState(false);
+
+  // 日志清理相关 state
+  const [logsSize, setLogsSize] = useState<LogsSize | null>(null);
+  const [logsSizeLoading, setLogsSizeLoading] = useState(false);
+  const [logsScope, setLogsScope] = useState<"all" | "date_range">("all");
+  const [logsDateRange, setLogsDateRange] = useState<DateRange | undefined>(undefined);
+  const [logsPromptOpen, setLogsPromptOpen] = useState(false);
+  const [logsClearing, setLogsClearing] = useState(false);
+
+  async function refreshDbSize() {
+    setDbSizeLoading(true);
+    try {
+      const next = await getDbSize();
+      setDbSize(next);
+    } catch (e) {
+      toast.error(t("settings.storage.dbSizeFail"), { description: String(e) });
+    } finally {
+      setDbSizeLoading(false);
+    }
+  }
+
+  async function refreshLogsSize() {
+    setLogsSizeLoading(true);
+    try {
+      const next = await getLogsSize();
+      setLogsSize(next);
+    } catch (e) {
+      toast.error(t("settings.maintenance.logsSizeFail"), { description: String(e) });
+    } finally {
+      setLogsSizeLoading(false);
+    }
+  }
 
   useEffect(() => {
     getHealth()
@@ -89,6 +127,10 @@ export function SettingsPage({ pathname }: { pathname?: string }) {
     getUpdateStatus()
       .then(setUpdateStatus)
       .catch(() => setUpdateStatus(null));
+
+    void refreshDbSize();
+    void refreshLogsSize();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -150,9 +192,13 @@ export function SettingsPage({ pathname }: { pathname?: string }) {
         ? t("settings.update.latest")
         : "-";
 
-  if (pathname?.startsWith("/settings/maintenance")) {
-    return <SettingsMaintenancePage onBack={() => navigate("/settings")} />;
-  }
+  const recordsDateStr = recordsDateRange?.from
+    ? `${format(recordsDateRange.from, "yyyy-MM-dd")}${recordsDateRange.to ? ` ~ ${format(recordsDateRange.to, "yyyy-MM-dd")}` : ""}`
+    : "-";
+
+  const logsDateStr = logsDateRange?.from
+    ? `${format(logsDateRange.from, "yyyy-MM-dd")}${logsDateRange.to ? ` ~ ${format(logsDateRange.to, "yyyy-MM-dd")}` : ""}`
+    : "-";
 
   return (
     <div className="space-y-4 pb-4">
@@ -180,7 +226,7 @@ export function SettingsPage({ pathname }: { pathname?: string }) {
             {t("settings.tabs.application")}
           </TabsTrigger>
           <TabsTrigger value="data" className="gap-1.5">
-            <HardDrive className="h-3.5 w-3.5" />
+            <Database className="h-3.5 w-3.5" />
             {t("settings.tabs.data")}
           </TabsTrigger>
           <TabsTrigger value="system" className="gap-1.5">
@@ -824,7 +870,7 @@ export function SettingsPage({ pathname }: { pathname?: string }) {
 
         {/* 数据标签页 */}
         <TabsContent value="data" className="space-y-4 mt-4">
-          {/* 数据目录（原数据存储） */}
+          {/* 数据存储 */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -857,31 +903,138 @@ export function SettingsPage({ pathname }: { pathname?: string }) {
                   {t("settings.storage.dataDirHint")}
                 </p>
               </div>
+            </CardContent>
+          </Card>
+
+          {/* 数据库管理 */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Database className="h-4 w-4" />
+                {t("settings.maintenance.databaseTitle")}
+              </CardTitle>
+              <CardDescription>{t("settings.maintenance.databaseSubtitle")}</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
               <div className="space-y-2">
                 <label className="text-sm font-medium">{t("settings.storage.dbFile")}</label>
                 <Input value={health?.db_path ?? "-"} disabled className="font-mono text-sm" />
               </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">{t("settings.storage.dbSize")}</label>
+                <div className="flex gap-2">
+                  <Input value={dbSize ? formatBytes(dbSize.total_bytes) : "-"} disabled className="font-mono text-sm" />
+                  <Button variant="outline" onClick={() => void refreshDbSize()} disabled={dbSizeLoading}>
+                    {t("common.refresh")}
+                  </Button>
+                </div>
+              </div>
+
+              <Dialog
+                open={recordsPromptOpen}
+                onOpenChange={(v) => {
+                  if (recordsClearing) return;
+                  setRecordsPromptOpen(v);
+                }}
+              >
+                <DialogContent className="sm:max-w-[520px]">
+                  <DialogHeader>
+                    <DialogTitle>{t("settings.records.confirmTitle")}</DialogTitle>
+                    <DialogDescription>
+                      {t(recordsScope === "date_range" ? "settings.records.confirmDateRange" : "settings.records.confirmAll", {
+                        range: recordsDateStr,
+                      })}
+                    </DialogDescription>
+                  </DialogHeader>
+                  <DialogFooter>
+                    <Button variant="outline" onClick={() => setRecordsPromptOpen(false)} disabled={recordsClearing}>
+                      {t("common.cancel")}
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      onClick={async () => {
+                        setRecordsClearing(true);
+                        try {
+                          const msRange = recordsScope === "date_range" ? dateRangeToMs(recordsDateRange) : null;
+                          if (recordsScope === "date_range" && !msRange) {
+                            toast.error(t("settings.records.invalidDate"));
+                            return;
+                          }
+
+                          const res = await clearRecords({
+                            mode: recordsScope,
+                            start_ms: msRange?.start_ms,
+                            end_ms: msRange?.end_ms,
+                          });
+                          toast.success(t("settings.records.cleared"), {
+                            description: t("settings.records.clearedDetail", {
+                              usage: res.usage_events_deleted.toLocaleString(),
+                              failures: res.channel_failures_deleted.toLocaleString(),
+                            }),
+                          });
+                          setRecordsPromptOpen(false);
+                          setRecordsDateRange(undefined);
+                          await refreshDbSize();
+                        } catch (e) {
+                          toast.error(t("settings.records.clearFail"), { description: String(e) });
+                        } finally {
+                          setRecordsClearing(false);
+                        }
+                      }}
+                      disabled={recordsClearing}
+                    >
+                      {recordsClearing ? t("settings.records.clearing") : t("settings.records.clear")}
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium text-sm">{t("settings.maintenance.clearRecords")}</div>
+                  <div className="text-xs text-muted-foreground">{t("settings.maintenance.clearHint")}</div>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <Select value={recordsScope} onValueChange={(v) => setRecordsScope(v as any)} disabled={recordsClearing}>
+                    <SelectTrigger className="w-[140px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">{t("settings.maintenance.scopeAll")}</SelectItem>
+                      <SelectItem value="date_range">{t("settings.maintenance.scopeRange")}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {recordsScope === "date_range" && (
+                    <DateRangePicker
+                      value={recordsDateRange}
+                      onChange={setRecordsDateRange}
+                      placeholder={t("settings.records.selectRange")}
+                      className="w-[260px]"
+                      disabled={recordsClearing}
+                      locale={locale}
+                    />
+                  )}
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => {
+                      if (recordsScope === "date_range" && !recordsDateRange?.from) {
+                        toast.error(t("settings.records.invalidDate"));
+                        return;
+                      }
+                      setRecordsPromptOpen(true);
+                    }}
+                    disabled={recordsClearing || (recordsScope === "date_range" && !recordsDateRange?.from)}
+                  >
+                    {t("settings.records.clear")}
+                  </Button>
+                </div>
+              </div>
             </CardContent>
           </Card>
 
-          {/* 数据维护 */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <HardDrive className="h-4 w-4" />
-                {t("settings.maintenance.title")}
-              </CardTitle>
-              <CardDescription>{t("settings.maintenance.subtitle")}</CardDescription>
-            </CardHeader>
-            <CardContent className="flex items-center justify-between gap-4">
-              <div className="text-xs text-muted-foreground">{t("settings.maintenance.hint")}</div>
-              <Button variant="outline" onClick={() => navigate("/settings/maintenance")}>
-                {t("common.open")}
-              </Button>
-            </CardContent>
-          </Card>
-
-          {/* 应用日志 */}
+          {/* 系统日志 */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -985,9 +1138,125 @@ export function SettingsPage({ pathname }: { pathname?: string }) {
                   className="font-mono text-sm"
                 />
               </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">{t("settings.maintenance.logsSize")}</label>
+                <div className="flex gap-2">
+                  <Input value={logsSize ? formatBytes(logsSize.total_bytes) : "-"} disabled className="font-mono text-sm" />
+                  <Button variant="outline" onClick={() => void refreshLogsSize()} disabled={logsSizeLoading}>
+                    {t("common.refresh")}
+                  </Button>
+                </div>
+              </div>
+
+              <Dialog
+                open={logsPromptOpen}
+                onOpenChange={(v) => {
+                  if (logsClearing) return;
+                  setLogsPromptOpen(v);
+                }}
+              >
+                <DialogContent className="sm:max-w-[520px]">
+                  <DialogHeader>
+                    <DialogTitle>{t("settings.logging.confirmTitle")}</DialogTitle>
+                    <DialogDescription>
+                      {t(logsScope === "date_range" ? "settings.logging.confirmDateRange" : "settings.logging.confirmAll", {
+                        range: logsDateStr,
+                      })}
+                    </DialogDescription>
+                  </DialogHeader>
+                  <DialogFooter>
+                    <Button variant="outline" onClick={() => setLogsPromptOpen(false)} disabled={logsClearing}>
+                      {t("common.cancel")}
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      onClick={async () => {
+                        setLogsClearing(true);
+                        try {
+                          if (logsScope === "date_range") {
+                            const r = dateRangeToStrings(logsDateRange);
+                            if (!r) {
+                              toast.error(t("settings.logging.invalidDate"));
+                              return;
+                            }
+                            const res = await clearLogs({ mode: "date_range", start_date: r.start, end_date: r.end });
+                            toast.success(t("settings.logging.cleared"), {
+                              description: t("settings.logging.clearedDetail", {
+                                deleted: res.deleted_files,
+                                truncated: res.truncated_files,
+                              }),
+                            });
+                          } else {
+                            const res = await clearLogs({ mode: "all" });
+                            toast.success(t("settings.logging.cleared"), {
+                              description: t("settings.logging.clearedDetail", {
+                                deleted: res.deleted_files,
+                                truncated: res.truncated_files,
+                              }),
+                            });
+                          }
+
+                          setLogsPromptOpen(false);
+                          setLogsDateRange(undefined);
+                          await refreshLogsSize();
+                        } catch (e) {
+                          toast.error(t("settings.logging.clearFail"), { description: String(e) });
+                        } finally {
+                          setLogsClearing(false);
+                        }
+                      }}
+                      disabled={logsClearing}
+                    >
+                      {logsClearing ? t("settings.logging.clearing") : t("settings.logging.clear")}
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium text-sm">{t("settings.logging.clearLogs")}</div>
+                  <div className="text-xs text-muted-foreground">{t("settings.maintenance.clearHint")}</div>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <Select value={logsScope} onValueChange={(v) => setLogsScope(v as any)} disabled={logsClearing}>
+                    <SelectTrigger className="w-[140px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">{t("settings.maintenance.scopeAll")}</SelectItem>
+                      <SelectItem value="date_range">{t("settings.maintenance.scopeRange")}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {logsScope === "date_range" && (
+                    <DateRangePicker
+                      value={logsDateRange}
+                      onChange={setLogsDateRange}
+                      placeholder={t("settings.logging.selectRange")}
+                      className="w-[260px]"
+                      disabled={logsClearing}
+                      locale={locale}
+                    />
+                  )}
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => {
+                      if (logsScope === "date_range" && !logsDateRange?.from) {
+                        toast.error(t("settings.logging.invalidDate"));
+                        return;
+                      }
+                      setLogsPromptOpen(true);
+                    }}
+                    disabled={logsClearing || (logsScope === "date_range" && !logsDateRange?.from)}
+                  >
+                    {t("settings.logging.clear")}
+                  </Button>
+                </div>
+              </div>
             </CardContent>
           </Card>
-
         </TabsContent>
 
         {/* 系统标签页 */}

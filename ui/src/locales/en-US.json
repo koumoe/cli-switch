@@ -494,14 +494,8 @@
       "clearFail": "Clear failed"
     },
     "maintenance": {
-      "title": "Maintenance",
-      "subtitle": "Database/log size and cleanup",
-      "hint": "Manage database and log cleanup in one place",
-      "back": "Back to settings",
       "databaseTitle": "Database",
       "databaseSubtitle": "View size and clear request records",
-      "logsTitle": "System logs",
-      "logsSubtitle": "View size and clear .log files",
       "logsSize": "Log size",
       "logsSizeFail": "Failed to get log size",
       "clearRecords": "Clear records",
