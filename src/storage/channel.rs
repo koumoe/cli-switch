@@ -1,3 +1,4 @@
+use rusqlite::types::{FromSql, FromSqlError, ValueRef};
 use rusqlite::{OptionalExtension as _, params};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -5,6 +6,49 @@ use uuid::Uuid;
 
 use super::protocol::normalize_base_url;
 use super::{Protocol, now_ms, with_conn};
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub enum RechargeCurrency {
+    #[serde(rename = "CNY")]
+    Cny,
+    #[serde(rename = "USD")]
+    Usd,
+}
+
+impl RechargeCurrency {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            RechargeCurrency::Cny => "CNY",
+            RechargeCurrency::Usd => "USD",
+        }
+    }
+}
+
+impl std::fmt::Display for RechargeCurrency {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl std::str::FromStr for RechargeCurrency {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "CNY" => Ok(RechargeCurrency::Cny),
+            "USD" => Ok(RechargeCurrency::Usd),
+            other => Err(anyhow::anyhow!("未知 recharge_currency：{other}")),
+        }
+    }
+}
+
+impl FromSql for RechargeCurrency {
+    fn column_result(value: ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
+        let s = value.as_str()?;
+        s.parse::<RechargeCurrency>()
+            .map_err(|e| FromSqlError::Other(e.into_boxed_dyn_error()))
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Channel {
@@ -15,6 +59,7 @@ pub struct Channel {
     pub auth_type: String,
     pub auth_ref: String,
     pub priority: i64,
+    pub recharge_currency: RechargeCurrency,
     pub recharge_multiplier: f64,
     pub real_multiplier: f64,
     pub enabled: bool,
@@ -101,7 +146,7 @@ pub async fn list_channels(db_path: PathBuf) -> anyhow::Result<Vec<Channel>> {
     with_conn(db_path, |conn| {
         let mut stmt = conn.prepare(
             r#"
-            SELECT id, name, protocol, base_url, auth_type, auth_ref, priority, recharge_multiplier, real_multiplier, enabled, auto_disabled_until_ms, created_at_ms, updated_at_ms
+            SELECT id, name, protocol, base_url, auth_type, auth_ref, priority, recharge_currency, recharge_multiplier, real_multiplier, enabled, auto_disabled_until_ms, created_at_ms, updated_at_ms
             FROM channels
             ORDER BY CASE protocol
               WHEN 'openai' THEN 0
@@ -122,12 +167,15 @@ pub async fn list_channels(db_path: PathBuf) -> anyhow::Result<Vec<Channel>> {
                 auth_type: row.get(4)?,
                 auth_ref: row.get(5)?,
                 priority: row.get(6)?,
-                recharge_multiplier: row.get::<_, Option<f64>>(7)?.unwrap_or(1.0),
-                real_multiplier: row.get::<_, Option<f64>>(8)?.unwrap_or(1.0),
-                enabled: row.get::<_, i64>(9)? != 0,
-                auto_disabled_until_ms: row.get::<_, Option<i64>>(10)?.unwrap_or(0),
-                created_at_ms: row.get(11)?,
-                updated_at_ms: row.get(12)?,
+                recharge_currency: row
+                    .get::<_, Option<RechargeCurrency>>(7)?
+                    .unwrap_or(RechargeCurrency::Cny),
+                recharge_multiplier: row.get::<_, Option<f64>>(8)?.unwrap_or(1.0),
+                real_multiplier: row.get::<_, Option<f64>>(9)?.unwrap_or(1.0),
+                enabled: row.get::<_, i64>(10)? != 0,
+                auto_disabled_until_ms: row.get::<_, Option<i64>>(11)?.unwrap_or(0),
+                created_at_ms: row.get(12)?,
+                updated_at_ms: row.get(13)?,
             })
         })?;
 
@@ -146,6 +194,7 @@ pub struct CreateChannel {
     pub auth_ref: String,
     #[serde(default)]
     pub priority: i64,
+    pub recharge_currency: Option<RechargeCurrency>,
     pub recharge_multiplier: Option<f64>,
     pub real_multiplier: Option<f64>,
     pub enabled: bool,
@@ -161,12 +210,13 @@ pub async fn create_channel(db_path: PathBuf, input: CreateChannel) -> anyhow::R
             .trim()
             .to_string();
         let base_url = normalize_base_url(input.protocol, &input.base_url);
+        let recharge_currency = input.recharge_currency.unwrap_or(RechargeCurrency::Cny);
         let recharge_multiplier = input.recharge_multiplier.unwrap_or(1.0);
         let real_multiplier = input.real_multiplier.unwrap_or(1.0);
         conn.execute(
             r#"
-            INSERT INTO channels (id, name, protocol, base_url, auth_type, auth_ref, priority, recharge_multiplier, real_multiplier, enabled, created_at_ms, updated_at_ms)
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+            INSERT INTO channels (id, name, protocol, base_url, auth_type, auth_ref, priority, recharge_currency, recharge_multiplier, real_multiplier, enabled, created_at_ms, updated_at_ms)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
             "#,
             params![
                 id,
@@ -176,6 +226,7 @@ pub async fn create_channel(db_path: PathBuf, input: CreateChannel) -> anyhow::R
                 auth_type,
                 input.auth_ref,
                 input.priority,
+                recharge_currency.as_str(),
                 recharge_multiplier,
                 real_multiplier,
                 if input.enabled { 1 } else { 0 },
@@ -192,6 +243,7 @@ pub async fn create_channel(db_path: PathBuf, input: CreateChannel) -> anyhow::R
             auth_type,
             auth_ref: input.auth_ref,
             priority: input.priority,
+            recharge_currency,
             recharge_multiplier,
             real_multiplier,
             enabled: input.enabled,
@@ -210,6 +262,7 @@ pub struct UpdateChannel {
     pub auth_type: Option<String>,
     pub auth_ref: Option<String>,
     pub priority: Option<i64>,
+    pub recharge_currency: Option<RechargeCurrency>,
     pub recharge_multiplier: Option<f64>,
     pub real_multiplier: Option<f64>,
     pub enabled: Option<bool>,
@@ -227,7 +280,7 @@ pub async fn update_channel(
         let mut channel: Channel = {
             let mut stmt = conn.prepare(
                 r#"
-                SELECT id, name, protocol, base_url, auth_type, auth_ref, priority, recharge_multiplier, real_multiplier, enabled, auto_disabled_until_ms, created_at_ms, updated_at_ms
+                SELECT id, name, protocol, base_url, auth_type, auth_ref, priority, recharge_currency, recharge_multiplier, real_multiplier, enabled, auto_disabled_until_ms, created_at_ms, updated_at_ms
                 FROM channels
                 WHERE id = ?1
                 "#,
@@ -243,12 +296,15 @@ pub async fn update_channel(
                     auth_type: row.get(4)?,
                     auth_ref: row.get(5)?,
                     priority: row.get(6)?,
-                    recharge_multiplier: row.get::<_, Option<f64>>(7)?.unwrap_or(1.0),
-                    real_multiplier: row.get::<_, Option<f64>>(8)?.unwrap_or(1.0),
-                    enabled: row.get::<_, i64>(9)? != 0,
-                    auto_disabled_until_ms: row.get::<_, Option<i64>>(10)?.unwrap_or(0),
-                    created_at_ms: row.get(11)?,
-                    updated_at_ms: row.get(12)?,
+                    recharge_currency: row
+                        .get::<_, Option<RechargeCurrency>>(7)?
+                        .unwrap_or(RechargeCurrency::Cny),
+                    recharge_multiplier: row.get::<_, Option<f64>>(8)?.unwrap_or(1.0),
+                    real_multiplier: row.get::<_, Option<f64>>(9)?.unwrap_or(1.0),
+                    enabled: row.get::<_, i64>(10)? != 0,
+                    auto_disabled_until_ms: row.get::<_, Option<i64>>(11)?.unwrap_or(0),
+                    created_at_ms: row.get(12)?,
+                    updated_at_ms: row.get(13)?,
                 })
             });
 
@@ -276,6 +332,9 @@ pub async fn update_channel(
         if let Some(v) = input.priority {
             channel.priority = v;
         }
+        if let Some(v) = input.recharge_currency {
+            channel.recharge_currency = v;
+        }
         if let Some(v) = input.recharge_multiplier {
             channel.recharge_multiplier = v;
         }
@@ -294,7 +353,7 @@ pub async fn update_channel(
         tx.execute(
             r#"
             UPDATE channels
-            SET name = ?2, base_url = ?3, auth_type = ?4, auth_ref = ?5, priority = ?6, recharge_multiplier = ?7, real_multiplier = ?8, enabled = ?9, auto_disabled_until_ms = ?10, updated_at_ms = ?11
+            SET name = ?2, base_url = ?3, auth_type = ?4, auth_ref = ?5, priority = ?6, recharge_currency = ?7, recharge_multiplier = ?8, real_multiplier = ?9, enabled = ?10, auto_disabled_until_ms = ?11, updated_at_ms = ?12
             WHERE id = ?1
             "#,
             params![
@@ -304,6 +363,7 @@ pub async fn update_channel(
                 channel.auth_type,
                 channel.auth_ref,
                 channel.priority,
+                channel.recharge_currency.as_str(),
                 channel.recharge_multiplier,
                 channel.real_multiplier,
                 if channel.enabled { 1 } else { 0 },
@@ -371,7 +431,7 @@ pub async fn get_channel(db_path: PathBuf, channel_id: String) -> anyhow::Result
     with_conn(db_path, move |conn| {
         let mut stmt = conn.prepare(
             r#"
-            SELECT id, name, protocol, base_url, auth_type, auth_ref, priority, recharge_multiplier, real_multiplier, enabled, auto_disabled_until_ms, created_at_ms, updated_at_ms
+            SELECT id, name, protocol, base_url, auth_type, auth_ref, priority, recharge_currency, recharge_multiplier, real_multiplier, enabled, auto_disabled_until_ms, created_at_ms, updated_at_ms
             FROM channels
             WHERE id = ?1
             "#,
@@ -388,12 +448,15 @@ pub async fn get_channel(db_path: PathBuf, channel_id: String) -> anyhow::Result
                 auth_type: row.get(4)?,
                 auth_ref: row.get(5)?,
                 priority: row.get(6)?,
-                recharge_multiplier: row.get::<_, Option<f64>>(7)?.unwrap_or(1.0),
-                real_multiplier: row.get::<_, Option<f64>>(8)?.unwrap_or(1.0),
-                enabled: row.get::<_, i64>(9)? != 0,
-                auto_disabled_until_ms: row.get::<_, Option<i64>>(10)?.unwrap_or(0),
-                created_at_ms: row.get(11)?,
-                updated_at_ms: row.get(12)?,
+                recharge_currency: row
+                    .get::<_, Option<RechargeCurrency>>(7)?
+                    .unwrap_or(RechargeCurrency::Cny),
+                recharge_multiplier: row.get::<_, Option<f64>>(8)?.unwrap_or(1.0),
+                real_multiplier: row.get::<_, Option<f64>>(9)?.unwrap_or(1.0),
+                enabled: row.get::<_, i64>(10)? != 0,
+                auto_disabled_until_ms: row.get::<_, Option<i64>>(11)?.unwrap_or(0),
+                created_at_ms: row.get(12)?,
+                updated_at_ms: row.get(13)?,
             })
         })
         .optional()

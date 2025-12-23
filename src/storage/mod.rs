@@ -12,8 +12,8 @@ mod stats;
 mod usage;
 
 pub use channel::{
-    Channel, CreateChannel, UpdateChannel, channel_is_auto_disabled, clear_channel_failures,
-    create_channel, delete_channel, get_channel, list_channels,
+    Channel, CreateChannel, RechargeCurrency, UpdateChannel, channel_is_auto_disabled,
+    clear_channel_failures, create_channel, delete_channel, get_channel, list_channels,
     record_channel_failure_and_maybe_disable, reorder_channels, set_channel_enabled,
     update_channel,
 };
@@ -57,6 +57,12 @@ pub fn init_db(db_path: &Path) -> anyhow::Result<()> {
 
 fn ensure_channels_schema(conn: &Connection) -> anyhow::Result<()> {
     ensure_column(conn, "channels", "priority", "INTEGER NOT NULL DEFAULT 0")?;
+    ensure_column(
+        conn,
+        "channels",
+        "recharge_currency",
+        "TEXT NOT NULL DEFAULT 'CNY'",
+    )?;
     ensure_column(
         conn,
         "channels",
