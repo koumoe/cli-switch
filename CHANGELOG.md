@@ -1,3 +1,4 @@
+## [0.10.1](https://github.com/koumoe/cli-switch/compare/v0.10.0...v0.10.1) (2025-12-23)
 ## [0.10.0](https://github.com/koumoe/cli-switch/compare/v0.9.0...v0.10.0) (2025-12-23)
 
 ### Features
