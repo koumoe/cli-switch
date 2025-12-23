@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { TrendingUp, Zap, DollarSign, Clock, ArrowRight } from "lucide-react";
+import { TrendingUp, Zap, DollarSign, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
 import {
   Card,
@@ -13,6 +13,7 @@ import {
   TabsTrigger,
 } from "@/components/ui";
 import { useI18n } from "@/lib/i18n";
+import { useCurrency, formatMoney, parseDecimalLike } from "@/lib/currency";
 import {
   listChannels,
   statsSummary,
@@ -226,6 +227,7 @@ function ChannelDistribution({
 
 export function OverviewPage() {
   const { t } = useI18n();
+  const { currency } = useCurrency();
   const [channels, setChannels] = useState<Channel[]>([]);
   const [stats, setStats] = useState<StatsSummary | null>(null);
   const [channelStats, setChannelStats] = useState<ChannelStats[]>([]);
@@ -273,13 +275,22 @@ export function OverviewPage() {
     [enabledByProtocol],
   );
 
-  const avgLatency = stats?.avg_latency_ms ? Math.round(stats.avg_latency_ms) : null;
-
-  const formatLatency = (ms: number | null) => {
-    if (ms === null) return "-";
-    if (ms < 1000) return `${ms}ms`;
-    return `${(ms / 1000).toFixed(1)}s`;
-  };
+  const actualSpend = useMemo(() => {
+    if (!channelStats.length || !channels.length) return null;
+    const byId = new Map(channels.map((c) => [c.id, c] as const));
+    let sum = 0;
+    for (const s of channelStats) {
+      const est = parseDecimalLike(s.estimated_cost_usd);
+      if (!est || est <= 0) continue;
+      const ch = byId.get(s.channel_id);
+      const recharge = Number(ch?.recharge_multiplier ?? 1);
+      const real = Number(ch?.real_multiplier ?? 1);
+      if (!Number.isFinite(recharge) || recharge <= 0) continue;
+      if (!Number.isFinite(real) || real <= 0) continue;
+      sum += est * (real / recharge);
+    }
+    return sum > 0 ? sum : null;
+  }, [channels, channelStats]);
 
   const channelStatsUsed = useMemo(
     () => channelStats.filter((s) => s.success > 0),
@@ -388,14 +399,14 @@ export function OverviewPage() {
         </Card>
 
         <Card>
-          <CardHeader className="pb-1.5 pt-3 px-3">
-            <CardDescription className="text-xs flex items-center gap-1">
-              <Clock className="h-3 w-3" />
-              {t("overview.cards.avgLatency")}
+            <CardHeader className="pb-1.5 pt-3 px-3">
+              <CardDescription className="text-xs flex items-center gap-1">
+              <ArrowRight className="h-3 w-3" />
+              {t("overview.cards.actualSpend")}
             </CardDescription>
           </CardHeader>
           <CardContent className="pb-3 px-3">
-            <div className="text-xl font-bold">{formatLatency(avgLatency)}</div>
+            <div className="text-xl font-bold">{formatMoney(actualSpend, currency)}</div>
           </CardContent>
         </Card>
       </div>

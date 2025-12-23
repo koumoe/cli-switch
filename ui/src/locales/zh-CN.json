@@ -48,8 +48,9 @@
     "cards": {
       "todayRequests": "本月请求",
       "totalTokens": "本月 Token",
-      "estimatedCost": "预估费用",
-      "avgLatency": "平均延迟"
+      "estimatedCost": "预估费用（官方额度）",
+      "avgLatency": "平均延迟",
+      "actualSpend": "实际花费"
     },
     "trend": {
       "title": "本月请求趋势",
@@ -78,6 +79,19 @@
     "title": "渠道",
     "subtitle": "管理上游 API 渠道的配置和连接",
     "new": "新建渠道",
+    "autoSort": {
+      "button": "按倍率排序（预览）",
+      "title": "自动排序预览",
+      "description": "根据倍率为 {{terminal}} 生成建议顺序（系数 = 真实倍率 / 充值实际倍率），确认后才会生效。",
+      "noChange": "当前顺序无需调整",
+      "apply": "确认应用",
+      "headers": {
+        "from": "原序",
+        "to": "新序",
+        "channel": "渠道",
+        "factor": "系数"
+      }
+    },
     "tabs": {
       "codex": "Codex",
       "claude": "Claude",
@@ -110,6 +124,10 @@
       "name": "名称",
       "terminal": "终端",
       "priority": "优先级（数值越大越优先）",
+      "rechargeMultiplier": "充值实际倍率（每 1 {{currency}} 可获得多少 USD 额度）",
+      "rechargeMultiplierHint": "示例：{{currency}}1 → USD{{v}}",
+      "realMultiplier": "真实倍率（扣费倍率，按官方费用乘以该值）",
+      "realMultiplierHint": "示例：官方费用 × {{v}}",
       "baseUrl": "Base URL",
       "apiKey": "API Key / Token",
       "enabled": "启用"
@@ -132,6 +150,8 @@
       "testFail": "测试失败",
       "nameRequired": "名称不能为空",
       "baseUrlRequired": "Base URL 不能为空",
+      "rechargeMultiplierInvalid": "充值实际倍率必须是 > 0 的数字",
+      "realMultiplierInvalid": "真实倍率必须是 > 0 的数字",
       "testReachableOkTitle": "{{name}} 连通正常",
       "testReachableOkDesc": "状态: {{status}}, 延迟: {{latency}}ms",
       "testReachableBadTitle": "{{name}} 可达但返回异常",
@@ -205,7 +225,8 @@
       "totalRequests": "总请求",
       "successRate": "成功率",
       "failed": "失败数",
-      "estimatedCost": "预估成本"
+      "estimatedCost": "金额（官方额度）",
+      "actualSpend": "花费（实际金额）"
     },
     "channelStats": {
       "title": "渠道统计",
@@ -216,7 +237,8 @@
         "requests": "请求",
         "success": "成功",
         "failed": "失败",
-        "cost": "金额",
+        "estimatedCost": "金额（官方）",
+        "actualSpend": "花费（实际）",
         "avgLatency": "平均耗时"
       }
     },
@@ -338,6 +360,16 @@
       "title": "语言",
       "subtitle": "切换界面显示语言",
       "label": "界面语言"
+    },
+    "currency": {
+      "title": "货币单位",
+      "subtitle": "用于显示「实际花费」等金额单位（预估费用固定按官方 USD 计算）",
+      "label": "默认货币",
+      "options": {
+        "auto": "自动（跟随语言）",
+        "cny": "人民币（CNY）",
+        "usd": "美元（USD）"
+      }
     },
     "channelProtection": {
       "title": "渠道保护",

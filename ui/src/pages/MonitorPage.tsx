@@ -23,9 +23,12 @@ import {
 } from "@/components/ui";
 import { useI18n } from "@/lib/i18n";
 import { useWindowEvent } from "@/lib/useWindowEvent";
+import { useCurrency, formatMoney, parseDecimalLike } from "@/lib/currency";
 import {
+  listChannels,
   statsSummary,
   statsChannels,
+  type Channel,
   type StatsSummary,
   type ChannelStats,
 } from "../api";
@@ -33,17 +36,20 @@ import { protocolLabel } from "../lib";
 
 export function MonitorPage() {
   const { t } = useI18n();
+  const { currency } = useCurrency();
   const colClass = {
     channel: "w-28",
     terminal: "w-20",
     requests: "w-16",
     success: "w-16",
     failed: "w-16",
-    cost: "w-28",
+    estimatedCost: "w-28",
+    actualSpend: "w-28",
     avgLatency: "w-24",
   } as const;
   const [stats, setStats] = useState<StatsSummary | null>(null);
   const [channelStats, setChannelStats] = useState<ChannelStats[]>([]);
+  const [channels, setChannels] = useState<Channel[]>([]);
   const [loading, setLoading] = useState(false);
   const loadingRef = useRef(false);
 
@@ -53,7 +59,8 @@ export function MonitorPage() {
     setLoading(true);
     try {
       loadingRef.current = true;
-      const [st, cst] = await Promise.all([statsSummary(range), statsChannels(range)]);
+      const [cs, st, cst] = await Promise.all([listChannels(), statsSummary(range), statsChannels(range)]);
+      setChannels(cs);
       setStats(st);
       setChannelStats(
         [...cst.items].sort((a, b) => {
@@ -83,6 +90,24 @@ export function MonitorPage() {
     stats && stats.requests > 0
       ? Math.round((stats.success / stats.requests) * 100)
       : 0;
+
+  const channelsById = React.useMemo(() => new Map(channels.map((c) => [c.id, c] as const)), [channels]);
+
+  const totalActualSpend = React.useMemo(() => {
+    if (!channelStats.length || !channels.length) return null;
+    let sum = 0;
+    for (const s of channelStats) {
+      const est = parseDecimalLike(s.estimated_cost_usd);
+      if (!est || est <= 0) continue;
+      const ch = channelsById.get(s.channel_id);
+      const recharge = Number(ch?.recharge_multiplier ?? 1);
+      const real = Number(ch?.real_multiplier ?? 1);
+      if (!Number.isFinite(recharge) || recharge <= 0) continue;
+      if (!Number.isFinite(real) || real <= 0) continue;
+      sum += est * (real / recharge);
+    }
+    return sum > 0 ? sum : null;
+  }, [channelStats, channels.length, channelsById]);
 
   return (
     <div className="space-y-4 pb-4">
@@ -118,7 +143,7 @@ export function MonitorPage() {
       </div>
 
       {/* 统计卡片 */}
-      <div className="grid gap-3 md:grid-cols-4">
+      <div className="grid gap-3 md:grid-cols-5">
         <Card>
           <CardHeader className="pb-2">
             <CardDescription>{t("monitor.cards.totalRequests")}</CardDescription>
@@ -158,6 +183,17 @@ export function MonitorPage() {
             </div>
           </CardContent>
         </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>{t("monitor.cards.actualSpend")}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="text-xl font-semibold">
+              {formatMoney(totalActualSpend, currency)}
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* 渠道统计 */}
@@ -183,15 +219,18 @@ export function MonitorPage() {
 	                  <TableHead className={colClass.success}>
 	                    {t("monitor.channelStats.headers.success")}
 	                  </TableHead>
-	                  <TableHead className={colClass.failed}>
-	                    {t("monitor.channelStats.headers.failed")}
-	                  </TableHead>
-	                  <TableHead className={colClass.cost}>
-	                    {t("monitor.channelStats.headers.cost")}
-	                  </TableHead>
-	                  <TableHead className={colClass.avgLatency}>
-	                    {t("monitor.channelStats.headers.avgLatency")}
-	                  </TableHead>
+                  <TableHead className={colClass.failed}>
+                    {t("monitor.channelStats.headers.failed")}
+                  </TableHead>
+                  <TableHead className={colClass.estimatedCost}>
+                    {t("monitor.channelStats.headers.estimatedCost")}
+                  </TableHead>
+                  <TableHead className={colClass.actualSpend}>
+                    {t("monitor.channelStats.headers.actualSpend")}
+                  </TableHead>
+                  <TableHead className={colClass.avgLatency}>
+                    {t("monitor.channelStats.headers.avgLatency")}
+                  </TableHead>
 	                </TableRow>
 	              </TableHeader>
               <TableBody>
@@ -210,6 +249,18 @@ export function MonitorPage() {
                     </TableCell>
                     <TableCell className="text-muted-foreground font-mono">
                       {cs.estimated_cost_usd ? `$${cs.estimated_cost_usd}` : "-"}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground font-mono">
+                      {(() => {
+                        const est = parseDecimalLike(cs.estimated_cost_usd);
+                        const ch = channelsById.get(cs.channel_id);
+                        const recharge = Number(ch?.recharge_multiplier ?? 1);
+                        const real = Number(ch?.real_multiplier ?? 1);
+                        if (!est || est <= 0) return "-";
+                        if (!Number.isFinite(recharge) || recharge <= 0) return "-";
+                        if (!Number.isFinite(real) || real <= 0) return "-";
+                        return formatMoney(est * (real / recharge), currency);
+                      })()}
                     </TableCell>
                     <TableCell className="text-muted-foreground">
                       {cs.avg_latency_ms

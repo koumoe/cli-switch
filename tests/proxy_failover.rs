@@ -116,6 +116,8 @@ async fn failover_on_non_200_until_success() {
             auth_type: None,
             auth_ref: "t1".to_string(),
             priority: 30,
+            recharge_multiplier: None,
+            real_multiplier: None,
             enabled: true,
         },
     )
@@ -130,6 +132,8 @@ async fn failover_on_non_200_until_success() {
             auth_type: None,
             auth_ref: "t2".to_string(),
             priority: 20,
+            recharge_multiplier: None,
+            real_multiplier: None,
             enabled: true,
         },
     )
@@ -144,6 +148,8 @@ async fn failover_on_non_200_until_success() {
             auth_type: None,
             auth_ref: "t3".to_string(),
             priority: 10,
+            recharge_multiplier: None,
+            real_multiplier: None,
             enabled: true,
         },
     )
@@ -194,6 +200,8 @@ async fn return_last_error_when_all_channels_fail() {
                 auth_type: None,
                 auth_ref: "t".to_string(),
                 priority,
+                recharge_multiplier: None,
+                real_multiplier: None,
                 enabled: true,
             },
         )
@@ -265,6 +273,8 @@ async fn gemini_logs_include_model_and_cost() {
             auth_type: None,
             auth_ref: "t".to_string(),
             priority: 10,
+            recharge_multiplier: None,
+            real_multiplier: None,
             enabled: true,
         },
     )
@@ -319,6 +329,8 @@ async fn anthropic_count_tokens_no_failover_and_no_usage_log() {
             auth_type: None,
             auth_ref: "t1".to_string(),
             priority: 30,
+            recharge_multiplier: None,
+            real_multiplier: None,
             enabled: true,
         },
     )
@@ -333,6 +345,8 @@ async fn anthropic_count_tokens_no_failover_and_no_usage_log() {
             auth_type: None,
             auth_ref: "t2".to_string(),
             priority: 20,
+            recharge_multiplier: None,
+            real_multiplier: None,
             enabled: true,
         },
     )
@@ -401,6 +415,8 @@ async fn anthropic_count_tokens_does_not_auto_disable() {
             auth_type: None,
             auth_ref: "t1".to_string(),
             priority: 10,
+            recharge_multiplier: None,
+            real_multiplier: None,
             enabled: true,
         },
     )

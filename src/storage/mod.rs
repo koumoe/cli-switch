@@ -60,6 +60,18 @@ fn ensure_channels_schema(conn: &Connection) -> anyhow::Result<()> {
     ensure_column(
         conn,
         "channels",
+        "recharge_multiplier",
+        "REAL NOT NULL DEFAULT 1.0",
+    )?;
+    ensure_column(
+        conn,
+        "channels",
+        "real_multiplier",
+        "REAL NOT NULL DEFAULT 1.0",
+    )?;
+    ensure_column(
+        conn,
+        "channels",
         "auto_disabled_until_ms",
         "INTEGER NOT NULL DEFAULT 0",
     )?;
