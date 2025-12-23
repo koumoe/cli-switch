@@ -9,6 +9,14 @@ use crate::server::AppState;
 use crate::server::error::{ApiError, map_storage_unit_no_content};
 use crate::storage;
 
+fn real_multiplier_is_valid(v: f64) -> bool {
+    if !v.is_finite() || v < 0.0 {
+        return false;
+    }
+    let scaled = v * 100.0;
+    (scaled - scaled.round()).abs() < 1e-9
+}
+
 pub(in crate::server) async fn list_channels(
     State(state): State<AppState>,
 ) -> Result<impl IntoResponse, ApiError> {
@@ -57,18 +65,11 @@ pub(in crate::server) async fn create_channel(
     if input.base_url.trim().is_empty() {
         return Err(ApiError::BadRequest("base_url 不能为空".to_string()));
     }
-    if let Some(v) = input.recharge_multiplier
-        && (!v.is_finite() || v <= 0.0)
-    {
-        return Err(ApiError::BadRequest(
-            "recharge_multiplier 必须是 > 0 的有限数字".to_string(),
-        ));
-    }
     if let Some(v) = input.real_multiplier
-        && (!v.is_finite() || v <= 0.0)
+        && !real_multiplier_is_valid(v)
     {
         return Err(ApiError::BadRequest(
-            "real_multiplier 必须是 > 0 的有限数字".to_string(),
+            "real_multiplier 必须是 >= 0 的有限数字，且最多 2 位小数".to_string(),
         ));
     }
 
@@ -81,18 +82,11 @@ pub(in crate::server) async fn update_channel(
     axum::extract::Path(channel_id): axum::extract::Path<String>,
     Json(input): Json<storage::UpdateChannel>,
 ) -> Result<impl IntoResponse, ApiError> {
-    if let Some(v) = input.recharge_multiplier
-        && (!v.is_finite() || v <= 0.0)
-    {
-        return Err(ApiError::BadRequest(
-            "recharge_multiplier 必须是 > 0 的有限数字".to_string(),
-        ));
-    }
     if let Some(v) = input.real_multiplier
-        && (!v.is_finite() || v <= 0.0)
+        && !real_multiplier_is_valid(v)
     {
         return Err(ApiError::BadRequest(
-            "real_multiplier 必须是 > 0 的有限数字".to_string(),
+            "real_multiplier 必须是 >= 0 的有限数字，且最多 2 位小数".to_string(),
         ));
     }
     let res = storage::update_channel(state.db_path(), channel_id, input).await;

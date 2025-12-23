@@ -10,7 +10,6 @@ CREATE TABLE IF NOT EXISTS channels (
   auth_ref TEXT NOT NULL,
   priority INTEGER NOT NULL DEFAULT 0,
   recharge_currency TEXT NOT NULL DEFAULT 'CNY' CHECK(recharge_currency IN ('CNY','USD')),
-  recharge_multiplier REAL NOT NULL DEFAULT 1.0,
   real_multiplier REAL NOT NULL DEFAULT 1.0,
   enabled INTEGER NOT NULL,
   auto_disabled_until_ms INTEGER NOT NULL DEFAULT 0,

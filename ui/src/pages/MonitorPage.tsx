@@ -96,17 +96,17 @@ export function MonitorPage() {
   const totalActualSpend = React.useMemo(() => {
     if (!channelStats.length || !channels.length) return null;
     let sum = 0;
+    let hasAny = false;
     for (const s of channelStats) {
       const est = parseDecimalLike(s.estimated_cost_usd);
       if (!est || est <= 0) continue;
       const ch = channelsById.get(s.channel_id);
-      const recharge = Number(ch?.recharge_multiplier ?? 1);
       const real = Number(ch?.real_multiplier ?? 1);
-      if (!Number.isFinite(recharge) || recharge <= 0) continue;
-      if (!Number.isFinite(real) || real <= 0) continue;
-      sum += est * (real / recharge);
+      if (!Number.isFinite(real) || real < 0) continue;
+      hasAny = true;
+      sum += est * real;
     }
-    return sum > 0 ? sum : null;
+    return hasAny ? sum : null;
   }, [channelStats, channels.length, channelsById]);
 
   return (
@@ -254,12 +254,10 @@ export function MonitorPage() {
                       {(() => {
                         const est = parseDecimalLike(cs.estimated_cost_usd);
                         const ch = channelsById.get(cs.channel_id);
-                        const recharge = Number(ch?.recharge_multiplier ?? 1);
                         const real = Number(ch?.real_multiplier ?? 1);
                         if (!est || est <= 0) return "-";
-                        if (!Number.isFinite(recharge) || recharge <= 0) return "-";
-                        if (!Number.isFinite(real) || real <= 0) return "-";
-                        return formatMoney(est * (real / recharge), currency);
+                        if (!Number.isFinite(real) || real < 0) return "-";
+                        return formatMoney(est * real, currency);
                       })()}
                     </TableCell>
                     <TableCell className="text-muted-foreground">
