@@ -38,6 +38,7 @@ export type Channel = {
   auth_type: string;
   auth_ref: string;
   priority: number;
+  recharge_currency: "USD" | "CNY";
   recharge_multiplier: number;
   real_multiplier: number;
   enabled: boolean;
@@ -53,6 +54,7 @@ export type CreateChannelInput = {
   auth_type: string;
   auth_ref: string;
   priority: number;
+  recharge_currency: "USD" | "CNY";
   recharge_multiplier: number;
   real_multiplier: number;
   enabled: boolean;
@@ -64,6 +66,7 @@ export type UpdateChannelInput = Partial<{
   auth_type: string;
   auth_ref: string;
   priority: number;
+  recharge_currency: "USD" | "CNY";
   recharge_multiplier: number;
   real_multiplier: number;
   enabled: boolean;

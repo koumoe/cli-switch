@@ -36,6 +36,7 @@ import {
 import { humanizeErrorText } from "@/lib/error";
 import { useI18n } from "@/lib/i18n";
 import { useWindowEvent } from "@/lib/useWindowEvent";
+import { formatMoney, parseDecimalLike, useCurrency } from "@/lib/currency";
 import {
   listChannels,
   usageList,
@@ -47,6 +48,7 @@ import { clampStr, formatDateTime, formatDuration, protocolLabel, protocolLabelK
 
 export function LogsPage() {
   const { locale, t } = useI18n();
+  const { currency } = useCurrency();
   const [events, setEvents] = useState<UsageEvent[]>([]);
   const [channels, setChannels] = useState<Channel[]>([]);
   const [loading, setLoading] = useState(false);
@@ -70,6 +72,8 @@ export function LogsPage() {
     for (const c of channels) m.set(c.id, c.name);
     return m;
   }, [channels]);
+
+  const channelsById = useMemo(() => new Map(channels.map((c) => [c.id, c] as const)), [channels]);
 
   const totalPages = useMemo(() => {
     if (total <= 0) return 1;
@@ -218,6 +222,21 @@ export function LogsPage() {
                 <div className="text-muted-foreground">{t("logs.headers.cost")}</div>
                 <div className="font-mono">
                   {detailEvent.estimated_cost_usd ? `$${detailEvent.estimated_cost_usd}` : "-"}
+                </div>
+              </div>
+              <div className="grid grid-cols-[120px_1fr] gap-2">
+                <div className="text-muted-foreground">{t("logs.details.estimatedSpend")}</div>
+                <div className="font-mono">
+                  {(() => {
+                    const est = parseDecimalLike(detailEvent.estimated_cost_usd);
+                    const ch = channelsById.get(detailEvent.channel_id);
+                    const recharge = Number(ch?.recharge_multiplier ?? 1);
+                    const real = Number(ch?.real_multiplier ?? 1);
+                    if (!est || est <= 0) return "-";
+                    if (!Number.isFinite(recharge) || recharge <= 0) return "-";
+                    if (!Number.isFinite(real) || real <= 0) return "-";
+                    return formatMoney(est * (real / recharge), currency);
+                  })()}
                 </div>
               </div>
               <div className="grid grid-cols-[120px_1fr] gap-2">
