@@ -2,6 +2,7 @@ use anyhow::Context as _;
 use serde::{Deserialize, Serialize};
 use sha2::Digest as _;
 use std::path::{Path, PathBuf};
+use std::time::SystemTime;
 
 #[cfg(not(target_os = "windows"))]
 use std::ffi::{OsStr, OsString};
@@ -138,6 +139,123 @@ fn updates_dir(data_dir: &Path) -> PathBuf {
 
 fn pending_path(data_dir: &Path) -> PathBuf {
     updates_dir(data_dir).join("pending.json")
+}
+
+fn update_downloads_dir(data_dir: &Path) -> PathBuf {
+    updates_dir(data_dir).join("downloads")
+}
+
+fn update_staged_dir(data_dir: &Path) -> PathBuf {
+    updates_dir(data_dir).join("staged")
+}
+
+fn collect_update_versions(
+    data_dir: &Path,
+) -> anyhow::Result<std::collections::HashMap<String, SystemTime>> {
+    fn collect_from(
+        dir: &Path,
+        acc: &mut std::collections::HashMap<String, SystemTime>,
+    ) -> anyhow::Result<()> {
+        let entries = match std::fs::read_dir(dir) {
+            Ok(rd) => rd,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(e) => return Err(e).with_context(|| format!("read dir failed: {}", dir.display())),
+        };
+
+        for entry in entries {
+            let entry =
+                entry.with_context(|| format!("read dir entry failed: {}", dir.display()))?;
+            let ty = entry
+                .file_type()
+                .with_context(|| format!("read file type failed: {}", entry.path().display()))?;
+            if !ty.is_dir() {
+                continue;
+            }
+            let name = entry.file_name().to_string_lossy().to_string();
+            if name.is_empty() {
+                continue;
+            }
+            let mtime = entry
+                .metadata()
+                .ok()
+                .and_then(|m| m.modified().ok())
+                .unwrap_or(SystemTime::UNIX_EPOCH);
+            acc.entry(name)
+                .and_modify(|t| {
+                    if mtime > *t {
+                        *t = mtime;
+                    }
+                })
+                .or_insert(mtime);
+        }
+        Ok(())
+    }
+
+    let mut out = std::collections::HashMap::new();
+    collect_from(&update_downloads_dir(data_dir), &mut out)?;
+    collect_from(&update_staged_dir(data_dir), &mut out)?;
+    Ok(out)
+}
+
+fn keep_two_versions(
+    versions: &std::collections::HashMap<String, SystemTime>,
+    primary: &str,
+    preferred_secondary: &str,
+) -> std::collections::HashSet<String> {
+    let mut keep = std::collections::HashSet::new();
+    keep.insert(primary.to_string());
+    if versions.contains_key(preferred_secondary) && preferred_secondary != primary {
+        keep.insert(preferred_secondary.to_string());
+        return keep;
+    }
+
+    let mut candidates: Vec<(&String, &SystemTime)> = versions
+        .iter()
+        .filter(|(v, _)| v.as_str() != primary)
+        .collect();
+    candidates.sort_by(|(va, ta), (vb, tb)| tb.cmp(ta).then_with(|| vb.cmp(va)));
+    if let Some((v, _)) = candidates.first() {
+        keep.insert((*v).clone());
+    }
+    keep
+}
+
+fn cleanup_update_artifacts_with_keep(
+    data_dir: &Path,
+    keep: &std::collections::HashSet<String>,
+) -> anyhow::Result<()> {
+    fn cleanup_dir(root: &Path, keep: &std::collections::HashSet<String>) -> anyhow::Result<()> {
+        let entries = match std::fs::read_dir(root) {
+            Ok(rd) => rd,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(e) => {
+                return Err(e).with_context(|| format!("read dir failed: {}", root.display()));
+            }
+        };
+
+        for entry in entries {
+            let entry =
+                entry.with_context(|| format!("read dir entry failed: {}", root.display()))?;
+            let path = entry.path();
+            let ty = entry
+                .file_type()
+                .with_context(|| format!("read file type failed: {}", path.display()))?;
+            if !ty.is_dir() {
+                continue;
+            }
+            let name = entry.file_name().to_string_lossy().to_string();
+            if keep.contains(&name) {
+                continue;
+            }
+            std::fs::remove_dir_all(&path)
+                .with_context(|| format!("remove dir failed: {}", path.display()))?;
+        }
+        Ok(())
+    }
+
+    cleanup_dir(&update_downloads_dir(data_dir), keep)?;
+    cleanup_dir(&update_staged_dir(data_dir), keep)?;
+    Ok(())
 }
 
 pub fn load_pending_update(data_dir: &Path) -> Option<PendingUpdate> {
@@ -718,6 +836,18 @@ async fn download_latest_inner(
     atomic_write(&pending_path(data_dir), &json)?;
     tracing::info!(version = %latest, staged = %staged_exe.display(), "update download completed");
 
+    match collect_update_versions(data_dir) {
+        Ok(versions) => {
+            let keep = keep_two_versions(&versions, &latest, env!("CARGO_PKG_VERSION"));
+            if let Err(e) = cleanup_update_artifacts_with_keep(data_dir, &keep) {
+                tracing::warn!(err = %e, keep = ?keep, "update artifacts cleanup failed");
+            }
+        }
+        Err(e) => {
+            tracing::warn!(err = %e, "collect update versions failed, cleanup skipped");
+        }
+    }
+
     let mut rt = runtime.lock().await;
     rt.stage = Stage::Ready;
     rt.reset_download_state();
@@ -770,6 +900,18 @@ fn apply_pending_on_exit_inner(data_dir: &Path, restart: bool) -> anyhow::Result
         staged = %pending.staged_executable.display(),
         "applying pending update on exit"
     );
+
+    match collect_update_versions(data_dir) {
+        Ok(versions) => {
+            let keep = keep_two_versions(&versions, &pending.version, env!("CARGO_PKG_VERSION"));
+            if let Err(e) = cleanup_update_artifacts_with_keep(data_dir, &keep) {
+                tracing::warn!(err = %e, keep = ?keep, "update artifacts cleanup failed");
+            }
+        }
+        Err(e) => {
+            tracing::warn!(err = %e, "collect update versions failed, cleanup skipped");
+        }
+    }
 
     let target = std::env::current_exe().context("读取当前可执行文件路径失败")?;
 
@@ -1003,4 +1145,80 @@ exit 0
         "spawned update apply helper"
     );
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn keep_two_versions_prefers_secondary_when_present() {
+        let mut versions = std::collections::HashMap::new();
+        versions.insert(
+            "1.0.0".to_string(),
+            SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1),
+        );
+        versions.insert(
+            "1.1.0".to_string(),
+            SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(2),
+        );
+
+        let keep = keep_two_versions(&versions, "1.1.0", "1.0.0");
+        assert_eq!(keep.len(), 2);
+        assert!(keep.contains("1.1.0"));
+        assert!(keep.contains("1.0.0"));
+    }
+
+    #[test]
+    fn keep_two_versions_falls_back_to_most_recent() {
+        let mut versions = std::collections::HashMap::new();
+        versions.insert(
+            "0.9.0".to_string(),
+            SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1),
+        );
+        versions.insert(
+            "1.0.0".to_string(),
+            SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(2),
+        );
+        versions.insert(
+            "1.1.0".to_string(),
+            SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(3),
+        );
+
+        let keep = keep_two_versions(&versions, "1.1.0", "2.0.0");
+        assert_eq!(keep.len(), 2);
+        assert!(keep.contains("1.1.0"));
+        assert!(keep.contains("1.0.0"));
+        assert!(!keep.contains("0.9.0"));
+    }
+
+    #[test]
+    fn cleanup_update_artifacts_removes_old_versions() {
+        let data_dir =
+            std::env::temp_dir().join(format!("cliswitch-update-test-{}", uuid::Uuid::new_v4()));
+        let _ = std::fs::remove_dir_all(&data_dir);
+
+        let versions = ["0.9.0", "1.0.0", "1.1.0"];
+        for v in versions {
+            std::fs::create_dir_all(update_downloads_dir(&data_dir).join(v)).unwrap();
+            std::fs::create_dir_all(update_staged_dir(&data_dir).join(v)).unwrap();
+        }
+        std::fs::write(update_downloads_dir(&data_dir).join("keep.txt"), b"ok").unwrap();
+
+        let keep: std::collections::HashSet<String> = ["1.1.0".to_string(), "1.0.0".to_string()]
+            .into_iter()
+            .collect();
+        cleanup_update_artifacts_with_keep(&data_dir, &keep).unwrap();
+
+        assert!(update_downloads_dir(&data_dir).join("1.1.0").is_dir());
+        assert!(update_downloads_dir(&data_dir).join("1.0.0").is_dir());
+        assert!(!update_downloads_dir(&data_dir).join("0.9.0").exists());
+        assert!(update_downloads_dir(&data_dir).join("keep.txt").is_file());
+
+        assert!(update_staged_dir(&data_dir).join("1.1.0").is_dir());
+        assert!(update_staged_dir(&data_dir).join("1.0.0").is_dir());
+        assert!(!update_staged_dir(&data_dir).join("0.9.0").exists());
+
+        std::fs::remove_dir_all(&data_dir).unwrap();
+    }
 }
