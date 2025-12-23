@@ -48,9 +48,9 @@
     "cards": {
       "todayRequests": "本月请求",
       "totalTokens": "本月 Token",
-      "estimatedCost": "预估费用（官方额度）",
+      "estimatedCost": "官方额度",
       "avgLatency": "平均延迟",
-      "actualSpend": "实际花费"
+      "actualSpend": "预估费用"
     },
     "trend": {
       "title": "本月请求趋势",
@@ -80,9 +80,9 @@
     "subtitle": "管理上游 API 渠道的配置和连接",
     "new": "新建渠道",
     "autoSort": {
-      "button": "按倍率排序（预览）",
-      "title": "自动排序预览",
-      "description": "根据倍率为 {{terminal}} 生成建议顺序（系数 = 真实倍率 / 充值实际倍率），确认后才会生效。",
+      "button": "按倍率排序",
+      "title": "自动排序",
+      "description": "根据倍率为 {{terminal}} 生成建议顺序",
       "noChange": "当前顺序无需调整",
       "apply": "确认应用",
       "headers": {
@@ -124,10 +124,13 @@
       "name": "名称",
       "terminal": "终端",
       "priority": "优先级（数值越大越优先）",
-      "rechargeMultiplier": "充值实际倍率（每 1 {{currency}} 可获得多少 USD 额度）",
-      "rechargeMultiplierHint": "示例：{{currency}}1 → USD{{v}}",
-      "realMultiplier": "真实倍率（扣费倍率，按官方费用乘以该值）",
-      "realMultiplierHint": "示例：官方费用 × {{v}}",
+      "rechargeCurrency": "充值货币",
+      "rechargeCurrencyOptions": {
+        "cny": "人民币（CNY）",
+        "usd": "美元（USD）"
+      },
+      "rechargeMultiplier": "充值实际倍率",
+      "realMultiplier": "真实倍率",
       "baseUrl": "Base URL",
       "apiKey": "API Key / Token",
       "enabled": "启用"
@@ -225,8 +228,8 @@
       "totalRequests": "总请求",
       "successRate": "成功率",
       "failed": "失败数",
-      "estimatedCost": "金额（官方额度）",
-      "actualSpend": "花费（实际金额）"
+      "estimatedCost": "官方额度",
+      "actualSpend": "预估费用"
     },
     "channelStats": {
       "title": "渠道统计",
@@ -237,8 +240,8 @@
         "requests": "请求",
         "success": "成功",
         "failed": "失败",
-        "estimatedCost": "金额（官方）",
-        "actualSpend": "花费（实际）",
+        "estimatedCost": "官方额度",
+        "actualSpend": "预估费用",
         "avgLatency": "平均耗时"
       }
     },
@@ -297,8 +300,14 @@
       "model": "模型",
       "timing": "耗时",
       "tokens": "Token",
-      "cost": "金额",
+      "cost": "官方额度",
       "result": "状态"
+    },
+    "details": {
+      "routeId": "路由 ID",
+      "errorKind": "错误类型",
+      "errorDetail": "错误详情",
+      "estimatedSpend": "预估费用"
     },
     "cell": {
       "duration": "耗时",
@@ -363,7 +372,7 @@
     },
     "currency": {
       "title": "货币单位",
-      "subtitle": "用于显示「实际花费」等金额单位（预估费用固定按官方 USD 计算）",
+      "subtitle": "用于显示「预估费用」等金额单位（官方额度固定按官方 USD 计算）",
       "label": "默认货币",
       "options": {
         "auto": "自动（跟随语言）",

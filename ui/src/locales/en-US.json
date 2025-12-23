@@ -48,9 +48,9 @@
     "cards": {
       "todayRequests": "This Month Requests",
       "totalTokens": "This Month Tokens",
-      "estimatedCost": "Est. Cost (official)",
+      "estimatedCost": "Official Credits",
       "avgLatency": "Avg Latency",
-      "actualSpend": "Actual Spend"
+      "actualSpend": "Estimated Cost"
     },
     "trend": {
       "title": "This Month Request Trend",
@@ -80,9 +80,9 @@
     "subtitle": "Manage upstream API channel configuration and connectivity",
     "new": "New Channel",
     "autoSort": {
-      "button": "Sort by multiplier (preview)",
-      "title": "Auto sort preview",
-      "description": "Generate a suggested order for {{terminal}} based on multipliers (factor = real_multiplier / recharge_multiplier). It only applies after confirmation.",
+      "button": "Sort by multiplier",
+      "title": "Auto sort",
+      "description": "Generate a suggested order for {{terminal}} based on multipliers",
       "noChange": "No changes needed for current order",
       "apply": "Apply",
       "headers": {
@@ -124,10 +124,13 @@
       "name": "Name",
       "terminal": "Terminal",
       "priority": "Priority (higher wins)",
-      "rechargeMultiplier": "Recharge rate (USD credits per 1 {{currency}} paid)",
-      "rechargeMultiplierHint": "Example: {{currency}}1 → USD{{v}}",
-      "realMultiplier": "Real multiplier (multiply official cost by this)",
-      "realMultiplierHint": "Example: official cost × {{v}}",
+      "rechargeCurrency": "Recharge currency",
+      "rechargeCurrencyOptions": {
+        "cny": "CNY (RMB)",
+        "usd": "USD"
+      },
+      "rechargeMultiplier": "Recharge rate",
+      "realMultiplier": "Real multiplier",
       "baseUrl": "Base URL",
       "apiKey": "API Key / Token",
       "enabled": "Enabled"
@@ -225,8 +228,8 @@
       "totalRequests": "Total Requests",
       "successRate": "Success Rate",
       "failed": "Failures",
-      "estimatedCost": "Amount (official)",
-      "actualSpend": "Spend (actual)"
+      "estimatedCost": "Official Credits",
+      "actualSpend": "Estimated Cost"
     },
     "channelStats": {
       "title": "Channel Stats",
@@ -237,8 +240,8 @@
         "requests": "Requests",
         "success": "Success",
         "failed": "Failed",
-        "estimatedCost": "Amount (official)",
-        "actualSpend": "Spend (actual)",
+        "estimatedCost": "Official Credits",
+        "actualSpend": "Estimated Cost",
         "avgLatency": "Avg Duration"
       }
     },
@@ -297,7 +300,7 @@
       "model": "Model",
       "timing": "Timing",
       "tokens": "Tokens",
-      "cost": "Cost",
+      "cost": "Official Credits",
       "result": "Result"
     },
     "cell": {
@@ -314,7 +317,8 @@
       "requestId": "Request ID",
       "routeId": "Route ID",
       "errorKind": "Error Kind",
-      "errorDetail": "Error Detail"
+      "errorDetail": "Error Detail",
+      "estimatedSpend": "Estimated Cost"
     },
     "empty": "No request records",
     "toast": {
@@ -363,7 +367,7 @@
     },
     "currency": {
       "title": "Currency",
-      "subtitle": "Used for displaying units like Actual Spend (Est. Cost is always calculated in official USD)",
+      "subtitle": "Used for displaying values like Estimated Cost (Official Credits are always calculated in official USD)",
       "label": "Default currency",
       "options": {
         "auto": "Auto (follow language)",

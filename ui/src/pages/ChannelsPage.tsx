@@ -66,6 +66,7 @@ function emptyDraft(): ChannelDraft {
     auth_type: "auto",
     auth_ref: "",
     priority: 0,
+    recharge_currency: "CNY",
     recharge_multiplier: 1,
     real_multiplier: 1,
     enabled: true,
@@ -213,6 +214,7 @@ export function ChannelsPage() {
       ...emptyDraft(),
       protocol: activeProtocol,
       base_url: defaultBaseUrl(activeProtocol),
+      recharge_currency: currency,
     });
     setModalOpen(true);
   }
@@ -227,6 +229,7 @@ export function ChannelsPage() {
       auth_type: "auto",
       auth_ref: c.auth_ref,
       priority: c.priority ?? 0,
+      recharge_currency: c.recharge_currency ?? "CNY",
       recharge_multiplier: c.recharge_multiplier ?? 1,
       real_multiplier: c.real_multiplier ?? 1,
       enabled: c.enabled,
@@ -256,6 +259,7 @@ export function ChannelsPage() {
           auth_type: "auto",
           auth_ref: draft.auth_ref,
           priority: draft.priority,
+          recharge_currency: draft.recharge_currency,
           recharge_multiplier: draft.recharge_multiplier,
           real_multiplier: draft.real_multiplier,
           enabled: draft.enabled,
@@ -751,8 +755,25 @@ export function ChannelsPage() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <label className="text-sm font-medium">
-                  {t("channels.modal.rechargeMultiplier", { currency })}
+                  {t("channels.modal.rechargeCurrency")}
                 </label>
+                <Select
+                  value={draft.recharge_currency}
+                  onValueChange={(v) =>
+                    setDraft((d) => ({ ...d, recharge_currency: v as "USD" | "CNY" }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="CNY">{t("channels.modal.rechargeCurrencyOptions.cny")}</SelectItem>
+                    <SelectItem value="USD">{t("channels.modal.rechargeCurrencyOptions.usd")}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">{t("channels.modal.rechargeMultiplier")}</label>
                 <Input
                   type="number"
                   step="0.000001"
@@ -772,41 +793,31 @@ export function ChannelsPage() {
                   }}
                   placeholder="1"
                 />
-                <div className="text-xs text-muted-foreground">
-                  {t("channels.modal.rechargeMultiplierHint", {
-                    currency,
-                    v: formatDecimal(draft.recharge_multiplier ?? 1),
-                  })}
-                </div>
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">{t("channels.modal.realMultiplier")}</label>
-                <Input
-                  type="number"
-                  step="0.000001"
-                  min={0}
-                  value={String(draft.real_multiplier ?? 1)}
-                  onChange={(e) => {
-                    const raw = e.target.value;
-                    if (!raw.trim()) {
-                      setDraft((d) => ({ ...d, real_multiplier: 1 }));
-                      return;
-                    }
-                    const n = Number(raw);
-                    setDraft((d) => ({
-                      ...d,
-                      real_multiplier: Number.isFinite(n) ? n : d.real_multiplier,
-                    }));
-                  }}
-                  placeholder="1"
-                />
-                <div className="text-xs text-muted-foreground">
-                  {t("channels.modal.realMultiplierHint", {
-                    v: formatDecimal(draft.real_multiplier ?? 1),
-                  })}
-                </div>
               </div>
             </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">{t("channels.modal.realMultiplier")}</label>
+              <Input
+                type="number"
+                step="0.000001"
+                min={0}
+                value={String(draft.real_multiplier ?? 1)}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  if (!raw.trim()) {
+                    setDraft((d) => ({ ...d, real_multiplier: 1 }));
+                    return;
+                  }
+                  const n = Number(raw);
+                  setDraft((d) => ({
+                    ...d,
+                    real_multiplier: Number.isFinite(n) ? n : d.real_multiplier,
+                  }));
+                }}
+                placeholder="1"
+              />
+              </div>
 
             <div className="space-y-2">
               <label className="text-sm font-medium">{t("channels.modal.baseUrl")}</label>
