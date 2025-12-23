@@ -57,6 +57,20 @@ pub(in crate::server) async fn create_channel(
     if input.base_url.trim().is_empty() {
         return Err(ApiError::BadRequest("base_url 不能为空".to_string()));
     }
+    if let Some(v) = input.recharge_multiplier
+        && (!v.is_finite() || v <= 0.0)
+    {
+        return Err(ApiError::BadRequest(
+            "recharge_multiplier 必须是 > 0 的有限数字".to_string(),
+        ));
+    }
+    if let Some(v) = input.real_multiplier
+        && (!v.is_finite() || v <= 0.0)
+    {
+        return Err(ApiError::BadRequest(
+            "real_multiplier 必须是 > 0 的有限数字".to_string(),
+        ));
+    }
 
     let channel = storage::create_channel(state.db_path(), input).await?;
     Ok((StatusCode::CREATED, Json(channel)))
@@ -67,6 +81,20 @@ pub(in crate::server) async fn update_channel(
     axum::extract::Path(channel_id): axum::extract::Path<String>,
     Json(input): Json<storage::UpdateChannel>,
 ) -> Result<impl IntoResponse, ApiError> {
+    if let Some(v) = input.recharge_multiplier
+        && (!v.is_finite() || v <= 0.0)
+    {
+        return Err(ApiError::BadRequest(
+            "recharge_multiplier 必须是 > 0 的有限数字".to_string(),
+        ));
+    }
+    if let Some(v) = input.real_multiplier
+        && (!v.is_finite() || v <= 0.0)
+    {
+        return Err(ApiError::BadRequest(
+            "real_multiplier 必须是 > 0 的有限数字".to_string(),
+        ));
+    }
     let res = storage::update_channel(state.db_path(), channel_id, input).await;
     map_storage_unit_no_content(res, |msg| {
         msg.starts_with("channel not found")

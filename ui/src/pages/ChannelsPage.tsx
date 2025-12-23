@@ -1,4 +1,4 @@
-import React, { useEffect, useReducer, useRef, useState } from "react";
+import React, { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import {
   Plus,
   GripVertical,
@@ -7,6 +7,7 @@ import {
   Power,
   PowerOff,
   TestTube,
+  ArrowDownUp,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -39,6 +40,7 @@ import {
   TabsTrigger,
 } from "@/components/ui";
 import { useI18n } from "@/lib/i18n";
+import { useCurrency, formatDecimal } from "@/lib/currency";
 import {
   listChannels,
   createChannel,
@@ -52,7 +54,7 @@ import {
   type CreateChannelInput,
   type Protocol,
 } from "../api";
-import { formatDateTime } from "../lib";
+import { formatDateTime, protocolLabel } from "../lib";
 
 type ChannelDraft = CreateChannelInput;
 
@@ -64,6 +66,8 @@ function emptyDraft(): ChannelDraft {
     auth_type: "auto",
     auth_ref: "",
     priority: 0,
+    recharge_multiplier: 1,
+    real_multiplier: 1,
     enabled: true,
   };
 }
@@ -118,6 +122,7 @@ function dragReducer(state: DragState, action: DragAction): DragState {
 
 export function ChannelsPage() {
   const { t } = useI18n();
+  const { currency } = useCurrency();
   const [activeProtocol, setActiveProtocol] = useState<Protocol>("openai");
   const [channelsByProtocol, setChannelsByProtocol] = useState<
     Record<Protocol, Channel[]>
@@ -138,6 +143,8 @@ export function ChannelsPage() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Channel | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [autoSortOpen, setAutoSortOpen] = useState(false);
+  const [autoSortApplying, setAutoSortApplying] = useState(false);
 
   async function refresh() {
     try {
@@ -153,6 +160,51 @@ export function ChannelsPage() {
   useEffect(() => {
     refresh();
   }, []);
+
+  function effectiveCostFactor(c: Channel): number {
+    const recharge = Number(c.recharge_multiplier ?? 1);
+    const real = Number(c.real_multiplier ?? 1);
+    if (!Number.isFinite(recharge) || recharge <= 0) return Number.POSITIVE_INFINITY;
+    if (!Number.isFinite(real) || real <= 0) return Number.POSITIVE_INFINITY;
+    return real / recharge;
+  }
+
+  const autoSortCurrent = channelsByProtocol[activeProtocol] ?? [];
+  const autoSortSuggested = useMemo(() => {
+    const list = [...autoSortCurrent];
+    list.sort((a, b) => {
+      const aDisabled = !a.enabled;
+      const bDisabled = !b.enabled;
+      if (aDisabled !== bDisabled) return aDisabled ? 1 : -1;
+      const fa = effectiveCostFactor(a);
+      const fb = effectiveCostFactor(b);
+      if (fa !== fb) return fa - fb;
+      return a.name.localeCompare(b.name);
+    });
+    return list;
+  }, [autoSortCurrent, activeProtocol]);
+
+  const autoSortChanged = useMemo(() => {
+    if (autoSortCurrent.length !== autoSortSuggested.length) return true;
+    for (let i = 0; i < autoSortCurrent.length; i += 1) {
+      if (autoSortCurrent[i]?.id !== autoSortSuggested[i]?.id) return true;
+    }
+    return false;
+  }, [autoSortCurrent, autoSortSuggested]);
+
+  async function applyAutoSort() {
+    setAutoSortApplying(true);
+    try {
+      await reorderChannels(activeProtocol, autoSortSuggested.map((c) => c.id));
+      toast.success(t("channels.toast.reorderOk"));
+      setAutoSortOpen(false);
+      await refresh();
+    } catch (e) {
+      toast.error(t("channels.toast.reorderFail"), { description: String(e) });
+    } finally {
+      setAutoSortApplying(false);
+    }
+  }
 
   function openCreate() {
     setModalMode("create");
@@ -175,6 +227,8 @@ export function ChannelsPage() {
       auth_type: "auto",
       auth_ref: c.auth_ref,
       priority: c.priority ?? 0,
+      recharge_multiplier: c.recharge_multiplier ?? 1,
+      real_multiplier: c.real_multiplier ?? 1,
       enabled: c.enabled,
     });
     setModalOpen(true);
@@ -184,6 +238,12 @@ export function ChannelsPage() {
     try {
       if (!draft.name.trim()) throw new Error(t("channels.toast.nameRequired"));
       if (!draft.base_url.trim()) throw new Error(t("channels.toast.baseUrlRequired"));
+      if (!Number.isFinite(draft.recharge_multiplier) || draft.recharge_multiplier <= 0) {
+        throw new Error(t("channels.toast.rechargeMultiplierInvalid"));
+      }
+      if (!Number.isFinite(draft.real_multiplier) || draft.real_multiplier <= 0) {
+        throw new Error(t("channels.toast.realMultiplierInvalid"));
+      }
 
       if (modalMode === "create") {
         await createChannel({ ...draft, name: draft.name.trim(), base_url: draft.base_url.trim() });
@@ -196,6 +256,8 @@ export function ChannelsPage() {
           auth_type: "auto",
           auth_ref: draft.auth_ref,
           priority: draft.priority,
+          recharge_multiplier: draft.recharge_multiplier,
+          real_multiplier: draft.real_multiplier,
           enabled: draft.enabled,
         });
         toast.success(t("channels.toast.updateOk"));
@@ -565,17 +627,28 @@ export function ChannelsPage() {
   return (
     <div className="space-y-4 pb-4">
       {/* 页面标题 */}
-      <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between">
         <div>
           <h1 className="text-lg font-semibold">{t("channels.title")}</h1>
           <p className="text-muted-foreground text-xs mt-0.5">
             {t("channels.subtitle")}
           </p>
         </div>
-        <Button size="sm" onClick={openCreate}>
-          <Plus className="h-4 w-4 mr-2" />
-          {t("channels.new")}
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setAutoSortOpen(true)}
+            disabled={autoSortCurrent.length <= 1}
+          >
+            <ArrowDownUp className="h-4 w-4 mr-2" />
+            {t("channels.autoSort.button")}
+          </Button>
+          <Button size="sm" onClick={openCreate}>
+            <Plus className="h-4 w-4 mr-2" />
+            {t("channels.new")}
+          </Button>
+        </div>
       </div>
 
       {/* 渠道表格 */}
@@ -675,6 +748,66 @@ export function ChannelsPage() {
               />
             </div>
 
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">
+                  {t("channels.modal.rechargeMultiplier", { currency })}
+                </label>
+                <Input
+                  type="number"
+                  step="0.000001"
+                  min={0}
+                  value={String(draft.recharge_multiplier ?? 1)}
+                  onChange={(e) => {
+                    const raw = e.target.value;
+                    if (!raw.trim()) {
+                      setDraft((d) => ({ ...d, recharge_multiplier: 1 }));
+                      return;
+                    }
+                    const n = Number(raw);
+                    setDraft((d) => ({
+                      ...d,
+                      recharge_multiplier: Number.isFinite(n) ? n : d.recharge_multiplier,
+                    }));
+                  }}
+                  placeholder="1"
+                />
+                <div className="text-xs text-muted-foreground">
+                  {t("channels.modal.rechargeMultiplierHint", {
+                    currency,
+                    v: formatDecimal(draft.recharge_multiplier ?? 1),
+                  })}
+                </div>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">{t("channels.modal.realMultiplier")}</label>
+                <Input
+                  type="number"
+                  step="0.000001"
+                  min={0}
+                  value={String(draft.real_multiplier ?? 1)}
+                  onChange={(e) => {
+                    const raw = e.target.value;
+                    if (!raw.trim()) {
+                      setDraft((d) => ({ ...d, real_multiplier: 1 }));
+                      return;
+                    }
+                    const n = Number(raw);
+                    setDraft((d) => ({
+                      ...d,
+                      real_multiplier: Number.isFinite(n) ? n : d.real_multiplier,
+                    }));
+                  }}
+                  placeholder="1"
+                />
+                <div className="text-xs text-muted-foreground">
+                  {t("channels.modal.realMultiplierHint", {
+                    v: formatDecimal(draft.real_multiplier ?? 1),
+                  })}
+                </div>
+              </div>
+            </div>
+
             <div className="space-y-2">
               <label className="text-sm font-medium">{t("channels.modal.baseUrl")}</label>
               <Input
@@ -708,6 +841,71 @@ export function ChannelsPage() {
               {t("common.cancel")}
             </Button>
             <Button onClick={submit}>{t("common.save")}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 自动排序预览 */}
+      <Dialog open={autoSortOpen} onOpenChange={setAutoSortOpen}>
+        <DialogContent className="sm:max-w-[720px]">
+          <DialogHeader>
+            <DialogTitle>{t("channels.autoSort.title")}</DialogTitle>
+            <DialogDescription>
+              {t("channels.autoSort.description", { terminal: protocolLabel(t, activeProtocol) })}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            {!autoSortChanged ? (
+              <div className="text-sm text-muted-foreground">
+                {t("channels.autoSort.noChange")}
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-14">{t("channels.autoSort.headers.from")}</TableHead>
+                    <TableHead className="w-14">{t("channels.autoSort.headers.to")}</TableHead>
+                    <TableHead>{t("channels.autoSort.headers.channel")}</TableHead>
+                    <TableHead className="w-36">{t("channels.autoSort.headers.factor")}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {autoSortSuggested.map((c, newIdx) => {
+                    const oldIdx = autoSortCurrent.findIndex((x) => x.id === c.id);
+                    const factor = effectiveCostFactor(c);
+                    return (
+                      <TableRow key={c.id}>
+                        <TableCell className="font-mono text-xs">{oldIdx >= 0 ? oldIdx + 1 : "-"}</TableCell>
+                        <TableCell className="font-mono text-xs">{newIdx + 1}</TableCell>
+                        <TableCell className="min-w-0">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="truncate">{c.name}</span>
+                            {!c.enabled && (
+                              <Badge variant="outline" className="text-[10px] px-1 py-0">
+                                {t("common.disabled")}
+                              </Badge>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="font-mono text-xs text-muted-foreground">
+                          {Number.isFinite(factor) ? formatDecimal(factor, 6) : "-"}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAutoSortOpen(false)} disabled={autoSortApplying}>
+              {t("common.cancel")}
+            </Button>
+            <Button onClick={applyAutoSort} disabled={!autoSortChanged || autoSortApplying}>
+              {t("channels.autoSort.apply")}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

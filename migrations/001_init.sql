@@ -9,6 +9,8 @@ CREATE TABLE IF NOT EXISTS channels (
   auth_type TEXT NOT NULL,
   auth_ref TEXT NOT NULL,
   priority INTEGER NOT NULL DEFAULT 0,
+  recharge_multiplier REAL NOT NULL DEFAULT 1.0,
+  real_multiplier REAL NOT NULL DEFAULT 1.0,
   enabled INTEGER NOT NULL,
   auto_disabled_until_ms INTEGER NOT NULL DEFAULT 0,
   created_at_ms INTEGER NOT NULL,

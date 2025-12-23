@@ -15,6 +15,8 @@ pub struct Channel {
     pub auth_type: String,
     pub auth_ref: String,
     pub priority: i64,
+    pub recharge_multiplier: f64,
+    pub real_multiplier: f64,
     pub enabled: bool,
     pub auto_disabled_until_ms: i64,
     pub created_at_ms: i64,
@@ -99,7 +101,7 @@ pub async fn list_channels(db_path: PathBuf) -> anyhow::Result<Vec<Channel>> {
     with_conn(db_path, |conn| {
         let mut stmt = conn.prepare(
             r#"
-            SELECT id, name, protocol, base_url, auth_type, auth_ref, priority, enabled, auto_disabled_until_ms, created_at_ms, updated_at_ms
+            SELECT id, name, protocol, base_url, auth_type, auth_ref, priority, recharge_multiplier, real_multiplier, enabled, auto_disabled_until_ms, created_at_ms, updated_at_ms
             FROM channels
             ORDER BY CASE protocol
               WHEN 'openai' THEN 0
@@ -120,10 +122,12 @@ pub async fn list_channels(db_path: PathBuf) -> anyhow::Result<Vec<Channel>> {
                 auth_type: row.get(4)?,
                 auth_ref: row.get(5)?,
                 priority: row.get(6)?,
-                enabled: row.get::<_, i64>(7)? != 0,
-                auto_disabled_until_ms: row.get::<_, Option<i64>>(8)?.unwrap_or(0),
-                created_at_ms: row.get(9)?,
-                updated_at_ms: row.get(10)?,
+                recharge_multiplier: row.get::<_, Option<f64>>(7)?.unwrap_or(1.0),
+                real_multiplier: row.get::<_, Option<f64>>(8)?.unwrap_or(1.0),
+                enabled: row.get::<_, i64>(9)? != 0,
+                auto_disabled_until_ms: row.get::<_, Option<i64>>(10)?.unwrap_or(0),
+                created_at_ms: row.get(11)?,
+                updated_at_ms: row.get(12)?,
             })
         })?;
 
@@ -142,6 +146,8 @@ pub struct CreateChannel {
     pub auth_ref: String,
     #[serde(default)]
     pub priority: i64,
+    pub recharge_multiplier: Option<f64>,
+    pub real_multiplier: Option<f64>,
     pub enabled: bool,
 }
 
@@ -155,10 +161,12 @@ pub async fn create_channel(db_path: PathBuf, input: CreateChannel) -> anyhow::R
             .trim()
             .to_string();
         let base_url = normalize_base_url(input.protocol, &input.base_url);
+        let recharge_multiplier = input.recharge_multiplier.unwrap_or(1.0);
+        let real_multiplier = input.real_multiplier.unwrap_or(1.0);
         conn.execute(
             r#"
-            INSERT INTO channels (id, name, protocol, base_url, auth_type, auth_ref, priority, enabled, created_at_ms, updated_at_ms)
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+            INSERT INTO channels (id, name, protocol, base_url, auth_type, auth_ref, priority, recharge_multiplier, real_multiplier, enabled, created_at_ms, updated_at_ms)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
             "#,
             params![
                 id,
@@ -168,6 +176,8 @@ pub async fn create_channel(db_path: PathBuf, input: CreateChannel) -> anyhow::R
                 auth_type,
                 input.auth_ref,
                 input.priority,
+                recharge_multiplier,
+                real_multiplier,
                 if input.enabled { 1 } else { 0 },
                 ts,
                 ts,
@@ -182,6 +192,8 @@ pub async fn create_channel(db_path: PathBuf, input: CreateChannel) -> anyhow::R
             auth_type,
             auth_ref: input.auth_ref,
             priority: input.priority,
+            recharge_multiplier,
+            real_multiplier,
             enabled: input.enabled,
             auto_disabled_until_ms: 0,
             created_at_ms: ts,
@@ -198,6 +210,8 @@ pub struct UpdateChannel {
     pub auth_type: Option<String>,
     pub auth_ref: Option<String>,
     pub priority: Option<i64>,
+    pub recharge_multiplier: Option<f64>,
+    pub real_multiplier: Option<f64>,
     pub enabled: Option<bool>,
 }
 
@@ -213,7 +227,7 @@ pub async fn update_channel(
         let mut channel: Channel = {
             let mut stmt = conn.prepare(
                 r#"
-                SELECT id, name, protocol, base_url, auth_type, auth_ref, priority, enabled, auto_disabled_until_ms, created_at_ms, updated_at_ms
+                SELECT id, name, protocol, base_url, auth_type, auth_ref, priority, recharge_multiplier, real_multiplier, enabled, auto_disabled_until_ms, created_at_ms, updated_at_ms
                 FROM channels
                 WHERE id = ?1
                 "#,
@@ -229,10 +243,12 @@ pub async fn update_channel(
                     auth_type: row.get(4)?,
                     auth_ref: row.get(5)?,
                     priority: row.get(6)?,
-                    enabled: row.get::<_, i64>(7)? != 0,
-                    auto_disabled_until_ms: row.get::<_, Option<i64>>(8)?.unwrap_or(0),
-                    created_at_ms: row.get(9)?,
-                    updated_at_ms: row.get(10)?,
+                    recharge_multiplier: row.get::<_, Option<f64>>(7)?.unwrap_or(1.0),
+                    real_multiplier: row.get::<_, Option<f64>>(8)?.unwrap_or(1.0),
+                    enabled: row.get::<_, i64>(9)? != 0,
+                    auto_disabled_until_ms: row.get::<_, Option<i64>>(10)?.unwrap_or(0),
+                    created_at_ms: row.get(11)?,
+                    updated_at_ms: row.get(12)?,
                 })
             });
 
@@ -260,6 +276,12 @@ pub async fn update_channel(
         if let Some(v) = input.priority {
             channel.priority = v;
         }
+        if let Some(v) = input.recharge_multiplier {
+            channel.recharge_multiplier = v;
+        }
+        if let Some(v) = input.real_multiplier {
+            channel.real_multiplier = v;
+        }
         if let Some(v) = input.enabled {
             channel.enabled = v;
             if v {
@@ -272,7 +294,7 @@ pub async fn update_channel(
         tx.execute(
             r#"
             UPDATE channels
-            SET name = ?2, base_url = ?3, auth_type = ?4, auth_ref = ?5, priority = ?6, enabled = ?7, auto_disabled_until_ms = ?8, updated_at_ms = ?9
+            SET name = ?2, base_url = ?3, auth_type = ?4, auth_ref = ?5, priority = ?6, recharge_multiplier = ?7, real_multiplier = ?8, enabled = ?9, auto_disabled_until_ms = ?10, updated_at_ms = ?11
             WHERE id = ?1
             "#,
             params![
@@ -282,6 +304,8 @@ pub async fn update_channel(
                 channel.auth_type,
                 channel.auth_ref,
                 channel.priority,
+                channel.recharge_multiplier,
+                channel.real_multiplier,
                 if channel.enabled { 1 } else { 0 },
                 channel.auto_disabled_until_ms,
                 channel.updated_at_ms,
@@ -347,7 +371,7 @@ pub async fn get_channel(db_path: PathBuf, channel_id: String) -> anyhow::Result
     with_conn(db_path, move |conn| {
         let mut stmt = conn.prepare(
             r#"
-            SELECT id, name, protocol, base_url, auth_type, auth_ref, priority, enabled, auto_disabled_until_ms, created_at_ms, updated_at_ms
+            SELECT id, name, protocol, base_url, auth_type, auth_ref, priority, recharge_multiplier, real_multiplier, enabled, auto_disabled_until_ms, created_at_ms, updated_at_ms
             FROM channels
             WHERE id = ?1
             "#,
@@ -364,10 +388,12 @@ pub async fn get_channel(db_path: PathBuf, channel_id: String) -> anyhow::Result
                 auth_type: row.get(4)?,
                 auth_ref: row.get(5)?,
                 priority: row.get(6)?,
-                enabled: row.get::<_, i64>(7)? != 0,
-                auto_disabled_until_ms: row.get::<_, Option<i64>>(8)?.unwrap_or(0),
-                created_at_ms: row.get(9)?,
-                updated_at_ms: row.get(10)?,
+                recharge_multiplier: row.get::<_, Option<f64>>(7)?.unwrap_or(1.0),
+                real_multiplier: row.get::<_, Option<f64>>(8)?.unwrap_or(1.0),
+                enabled: row.get::<_, i64>(9)? != 0,
+                auto_disabled_until_ms: row.get::<_, Option<i64>>(10)?.unwrap_or(0),
+                created_at_ms: row.get(11)?,
+                updated_at_ms: row.get(12)?,
             })
         })
         .optional()

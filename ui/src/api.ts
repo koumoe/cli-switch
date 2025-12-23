@@ -38,6 +38,8 @@ export type Channel = {
   auth_type: string;
   auth_ref: string;
   priority: number;
+  recharge_multiplier: number;
+  real_multiplier: number;
   enabled: boolean;
   auto_disabled_until_ms: number;
   created_at_ms: number;
@@ -51,6 +53,8 @@ export type CreateChannelInput = {
   auth_type: string;
   auth_ref: string;
   priority: number;
+  recharge_multiplier: number;
+  real_multiplier: number;
   enabled: boolean;
 };
 
@@ -60,6 +64,8 @@ export type UpdateChannelInput = Partial<{
   auth_type: string;
   auth_ref: string;
   priority: number;
+  recharge_multiplier: number;
+  real_multiplier: number;
   enabled: boolean;
 }>;
 
