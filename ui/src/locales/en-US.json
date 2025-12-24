@@ -120,9 +120,11 @@
     },
     "status": {
       "autoDisabled": "Auto disabled: {{minutes}}m",
-      "endpointCooling": "URL cooling: {{minutes}}m",
-      "keyCooling": "Key cooling: {{minutes}}m",
-      "partialEndpointCooling": "Some URLs cooling: {{minutes}}m",
+      "endpointAbnormal": "Endpoint abnormal",
+      "keyAbnormal": "Key abnormal",
+      "endpointCooling": "Cooling: {{minutes}}m",
+      "keyCooling": "Cooling: {{minutes}}m",
+      "partialEndpointCooling": "Some endpoints cooling: {{minutes}}m",
       "partialKeyCooling": "Some keys cooling: {{minutes}}m",
       "unavailable": "Unavailable"
     },

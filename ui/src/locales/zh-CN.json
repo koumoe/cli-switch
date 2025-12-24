@@ -120,9 +120,11 @@
     },
     "status": {
       "autoDisabled": "自动禁用：{{minutes}} 分",
-      "endpointCooling": "URL 冷却：{{minutes}} 分",
-      "keyCooling": "Key 冷却：{{minutes}} 分",
-      "partialEndpointCooling": "部分 URL 冷却：{{minutes}} 分",
+      "endpointAbnormal": "Endpoint 异常",
+      "keyAbnormal": "Key 异常",
+      "endpointCooling": "冷却：{{minutes}} 分",
+      "keyCooling": "冷却：{{minutes}} 分",
+      "partialEndpointCooling": "部分 Endpoint 冷却：{{minutes}} 分",
       "partialKeyCooling": "部分 Key 冷却：{{minutes}} 分",
       "unavailable": "不可用"
     },

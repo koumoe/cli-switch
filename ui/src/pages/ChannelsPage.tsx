@@ -41,12 +41,15 @@ import {
 } from "@/components/ui";
 import {
   ItemListEditor,
+  KeyListEditor,
   type ListItem,
+  type SavedKey,
   generateTempId,
   endpointsToItems,
-  keysToItems,
-  itemsToAuthRefs,
+  keysToSavedKeys,
+  buildAuthRefs,
   itemsToBaseUrls,
+  parseLines,
 } from "@/components/ItemListEditor";
 import { useI18n } from "@/lib/i18n";
 import { useCurrency } from "@/lib/currency";
@@ -69,7 +72,8 @@ type ChannelDraft = {
   protocol: Protocol;
   endpointItems: ListItem[];
   auth_type: string;
-  keyItems: ListItem[];
+  savedKeys: SavedKey[];
+  newKeysText: string;
   priority: number;
   recharge_currency: "USD" | "CNY";
   real_multiplier: number;
@@ -86,7 +90,8 @@ function emptyDraft(): ChannelDraft {
       value: "https://api.openai.com",
     }],
     auth_type: "auto",
-    keyItems: [],
+    savedKeys: [],
+    newKeysText: "",
     priority: 0,
     recharge_currency: "CNY",
     real_multiplier: 1,
@@ -269,19 +274,20 @@ export function ChannelsPage() {
   function openEdit(c: Channel) {
     setModalMode("edit");
     setEditId(c.id);
-    // 将后端返回的数据转换为 ListItem 格式
+    // 将后端返回的数据转换为组件所需格式
     const endpointItems = c.endpoints?.length
       ? endpointsToItems(c.endpoints)
       : [{ type: "new" as const, tempId: generateTempId(), value: c.base_url }];
-    const keyItems = c.keys?.length
-      ? keysToItems(c.keys)
+    const savedKeys = c.keys?.length
+      ? keysToSavedKeys(c.keys)
       : [];
     setDraft({
       name: c.name,
       protocol: c.protocol,
       endpointItems,
       auth_type: "auto",
-      keyItems,
+      savedKeys,
+      newKeysText: "",
       priority: c.priority ?? 0,
       recharge_currency: c.recharge_currency ?? "CNY",
       real_multiplier: c.real_multiplier ?? 1,
@@ -296,7 +302,7 @@ export function ChannelsPage() {
     try {
       if (!draft.name.trim()) throw new Error(t("channels.toast.nameRequired"));
       const baseUrls = itemsToBaseUrls(draft.endpointItems);
-      const authRefs = itemsToAuthRefs(draft.keyItems);
+      const authRefs = buildAuthRefs(draft.savedKeys, draft.newKeysText);
       if (baseUrls.length === 0) throw new Error(t("channels.toast.baseUrlRequired"));
       if (authRefs.length === 0) throw new Error(t("channels.toast.apiKeyRequired"));
       const real = Number(draft.real_multiplier);
@@ -669,19 +675,27 @@ export function ChannelsPage() {
                           <Badge variant="success">{t("common.enabled")}</Badge>
                         ) : !endpointAvailable ? (
                           <Badge variant="warning">
-                            {t("channels.status.endpointCooling", {
-                              minutes: hasEndpointCooldown ? endpointCooldownMin : 1,
-                            })}
+                            {t("channels.status.endpointAbnormal")}
                           </Badge>
                         ) : !keyAvailable ? (
                           <Badge variant="warning">
-                            {t("channels.status.keyCooling", {
-                              minutes: hasKeyCooldown ? keyCooldownMin : 1,
-                            })}
+                            {t("channels.status.keyAbnormal")}
                           </Badge>
                         ) : (
                           <Badge variant="warning">{t("channels.status.unavailable")}</Badge>
                         )}
+                        {c.enabled && !available && (hasEndpointCooldown || hasKeyCooldown) ? (
+                          <div className="text-xs text-muted-foreground">
+                            {!endpointAvailable && hasEndpointCooldown
+                              ? t("channels.status.endpointCooling", {
+                                  minutes: endpointCooldownMin,
+                                })
+                              : null}
+                            {!keyAvailable && hasKeyCooldown
+                              ? t("channels.status.keyCooling", { minutes: keyCooldownMin })
+                              : null}
+                          </div>
+                        ) : null}
                         {c.enabled && available && (hasEndpointCooldown || hasKeyCooldown) ? (
                           <div className="text-xs text-muted-foreground">
                             {hasEndpointCooldown
@@ -972,12 +986,12 @@ export function ChannelsPage() {
 
             <div className="space-y-2">
               <label className="text-sm font-medium">{t("channels.modal.apiKey")}</label>
-              <ItemListEditor
-                items={draft.keyItems}
-                onChange={(items) => setDraft((d) => ({ ...d, keyItems: items }))}
-                placeholder="sk-..."
-                addLabel={t("channels.modal.addKey")}
-                isMasked={true}
+              <KeyListEditor
+                savedKeys={draft.savedKeys}
+                onSavedKeysChange={(keys) => setDraft((d) => ({ ...d, savedKeys: keys }))}
+                newKeysText={draft.newKeysText}
+                onNewKeysTextChange={(text) => setDraft((d) => ({ ...d, newKeysText: text }))}
+                nowMs={renderNowMs}
               />
             </div>
 
