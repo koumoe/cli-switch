@@ -4,10 +4,6 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use uuid::Uuid;
 
-use super::channel_endpoint::{
-    ChannelEndpoint, get_primary_endpoint_base_url_tx, replace_channel_endpoints_tx,
-};
-use super::channel_key::{ChannelKey, get_primary_key_auth_ref_tx, replace_channel_keys_tx};
 use super::protocol::normalize_base_url;
 use super::{Protocol, now_ms, with_conn};
 
@@ -62,8 +58,6 @@ pub struct Channel {
     pub base_url: String,
     pub auth_type: String,
     pub auth_ref: String,
-    pub endpoints: Vec<ChannelEndpoint>,
-    pub keys: Vec<ChannelKey>,
     pub priority: i64,
     pub recharge_currency: RechargeCurrency,
     pub real_multiplier: f64,
@@ -149,63 +143,6 @@ pub async fn clear_channel_failures(db_path: PathBuf, channel_id: String) -> any
 
 pub async fn list_channels(db_path: PathBuf) -> anyhow::Result<Vec<Channel>> {
     with_conn(db_path, |conn| {
-        let mut endpoints_by_channel =
-            std::collections::HashMap::<String, Vec<ChannelEndpoint>>::new();
-        {
-            let mut stmt = conn.prepare(
-                r#"
-                SELECT id, channel_id, base_url, priority, enabled, auto_disabled_until_ms, created_at_ms, updated_at_ms
-                FROM channel_endpoints
-                ORDER BY priority DESC, created_at_ms ASC
-                "#,
-            )?;
-            let mut rows = stmt.query([])?;
-            while let Some(row) = rows.next()? {
-                let channel_id: String = row.get(1)?;
-                endpoints_by_channel
-                    .entry(channel_id.clone())
-                    .or_default()
-                    .push(ChannelEndpoint {
-                        id: row.get(0)?,
-                        channel_id,
-                        base_url: row.get(2)?,
-                        priority: row.get(3)?,
-                        enabled: row.get::<_, i64>(4)? != 0,
-                        auto_disabled_until_ms: row.get::<_, Option<i64>>(5)?.unwrap_or(0),
-                        created_at_ms: row.get(6)?,
-                        updated_at_ms: row.get(7)?,
-                    });
-            }
-        }
-
-        let mut keys_by_channel = std::collections::HashMap::<String, Vec<ChannelKey>>::new();
-        {
-            let mut stmt = conn.prepare(
-                r#"
-                SELECT id, channel_id, auth_ref, priority, enabled, auto_disabled_until_ms, created_at_ms, updated_at_ms
-                FROM channel_keys
-                ORDER BY priority DESC, created_at_ms ASC
-                "#,
-            )?;
-            let mut rows = stmt.query([])?;
-            while let Some(row) = rows.next()? {
-                let channel_id: String = row.get(1)?;
-                keys_by_channel
-                    .entry(channel_id.clone())
-                    .or_default()
-                    .push(ChannelKey {
-                        id: row.get(0)?,
-                        channel_id,
-                        auth_ref: row.get(2)?,
-                        priority: row.get(3)?,
-                        enabled: row.get::<_, i64>(4)? != 0,
-                        auto_disabled_until_ms: row.get::<_, Option<i64>>(5)?.unwrap_or(0),
-                        created_at_ms: row.get(6)?,
-                        updated_at_ms: row.get(7)?,
-                    });
-            }
-        }
-
         let mut stmt = conn.prepare(
             r#"
             SELECT id, name, protocol, base_url, auth_type, auth_ref, priority, recharge_currency, real_multiplier, enabled, auto_disabled_until_ms, created_at_ms, updated_at_ms
@@ -221,16 +158,13 @@ pub async fn list_channels(db_path: PathBuf) -> anyhow::Result<Vec<Channel>> {
         let rows = stmt.query_map([], |row| {
             let protocol: Protocol = row.get(2)?;
             let base_url: String = row.get(3)?;
-            let channel_id: String = row.get(0)?;
             Ok(Channel {
-                id: channel_id.clone(),
+                id: row.get(0)?,
                 name: row.get(1)?,
                 protocol,
                 base_url: normalize_base_url(protocol, &base_url),
                 auth_type: row.get(4)?,
                 auth_ref: row.get(5)?,
-                endpoints: endpoints_by_channel.remove(&channel_id).unwrap_or_default(),
-                keys: keys_by_channel.remove(&channel_id).unwrap_or_default(),
                 priority: row.get(6)?,
                 recharge_currency: row
                     .get::<_, Option<RechargeCurrency>>(7)?
@@ -253,44 +187,14 @@ pub async fn list_channels(db_path: PathBuf) -> anyhow::Result<Vec<Channel>> {
 pub struct CreateChannel {
     pub name: String,
     pub protocol: Protocol,
-    pub base_url: Option<String>,
-    pub base_urls: Option<Vec<String>>,
+    pub base_url: String,
     pub auth_type: Option<String>,
-    pub auth_ref: Option<String>,
-    pub auth_refs: Option<Vec<String>>,
+    pub auth_ref: String,
     #[serde(default)]
     pub priority: i64,
     pub recharge_currency: Option<RechargeCurrency>,
     pub real_multiplier: Option<f64>,
     pub enabled: bool,
-}
-
-fn normalize_lines(v: &str) -> Vec<String> {
-    let mut out = Vec::<String>::new();
-    let mut seen = std::collections::HashSet::<String>::new();
-    for raw in v.lines() {
-        let s = raw.trim();
-        if s.is_empty() {
-            continue;
-        }
-        if seen.insert(s.to_string()) {
-            out.push(s.to_string());
-        }
-    }
-    out
-}
-
-fn coerce_list(list: Option<Vec<String>>, single: Option<String>) -> Vec<String> {
-    if let Some(vs) = list
-        && !vs.is_empty()
-    {
-        let joined = vs.join("\n");
-        return normalize_lines(&joined);
-    }
-    if let Some(s) = single {
-        return normalize_lines(&s);
-    }
-    Vec::new()
 }
 
 pub async fn create_channel(db_path: PathBuf, input: CreateChannel) -> anyhow::Result<Channel> {
@@ -302,20 +206,10 @@ pub async fn create_channel(db_path: PathBuf, input: CreateChannel) -> anyhow::R
             .unwrap_or_else(|| "auto".to_string())
             .trim()
             .to_string();
-        let base_urls = coerce_list(input.base_urls, input.base_url);
-        let auth_refs = coerce_list(input.auth_refs, input.auth_ref);
-        if base_urls.is_empty() {
-            return Err(anyhow::anyhow!("base_url 不能为空"));
-        }
-        if auth_refs.is_empty() {
-            return Err(anyhow::anyhow!("auth_ref 不能为空"));
-        }
-
-        let base_url = normalize_base_url(input.protocol, &base_urls[0]);
+        let base_url = normalize_base_url(input.protocol, &input.base_url);
         let recharge_currency = input.recharge_currency.unwrap_or(RechargeCurrency::Cny);
         let real_multiplier = input.real_multiplier.unwrap_or(1.0);
-        let tx = conn.unchecked_transaction()?;
-        tx.execute(
+        conn.execute(
             r#"
             INSERT INTO channels (id, name, protocol, base_url, auth_type, auth_ref, priority, recharge_currency, real_multiplier, enabled, created_at_ms, updated_at_ms)
             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
@@ -326,7 +220,7 @@ pub async fn create_channel(db_path: PathBuf, input: CreateChannel) -> anyhow::R
                 input.protocol.as_str(),
                 base_url,
                 auth_type,
-                auth_refs[0].as_str(),
+                input.auth_ref,
                 input.priority,
                 recharge_currency.as_str(),
                 real_multiplier,
@@ -336,23 +230,13 @@ pub async fn create_channel(db_path: PathBuf, input: CreateChannel) -> anyhow::R
             ],
         )?;
 
-        let endpoints = replace_channel_endpoints_tx(&tx, &id, input.protocol, base_urls, ts)?;
-        let keys = replace_channel_keys_tx(&tx, &id, auth_refs, ts)?;
-
-        tx.commit()?;
-
         Ok(Channel {
             id,
             name: input.name,
             protocol: input.protocol,
             base_url,
             auth_type,
-            auth_ref: keys
-                .first()
-                .map(|k| k.auth_ref.clone())
-                .unwrap_or_default(),
-            endpoints,
-            keys,
+            auth_ref: input.auth_ref,
             priority: input.priority,
             recharge_currency,
             real_multiplier,
@@ -369,10 +253,8 @@ pub async fn create_channel(db_path: PathBuf, input: CreateChannel) -> anyhow::R
 pub struct UpdateChannel {
     pub name: Option<String>,
     pub base_url: Option<String>,
-    pub base_urls: Option<Vec<String>>,
     pub auth_type: Option<String>,
     pub auth_ref: Option<String>,
-    pub auth_refs: Option<Vec<String>>,
     pub priority: Option<i64>,
     pub recharge_currency: Option<RechargeCurrency>,
     pub real_multiplier: Option<f64>,
@@ -406,8 +288,6 @@ pub async fn update_channel(
                     base_url: normalize_base_url(protocol, &base_url),
                     auth_type: row.get(4)?,
                     auth_ref: row.get(5)?,
-                    endpoints: Vec::new(),
-                    keys: Vec::new(),
                     priority: row.get(6)?,
                     recharge_currency: row
                         .get::<_, Option<RechargeCurrency>>(7)?
@@ -432,8 +312,14 @@ pub async fn update_channel(
         if let Some(v) = input.name {
             channel.name = v;
         }
+        if let Some(v) = input.base_url {
+            channel.base_url = normalize_base_url(channel.protocol, &v);
+        }
         if let Some(v) = input.auth_type {
             channel.auth_type = v;
+        }
+        if let Some(v) = input.auth_ref {
+            channel.auth_ref = v;
         }
         if let Some(v) = input.priority {
             channel.priority = v;
@@ -453,46 +339,6 @@ pub async fn update_channel(
         channel.updated_at_ms = ts;
 
         let tx = conn.unchecked_transaction()?;
-
-        let mut replaced_endpoints = false;
-        let mut replaced_keys = false;
-
-        if input.base_urls.is_some() || input.base_url.is_some() {
-            let base_urls = coerce_list(input.base_urls, input.base_url);
-            if base_urls.is_empty() {
-                return Err(anyhow::anyhow!("base_url 不能为空"));
-            }
-            let endpoints =
-                replace_channel_endpoints_tx(&tx, &channel.id, channel.protocol, base_urls, ts)?;
-            channel.base_url = endpoints
-                .first()
-                .map(|e| e.base_url.clone())
-                .unwrap_or_else(|| channel.base_url.clone());
-            replaced_endpoints = true;
-        }
-
-        if input.auth_refs.is_some() || input.auth_ref.is_some() {
-            let auth_refs = coerce_list(input.auth_refs, input.auth_ref);
-            if auth_refs.is_empty() {
-                return Err(anyhow::anyhow!("auth_ref 不能为空"));
-            }
-            let keys = replace_channel_keys_tx(&tx, &channel.id, auth_refs, ts)?;
-            channel.auth_ref = keys
-                .first()
-                .map(|k| k.auth_ref.clone())
-                .unwrap_or_else(|| channel.auth_ref.clone());
-            replaced_keys = true;
-        }
-
-        if !replaced_endpoints
-            && let Some(v) = get_primary_endpoint_base_url_tx(&tx, &channel.id)?
-        {
-            channel.base_url = v;
-        }
-        if !replaced_keys && let Some(v) = get_primary_key_auth_ref_tx(&tx, &channel.id)? {
-            channel.auth_ref = v;
-        }
-
         tx.execute(
             r#"
             UPDATE channels
@@ -571,54 +417,6 @@ pub async fn set_channel_enabled(
 
 pub async fn get_channel(db_path: PathBuf, channel_id: String) -> anyhow::Result<Option<Channel>> {
     with_conn(db_path, move |conn| {
-        let endpoints = {
-            let mut stmt = conn.prepare(
-                r#"
-                SELECT id, channel_id, base_url, priority, enabled, auto_disabled_until_ms, created_at_ms, updated_at_ms
-                FROM channel_endpoints
-                WHERE channel_id = ?1
-                ORDER BY priority DESC, created_at_ms ASC
-                "#,
-            )?;
-            let rows = stmt.query_map([&channel_id], |row| {
-                Ok(ChannelEndpoint {
-                    id: row.get(0)?,
-                    channel_id: row.get(1)?,
-                    base_url: row.get(2)?,
-                    priority: row.get(3)?,
-                    enabled: row.get::<_, i64>(4)? != 0,
-                    auto_disabled_until_ms: row.get::<_, Option<i64>>(5)?.unwrap_or(0),
-                    created_at_ms: row.get(6)?,
-                    updated_at_ms: row.get(7)?,
-                })
-            })?;
-            rows.collect::<rusqlite::Result<Vec<_>>>()?
-        };
-
-        let keys = {
-            let mut stmt = conn.prepare(
-                r#"
-                SELECT id, channel_id, auth_ref, priority, enabled, auto_disabled_until_ms, created_at_ms, updated_at_ms
-                FROM channel_keys
-                WHERE channel_id = ?1
-                ORDER BY priority DESC, created_at_ms ASC
-                "#,
-            )?;
-            let rows = stmt.query_map([&channel_id], |row| {
-                Ok(ChannelKey {
-                    id: row.get(0)?,
-                    channel_id: row.get(1)?,
-                    auth_ref: row.get(2)?,
-                    priority: row.get(3)?,
-                    enabled: row.get::<_, i64>(4)? != 0,
-                    auto_disabled_until_ms: row.get::<_, Option<i64>>(5)?.unwrap_or(0),
-                    created_at_ms: row.get(6)?,
-                    updated_at_ms: row.get(7)?,
-                })
-            })?;
-            rows.collect::<rusqlite::Result<Vec<_>>>()?
-        };
-
         let mut stmt = conn.prepare(
             r#"
             SELECT id, name, protocol, base_url, auth_type, auth_ref, priority, recharge_currency, real_multiplier, enabled, auto_disabled_until_ms, created_at_ms, updated_at_ms
@@ -637,8 +435,6 @@ pub async fn get_channel(db_path: PathBuf, channel_id: String) -> anyhow::Result
                 base_url: normalize_base_url(protocol, &base_url),
                 auth_type: row.get(4)?,
                 auth_ref: row.get(5)?,
-                endpoints: endpoints.clone(),
-                keys: keys.clone(),
                 priority: row.get(6)?,
                 recharge_currency: row
                     .get::<_, Option<RechargeCurrency>>(7)?
@@ -720,62 +516,6 @@ pub async fn delete_channel(db_path: PathBuf, channel_id: String) -> anyhow::Res
         let tx = conn.unchecked_transaction()?;
         tx.execute(
             r#"DELETE FROM route_channels WHERE channel_id = ?1"#,
-            params![channel_id],
-        )?;
-        let mut endpoint_ids = Vec::<String>::new();
-        {
-            let mut stmt =
-                tx.prepare(r#"SELECT id FROM channel_endpoints WHERE channel_id = ?1"#)?;
-            let mut rows = stmt.query([&channel_id])?;
-            while let Some(row) = rows.next()? {
-                endpoint_ids.push(row.get::<_, String>(0)?);
-            }
-        }
-        let mut key_ids = Vec::<String>::new();
-        {
-            let mut stmt = tx.prepare(r#"SELECT id FROM channel_keys WHERE channel_id = ?1"#)?;
-            let mut rows = stmt.query([&channel_id])?;
-            while let Some(row) = rows.next()? {
-                key_ids.push(row.get::<_, String>(0)?);
-            }
-        }
-
-        for id in &endpoint_ids {
-            tx.execute(
-                r#"DELETE FROM endpoint_key_failures WHERE endpoint_id = ?1"#,
-                params![id],
-            )?;
-            tx.execute(
-                r#"DELETE FROM endpoint_key_states WHERE endpoint_id = ?1"#,
-                params![id],
-            )?;
-            tx.execute(
-                r#"DELETE FROM endpoint_failures WHERE endpoint_id = ?1"#,
-                params![id],
-            )?;
-        }
-        for id in &key_ids {
-            tx.execute(
-                r#"DELETE FROM endpoint_key_failures WHERE key_id = ?1"#,
-                params![id],
-            )?;
-            tx.execute(
-                r#"DELETE FROM endpoint_key_states WHERE key_id = ?1"#,
-                params![id],
-            )?;
-            tx.execute(r#"DELETE FROM key_failures WHERE key_id = ?1"#, params![id])?;
-        }
-
-        tx.execute(
-            r#"DELETE FROM channel_endpoints WHERE channel_id = ?1"#,
-            params![channel_id],
-        )?;
-        tx.execute(
-            r#"DELETE FROM channel_keys WHERE channel_id = ?1"#,
-            params![channel_id],
-        )?;
-        tx.execute(
-            r#"DELETE FROM channel_failures WHERE channel_id = ?1"#,
             params![channel_id],
         )?;
         let deleted = tx.execute(r#"DELETE FROM channels WHERE id = ?1"#, params![channel_id])?;
