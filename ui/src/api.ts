@@ -37,33 +37,9 @@ export type Channel = {
   base_url: string;
   auth_type: string;
   auth_ref: string;
-  endpoints: ChannelEndpoint[];
-  keys: ChannelKey[];
   priority: number;
   recharge_currency: "USD" | "CNY";
   real_multiplier: number;
-  enabled: boolean;
-  auto_disabled_until_ms: number;
-  created_at_ms: number;
-  updated_at_ms: number;
-};
-
-export type ChannelEndpoint = {
-  id: string;
-  channel_id: string;
-  base_url: string;
-  priority: number;
-  enabled: boolean;
-  auto_disabled_until_ms: number;
-  created_at_ms: number;
-  updated_at_ms: number;
-};
-
-export type ChannelKey = {
-  id: string;
-  channel_id: string;
-  auth_ref: string;
-  priority: number;
   enabled: boolean;
   auto_disabled_until_ms: number;
   created_at_ms: number;
@@ -73,9 +49,9 @@ export type ChannelKey = {
 export type CreateChannelInput = {
   name: string;
   protocol: Protocol;
-  base_urls: string[];
+  base_url: string;
   auth_type: string;
-  auth_refs: string[];
+  auth_ref: string;
   priority: number;
   recharge_currency: "USD" | "CNY";
   real_multiplier: number;
@@ -85,10 +61,8 @@ export type CreateChannelInput = {
 export type UpdateChannelInput = Partial<{
   name: string;
   base_url: string;
-  base_urls: string[];
   auth_type: string;
   auth_ref: string;
-  auth_refs: string[];
   priority: number;
   recharge_currency: "USD" | "CNY";
   real_multiplier: number;

@@ -4,9 +4,6 @@ use serde::Serialize;
 use std::path::{Path, PathBuf};
 
 mod channel;
-mod channel_endpoint;
-mod channel_key;
-mod endpoint_key;
 mod pricing;
 mod protocol;
 mod route;
@@ -19,17 +16,6 @@ pub use channel::{
     clear_channel_failures, create_channel, delete_channel, get_channel, list_channels,
     record_channel_failure_and_maybe_disable, reorder_channels, set_channel_enabled,
     update_channel,
-};
-pub use channel_endpoint::{
-    ChannelEndpoint, clear_endpoint_failures, list_channel_endpoints,
-    record_endpoint_failure_and_maybe_disable,
-};
-pub use channel_key::{
-    ChannelKey, clear_key_failures, list_channel_keys, record_key_failure_and_maybe_disable,
-};
-pub use endpoint_key::{
-    UpstreamAttempt, clear_endpoint_key_failures, list_available_upstream_attempts,
-    record_endpoint_key_failure_and_maybe_disable,
 };
 pub use pricing::{
     PricingModel, PricingStatus, UpsertPricingModel, pricing_status, search_pricing_models,
@@ -62,16 +48,9 @@ pub fn init_db(db_path: &Path) -> anyhow::Result<()> {
 
     ensure_channels_schema(&conn)?;
     ensure_channel_failures_schema(&conn)?;
-    ensure_channel_endpoints_schema(&conn)?;
-    ensure_channel_keys_schema(&conn)?;
-    ensure_endpoint_failures_schema(&conn)?;
-    ensure_key_failures_schema(&conn)?;
-    ensure_endpoint_key_states_schema(&conn)?;
-    ensure_endpoint_key_failures_schema(&conn)?;
     ensure_app_settings_schema(&conn)?;
     ensure_pricing_models_schema(&conn)?;
     ensure_usage_events_schema(&conn)?;
-    backfill_channels_to_endpoints_and_keys(&conn)?;
 
     Ok(())
 }
@@ -114,200 +93,6 @@ fn ensure_channel_failures_schema(conn: &Connection) -> anyhow::Result<()> {
         r#"CREATE INDEX IF NOT EXISTS idx_channel_failures_channel_ts ON channel_failures(channel_id, at_ms)"#,
         [],
     )?;
-    Ok(())
-}
-
-fn ensure_channel_endpoints_schema(conn: &Connection) -> anyhow::Result<()> {
-    conn.execute(
-        r#"
-        CREATE TABLE IF NOT EXISTS channel_endpoints (
-          id TEXT PRIMARY KEY,
-          channel_id TEXT NOT NULL,
-          base_url TEXT NOT NULL,
-          priority INTEGER NOT NULL DEFAULT 0,
-          enabled INTEGER NOT NULL,
-          created_at_ms INTEGER NOT NULL,
-          updated_at_ms INTEGER NOT NULL
-        )
-        "#,
-        [],
-    )?;
-    conn.execute(
-        r#"
-        CREATE INDEX IF NOT EXISTS idx_channel_endpoints_channel_priority
-          ON channel_endpoints(channel_id, priority)
-        "#,
-        [],
-    )?;
-    ensure_column(
-        conn,
-        "channel_endpoints",
-        "auto_disabled_until_ms",
-        "INTEGER NOT NULL DEFAULT 0",
-    )?;
-    Ok(())
-}
-
-fn ensure_channel_keys_schema(conn: &Connection) -> anyhow::Result<()> {
-    conn.execute(
-        r#"
-        CREATE TABLE IF NOT EXISTS channel_keys (
-          id TEXT PRIMARY KEY,
-          channel_id TEXT NOT NULL,
-          auth_ref TEXT NOT NULL,
-          priority INTEGER NOT NULL DEFAULT 0,
-          enabled INTEGER NOT NULL,
-          created_at_ms INTEGER NOT NULL,
-          updated_at_ms INTEGER NOT NULL
-        )
-        "#,
-        [],
-    )?;
-    conn.execute(
-        r#"
-        CREATE INDEX IF NOT EXISTS idx_channel_keys_channel_priority
-          ON channel_keys(channel_id, priority)
-        "#,
-        [],
-    )?;
-    ensure_column(
-        conn,
-        "channel_keys",
-        "auto_disabled_until_ms",
-        "INTEGER NOT NULL DEFAULT 0",
-    )?;
-    Ok(())
-}
-
-fn ensure_endpoint_failures_schema(conn: &Connection) -> anyhow::Result<()> {
-    conn.execute(
-        r#"
-        CREATE TABLE IF NOT EXISTS endpoint_failures (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          endpoint_id TEXT NOT NULL,
-          at_ms INTEGER NOT NULL
-        )
-        "#,
-        [],
-    )?;
-    conn.execute(
-        r#"
-        CREATE INDEX IF NOT EXISTS idx_endpoint_failures_endpoint_ts
-          ON endpoint_failures(endpoint_id, at_ms)
-        "#,
-        [],
-    )?;
-    Ok(())
-}
-
-fn ensure_key_failures_schema(conn: &Connection) -> anyhow::Result<()> {
-    conn.execute(
-        r#"
-        CREATE TABLE IF NOT EXISTS key_failures (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          key_id TEXT NOT NULL,
-          at_ms INTEGER NOT NULL
-        )
-        "#,
-        [],
-    )?;
-    conn.execute(
-        r#"
-        CREATE INDEX IF NOT EXISTS idx_key_failures_key_ts
-          ON key_failures(key_id, at_ms)
-        "#,
-        [],
-    )?;
-    Ok(())
-}
-
-fn ensure_endpoint_key_states_schema(conn: &Connection) -> anyhow::Result<()> {
-    conn.execute(
-        r#"
-        CREATE TABLE IF NOT EXISTS endpoint_key_states (
-          endpoint_id TEXT NOT NULL,
-          key_id TEXT NOT NULL,
-          auto_disabled_until_ms INTEGER NOT NULL DEFAULT 0,
-          updated_at_ms INTEGER NOT NULL,
-          PRIMARY KEY (endpoint_id, key_id)
-        )
-        "#,
-        [],
-    )?;
-    conn.execute(
-        r#"CREATE INDEX IF NOT EXISTS idx_endpoint_key_states_until ON endpoint_key_states(auto_disabled_until_ms)"#,
-        [],
-    )?;
-    Ok(())
-}
-
-fn ensure_endpoint_key_failures_schema(conn: &Connection) -> anyhow::Result<()> {
-    conn.execute(
-        r#"
-        CREATE TABLE IF NOT EXISTS endpoint_key_failures (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          endpoint_id TEXT NOT NULL,
-          key_id TEXT NOT NULL,
-          at_ms INTEGER NOT NULL
-        )
-        "#,
-        [],
-    )?;
-    conn.execute(
-        r#"
-        CREATE INDEX IF NOT EXISTS idx_endpoint_key_failures_pair_ts
-          ON endpoint_key_failures(endpoint_id, key_id, at_ms)
-        "#,
-        [],
-    )?;
-    Ok(())
-}
-
-fn backfill_channels_to_endpoints_and_keys(conn: &Connection) -> anyhow::Result<()> {
-    let ts = now_ms();
-
-    let mut stmt = conn.prepare(r#"SELECT id, protocol, base_url, auth_ref FROM channels"#)?;
-    let mut rows = stmt.query([])?;
-    while let Some(row) = rows.next()? {
-        let channel_id: String = row.get(0)?;
-        let protocol: Protocol = row.get(1)?;
-        let base_url: String = row.get(2)?;
-        let auth_ref: String = row.get(3)?;
-
-        let endpoint_cnt: i64 = conn.query_row(
-            r#"SELECT COUNT(*) FROM channel_endpoints WHERE channel_id = ?1"#,
-            params![channel_id],
-            |r| r.get(0),
-        )?;
-        if endpoint_cnt == 0 {
-            let endpoint_id = uuid::Uuid::new_v4().to_string();
-            let normalized = protocol::normalize_base_url(protocol, &base_url);
-            conn.execute(
-                r#"
-                INSERT INTO channel_endpoints (id, channel_id, base_url, priority, enabled, created_at_ms, updated_at_ms)
-                VALUES (?1, ?2, ?3, 0, 1, ?4, ?4)
-                "#,
-                params![endpoint_id, channel_id, normalized, ts],
-            )?;
-        }
-
-        let key_cnt: i64 = conn.query_row(
-            r#"SELECT COUNT(*) FROM channel_keys WHERE channel_id = ?1"#,
-            params![channel_id],
-            |r| r.get(0),
-        )?;
-        if key_cnt == 0 {
-            let key_id = uuid::Uuid::new_v4().to_string();
-            conn.execute(
-                r#"
-                INSERT INTO channel_keys (id, channel_id, auth_ref, priority, enabled, created_at_ms, updated_at_ms)
-                VALUES (?1, ?2, ?3, 0, 1, ?4, ?4)
-                "#,
-                params![key_id, channel_id, auth_ref, ts],
-            )?;
-        }
-    }
-
     Ok(())
 }
 
@@ -428,53 +213,6 @@ pub async fn clear_records(
                 .try_into()
                 .unwrap_or(i64::MAX),
         };
-
-        let endpoint_failures_deleted: i64 = match kind {
-            RecordsClearKind::DateRange { start_ms, end_ms } => conn
-                .execute(
-                    r#"DELETE FROM endpoint_failures WHERE at_ms >= ?1 AND at_ms <= ?2"#,
-                    params![start_ms, end_ms],
-                )?
-                .try_into()
-                .unwrap_or(i64::MAX),
-            RecordsClearKind::Errors | RecordsClearKind::All => conn
-                .execute(r#"DELETE FROM endpoint_failures"#, [])?
-                .try_into()
-                .unwrap_or(i64::MAX),
-        };
-
-        let key_failures_deleted: i64 = match kind {
-            RecordsClearKind::DateRange { start_ms, end_ms } => conn
-                .execute(
-                    r#"DELETE FROM key_failures WHERE at_ms >= ?1 AND at_ms <= ?2"#,
-                    params![start_ms, end_ms],
-                )?
-                .try_into()
-                .unwrap_or(i64::MAX),
-            RecordsClearKind::Errors | RecordsClearKind::All => conn
-                .execute(r#"DELETE FROM key_failures"#, [])?
-                .try_into()
-                .unwrap_or(i64::MAX),
-        };
-
-        let endpoint_key_failures_deleted: i64 = match kind {
-            RecordsClearKind::DateRange { start_ms, end_ms } => conn
-                .execute(
-                    r#"DELETE FROM endpoint_key_failures WHERE at_ms >= ?1 AND at_ms <= ?2"#,
-                    params![start_ms, end_ms],
-                )?
-                .try_into()
-                .unwrap_or(i64::MAX),
-            RecordsClearKind::Errors | RecordsClearKind::All => conn
-                .execute(r#"DELETE FROM endpoint_key_failures"#, [])?
-                .try_into()
-                .unwrap_or(i64::MAX),
-        };
-
-        let channel_failures_deleted = channel_failures_deleted
-            .saturating_add(endpoint_failures_deleted)
-            .saturating_add(key_failures_deleted)
-            .saturating_add(endpoint_key_failures_deleted);
 
         let vacuumed = matches!(kind, RecordsClearKind::Errors | RecordsClearKind::All);
         conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);")?;

@@ -24,20 +24,16 @@ struct AttemptCtx<'a> {
     settings: &'a storage::AppSettings,
     protocol: Protocol,
     channel_id: &'a str,
-    endpoint_id: &'a str,
-    key_id: &'a str,
     attempt: usize,
     total: usize,
 }
 
 impl AttemptCtx<'_> {
     async fn fail(&self, err: &ProxyError, msg: &'static str) {
-        maybe_record_failure(self.db_path, self.settings, self.endpoint_id, self.key_id).await;
+        maybe_record_failure(self.db_path, self.settings, self.channel_id).await;
         tracing::warn!(
             protocol = self.protocol.as_str(),
             channel_id = %self.channel_id,
-            endpoint_id = %self.endpoint_id,
-            key_id = %self.key_id,
             attempt = self.attempt,
             total = self.total,
             err = %err,
@@ -73,20 +69,8 @@ pub async fn forward(
     let request_id: Arc<str> = Arc::from(Uuid::new_v4().to_string());
     let settings = storage::get_app_settings(db_path.clone()).await?;
     let now_ms = storage::now_ms();
-    let (enabled_channels, attempts) = storage::list_available_upstream_attempts(
-        db_path.clone(),
-        protocol,
-        now_ms,
-        settings.auto_disable_enabled,
-    )
-    .await?;
-    if enabled_channels <= 0 {
-        return Err(ProxyError::NoEnabledChannel(protocol));
-    }
-    if attempts.is_empty() {
-        return Err(ProxyError::NoAvailableChannel(protocol));
-    }
-    let total_attempts = attempts.len();
+    let channels = list_available_channels(db_path.clone(), protocol, now_ms, &settings).await?;
+    let total_channels = channels.len();
 
     let (parts, body) = req.into_parts();
     let is_count_tokens = protocol == Protocol::Anthropic
@@ -102,34 +86,30 @@ pub async fn forward(
 
     let mut last_err: Option<ProxyError> = None;
 
-    for (idx, attempt) in attempts.into_iter().enumerate() {
-        let is_last = idx + 1 >= total_attempts;
+    for (idx, channel) in channels.into_iter().enumerate() {
+        let is_last = idx + 1 >= total_channels;
         let started = Instant::now();
 
         let attempt_ctx = AttemptCtx {
             db_path: db_path_ref,
             settings: &settings,
             protocol,
-            channel_id: attempt.channel_id.as_str(),
-            endpoint_id: attempt.endpoint_id.as_str(),
-            key_id: attempt.key_id.as_str(),
+            channel_id: channel.id.as_str(),
             attempt: idx + 1,
-            total: total_attempts,
+            total: total_channels,
         };
 
         if !is_count_tokens {
             tracing::debug!(
                 protocol = protocol.as_str(),
-                channel_id = %attempt.channel_id,
-                endpoint_id = %attempt.endpoint_id,
-                key_id = %attempt.key_id,
+                channel_id = %channel.id,
                 attempt = idx + 1,
-                total = total_attempts,
+                total = total_channels,
                 "proxy attempt start"
             );
         }
 
-        let mut url = match build_upstream_url(&attempt.base_url, &parts.uri, protocol_root) {
+        let mut url = match build_upstream_url(&channel.base_url, &parts.uri, protocol_root) {
             Ok(v) => v,
             Err(e) => {
                 if !is_count_tokens {
@@ -146,7 +126,7 @@ pub async fn forward(
         };
 
         let mut out_headers = filtered_headers(&parts.headers);
-        if let Err(e) = apply_auth_token(&attempt.auth_ref, protocol, &mut url, &mut out_headers) {
+        if let Err(e) = apply_auth(&channel, protocol, &mut url, &mut out_headers) {
             if !is_count_tokens {
                 attempt_ctx
                     .fail(&e, "proxy attempt failed (apply auth)")
@@ -169,20 +149,12 @@ pub async fn forward(
             Ok(r) => r,
             Err(e) => {
                 if !is_count_tokens {
-                    maybe_record_failure(
-                        db_path_ref,
-                        &settings,
-                        &attempt.endpoint_id,
-                        &attempt.key_id,
-                    )
-                    .await;
+                    maybe_record_failure(db_path_ref, &settings, &channel.id).await;
                     tracing::warn!(
                         protocol = protocol.as_str(),
-                        channel_id = %attempt.channel_id,
-                        endpoint_id = %attempt.endpoint_id,
-                        key_id = %attempt.key_id,
+                        channel_id = %channel.id,
                         attempt = idx + 1,
-                        total = total_attempts,
+                        total = total_channels,
                         err = %e,
                         "proxy attempt failed (request error)"
                     );
@@ -190,7 +162,7 @@ pub async fn forward(
                         build_usage_event(UsageEventParams {
                             request_id: Some(request_id.clone()),
                             protocol,
-                            channel_id: attempt.channel_id.clone(),
+                            channel_id: channel.id.clone(),
                             model: model.clone(),
                             success: false,
                             http_status: None,
@@ -218,22 +190,14 @@ pub async fn forward(
 
         let status = upstream.status();
         if !is_count_tokens && !status.is_success() {
-            maybe_record_failure(
-                db_path_ref,
-                &settings,
-                &attempt.endpoint_id,
-                &attempt.key_id,
-            )
-            .await;
+            maybe_record_failure(db_path_ref, &settings, &channel.id).await;
         }
         if !is_count_tokens && !status.is_success() && !is_last {
             tracing::warn!(
                 protocol = protocol.as_str(),
-                channel_id = %attempt.channel_id,
-                endpoint_id = %attempt.endpoint_id,
-                key_id = %attempt.key_id,
+                channel_id = %channel.id,
                 attempt = idx + 1,
-                total = total_attempts,
+                total = total_channels,
                 http_status = status.as_u16(),
                 "proxy attempt got non-2xx, retry next channel"
             );
@@ -242,7 +206,7 @@ pub async fn forward(
                 build_usage_event(UsageEventParams {
                     request_id: Some(request_id.clone()),
                     protocol,
-                    channel_id: attempt.channel_id.clone(),
+                    channel_id: channel.id.clone(),
                     model: model.clone(),
                     success: false,
                     http_status: Some(status.as_u16() as i64),
@@ -257,42 +221,16 @@ pub async fn forward(
             continue;
         }
 
-        if !is_count_tokens && status.is_success() && settings.auto_disable_enabled {
-            if let Err(e) =
-                storage::clear_endpoint_failures(db_path.clone(), attempt.endpoint_id.clone()).await
-            {
-                tracing::warn!(
-                    channel_id = %attempt.channel_id,
-                    endpoint_id = %attempt.endpoint_id,
-                    err = %e,
-                    "clear endpoint failures failed"
-                );
-            }
-            if let Err(e) =
-                storage::clear_key_failures(db_path.clone(), attempt.key_id.clone()).await
-            {
-                tracing::warn!(
-                    channel_id = %attempt.channel_id,
-                    key_id = %attempt.key_id,
-                    err = %e,
-                    "clear key failures failed"
-                );
-            }
-            if let Err(e) = storage::clear_endpoint_key_failures(
-                db_path.clone(),
-                attempt.endpoint_id.clone(),
-                attempt.key_id.clone(),
-            )
-            .await
-            {
-                tracing::warn!(
-                    channel_id = %attempt.channel_id,
-                    endpoint_id = %attempt.endpoint_id,
-                    key_id = %attempt.key_id,
-                    err = %e,
-                    "clear endpoint-key failures failed"
-                );
-            }
+        if !is_count_tokens
+            && status.is_success()
+            && let Err(e) =
+                storage::clear_channel_failures(db_path.clone(), channel.id.clone()).await
+        {
+            tracing::warn!(
+                channel_id = %channel.id,
+                err = %e,
+                "clear channel failures failed"
+            );
         }
 
         return proxy_upstream_response(
@@ -300,7 +238,7 @@ pub async fn forward(
             StreamRecordContext {
                 db_path: db_path.clone(),
                 protocol,
-                channel_id: attempt.channel_id.clone(),
+                channel_id: channel.id.clone(),
                 model: model.clone(),
                 request_id: request_id.clone(),
                 http_status: 0,
@@ -316,67 +254,43 @@ pub async fn forward(
     Err(last_err.unwrap_or_else(|| ProxyError::Upstream("all channels failed".to_string())))
 }
 
-async fn maybe_record_failure(
-    db_path: &Path,
+async fn list_available_channels(
+    db_path: std::path::PathBuf,
+    protocol: Protocol,
+    now_ms: i64,
     settings: &storage::AppSettings,
-    endpoint_id: &str,
-    key_id: &str,
-) {
+) -> Result<Vec<Channel>, ProxyError> {
+    let channels = storage::list_channels(db_path).await?;
+    let enabled: Vec<Channel> = channels
+        .into_iter()
+        .filter(|c| c.enabled && c.protocol == protocol)
+        .collect();
+    if enabled.is_empty() {
+        return Err(ProxyError::NoEnabledChannel(protocol));
+    }
+
+    if !settings.auto_disable_enabled {
+        return Ok(enabled);
+    }
+
+    let out: Vec<Channel> = enabled
+        .into_iter()
+        .filter(|c| !storage::channel_is_auto_disabled(c, now_ms))
+        .collect();
+    if out.is_empty() {
+        return Err(ProxyError::NoAvailableChannel(protocol));
+    }
+    Ok(out)
+}
+
+async fn maybe_record_failure(db_path: &Path, settings: &storage::AppSettings, channel_id: &str) {
     if !settings.auto_disable_enabled {
         return;
     }
     let now_ms = storage::now_ms();
-
-    if let Err(e) = storage::record_endpoint_failure_and_maybe_disable(
+    match storage::record_channel_failure_and_maybe_disable(
         db_path.to_path_buf(),
-        endpoint_id.to_string(),
-        now_ms,
-        settings.auto_disable_window_minutes,
-        settings.auto_disable_failure_times,
-        settings.auto_disable_disable_minutes,
-    )
-    .await
-    .map(|until| {
-        if let Some(until_ms) = until {
-            tracing::warn!(
-                endpoint_id = endpoint_id,
-                disabled_until_ms = until_ms,
-                "endpoint auto disabled"
-            );
-        }
-    }) {
-        tracing::warn!(
-            endpoint_id = endpoint_id,
-            err = %e,
-            "record endpoint failure failed"
-        );
-    }
-
-    if let Err(e) = storage::record_key_failure_and_maybe_disable(
-        db_path.to_path_buf(),
-        key_id.to_string(),
-        now_ms,
-        settings.auto_disable_window_minutes,
-        settings.auto_disable_failure_times,
-        settings.auto_disable_disable_minutes,
-    )
-    .await
-    .map(|until| {
-        if let Some(until_ms) = until {
-            tracing::warn!(
-                key_id = key_id,
-                disabled_until_ms = until_ms,
-                "key auto disabled"
-            );
-        }
-    }) {
-        tracing::warn!(key_id = key_id, err = %e, "record key failure failed");
-    }
-
-    match storage::record_endpoint_key_failure_and_maybe_disable(
-        db_path.to_path_buf(),
-        endpoint_id.to_string(),
-        key_id.to_string(),
+        channel_id.to_string(),
         now_ms,
         settings.auto_disable_window_minutes,
         settings.auto_disable_failure_times,
@@ -386,19 +300,17 @@ async fn maybe_record_failure(
     {
         Ok(Some(until_ms)) => {
             tracing::warn!(
-                endpoint_id = endpoint_id,
-                key_id = key_id,
+                channel_id = channel_id,
                 disabled_until_ms = until_ms,
-                "endpoint-key auto disabled"
+                "channel auto disabled"
             );
         }
         Ok(None) => {}
         Err(e) => {
             tracing::warn!(
-                endpoint_id = endpoint_id,
-                key_id = key_id,
+                channel_id = channel_id,
                 err = %e,
-                "record endpoint-key failure failed"
+                "record channel failure failed"
             );
         }
     }
@@ -691,15 +603,8 @@ pub(crate) fn apply_auth(
     url: &mut Url,
     headers: &mut HeaderMap,
 ) -> Result<(), ProxyError> {
-    apply_auth_token(channel.auth_ref.trim(), protocol, url, headers)
-}
+    let token = channel.auth_ref.trim();
 
-pub(crate) fn apply_auth_token(
-    token: &str,
-    protocol: Protocol,
-    url: &mut Url,
-    headers: &mut HeaderMap,
-) -> Result<(), ProxyError> {
     let detected = detect_request_auth_kind(protocol, headers, url);
     let auth_kind = resolve_auth_kind(protocol, detected);
 
