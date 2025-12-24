@@ -37,7 +37,7 @@ import { type Locale, useI18n } from "@/lib/i18n";
 import { useCurrency, type CurrencyMode } from "@/lib/currency";
 import { setLogLevel } from "@/lib/logger";
 import { formatBytes, formatDateTime } from "../lib";
-import { checkUpdate, clearLogs, clearRecords, downloadUpdate, getDbSize, getHealth, getLogsSize, getSettings, getUpdateStatus, pricingStatus, pricingSync, updateSettings, type AppSettings, type AutoStartLaunchMode, type CloseBehavior, type DbSize, type Health, type LogsSize, type PricingStatus, type UpdateCheck, type UpdateStatus } from "../api";
+import { checkUpdate, clearLogs, clearRecords, downloadUpdate, getDbSize, getHealth, getLogsSize, getSettings, getUpdateStatus, pricingStatus, pricingSync, updateSettings, type AppSettings, type AutoStartLaunchMode, type CloseBehavior, type DbSize, type Health, type LogsSize, type PricingStatus, type RecordsClearMode, type UpdateCheck, type UpdateStatus } from "../api";
 import type { CliswitchUpdateStatusEvent } from "@/lib/cliswitchEvents";
 import { clearUpdateReadyShown } from "@/lib/updateReadyPrompt";
 
@@ -71,7 +71,7 @@ export function SettingsPage() {
   // 数据库相关 state
   const [dbSize, setDbSize] = useState<DbSize | null>(null);
   const [dbSizeLoading, setDbSizeLoading] = useState(false);
-  const [recordsScope, setRecordsScope] = useState<"all" | "date_range">("all");
+  const [recordsScope, setRecordsScope] = useState<RecordsClearMode>("all");
   const [recordsDateRange, setRecordsDateRange] = useState<DateRange | undefined>(undefined);
   const [recordsPromptOpen, setRecordsPromptOpen] = useState(false);
   const [recordsClearing, setRecordsClearing] = useState(false);
@@ -955,9 +955,14 @@ export function SettingsPage() {
                   <DialogHeader>
                     <DialogTitle>{t("settings.records.confirmTitle")}</DialogTitle>
                     <DialogDescription>
-                      {t(recordsScope === "date_range" ? "settings.records.confirmDateRange" : "settings.records.confirmAll", {
-                        range: recordsDateStr,
-                      })}
+                      {t(
+                        recordsScope === "date_range"
+                          ? "settings.records.confirmDateRange"
+                          : recordsScope === "errors"
+                            ? "settings.records.confirmErrors"
+                            : "settings.records.confirmAll",
+                        { range: recordsDateStr }
+                      )}
                     </DialogDescription>
                   </DialogHeader>
                   <DialogFooter>
@@ -1009,12 +1014,13 @@ export function SettingsPage() {
                   <div className="text-xs text-muted-foreground">{t("settings.maintenance.clearHint")}</div>
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0">
-                  <Select value={recordsScope} onValueChange={(v) => setRecordsScope(v as any)} disabled={recordsClearing}>
+                  <Select value={recordsScope} onValueChange={(v) => setRecordsScope(v as RecordsClearMode)} disabled={recordsClearing}>
                     <SelectTrigger className="w-[140px]">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">{t("settings.maintenance.scopeAll")}</SelectItem>
+                      <SelectItem value="errors">{t("settings.maintenance.scopeErrors")}</SelectItem>
                       <SelectItem value="date_range">{t("settings.maintenance.scopeRange")}</SelectItem>
                     </SelectContent>
                   </Select>
