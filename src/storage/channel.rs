@@ -7,7 +7,7 @@ use uuid::Uuid;
 use super::channel_endpoint::{
     ChannelEndpoint, get_primary_endpoint_base_url_tx, replace_channel_endpoints_tx,
 };
-use super::channel_key::{ChannelKey, get_primary_key_auth_ref_tx, replace_channel_keys_tx};
+use super::channel_key::{ChannelKey, get_primary_key_auth_ref_tx, mask_auth_ref, replace_channel_keys_tx, update_channel_keys_tx};
 use super::protocol::normalize_base_url;
 use super::{Protocol, now_ms, with_conn};
 
@@ -190,13 +190,15 @@ pub async fn list_channels(db_path: PathBuf) -> anyhow::Result<Vec<Channel>> {
             let mut rows = stmt.query([])?;
             while let Some(row) = rows.next()? {
                 let channel_id: String = row.get(1)?;
+                let auth_ref: String = row.get(2)?;
                 keys_by_channel
                     .entry(channel_id.clone())
                     .or_default()
                     .push(ChannelKey {
                         id: row.get(0)?,
                         channel_id,
-                        auth_ref: row.get(2)?,
+                        auth_ref_masked: mask_auth_ref(&auth_ref),
+                        auth_ref,
                         priority: row.get(3)?,
                         enabled: row.get::<_, i64>(4)? != 0,
                         auto_disabled_until_ms: row.get::<_, Option<i64>>(5)?.unwrap_or(0),
@@ -476,7 +478,8 @@ pub async fn update_channel(
             if auth_refs.is_empty() {
                 return Err(anyhow::anyhow!("auth_ref 不能为空"));
             }
-            let keys = replace_channel_keys_tx(&tx, &channel.id, auth_refs, ts)?;
+            // 使用支持 __KEEP__: 前缀的更新函数
+            let keys = update_channel_keys_tx(&tx, &channel.id, auth_refs, ts)?;
             channel.auth_ref = keys
                 .first()
                 .map(|k| k.auth_ref.clone())
@@ -605,10 +608,12 @@ pub async fn get_channel(db_path: PathBuf, channel_id: String) -> anyhow::Result
                 "#,
             )?;
             let rows = stmt.query_map([&channel_id], |row| {
+                let auth_ref: String = row.get(2)?;
                 Ok(ChannelKey {
                     id: row.get(0)?,
                     channel_id: row.get(1)?,
-                    auth_ref: row.get(2)?,
+                    auth_ref_masked: mask_auth_ref(&auth_ref),
+                    auth_ref,
                     priority: row.get(3)?,
                     enabled: row.get::<_, i64>(4)? != 0,
                     auto_disabled_until_ms: row.get::<_, Option<i64>>(5)?.unwrap_or(0),
