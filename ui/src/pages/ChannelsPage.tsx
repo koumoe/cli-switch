@@ -802,7 +802,7 @@ export function ChannelsPage() {
 
       {/* 新建/编辑弹窗 */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent className="sm:max-w-[500px] max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>
               {modalMode === "create" ? t("channels.modal.createTitle") : t("channels.modal.editTitle")}
@@ -812,7 +812,7 @@ export function ChannelsPage() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 py-4">
+          <div className="space-y-4 py-4 overflow-y-auto flex-1">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <label className="text-sm font-medium">{t("channels.modal.name")}</label>
