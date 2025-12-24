@@ -103,6 +103,10 @@
       "priority": "Priority",
       "baseUrl": "Base URL",
       "status": "Status",
+      "config": "Config",
+      "configSingleKey": "Single Key",
+      "configMultiKey": "{{count}} Keys",
+      "configMultiEndpoint": "{{count}} Endpoints",
       "updatedAt": "Updated At",
       "empty": "No channels. Click 'New Channel' to add one."
     },
@@ -137,9 +141,15 @@
       "realMultiplier": "Real multiplier",
       "realMultiplierHint": "0 means free channel; up to 2 decimals",
       "realMultiplierTooManyDecimals": "Up to 2 decimal places",
-      "baseUrl": "Base URL",
-      "apiKey": "API Key / Token",
-      "enabled": "Enabled"
+      "baseUrl": "Endpoints",
+      "apiKey": "API Keys",
+      "enabled": "Enabled",
+      "addEndpoint": "Add Endpoint",
+      "addKey": "Add API Key",
+      "savedBadge": "Saved",
+      "newBadge": "New",
+      "deleteKeyConfirm": "Delete this key? This action cannot be undone",
+      "deleteEndpointConfirm": "Delete this endpoint? This action cannot be undone"
     },
     "deleteDialog": {
       "title": "Delete Channel",

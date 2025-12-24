@@ -22,7 +22,6 @@ import {
   DialogHeader,
   DialogTitle,
   Input,
-  Textarea,
   Select,
   SelectContent,
   SelectItem,
@@ -40,6 +39,15 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui";
+import {
+  ItemListEditor,
+  type ListItem,
+  generateTempId,
+  endpointsToItems,
+  keysToItems,
+  itemsToAuthRefs,
+  itemsToBaseUrls,
+} from "@/components/ItemListEditor";
 import { useI18n } from "@/lib/i18n";
 import { useCurrency } from "@/lib/currency";
 import {
@@ -59,9 +67,9 @@ import { formatDateTime, protocolLabel } from "../lib";
 type ChannelDraft = {
   name: string;
   protocol: Protocol;
-  base_urls_text: string;
+  endpointItems: ListItem[];
   auth_type: string;
-  auth_refs_text: string;
+  keyItems: ListItem[];
   priority: number;
   recharge_currency: "USD" | "CNY";
   real_multiplier: number;
@@ -72,9 +80,13 @@ function emptyDraft(): ChannelDraft {
   return {
     name: "",
     protocol: "openai",
-    base_urls_text: "https://api.openai.com",
+    endpointItems: [{
+      type: "new",
+      tempId: generateTempId(),
+      value: "https://api.openai.com",
+    }],
     auth_type: "auto",
-    auth_refs_text: "",
+    keyItems: [],
     priority: 0,
     recharge_currency: "CNY",
     real_multiplier: 1,
@@ -111,20 +123,6 @@ function defaultBaseUrl(protocol: Protocol): string {
     case "gemini":
       return "https://generativelanguage.googleapis.com";
   }
-}
-
-function parseLines(raw: string): string[] {
-  const out: string[] = [];
-  const seen = new Set<string>();
-  for (const line of raw.split(/\r?\n/g)) {
-    const s = line.trim();
-    if (!s) continue;
-    if (!seen.has(s)) {
-      seen.add(s);
-      out.push(s);
-    }
-  }
-  return out;
 }
 
 type DragSnapshot = {
@@ -256,7 +254,11 @@ export function ChannelsPage() {
     setDraft({
       ...emptyDraft(),
       protocol: activeProtocol,
-      base_urls_text: defaultBaseUrl(activeProtocol),
+      endpointItems: [{
+        type: "new",
+        tempId: generateTempId(),
+        value: defaultBaseUrl(activeProtocol),
+      }],
       recharge_currency: currency,
     });
     setRealMultiplierInput(formatFixed2(1));
@@ -267,18 +269,19 @@ export function ChannelsPage() {
   function openEdit(c: Channel) {
     setModalMode("edit");
     setEditId(c.id);
-    const endpoints = (c.endpoints?.length ? c.endpoints.map((e) => e.base_url) : [c.base_url])
-      .filter(Boolean)
-      .join("\n");
-    const keys = (c.keys?.length ? c.keys.map((k) => k.auth_ref) : [c.auth_ref])
-      .filter(Boolean)
-      .join("\n");
+    // 将后端返回的数据转换为 ListItem 格式
+    const endpointItems = c.endpoints?.length
+      ? endpointsToItems(c.endpoints)
+      : [{ type: "new" as const, tempId: generateTempId(), value: c.base_url }];
+    const keyItems = c.keys?.length
+      ? keysToItems(c.keys)
+      : [];
     setDraft({
       name: c.name,
       protocol: c.protocol,
-      base_urls_text: endpoints,
+      endpointItems,
       auth_type: "auto",
-      auth_refs_text: keys,
+      keyItems,
       priority: c.priority ?? 0,
       recharge_currency: c.recharge_currency ?? "CNY",
       real_multiplier: c.real_multiplier ?? 1,
@@ -292,8 +295,8 @@ export function ChannelsPage() {
   async function submit() {
     try {
       if (!draft.name.trim()) throw new Error(t("channels.toast.nameRequired"));
-      const baseUrls = parseLines(draft.base_urls_text);
-      const authRefs = parseLines(draft.auth_refs_text);
+      const baseUrls = itemsToBaseUrls(draft.endpointItems);
+      const authRefs = itemsToAuthRefs(draft.keyItems);
       if (baseUrls.length === 0) throw new Error(t("channels.toast.baseUrlRequired"));
       if (authRefs.length === 0) throw new Error(t("channels.toast.apiKeyRequired"));
       const real = Number(draft.real_multiplier);
@@ -485,6 +488,7 @@ export function ChannelsPage() {
       drag: "w-10",
       name: "w-44",
       priority: "w-20",
+      config: "w-40",
       status: "w-20",
       updatedAt: "w-44",
       actions: "w-32",
@@ -499,6 +503,9 @@ export function ChannelsPage() {
                 <TableHead className={colClass.name}>{t("channels.table.name")}</TableHead>
                 <TableHead className={colClass.priority}>
                   {t("channels.table.priority")}
+                </TableHead>
+                <TableHead className={colClass.config}>
+                  {t("channels.table.config")}
                 </TableHead>
                 <TableHead className={colClass.status}>
                   {t("channels.table.status")}
@@ -635,6 +642,24 @@ export function ChannelsPage() {
                     </TableCell>
                     <TableCell className="font-mono text-sm">
                       {c.priority}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap gap-1">
+                        {(c.endpoints?.length ?? 1) > 1 && (
+                          <Badge variant="outline" className="text-xs">
+                            {t("channels.table.configMultiEndpoint", { count: c.endpoints?.length ?? 1 })}
+                          </Badge>
+                        )}
+                        {(c.keys?.length ?? 1) === 1 ? (
+                          <Badge variant="outline" className="text-xs">
+                            {t("channels.table.configSingleKey")}
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-xs">
+                            {t("channels.table.configMultiKey", { count: c.keys?.length ?? 1 })}
+                          </Badge>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell>
                       <div className="space-y-1">
@@ -806,14 +831,20 @@ export function ChannelsPage() {
                       const nextProtocol = v as Protocol;
                       const prevDefault = defaultBaseUrl(d.protocol);
                       const nextDefault = defaultBaseUrl(nextProtocol);
-                      const currentFirst = parseLines(d.base_urls_text)[0] ?? "";
+                      // 获取第一个 endpoint 的值
+                      const currentFirst = d.endpointItems[0];
+                      const currentFirstValue = currentFirst?.type === "new"
+                        ? currentFirst.value.trim()
+                        : currentFirst?.maskedValue?.trim() ?? "";
                       const shouldUpdateBase =
-                        !currentFirst.trim() || currentFirst.trim() === prevDefault;
+                        !currentFirstValue || currentFirstValue === prevDefault;
                       return {
                         ...d,
                         protocol: nextProtocol,
                         auth_type: "auto",
-                        base_urls_text: shouldUpdateBase ? nextDefault : d.base_urls_text,
+                        endpointItems: shouldUpdateBase
+                          ? [{ type: "new" as const, tempId: generateTempId(), value: nextDefault }]
+                          : d.endpointItems,
                       };
                     })
                   }
@@ -931,19 +962,22 @@ export function ChannelsPage() {
 
             <div className="space-y-2">
               <label className="text-sm font-medium">{t("channels.modal.baseUrl")}</label>
-              <Textarea
-                value={draft.base_urls_text}
-                onChange={(e) => setDraft((d) => ({ ...d, base_urls_text: e.target.value }))}
+              <ItemListEditor
+                items={draft.endpointItems}
+                onChange={(items) => setDraft((d) => ({ ...d, endpointItems: items }))}
                 placeholder="https://api.openai.com"
+                addLabel={t("channels.modal.addEndpoint")}
               />
             </div>
 
             <div className="space-y-2">
               <label className="text-sm font-medium">{t("channels.modal.apiKey")}</label>
-              <Textarea
-                value={draft.auth_refs_text}
-                onChange={(e) => setDraft((d) => ({ ...d, auth_refs_text: e.target.value }))}
+              <ItemListEditor
+                items={draft.keyItems}
+                onChange={(items) => setDraft((d) => ({ ...d, keyItems: items }))}
                 placeholder="sk-..."
+                addLabel={t("channels.modal.addKey")}
+                isMasked={true}
               />
             </div>
 

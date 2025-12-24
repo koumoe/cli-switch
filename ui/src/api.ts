@@ -62,7 +62,7 @@ export type ChannelEndpoint = {
 export type ChannelKey = {
   id: string;
   channel_id: string;
-  auth_ref: string;
+  auth_ref_masked: string;
   priority: number;
   enabled: boolean;
   auto_disabled_until_ms: number;

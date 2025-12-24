@@ -103,6 +103,10 @@
       "priority": "优先级",
       "baseUrl": "Base URL",
       "status": "状态",
+      "config": "配置",
+      "configSingleKey": "单 Key",
+      "configMultiKey": "{{count}} 个 Key",
+      "configMultiEndpoint": "{{count}} 个 Endpoint",
       "updatedAt": "更新时间",
       "empty": "暂无渠道，点击「新建渠道」添加"
     },
@@ -137,9 +141,15 @@
       "realMultiplier": "真实倍率",
       "realMultiplierHint": "支持 0 表示免费渠道，最多 2 位小数",
       "realMultiplierTooManyDecimals": "最多只能输入 2 位小数",
-      "baseUrl": "Base URL",
-      "apiKey": "API Key / Token",
-      "enabled": "启用"
+      "baseUrl": "Endpoints",
+      "apiKey": "API Keys",
+      "enabled": "启用",
+      "addEndpoint": "添加 Endpoint",
+      "addKey": "添加 API Key",
+      "savedBadge": "已保存",
+      "newBadge": "新增",
+      "deleteKeyConfirm": "确定删除此 Key？此操作不可恢复",
+      "deleteEndpointConfirm": "确定删除此 Endpoint？此操作不可恢复"
     },
     "deleteDialog": {
       "title": "删除渠道",
