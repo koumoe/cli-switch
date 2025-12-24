@@ -1,3 +1,10 @@
+## [0.13.0](https://github.com/koumoe/cli-switch/compare/v0.12.0...v0.13.0) (2025-12-24)
+
+### Features
+
+* **core:** multi-endpoint and multi-key with auto-disable ([695bbd7](https://github.com/koumoe/cli-switch/commit/695bbd7cc002b577f4dd8708acbf6c6269860e49))
+* **settings:** add errors-only record cleanup ([5144e2c](https://github.com/koumoe/cli-switch/commit/5144e2ce5293830bd9314846084eccaba3f237e1))
+* **ui:** configure multi endpoints/keys and show cooldown ([d439be3](https://github.com/koumoe/cli-switch/commit/d439be3e0e8b924c4d9738f4b9b9bd92af9c16bc))
 ## [0.12.0](https://github.com/koumoe/cli-switch/compare/v0.11.1...v0.12.0) (2025-12-23)
 
 ### Features
