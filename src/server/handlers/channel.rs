@@ -62,8 +62,27 @@ pub(in crate::server) async fn create_channel(
     if input.name.trim().is_empty() {
         return Err(ApiError::BadRequest("name 不能为空".to_string()));
     }
-    if input.base_url.trim().is_empty() {
+    let has_base_url = input
+        .base_urls
+        .as_ref()
+        .is_some_and(|vs| vs.iter().any(|s| !s.trim().is_empty()))
+        || input
+            .base_url
+            .as_deref()
+            .is_some_and(|s| !s.trim().is_empty());
+    if !has_base_url {
         return Err(ApiError::BadRequest("base_url 不能为空".to_string()));
+    }
+    let has_auth_ref = input
+        .auth_refs
+        .as_ref()
+        .is_some_and(|vs| vs.iter().any(|s| !s.trim().is_empty()))
+        || input
+            .auth_ref
+            .as_deref()
+            .is_some_and(|s| !s.trim().is_empty());
+    if !has_auth_ref {
+        return Err(ApiError::BadRequest("auth_ref 不能为空".to_string()));
     }
     if let Some(v) = input.real_multiplier
         && !real_multiplier_is_valid(v)
@@ -88,6 +107,26 @@ pub(in crate::server) async fn update_channel(
         return Err(ApiError::BadRequest(
             "real_multiplier 必须是 >= 0 的有限数字，且最多 2 位小数".to_string(),
         ));
+    }
+    if let Some(vs) = input.base_urls.as_ref()
+        && !vs.iter().any(|s| !s.trim().is_empty())
+    {
+        return Err(ApiError::BadRequest("base_urls 不能为空".to_string()));
+    }
+    if let Some(v) = input.base_url.as_deref()
+        && v.trim().is_empty()
+    {
+        return Err(ApiError::BadRequest("base_url 不能为空".to_string()));
+    }
+    if let Some(vs) = input.auth_refs.as_ref()
+        && !vs.iter().any(|s| !s.trim().is_empty())
+    {
+        return Err(ApiError::BadRequest("auth_refs 不能为空".to_string()));
+    }
+    if let Some(v) = input.auth_ref.as_deref()
+        && v.trim().is_empty()
+    {
+        return Err(ApiError::BadRequest("auth_ref 不能为空".to_string()));
     }
     let res = storage::update_channel(state.db_path(), channel_id, input).await;
     map_storage_unit_no_content(res, |msg| {
