@@ -1,3 +1,8 @@
+## [0.13.1](https://github.com/koumoe/cli-switch/compare/v0.13.0...v0.13.1) (2025-12-24)
+
+### Bug Fixes
+
+* revert multi-endpoint/multi-key support ([bc21bce](https://github.com/koumoe/cli-switch/commit/bc21bced6a0494bae206c845a324ba05c9b8e39c))
 ## [0.13.0](https://github.com/koumoe/cli-switch/compare/v0.12.0...v0.13.0) (2025-12-24)
 
 ### Features
