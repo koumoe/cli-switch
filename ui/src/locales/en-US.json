@@ -115,7 +115,12 @@
       "disable": "Disable"
     },
     "status": {
-      "autoDisabled": "Auto disabled: {{minutes}}m"
+      "autoDisabled": "Auto disabled: {{minutes}}m",
+      "endpointCooling": "URL cooling: {{minutes}}m",
+      "keyCooling": "Key cooling: {{minutes}}m",
+      "partialEndpointCooling": "Some URLs cooling: {{minutes}}m",
+      "partialKeyCooling": "Some keys cooling: {{minutes}}m",
+      "unavailable": "Unavailable"
     },
     "modal": {
       "createTitle": "New Channel",
@@ -154,6 +159,7 @@
       "testFail": "Test failed",
       "nameRequired": "Name is required",
       "baseUrlRequired": "Base URL is required",
+      "apiKeyRequired": "API Key is required",
       "realMultiplierInvalid": "Real multiplier must be a finite number >= 0 with up to 2 decimals",
       "testReachableOkTitle": "{{name}} is reachable",
       "testReachableOkDesc": "Status: {{status}}, Latency: {{latency}}ms",
