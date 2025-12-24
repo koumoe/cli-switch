@@ -22,6 +22,7 @@ import {
   DialogHeader,
   DialogTitle,
   Input,
+  Textarea,
   Select,
   SelectContent,
   SelectItem,
@@ -51,20 +52,29 @@ import {
   testChannel,
   reorderChannels,
   type Channel,
-  type CreateChannelInput,
   type Protocol,
 } from "../api";
 import { formatDateTime, protocolLabel } from "../lib";
 
-type ChannelDraft = CreateChannelInput;
+type ChannelDraft = {
+  name: string;
+  protocol: Protocol;
+  base_urls_text: string;
+  auth_type: string;
+  auth_refs_text: string;
+  priority: number;
+  recharge_currency: "USD" | "CNY";
+  real_multiplier: number;
+  enabled: boolean;
+};
 
 function emptyDraft(): ChannelDraft {
   return {
     name: "",
     protocol: "openai",
-    base_url: "https://api.openai.com",
+    base_urls_text: "https://api.openai.com",
     auth_type: "auto",
-    auth_ref: "",
+    auth_refs_text: "",
     priority: 0,
     recharge_currency: "CNY",
     real_multiplier: 1,
@@ -86,6 +96,12 @@ function hasMoreThanTwoDecimals(raw: string): boolean {
   return s.length - dot - 1 > 2;
 }
 
+function remainingMinutes(untilMs: number | null | undefined, nowMs: number): number | null {
+  const until = Number(untilMs ?? 0);
+  if (!Number.isFinite(until) || until <= nowMs) return null;
+  return Math.max(1, Math.ceil((until - nowMs) / 60000));
+}
+
 function defaultBaseUrl(protocol: Protocol): string {
   switch (protocol) {
     case "openai":
@@ -95,6 +111,20 @@ function defaultBaseUrl(protocol: Protocol): string {
     case "gemini":
       return "https://generativelanguage.googleapis.com";
   }
+}
+
+function parseLines(raw: string): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const line of raw.split(/\r?\n/g)) {
+    const s = line.trim();
+    if (!s) continue;
+    if (!seen.has(s)) {
+      seen.add(s);
+      out.push(s);
+    }
+  }
+  return out;
 }
 
 type DragSnapshot = {
@@ -226,7 +256,7 @@ export function ChannelsPage() {
     setDraft({
       ...emptyDraft(),
       protocol: activeProtocol,
-      base_url: defaultBaseUrl(activeProtocol),
+      base_urls_text: defaultBaseUrl(activeProtocol),
       recharge_currency: currency,
     });
     setRealMultiplierInput(formatFixed2(1));
@@ -237,12 +267,18 @@ export function ChannelsPage() {
   function openEdit(c: Channel) {
     setModalMode("edit");
     setEditId(c.id);
+    const endpoints = (c.endpoints?.length ? c.endpoints.map((e) => e.base_url) : [c.base_url])
+      .filter(Boolean)
+      .join("\n");
+    const keys = (c.keys?.length ? c.keys.map((k) => k.auth_ref) : [c.auth_ref])
+      .filter(Boolean)
+      .join("\n");
     setDraft({
       name: c.name,
       protocol: c.protocol,
-      base_url: c.base_url,
+      base_urls_text: endpoints,
       auth_type: "auto",
-      auth_ref: c.auth_ref,
+      auth_refs_text: keys,
       priority: c.priority ?? 0,
       recharge_currency: c.recharge_currency ?? "CNY",
       real_multiplier: c.real_multiplier ?? 1,
@@ -256,7 +292,10 @@ export function ChannelsPage() {
   async function submit() {
     try {
       if (!draft.name.trim()) throw new Error(t("channels.toast.nameRequired"));
-      if (!draft.base_url.trim()) throw new Error(t("channels.toast.baseUrlRequired"));
+      const baseUrls = parseLines(draft.base_urls_text);
+      const authRefs = parseLines(draft.auth_refs_text);
+      if (baseUrls.length === 0) throw new Error(t("channels.toast.baseUrlRequired"));
+      if (authRefs.length === 0) throw new Error(t("channels.toast.apiKeyRequired"));
       const real = Number(draft.real_multiplier);
       const scaled = real * 100;
       const twoDecimalsOk = Number.isFinite(real) && Math.abs(scaled - Math.round(scaled)) < 1e-9;
@@ -265,15 +304,25 @@ export function ChannelsPage() {
       }
 
       if (modalMode === "create") {
-        await createChannel({ ...draft, name: draft.name.trim(), base_url: draft.base_url.trim() });
+        await createChannel({
+          name: draft.name.trim(),
+          protocol: draft.protocol,
+          base_urls: baseUrls,
+          auth_type: "auto",
+          auth_refs: authRefs,
+          priority: draft.priority,
+          recharge_currency: draft.recharge_currency,
+          real_multiplier: draft.real_multiplier,
+          enabled: draft.enabled,
+        });
         toast.success(t("channels.toast.createOk"));
       } else {
         if (!editId) throw new Error(t("channels.toast.missingId"));
         await updateChannel(editId, {
           name: draft.name.trim(),
-          base_url: draft.base_url.trim(),
+          base_urls: baseUrls,
           auth_type: "auto",
-          auth_ref: draft.auth_ref,
+          auth_refs: authRefs,
           priority: draft.priority,
           recharge_currency: draft.recharge_currency,
           real_multiplier: draft.real_multiplier,
@@ -290,9 +339,7 @@ export function ChannelsPage() {
 
   async function toggleEnabled(c: Channel) {
     try {
-      const nowMs = Date.now();
-      const isAutoDisabled = c.enabled && (c.auto_disabled_until_ms ?? 0) > nowMs;
-      if (c.enabled && !isAutoDisabled) {
+      if (c.enabled) {
         await disableChannel(c.id);
         toast.success(t("channels.toast.disabledOk", { name: c.name }));
       } else {
@@ -493,13 +540,29 @@ export function ChannelsPage() {
                 </TableRow>
               ) : (
                 tabChannels.map((c) => {
-                  const isAutoDisabled =
-                    c.enabled && (c.auto_disabled_until_ms ?? 0) > renderNowMs;
-                  const effectiveEnabled = c.enabled && !isAutoDisabled;
-                  const autoDisabledMinutes = Math.max(
-                    1,
-                    Math.ceil(((c.auto_disabled_until_ms ?? 0) - renderNowMs) / 60000)
+                  const endpoints = c.endpoints ?? [];
+                  const keys = c.keys ?? [];
+                  const endpointAvailable = endpoints.some(
+                    (e) => e.enabled && (e.auto_disabled_until_ms ?? 0) <= renderNowMs
                   );
+                  const keyAvailable = keys.some(
+                    (k) => k.enabled && (k.auto_disabled_until_ms ?? 0) <= renderNowMs
+                  );
+                  const endpointCooldownMin = endpoints
+                    .filter((e) => e.enabled)
+                    .map((e) => remainingMinutes(e.auto_disabled_until_ms, renderNowMs))
+                    .filter((n): n is number => typeof n === "number")
+                    .reduce((a, b) => Math.min(a, b), Number.POSITIVE_INFINITY);
+                  const keyCooldownMin = keys
+                    .filter((k) => k.enabled)
+                    .map((k) => remainingMinutes(k.auto_disabled_until_ms, renderNowMs))
+                    .filter((n): n is number => typeof n === "number")
+                    .reduce((a, b) => Math.min(a, b), Number.POSITIVE_INFINITY);
+
+                  const hasEndpointCooldown = Number.isFinite(endpointCooldownMin);
+                  const hasKeyCooldown = Number.isFinite(keyCooldownMin);
+
+                  const available = c.enabled && endpointAvailable && keyAvailable;
 
                   return (
                     <TableRow
@@ -574,15 +637,40 @@ export function ChannelsPage() {
                       {c.priority}
                     </TableCell>
                     <TableCell>
-                      {isAutoDisabled ? (
-                        <Badge variant="warning">
-                          {t("channels.status.autoDisabled", { minutes: autoDisabledMinutes })}
-                        </Badge>
-                      ) : (
-                        <Badge variant={c.enabled ? "success" : "secondary"}>
-                          {c.enabled ? t("common.enabled") : t("common.disabled")}
-                        </Badge>
-                      )}
+                      <div className="space-y-1">
+                        {!c.enabled ? (
+                          <Badge variant="secondary">{t("common.disabled")}</Badge>
+                        ) : available ? (
+                          <Badge variant="success">{t("common.enabled")}</Badge>
+                        ) : !endpointAvailable ? (
+                          <Badge variant="warning">
+                            {t("channels.status.endpointCooling", {
+                              minutes: hasEndpointCooldown ? endpointCooldownMin : 1,
+                            })}
+                          </Badge>
+                        ) : !keyAvailable ? (
+                          <Badge variant="warning">
+                            {t("channels.status.keyCooling", {
+                              minutes: hasKeyCooldown ? keyCooldownMin : 1,
+                            })}
+                          </Badge>
+                        ) : (
+                          <Badge variant="warning">{t("channels.status.unavailable")}</Badge>
+                        )}
+                        {c.enabled && available && (hasEndpointCooldown || hasKeyCooldown) ? (
+                          <div className="text-xs text-muted-foreground">
+                            {hasEndpointCooldown
+                              ? t("channels.status.partialEndpointCooling", {
+                                  minutes: endpointCooldownMin,
+                                })
+                              : null}
+                            {hasEndpointCooldown && hasKeyCooldown ? " · " : null}
+                            {hasKeyCooldown
+                              ? t("channels.status.partialKeyCooling", { minutes: keyCooldownMin })
+                              : null}
+                          </div>
+                        ) : null}
+                      </div>
                     </TableCell>
                     <TableCell className="text-muted-foreground text-sm">
                       {formatDateTime(c.updated_at_ms)}
@@ -603,12 +691,10 @@ export function ChannelsPage() {
                           size="icon"
                           onClick={() => toggleEnabled(c)}
                           title={
-                            effectiveEnabled
-                              ? t("channels.actions.disable")
-                              : t("channels.actions.enable")
+                            c.enabled ? t("channels.actions.disable") : t("channels.actions.enable")
                           }
                         >
-                          {effectiveEnabled ? (
+                          {c.enabled ? (
                             <PowerOff className="h-4 w-4" />
                           ) : (
                             <Power className="h-4 w-4" />
@@ -720,13 +806,14 @@ export function ChannelsPage() {
                       const nextProtocol = v as Protocol;
                       const prevDefault = defaultBaseUrl(d.protocol);
                       const nextDefault = defaultBaseUrl(nextProtocol);
+                      const currentFirst = parseLines(d.base_urls_text)[0] ?? "";
                       const shouldUpdateBase =
-                        !d.base_url.trim() || d.base_url.trim() === prevDefault;
+                        !currentFirst.trim() || currentFirst.trim() === prevDefault;
                       return {
                         ...d,
                         protocol: nextProtocol,
                         auth_type: "auto",
-                        base_url: shouldUpdateBase ? nextDefault : d.base_url,
+                        base_urls_text: shouldUpdateBase ? nextDefault : d.base_urls_text,
                       };
                     })
                   }
@@ -844,19 +931,18 @@ export function ChannelsPage() {
 
             <div className="space-y-2">
               <label className="text-sm font-medium">{t("channels.modal.baseUrl")}</label>
-              <Input
-                value={draft.base_url}
-                onChange={(e) => setDraft((d) => ({ ...d, base_url: e.target.value }))}
+              <Textarea
+                value={draft.base_urls_text}
+                onChange={(e) => setDraft((d) => ({ ...d, base_urls_text: e.target.value }))}
                 placeholder="https://api.openai.com"
               />
             </div>
 
             <div className="space-y-2">
               <label className="text-sm font-medium">{t("channels.modal.apiKey")}</label>
-              <Input
-                type="password"
-                value={draft.auth_ref}
-                onChange={(e) => setDraft((d) => ({ ...d, auth_ref: e.target.value }))}
+              <Textarea
+                value={draft.auth_refs_text}
+                onChange={(e) => setDraft((d) => ({ ...d, auth_refs_text: e.target.value }))}
                 placeholder="sk-..."
               />
             </div>

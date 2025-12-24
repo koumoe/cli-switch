@@ -17,6 +17,34 @@ CREATE TABLE IF NOT EXISTS channels (
   updated_at_ms INTEGER NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS channel_endpoints (
+  id TEXT PRIMARY KEY,
+  channel_id TEXT NOT NULL,
+  base_url TEXT NOT NULL,
+  priority INTEGER NOT NULL DEFAULT 0,
+  enabled INTEGER NOT NULL,
+  auto_disabled_until_ms INTEGER NOT NULL DEFAULT 0,
+  created_at_ms INTEGER NOT NULL,
+  updated_at_ms INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_channel_endpoints_channel_priority
+  ON channel_endpoints(channel_id, priority);
+
+CREATE TABLE IF NOT EXISTS channel_keys (
+  id TEXT PRIMARY KEY,
+  channel_id TEXT NOT NULL,
+  auth_ref TEXT NOT NULL,
+  priority INTEGER NOT NULL DEFAULT 0,
+  enabled INTEGER NOT NULL,
+  auto_disabled_until_ms INTEGER NOT NULL DEFAULT 0,
+  created_at_ms INTEGER NOT NULL,
+  updated_at_ms INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_channel_keys_channel_priority
+  ON channel_keys(channel_id, priority);
+
 CREATE TABLE IF NOT EXISTS routes (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
@@ -79,6 +107,45 @@ CREATE TABLE IF NOT EXISTS channel_failures (
 );
 
 CREATE INDEX IF NOT EXISTS idx_channel_failures_channel_ts ON channel_failures(channel_id, at_ms);
+
+CREATE TABLE IF NOT EXISTS endpoint_failures (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  endpoint_id TEXT NOT NULL,
+  at_ms INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_endpoint_failures_endpoint_ts
+  ON endpoint_failures(endpoint_id, at_ms);
+
+CREATE TABLE IF NOT EXISTS key_failures (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  key_id TEXT NOT NULL,
+  at_ms INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_key_failures_key_ts
+  ON key_failures(key_id, at_ms);
+
+CREATE TABLE IF NOT EXISTS endpoint_key_states (
+  endpoint_id TEXT NOT NULL,
+  key_id TEXT NOT NULL,
+  auto_disabled_until_ms INTEGER NOT NULL DEFAULT 0,
+  updated_at_ms INTEGER NOT NULL,
+  PRIMARY KEY (endpoint_id, key_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_endpoint_key_states_until
+  ON endpoint_key_states(auto_disabled_until_ms);
+
+CREATE TABLE IF NOT EXISTS endpoint_key_failures (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  endpoint_id TEXT NOT NULL,
+  key_id TEXT NOT NULL,
+  at_ms INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_endpoint_key_failures_pair_ts
+  ON endpoint_key_failures(endpoint_id, key_id, at_ms);
 
 CREATE TABLE IF NOT EXISTS app_settings (
   key TEXT PRIMARY KEY,
