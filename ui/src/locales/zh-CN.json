@@ -505,6 +505,7 @@
       "clearRecords": "清理记录",
       "clearHint": "选择范围后进行清理",
       "scopeAll": "全部",
+      "scopeErrors": "仅错误",
       "scopeRange": "按时间"
     },
     "records": {

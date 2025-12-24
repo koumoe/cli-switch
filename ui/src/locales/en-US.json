@@ -505,6 +505,7 @@
       "clearRecords": "Clear records",
       "clearHint": "Choose a scope then clear",
       "scopeAll": "All",
+      "scopeErrors": "Errors only",
       "scopeRange": "By time"
     },
     "records": {
