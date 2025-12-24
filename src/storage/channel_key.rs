@@ -173,7 +173,10 @@ pub(crate) fn update_channel_keys_tx(
             let enabled: bool = row.get::<_, i64>(2)? != 0;
             let auto_disabled_until_ms: i64 = row.get::<_, Option<i64>>(3)?.unwrap_or(0);
             let created_at_ms: i64 = row.get(4)?;
-            existing_keys.insert(id.clone(), (auth_ref, enabled, auto_disabled_until_ms, created_at_ms));
+            existing_keys.insert(
+                id.clone(),
+                (auth_ref, enabled, auto_disabled_until_ms, created_at_ms),
+            );
         }
     }
 
@@ -186,7 +189,8 @@ pub(crate) fn update_channel_keys_tx(
 
     // 确定要删除的 keys（不在保留列表中的）
     let keep_set: std::collections::HashSet<String> = keep_ids.iter().cloned().collect();
-    let delete_ids: Vec<String> = existing_keys.keys()
+    let delete_ids: Vec<String> = existing_keys
+        .keys()
         .filter(|id| !keep_set.contains(*id))
         .cloned()
         .collect();
@@ -214,7 +218,9 @@ pub(crate) fn update_channel_keys_tx(
 
         if let Some(key_id) = ref_or_keep.strip_prefix(KEEP_PREFIX) {
             // 保留现有 Key，更新优先级
-            if let Some((auth_ref, enabled, auto_disabled_until_ms, created_at_ms)) = existing_keys.get(key_id) {
+            if let Some((auth_ref, enabled, auto_disabled_until_ms, created_at_ms)) =
+                existing_keys.get(key_id)
+            {
                 tx.execute(
                     r#"UPDATE channel_keys SET priority = ?2, updated_at_ms = ?3 WHERE id = ?1"#,
                     params![key_id, priority, ts],

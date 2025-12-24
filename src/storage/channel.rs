@@ -7,7 +7,10 @@ use uuid::Uuid;
 use super::channel_endpoint::{
     ChannelEndpoint, get_primary_endpoint_base_url_tx, replace_channel_endpoints_tx,
 };
-use super::channel_key::{ChannelKey, get_primary_key_auth_ref_tx, mask_auth_ref, replace_channel_keys_tx, update_channel_keys_tx};
+use super::channel_key::{
+    ChannelKey, get_primary_key_auth_ref_tx, mask_auth_ref, replace_channel_keys_tx,
+    update_channel_keys_tx,
+};
 use super::protocol::normalize_base_url;
 use super::{Protocol, now_ms, with_conn};
 
