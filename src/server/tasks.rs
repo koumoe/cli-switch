@@ -70,16 +70,12 @@ pub(crate) async fn app_update_auto_loop(
         }
 
         let data_dir = data_dir_from_db_path(db_path.as_path());
-        if update::load_pending_update(&data_dir).is_none() {
-            let _ = update::spawn_download_latest(
-                http_client.clone(),
-                update_runtime.clone(),
-                data_dir.clone(),
-            )
-            .await;
-        } else {
-            let _ = update::get_status(update_runtime.clone(), &data_dir, true).await;
-        }
+        let _ = update::spawn_download_latest(
+            http_client.clone(),
+            update_runtime.clone(),
+            data_dir.clone(),
+        )
+        .await;
 
         tokio::select! {
             _ = tokio::time::sleep(interval) => {}
