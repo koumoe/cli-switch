@@ -1,3 +1,9 @@
+## [0.15.2](https://github.com/koumoe/cli-switch/compare/v0.15.1...v0.15.2) (2025-12-30)
+
+### Bug Fixes
+
+* keep channel_failures out of records clear ([49ea89f](https://github.com/koumoe/cli-switch/commit/49ea89f18bdf137d49dad7c42aec8c6f0b926c46))
+* **ui:** clarify records clear toast ([57caf22](https://github.com/koumoe/cli-switch/commit/57caf2245c1f38256b93561cc98a3a102a25f4eb))
 ## [0.15.1](https://github.com/koumoe/cli-switch/compare/v0.15.0...v0.15.1) (2025-12-30)
 
 ### Bug Fixes
