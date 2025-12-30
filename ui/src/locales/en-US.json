@@ -136,7 +136,22 @@
       "realMultiplierTooManyDecimals": "Up to 2 decimal places",
       "baseUrl": "Base URL",
       "apiKey": "API Key / Token",
-      "enabled": "Enabled"
+      "enabled": "Enabled",
+      "advanced": "Advanced Options",
+      "useKeyPool": "Enable Multi-Key Pool",
+      "useKeyPoolHint": "When enabled, configure multiple API Keys for rotation",
+      "useEndpointPool": "Enable Multi-Endpoint Pool",
+      "useEndpointPoolHint": "When enabled, configure multiple Base URLs for rotation",
+      "keyPool": "Key Pool",
+      "keyPoolEmpty": "No keys yet, click to add",
+      "endpointPool": "Endpoint Pool",
+      "endpointPoolEmpty": "No endpoints yet, click to add",
+      "addKey": "Add Key",
+      "addEndpoint": "Add Endpoint",
+      "keyLabel": "Label",
+      "keyLabelPlaceholder": "Optional label",
+      "endpointLabel": "Label",
+      "endpointLabelPlaceholder": "Optional label"
     },
     "deleteDialog": {
       "title": "Delete Channel",
@@ -163,7 +178,19 @@
       "testUnreachableTitle": "Cannot reach {{name}}",
       "testTimeout": "Connection timed out",
       "reorderOk": "Order saved",
-      "reorderFail": "Failed to save order"
+      "reorderFail": "Failed to save order",
+      "keyCreateOk": "Key added",
+      "keyUpdateOk": "Key updated",
+      "keyDeleteOk": "Key deleted",
+      "keyEnableOk": "Key enabled",
+      "keyDisableOk": "Key disabled",
+      "keyAuthRefRequired": "API Key is required",
+      "endpointCreateOk": "Endpoint added",
+      "endpointUpdateOk": "Endpoint updated",
+      "endpointDeleteOk": "Endpoint deleted",
+      "endpointEnableOk": "Endpoint enabled",
+      "endpointDisableOk": "Endpoint disabled",
+      "endpointBaseUrlRequired": "Base URL is required"
     }
   },
   "routes": {

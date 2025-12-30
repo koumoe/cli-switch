@@ -136,7 +136,22 @@
       "realMultiplierTooManyDecimals": "最多只能输入 2 位小数",
       "baseUrl": "Base URL",
       "apiKey": "API Key / Token",
-      "enabled": "启用"
+      "enabled": "启用",
+      "advanced": "高级选项",
+      "useKeyPool": "启用多密钥池",
+      "useKeyPoolHint": "启用后可配置多个 API Key 轮换使用",
+      "useEndpointPool": "启用多端点池",
+      "useEndpointPoolHint": "启用后可配置多个 Base URL 轮换使用",
+      "keyPool": "密钥池",
+      "keyPoolEmpty": "暂无密钥，点击添加",
+      "endpointPool": "端点池",
+      "endpointPoolEmpty": "暂无端点，点击添加",
+      "addKey": "添加密钥",
+      "addEndpoint": "添加端点",
+      "keyLabel": "备注",
+      "keyLabelPlaceholder": "可选备注",
+      "endpointLabel": "备注",
+      "endpointLabelPlaceholder": "可选备注"
     },
     "deleteDialog": {
       "title": "删除渠道",
@@ -163,7 +178,19 @@
       "testUnreachableTitle": "{{name}} 无法连接",
       "testTimeout": "连接超时",
       "reorderOk": "排序已保存",
-      "reorderFail": "保存排序失败"
+      "reorderFail": "保存排序失败",
+      "keyCreateOk": "密钥添加成功",
+      "keyUpdateOk": "密钥更新成功",
+      "keyDeleteOk": "密钥已删除",
+      "keyEnableOk": "密钥已启用",
+      "keyDisableOk": "密钥已禁用",
+      "keyAuthRefRequired": "API Key 不能为空",
+      "endpointCreateOk": "端点添加成功",
+      "endpointUpdateOk": "端点更新成功",
+      "endpointDeleteOk": "端点已删除",
+      "endpointEnableOk": "端点已启用",
+      "endpointDisableOk": "端点已禁用",
+      "endpointBaseUrlRequired": "Base URL 不能为空"
     }
   },
   "routes": {

@@ -42,9 +42,63 @@ export type Channel = {
   real_multiplier: number;
   enabled: boolean;
   auto_disabled_until_ms: number;
+  use_key_pool: boolean;
+  use_endpoint_pool: boolean;
   created_at_ms: number;
   updated_at_ms: number;
 };
+
+export type ChannelKey = {
+  id: string;
+  channel_id: string;
+  auth_ref: string;
+  label: string | null;
+  priority: number;
+  enabled: boolean;
+  auto_disabled_until_ms: number;
+  created_at_ms: number;
+  updated_at_ms: number;
+};
+
+export type ChannelEndpoint = {
+  id: string;
+  channel_id: string;
+  base_url: string;
+  label: string | null;
+  priority: number;
+  enabled: boolean;
+  auto_disabled_until_ms: number;
+  created_at_ms: number;
+  updated_at_ms: number;
+};
+
+export type CreateChannelKeyInput = {
+  auth_ref: string;
+  label?: string | null;
+  priority?: number;
+  enabled?: boolean;
+};
+
+export type UpdateChannelKeyInput = Partial<{
+  auth_ref: string;
+  label: string | null;
+  priority: number;
+  enabled: boolean;
+}>;
+
+export type CreateChannelEndpointInput = {
+  base_url: string;
+  label?: string | null;
+  priority?: number;
+  enabled?: boolean;
+};
+
+export type UpdateChannelEndpointInput = Partial<{
+  base_url: string;
+  label: string | null;
+  priority: number;
+  enabled: boolean;
+}>;
 
 export type CreateChannelInput = {
   name: string;
@@ -56,6 +110,8 @@ export type CreateChannelInput = {
   recharge_currency: "USD" | "CNY";
   real_multiplier: number;
   enabled: boolean;
+  use_key_pool?: boolean;
+  use_endpoint_pool?: boolean;
 };
 
 export type UpdateChannelInput = Partial<{
@@ -67,6 +123,8 @@ export type UpdateChannelInput = Partial<{
   recharge_currency: "USD" | "CNY";
   real_multiplier: number;
   enabled: boolean;
+  use_key_pool: boolean;
+  use_endpoint_pool: boolean;
 }>;
 
 export type ChannelTestResponse = {
@@ -301,6 +359,56 @@ export function testChannel(id: string): Promise<ChannelTestResponse> {
 
 export function reorderChannels(protocol: Protocol, channelIds: string[]): Promise<void> {
   return http<void>("POST", "/api/channels/reorder", { protocol, channel_ids: channelIds });
+}
+
+// Channel Keys API
+export function listChannelKeys(channelId: string): Promise<ChannelKey[]> {
+  return http<ChannelKey[]>("GET", `/api/channels/${encodeURIComponent(channelId)}/keys`);
+}
+
+export function createChannelKey(channelId: string, input: CreateChannelKeyInput): Promise<ChannelKey> {
+  return http<ChannelKey>("POST", `/api/channels/${encodeURIComponent(channelId)}/keys`, input);
+}
+
+export function updateChannelKey(channelId: string, keyId: string, input: UpdateChannelKeyInput): Promise<void> {
+  return http<void>("PUT", `/api/channels/${encodeURIComponent(channelId)}/keys/${encodeURIComponent(keyId)}`, input);
+}
+
+export function deleteChannelKey(channelId: string, keyId: string): Promise<void> {
+  return http<void>("DELETE", `/api/channels/${encodeURIComponent(channelId)}/keys/${encodeURIComponent(keyId)}`);
+}
+
+export function enableChannelKey(channelId: string, keyId: string): Promise<void> {
+  return http<void>("POST", `/api/channels/${encodeURIComponent(channelId)}/keys/${encodeURIComponent(keyId)}/enable`);
+}
+
+export function disableChannelKey(channelId: string, keyId: string): Promise<void> {
+  return http<void>("POST", `/api/channels/${encodeURIComponent(channelId)}/keys/${encodeURIComponent(keyId)}/disable`);
+}
+
+// Channel Endpoints API
+export function listChannelEndpoints(channelId: string): Promise<ChannelEndpoint[]> {
+  return http<ChannelEndpoint[]>("GET", `/api/channels/${encodeURIComponent(channelId)}/endpoints`);
+}
+
+export function createChannelEndpoint(channelId: string, input: CreateChannelEndpointInput): Promise<ChannelEndpoint> {
+  return http<ChannelEndpoint>("POST", `/api/channels/${encodeURIComponent(channelId)}/endpoints`, input);
+}
+
+export function updateChannelEndpoint(channelId: string, endpointId: string, input: UpdateChannelEndpointInput): Promise<void> {
+  return http<void>("PUT", `/api/channels/${encodeURIComponent(channelId)}/endpoints/${encodeURIComponent(endpointId)}`, input);
+}
+
+export function deleteChannelEndpoint(channelId: string, endpointId: string): Promise<void> {
+  return http<void>("DELETE", `/api/channels/${encodeURIComponent(channelId)}/endpoints/${encodeURIComponent(endpointId)}`);
+}
+
+export function enableChannelEndpoint(channelId: string, endpointId: string): Promise<void> {
+  return http<void>("POST", `/api/channels/${encodeURIComponent(channelId)}/endpoints/${encodeURIComponent(endpointId)}/enable`);
+}
+
+export function disableChannelEndpoint(channelId: string, endpointId: string): Promise<void> {
+  return http<void>("POST", `/api/channels/${encodeURIComponent(channelId)}/endpoints/${encodeURIComponent(endpointId)}/disable`);
 }
 
 export function listRoutes(): Promise<Route[]> {

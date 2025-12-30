@@ -8,6 +8,10 @@ import {
   PowerOff,
   TestTube,
   ArrowDownUp,
+  ChevronDown,
+  ChevronUp,
+  Key,
+  Globe,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -50,7 +54,21 @@ import {
   disableChannel,
   testChannel,
   reorderChannels,
+  listChannelKeys,
+  createChannelKey,
+  updateChannelKey,
+  deleteChannelKey,
+  enableChannelKey,
+  disableChannelKey,
+  listChannelEndpoints,
+  createChannelEndpoint,
+  updateChannelEndpoint,
+  deleteChannelEndpoint,
+  enableChannelEndpoint,
+  disableChannelEndpoint,
   type Channel,
+  type ChannelKey,
+  type ChannelEndpoint,
   type CreateChannelInput,
   type Protocol,
 } from "../api";
@@ -69,6 +87,8 @@ function emptyDraft(): ChannelDraft {
     recharge_currency: "CNY",
     real_multiplier: 1,
     enabled: true,
+    use_key_pool: false,
+    use_endpoint_pool: false,
   };
 }
 
@@ -196,6 +216,19 @@ export function ChannelsPage() {
   const [autoSortOpen, setAutoSortOpen] = useState(false);
   const [autoSortApplying, setAutoSortApplying] = useState(false);
 
+  // Multi-key/endpoint states
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [channelKeys, setChannelKeys] = useState<ChannelKey[]>([]);
+  const [channelEndpoints, setChannelEndpoints] = useState<ChannelEndpoint[]>([]);
+  const [keyModalOpen, setKeyModalOpen] = useState(false);
+  const [keyModalMode, setKeyModalMode] = useState<"create" | "edit">("create");
+  const [keyEditId, setKeyEditId] = useState<string | null>(null);
+  const [keyDraft, setKeyDraft] = useState({ auth_ref: "", label: "", priority: 0, enabled: true });
+  const [endpointModalOpen, setEndpointModalOpen] = useState(false);
+  const [endpointModalMode, setEndpointModalMode] = useState<"create" | "edit">("create");
+  const [endpointEditId, setEndpointEditId] = useState<string | null>(null);
+  const [endpointDraft, setEndpointDraft] = useState({ base_url: "", label: "", priority: 0, enabled: true });
+
   async function refresh() {
     try {
       const cs = await listChannels();
@@ -262,10 +295,13 @@ export function ChannelsPage() {
     });
     setRealMultiplierInput(formatFixed2(1));
     setRealMultiplierTip(null);
+    setAdvancedOpen(false);
+    setChannelKeys([]);
+    setChannelEndpoints([]);
     setModalOpen(true);
   }
 
-  function openEdit(c: Channel) {
+  async function openEdit(c: Channel) {
     setModalMode("edit");
     setEditId(c.id);
     setDraft({
@@ -278,9 +314,26 @@ export function ChannelsPage() {
       recharge_currency: c.recharge_currency ?? "CNY",
       real_multiplier: c.real_multiplier ?? 1,
       enabled: c.enabled,
+      use_key_pool: c.use_key_pool ?? false,
+      use_endpoint_pool: c.use_endpoint_pool ?? false,
     });
     setRealMultiplierInput(formatFixed2(Number(c.real_multiplier ?? 1)));
     setRealMultiplierTip(null);
+    setAdvancedOpen(c.use_key_pool || c.use_endpoint_pool);
+
+    // Load keys and endpoints for this channel
+    try {
+      const [keys, endpoints] = await Promise.all([
+        listChannelKeys(c.id),
+        listChannelEndpoints(c.id),
+      ]);
+      setChannelKeys(keys);
+      setChannelEndpoints(endpoints);
+    } catch (e) {
+      setChannelKeys([]);
+      setChannelEndpoints([]);
+    }
+
     setModalOpen(true);
   }
 
@@ -309,11 +362,175 @@ export function ChannelsPage() {
           recharge_currency: draft.recharge_currency,
           real_multiplier: draft.real_multiplier,
           enabled: draft.enabled,
+          use_key_pool: draft.use_key_pool,
+          use_endpoint_pool: draft.use_endpoint_pool,
         });
         toast.success(t("channels.toast.updateOk"));
       }
       setModalOpen(false);
       await refresh();
+    } catch (e) {
+      toast.error(t("channels.toast.actionFail"), { description: String(e) });
+    }
+  }
+
+  // Key management functions
+  async function refreshKeys() {
+    if (!editId) return;
+    try {
+      const keys = await listChannelKeys(editId);
+      setChannelKeys(keys);
+    } catch (e) {
+      toast.error(t("channels.toast.actionFail"), { description: String(e) });
+    }
+  }
+
+  function openKeyCreate() {
+    setKeyModalMode("create");
+    setKeyEditId(null);
+    setKeyDraft({ auth_ref: "", label: "", priority: 0, enabled: true });
+    setKeyModalOpen(true);
+  }
+
+  function openKeyEdit(k: ChannelKey) {
+    setKeyModalMode("edit");
+    setKeyEditId(k.id);
+    setKeyDraft({ auth_ref: k.auth_ref, label: k.label ?? "", priority: k.priority, enabled: k.enabled });
+    setKeyModalOpen(true);
+  }
+
+  async function submitKey() {
+    if (!editId) return;
+    try {
+      if (!keyDraft.auth_ref.trim()) throw new Error(t("channels.toast.keyAuthRefRequired"));
+      if (keyModalMode === "create") {
+        await createChannelKey(editId, {
+          auth_ref: keyDraft.auth_ref.trim(),
+          label: keyDraft.label.trim() || null,
+          priority: keyDraft.priority,
+          enabled: keyDraft.enabled,
+        });
+        toast.success(t("channels.toast.keyCreateOk"));
+      } else {
+        if (!keyEditId) return;
+        await updateChannelKey(editId, keyEditId, {
+          auth_ref: keyDraft.auth_ref.trim(),
+          label: keyDraft.label.trim() || null,
+          priority: keyDraft.priority,
+          enabled: keyDraft.enabled,
+        });
+        toast.success(t("channels.toast.keyUpdateOk"));
+      }
+      setKeyModalOpen(false);
+      await refreshKeys();
+    } catch (e) {
+      toast.error(t("channels.toast.actionFail"), { description: String(e) });
+    }
+  }
+
+  async function deleteKey(k: ChannelKey) {
+    if (!editId) return;
+    try {
+      await deleteChannelKey(editId, k.id);
+      toast.success(t("channels.toast.keyDeleteOk"));
+      await refreshKeys();
+    } catch (e) {
+      toast.error(t("channels.toast.actionFail"), { description: String(e) });
+    }
+  }
+
+  async function toggleKeyEnabled(k: ChannelKey) {
+    if (!editId) return;
+    try {
+      if (k.enabled) {
+        await disableChannelKey(editId, k.id);
+        toast.success(t("channels.toast.keyDisableOk"));
+      } else {
+        await enableChannelKey(editId, k.id);
+        toast.success(t("channels.toast.keyEnableOk"));
+      }
+      await refreshKeys();
+    } catch (e) {
+      toast.error(t("channels.toast.actionFail"), { description: String(e) });
+    }
+  }
+
+  // Endpoint management functions
+  async function refreshEndpoints() {
+    if (!editId) return;
+    try {
+      const endpoints = await listChannelEndpoints(editId);
+      setChannelEndpoints(endpoints);
+    } catch (e) {
+      toast.error(t("channels.toast.actionFail"), { description: String(e) });
+    }
+  }
+
+  function openEndpointCreate() {
+    setEndpointModalMode("create");
+    setEndpointEditId(null);
+    setEndpointDraft({ base_url: "", label: "", priority: 0, enabled: true });
+    setEndpointModalOpen(true);
+  }
+
+  function openEndpointEdit(ep: ChannelEndpoint) {
+    setEndpointModalMode("edit");
+    setEndpointEditId(ep.id);
+    setEndpointDraft({ base_url: ep.base_url, label: ep.label ?? "", priority: ep.priority, enabled: ep.enabled });
+    setEndpointModalOpen(true);
+  }
+
+  async function submitEndpoint() {
+    if (!editId) return;
+    try {
+      if (!endpointDraft.base_url.trim()) throw new Error(t("channels.toast.endpointBaseUrlRequired"));
+      if (endpointModalMode === "create") {
+        await createChannelEndpoint(editId, {
+          base_url: endpointDraft.base_url.trim(),
+          label: endpointDraft.label.trim() || null,
+          priority: endpointDraft.priority,
+          enabled: endpointDraft.enabled,
+        });
+        toast.success(t("channels.toast.endpointCreateOk"));
+      } else {
+        if (!endpointEditId) return;
+        await updateChannelEndpoint(editId, endpointEditId, {
+          base_url: endpointDraft.base_url.trim(),
+          label: endpointDraft.label.trim() || null,
+          priority: endpointDraft.priority,
+          enabled: endpointDraft.enabled,
+        });
+        toast.success(t("channels.toast.endpointUpdateOk"));
+      }
+      setEndpointModalOpen(false);
+      await refreshEndpoints();
+    } catch (e) {
+      toast.error(t("channels.toast.actionFail"), { description: String(e) });
+    }
+  }
+
+  async function deleteEndpoint(ep: ChannelEndpoint) {
+    if (!editId) return;
+    try {
+      await deleteChannelEndpoint(editId, ep.id);
+      toast.success(t("channels.toast.endpointDeleteOk"));
+      await refreshEndpoints();
+    } catch (e) {
+      toast.error(t("channels.toast.actionFail"), { description: String(e) });
+    }
+  }
+
+  async function toggleEndpointEnabled(ep: ChannelEndpoint) {
+    if (!editId) return;
+    try {
+      if (ep.enabled) {
+        await disableChannelEndpoint(editId, ep.id);
+        toast.success(t("channels.toast.endpointDisableOk"));
+      } else {
+        await enableChannelEndpoint(editId, ep.id);
+        toast.success(t("channels.toast.endpointEnableOk"));
+      }
+      await refreshEndpoints();
     } catch (e) {
       toast.error(t("channels.toast.actionFail"), { description: String(e) });
     }
@@ -927,6 +1144,136 @@ export function ChannelsPage() {
                 onCheckedChange={(v) => setDraft((d) => ({ ...d, enabled: v }))}
               />
             </div>
+
+            {/* Advanced Options (only in edit mode) */}
+            {modalMode === "edit" && (
+              <div className="border-t pt-4 mt-4">
+                <button
+                  type="button"
+                  onClick={() => setAdvancedOpen(!advancedOpen)}
+                  className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground w-full"
+                >
+                  {advancedOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                  {t("channels.modal.advanced")}
+                </button>
+
+                {advancedOpen && (
+                  <div className="mt-4 space-y-4">
+                    {/* Multi-Key Pool */}
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <label className="text-sm font-medium flex items-center gap-2">
+                            <Key className="h-4 w-4" />
+                            {t("channels.modal.useKeyPool")}
+                          </label>
+                          <p className="text-xs text-muted-foreground">{t("channels.modal.useKeyPoolHint")}</p>
+                        </div>
+                        <Switch
+                          checked={draft.use_key_pool}
+                          onCheckedChange={(v) => setDraft((d) => ({ ...d, use_key_pool: v }))}
+                        />
+                      </div>
+
+                      {draft.use_key_pool && (
+                        <div className="border rounded-lg p-3 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-medium">{t("channels.modal.keyPool")}</span>
+                            <Button size="sm" variant="outline" onClick={openKeyCreate}>
+                              <Plus className="h-3 w-3 mr-1" />
+                              {t("channels.modal.addKey")}
+                            </Button>
+                          </div>
+                          {channelKeys.length === 0 ? (
+                            <p className="text-xs text-muted-foreground">{t("channels.modal.keyPoolEmpty")}</p>
+                          ) : (
+                            <div className="space-y-1">
+                              {channelKeys.map((k) => (
+                                <div key={k.id} className="flex items-center justify-between text-sm py-1 px-2 rounded hover:bg-muted/50">
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <span className={`truncate ${!k.enabled ? "text-muted-foreground line-through" : ""}`}>
+                                      {k.label || k.auth_ref.slice(0, 12) + "..."}
+                                    </span>
+                                    {!k.enabled && <Badge variant="secondary" className="text-[10px]">{t("common.disabled")}</Badge>}
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => toggleKeyEnabled(k)}>
+                                      {k.enabled ? <PowerOff className="h-3 w-3" /> : <Power className="h-3 w-3" />}
+                                    </Button>
+                                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => openKeyEdit(k)}>
+                                      <Pencil className="h-3 w-3" />
+                                    </Button>
+                                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => deleteKey(k)}>
+                                      <Trash2 className="h-3 w-3 text-destructive" />
+                                    </Button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Multi-Endpoint Pool */}
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <label className="text-sm font-medium flex items-center gap-2">
+                            <Globe className="h-4 w-4" />
+                            {t("channels.modal.useEndpointPool")}
+                          </label>
+                          <p className="text-xs text-muted-foreground">{t("channels.modal.useEndpointPoolHint")}</p>
+                        </div>
+                        <Switch
+                          checked={draft.use_endpoint_pool}
+                          onCheckedChange={(v) => setDraft((d) => ({ ...d, use_endpoint_pool: v }))}
+                        />
+                      </div>
+
+                      {draft.use_endpoint_pool && (
+                        <div className="border rounded-lg p-3 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-medium">{t("channels.modal.endpointPool")}</span>
+                            <Button size="sm" variant="outline" onClick={openEndpointCreate}>
+                              <Plus className="h-3 w-3 mr-1" />
+                              {t("channels.modal.addEndpoint")}
+                            </Button>
+                          </div>
+                          {channelEndpoints.length === 0 ? (
+                            <p className="text-xs text-muted-foreground">{t("channels.modal.endpointPoolEmpty")}</p>
+                          ) : (
+                            <div className="space-y-1">
+                              {channelEndpoints.map((ep) => (
+                                <div key={ep.id} className="flex items-center justify-between text-sm py-1 px-2 rounded hover:bg-muted/50">
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <span className={`truncate ${!ep.enabled ? "text-muted-foreground line-through" : ""}`}>
+                                      {ep.label || ep.base_url}
+                                    </span>
+                                    {!ep.enabled && <Badge variant="secondary" className="text-[10px]">{t("common.disabled")}</Badge>}
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => toggleEndpointEnabled(ep)}>
+                                      {ep.enabled ? <PowerOff className="h-3 w-3" /> : <Power className="h-3 w-3" />}
+                                    </Button>
+                                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => openEndpointEdit(ep)}>
+                                      <Pencil className="h-3 w-3" />
+                                    </Button>
+                                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => deleteEndpoint(ep)}>
+                                      <Trash2 className="h-3 w-3 text-destructive" />
+                                    </Button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <DialogFooter>
@@ -934,6 +1281,91 @@ export function ChannelsPage() {
               {t("common.cancel")}
             </Button>
             <Button onClick={submit}>{t("common.save")}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Key Edit Modal */}
+      <Dialog open={keyModalOpen} onOpenChange={setKeyModalOpen}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>
+              {keyModalMode === "create" ? t("channels.modal.addKey") : t("channels.modal.apiKey")}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">{t("channels.modal.apiKey")}</label>
+              <Input
+                type="password"
+                value={keyDraft.auth_ref}
+                onChange={(e) => setKeyDraft((d) => ({ ...d, auth_ref: e.target.value }))}
+                placeholder="sk-..."
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">{t("channels.modal.keyLabel")}</label>
+              <Input
+                value={keyDraft.label}
+                onChange={(e) => setKeyDraft((d) => ({ ...d, label: e.target.value }))}
+                placeholder={t("channels.modal.keyLabelPlaceholder")}
+              />
+            </div>
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium">{t("channels.modal.enabled")}</label>
+              <Switch
+                checked={keyDraft.enabled}
+                onCheckedChange={(v) => setKeyDraft((d) => ({ ...d, enabled: v }))}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setKeyModalOpen(false)}>
+              {t("common.cancel")}
+            </Button>
+            <Button onClick={submitKey}>{t("common.save")}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Endpoint Edit Modal */}
+      <Dialog open={endpointModalOpen} onOpenChange={setEndpointModalOpen}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>
+              {endpointModalMode === "create" ? t("channels.modal.addEndpoint") : t("channels.modal.baseUrl")}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">{t("channels.modal.baseUrl")}</label>
+              <Input
+                value={endpointDraft.base_url}
+                onChange={(e) => setEndpointDraft((d) => ({ ...d, base_url: e.target.value }))}
+                placeholder="https://api.openai.com"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">{t("channels.modal.endpointLabel")}</label>
+              <Input
+                value={endpointDraft.label}
+                onChange={(e) => setEndpointDraft((d) => ({ ...d, label: e.target.value }))}
+                placeholder={t("channels.modal.endpointLabelPlaceholder")}
+              />
+            </div>
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium">{t("channels.modal.enabled")}</label>
+              <Switch
+                checked={endpointDraft.enabled}
+                onCheckedChange={(v) => setEndpointDraft((d) => ({ ...d, enabled: v }))}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEndpointModalOpen(false)}>
+              {t("common.cancel")}
+            </Button>
+            <Button onClick={submitEndpoint}>{t("common.save")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
