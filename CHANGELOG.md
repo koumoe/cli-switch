@@ -1,3 +1,10 @@
+## [0.15.1](https://github.com/koumoe/cli-switch/compare/v0.15.0...v0.15.1) (2025-12-30)
+
+### Bug Fixes
+
+* replace stale pending update with latest ([0eca2ed](https://github.com/koumoe/cli-switch/commit/0eca2ed5a901af29611505f0933eacdaec31bf47))
+* satisfy clippy in updater pending check ([2ef225d](https://github.com/koumoe/cli-switch/commit/2ef225da0685305c739b5a0f015656d59d39634d))
+* **ui:** allow downloading latest when update is pending ([2630ab3](https://github.com/koumoe/cli-switch/commit/2630ab310da4919d2eb5447ee077299fda32863a))
 ## [0.15.0](https://github.com/koumoe/cli-switch/compare/v0.14.0...v0.15.0) (2025-12-30)
 
 ### Features
