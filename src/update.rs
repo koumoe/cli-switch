@@ -485,27 +485,26 @@ pub async fn spawn_download_latest(
     }
 
     let pending = load_pending_update(&data_dir);
-    if let Some(p) = pending.as_ref() {
-        if let (Ok(pending_ver), Ok(latest_ver)) = (
+    if let Some(p) = pending.as_ref()
+        && let (Ok(pending_ver), Ok(latest_ver)) = (
             semver::Version::parse(&p.version),
             semver::Version::parse(&latest),
-        ) {
-            if pending_ver >= latest_ver {
-                tracing::debug!(
-                    pending = %p.version,
-                    latest = %latest,
-                    "update download skipped: pending is newer than latest"
-                );
-                let mut rt = runtime.lock().await;
-                rt.latest_version = Some(latest);
-                rt.update_available = available;
-                rt.stage = Stage::Ready;
-                rt.error = None;
-                rt.reset_download_state();
-                publish_status(&rt, Some(p.version.clone()));
-                return false;
-            }
-        }
+        )
+        && pending_ver >= latest_ver
+    {
+        tracing::debug!(
+            pending = %p.version,
+            latest = %latest,
+            "update download skipped: pending is newer than latest"
+        );
+        let mut rt = runtime.lock().await;
+        rt.latest_version = Some(latest);
+        rt.update_available = available;
+        rt.stage = Stage::Ready;
+        rt.error = None;
+        rt.reset_download_state();
+        publish_status(&rt, Some(p.version.clone()));
+        return false;
     }
 
     if pending.as_ref().is_some_and(|p| p.version == latest) {
