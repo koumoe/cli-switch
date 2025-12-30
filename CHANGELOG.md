@@ -1,3 +1,8 @@
+## [0.14.0](https://github.com/koumoe/cli-switch/compare/v0.13.2...v0.14.0) (2025-12-30)
+
+### Features
+
+* **ui:** show real multiplier in channels table ([a2e1ea6](https://github.com/koumoe/cli-switch/commit/a2e1ea625c04739bc025ff0411114f458030f4c5))
 ## [0.13.2](https://github.com/koumoe/cli-switch/compare/v0.13.1...v0.13.2) (2025-12-30)
 
 ### Bug Fixes
