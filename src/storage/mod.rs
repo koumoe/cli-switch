@@ -12,10 +12,16 @@ mod stats;
 mod usage;
 
 pub use channel::{
-    Channel, CreateChannel, RechargeCurrency, UpdateChannel, channel_is_auto_disabled,
-    clear_channel_failures, create_channel, delete_channel, get_channel, list_channels,
-    record_channel_failure_and_maybe_disable, reorder_channels, set_channel_enabled,
-    update_channel,
+    Channel, ChannelEndpoint, ChannelKey, CreateChannel, CreateChannelEndpoint, CreateChannelKey,
+    RechargeCurrency, UpdateChannel, UpdateChannelEndpoint, UpdateChannelKey,
+    channel_is_auto_disabled, clear_channel_failures, clear_endpoint_failures, clear_key_failures,
+    create_channel, create_channel_endpoint, create_channel_key, delete_channel,
+    delete_channel_endpoint, delete_channel_key, endpoint_is_auto_disabled, get_channel,
+    key_is_auto_disabled, list_channel_endpoints, list_channel_keys, list_channels,
+    record_channel_failure_and_maybe_disable, record_endpoint_failure_and_maybe_disable,
+    record_key_failure_and_maybe_disable, reorder_channels, set_channel_enabled,
+    set_channel_endpoint_enabled, set_channel_key_enabled, update_channel, update_channel_endpoint,
+    update_channel_key,
 };
 pub use pricing::{
     PricingModel, PricingStatus, UpsertPricingModel, pricing_status, search_pricing_models,
@@ -51,6 +57,7 @@ pub fn init_db(db_path: &Path) -> anyhow::Result<()> {
     ensure_app_settings_schema(&conn)?;
     ensure_pricing_models_schema(&conn)?;
     ensure_usage_events_schema(&conn)?;
+    ensure_multi_key_endpoint_schema(&conn)?;
 
     Ok(())
 }
@@ -126,6 +133,94 @@ fn ensure_usage_events_schema(conn: &Connection) -> anyhow::Result<()> {
         "CREATE INDEX IF NOT EXISTS idx_usage_request_ts ON usage_events(request_id, ts_ms)",
         [],
     )?;
+    Ok(())
+}
+
+fn ensure_multi_key_endpoint_schema(conn: &Connection) -> anyhow::Result<()> {
+    // channels 表新增开关字段
+    ensure_column(conn, "channels", "use_key_pool", "INTEGER NOT NULL DEFAULT 0")?;
+    ensure_column(conn, "channels", "use_endpoint_pool", "INTEGER NOT NULL DEFAULT 0")?;
+
+    // 密钥池表
+    conn.execute(
+        r#"
+        CREATE TABLE IF NOT EXISTS channel_keys (
+            id TEXT PRIMARY KEY,
+            channel_id TEXT NOT NULL,
+            auth_ref TEXT NOT NULL,
+            label TEXT,
+            priority INTEGER NOT NULL DEFAULT 0,
+            enabled INTEGER NOT NULL DEFAULT 1,
+            auto_disabled_until_ms INTEGER NOT NULL DEFAULT 0,
+            created_at_ms INTEGER NOT NULL,
+            updated_at_ms INTEGER NOT NULL,
+            FOREIGN KEY (channel_id) REFERENCES channels(id) ON DELETE CASCADE
+        )
+        "#,
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_channel_keys_channel ON channel_keys(channel_id, priority DESC)",
+        [],
+    )?;
+
+    // 端点池表
+    conn.execute(
+        r#"
+        CREATE TABLE IF NOT EXISTS channel_endpoints (
+            id TEXT PRIMARY KEY,
+            channel_id TEXT NOT NULL,
+            base_url TEXT NOT NULL,
+            label TEXT,
+            priority INTEGER NOT NULL DEFAULT 0,
+            enabled INTEGER NOT NULL DEFAULT 1,
+            auto_disabled_until_ms INTEGER NOT NULL DEFAULT 0,
+            created_at_ms INTEGER NOT NULL,
+            updated_at_ms INTEGER NOT NULL,
+            FOREIGN KEY (channel_id) REFERENCES channels(id) ON DELETE CASCADE
+        )
+        "#,
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_channel_endpoints_channel ON channel_endpoints(channel_id, priority DESC)",
+        [],
+    )?;
+
+    // 密钥故障记录表
+    conn.execute(
+        r#"
+        CREATE TABLE IF NOT EXISTS key_failures (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            key_id TEXT NOT NULL,
+            at_ms INTEGER NOT NULL,
+            FOREIGN KEY (key_id) REFERENCES channel_keys(id) ON DELETE CASCADE
+        )
+        "#,
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_key_failures_key_ts ON key_failures(key_id, at_ms)",
+        [],
+    )?;
+
+    // 端点故障记录表
+    conn.execute(
+        r#"
+        CREATE TABLE IF NOT EXISTS endpoint_failures (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            endpoint_id TEXT NOT NULL,
+            at_ms INTEGER NOT NULL,
+            FOREIGN KEY (endpoint_id) REFERENCES channel_endpoints(id) ON DELETE CASCADE
+        )
+        "#,
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_endpoint_failures_endpoint_ts ON endpoint_failures(endpoint_id, at_ms)",
+        [],
+    )?;
+
     Ok(())
 }
 
