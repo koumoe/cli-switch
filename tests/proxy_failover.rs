@@ -119,6 +119,8 @@ async fn failover_on_non_200_until_success() {
             recharge_currency: None,
             real_multiplier: None,
             enabled: true,
+            use_key_pool: false,
+            use_endpoint_pool: false,
         },
     )
     .await
@@ -135,6 +137,8 @@ async fn failover_on_non_200_until_success() {
             recharge_currency: None,
             real_multiplier: None,
             enabled: true,
+            use_key_pool: false,
+            use_endpoint_pool: false,
         },
     )
     .await
@@ -151,6 +155,8 @@ async fn failover_on_non_200_until_success() {
             recharge_currency: None,
             real_multiplier: None,
             enabled: true,
+            use_key_pool: false,
+            use_endpoint_pool: false,
         },
     )
     .await
@@ -203,6 +209,8 @@ async fn return_last_error_when_all_channels_fail() {
                 recharge_currency: None,
                 real_multiplier: None,
                 enabled: true,
+                use_key_pool: false,
+                use_endpoint_pool: false,
             },
         )
         .await
@@ -276,6 +284,8 @@ async fn gemini_logs_include_model_and_cost() {
             recharge_currency: None,
             real_multiplier: None,
             enabled: true,
+            use_key_pool: false,
+            use_endpoint_pool: false,
         },
     )
     .await
@@ -332,6 +342,8 @@ async fn anthropic_count_tokens_no_failover_and_no_usage_log() {
             recharge_currency: None,
             real_multiplier: None,
             enabled: true,
+            use_key_pool: false,
+            use_endpoint_pool: false,
         },
     )
     .await
@@ -348,6 +360,8 @@ async fn anthropic_count_tokens_no_failover_and_no_usage_log() {
             recharge_currency: None,
             real_multiplier: None,
             enabled: true,
+            use_key_pool: false,
+            use_endpoint_pool: false,
         },
     )
     .await
@@ -418,6 +432,8 @@ async fn anthropic_count_tokens_does_not_auto_disable() {
             recharge_currency: None,
             real_multiplier: None,
             enabled: true,
+            use_key_pool: false,
+            use_endpoint_pool: false,
         },
     )
     .await
