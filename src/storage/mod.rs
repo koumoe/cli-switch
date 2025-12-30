@@ -171,7 +171,6 @@ pub enum RecordsClearKind {
 #[derive(Debug, Clone, Serialize)]
 pub struct ClearRecordsResult {
     pub usage_events_deleted: i64,
-    pub channel_failures_deleted: i64,
     pub vacuumed: bool,
 }
 
@@ -200,20 +199,6 @@ pub async fn clear_records(
                 .unwrap_or(i64::MAX),
         };
 
-        let channel_failures_deleted: i64 = match kind {
-            RecordsClearKind::DateRange { start_ms, end_ms } => conn
-                .execute(
-                    r#"DELETE FROM channel_failures WHERE at_ms >= ?1 AND at_ms <= ?2"#,
-                    params![start_ms, end_ms],
-                )?
-                .try_into()
-                .unwrap_or(i64::MAX),
-            RecordsClearKind::Errors | RecordsClearKind::All => conn
-                .execute(r#"DELETE FROM channel_failures"#, [])?
-                .try_into()
-                .unwrap_or(i64::MAX),
-        };
-
         let vacuumed = matches!(kind, RecordsClearKind::Errors | RecordsClearKind::All);
         conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);")?;
         if vacuumed {
@@ -222,7 +207,6 @@ pub async fn clear_records(
 
         Ok(ClearRecordsResult {
             usage_events_deleted,
-            channel_failures_deleted,
             vacuumed,
         })
     })

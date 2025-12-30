@@ -999,10 +999,14 @@ export function SettingsPage() {
                             end_ms: msRange?.end_ms,
                           });
                           toast.success(t("settings.records.cleared"), {
-                            description: t("settings.records.clearedDetail", {
-                              usage: res.usage_events_deleted.toLocaleString(),
-                              failures: res.channel_failures_deleted.toLocaleString(),
-                            }),
+                            description: t(
+                              recordsScope === "errors"
+                                ? "settings.records.clearedDetailErrors"
+                                : "settings.records.clearedDetail",
+                              {
+                                count: res.usage_events_deleted.toLocaleString(),
+                              }
+                            ),
                           });
                           setRecordsPromptOpen(false);
                           setRecordsDateRange(undefined);

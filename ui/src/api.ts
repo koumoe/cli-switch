@@ -420,7 +420,6 @@ export type RecordsClearMode = "date_range" | "errors" | "all";
 
 export type ClearRecordsResult = {
   usage_events_deleted: number;
-  channel_failures_deleted: number;
   vacuumed: boolean;
 };
 

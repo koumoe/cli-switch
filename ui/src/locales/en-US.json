@@ -528,7 +528,8 @@
       "invalidDate": "Please select a date range first",
       "clearing": "Clearing...",
       "cleared": "Cleared",
-      "clearedDetail": "Logs: {{usage}}, failures: {{failures}}",
+      "clearedDetail": "Deleted request records: {{count}}",
+      "clearedDetailErrors": "Deleted failed request records: {{count}}",
       "clearFail": "Clear failed"
     },
     "serviceInfo": {

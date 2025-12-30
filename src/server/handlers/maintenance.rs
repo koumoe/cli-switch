@@ -49,7 +49,6 @@ pub(in crate::server) async fn records_clear(
     tracing::info!(
         mode = ?input.mode,
         usage_events_deleted = res.usage_events_deleted,
-        channel_failures_deleted = res.channel_failures_deleted,
         vacuumed = res.vacuumed,
         "records cleared"
     );

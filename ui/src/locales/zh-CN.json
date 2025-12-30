@@ -528,7 +528,8 @@
       "invalidDate": "请先选择日期区间",
       "clearing": "清理中...",
       "cleared": "清理完成",
-      "clearedDetail": "日志：{{usage}}，失败：{{failures}}",
+      "clearedDetail": "已删除请求记录：{{count}} 条",
+      "clearedDetailErrors": "已删除失败请求记录：{{count}} 条",
       "clearFail": "清理失败"
     },
     "serviceInfo": {
