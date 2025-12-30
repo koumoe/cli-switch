@@ -185,17 +185,14 @@ export function ChannelsPage() {
 
   const autoSortCurrent = channelsByProtocol[activeProtocol] ?? [];
   const autoSortSuggested = useMemo(() => {
-    const list = [...autoSortCurrent];
+    const list = autoSortCurrent.map((c, originalIndex) => ({ c, originalIndex }));
     list.sort((a, b) => {
-      const aDisabled = !a.enabled;
-      const bDisabled = !b.enabled;
-      if (aDisabled !== bDisabled) return aDisabled ? 1 : -1;
-      const fa = effectiveCostFactor(a);
-      const fb = effectiveCostFactor(b);
+      const fa = effectiveCostFactor(a.c);
+      const fb = effectiveCostFactor(b.c);
       if (fa !== fb) return fa - fb;
-      return a.name.localeCompare(b.name);
+      return a.originalIndex - b.originalIndex;
     });
-    return list;
+    return list.map((x) => x.c);
   }, [autoSortCurrent, activeProtocol]);
 
   const autoSortChanged = useMemo(() => {
