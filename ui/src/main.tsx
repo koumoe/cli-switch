@@ -13,7 +13,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
       <CurrencyProvider>
         <TooltipProvider delayDuration={200}>
           <App />
-          <Toaster position="bottom-right" richColors />
+          <Toaster position="top-center" richColors />
         </TooltipProvider>
       </CurrencyProvider>
     </I18nProvider>
