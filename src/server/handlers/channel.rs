@@ -204,3 +204,170 @@ pub(in crate::server) async fn test_channel(
         })),
     }
 }
+
+// ========== Channel Keys API ==========
+
+pub(in crate::server) async fn list_channel_keys(
+    State(state): State<AppState>,
+    axum::extract::Path(channel_id): axum::extract::Path<String>,
+) -> Result<impl IntoResponse, ApiError> {
+    // 确保渠道存在
+    let Some(_channel) = storage::get_channel(state.db_path(), channel_id.clone()).await? else {
+        return Err(ApiError::NotFound("channel not found".to_string()));
+    };
+    let keys = storage::list_channel_keys(state.db_path(), channel_id).await?;
+    Ok(Json(keys))
+}
+
+pub(in crate::server) async fn create_channel_key(
+    State(state): State<AppState>,
+    axum::extract::Path(channel_id): axum::extract::Path<String>,
+    Json(input): Json<storage::CreateChannelKey>,
+) -> Result<impl IntoResponse, ApiError> {
+    // 确保渠道存在
+    let Some(_channel) = storage::get_channel(state.db_path(), channel_id.clone()).await? else {
+        return Err(ApiError::NotFound("channel not found".to_string()));
+    };
+    if input.auth_ref.trim().is_empty() {
+        return Err(ApiError::BadRequest("auth_ref 不能为空".to_string()));
+    }
+    let key = storage::create_channel_key(state.db_path(), channel_id, input).await?;
+    Ok((StatusCode::CREATED, Json(key)))
+}
+
+#[derive(Debug, Deserialize)]
+pub(in crate::server) struct ChannelKeyPath {
+    #[allow(dead_code)]
+    channel_id: String,
+    key_id: String,
+}
+
+pub(in crate::server) async fn update_channel_key(
+    State(state): State<AppState>,
+    axum::extract::Path(path): axum::extract::Path<ChannelKeyPath>,
+    Json(input): Json<storage::UpdateChannelKey>,
+) -> Result<impl IntoResponse, ApiError> {
+    let res = storage::update_channel_key(state.db_path(), path.key_id, input).await;
+    map_storage_unit_no_content(res, |msg| {
+        msg.starts_with("key not found")
+            .then(|| ApiError::NotFound("key not found".to_string()))
+    })
+}
+
+pub(in crate::server) async fn delete_channel_key(
+    State(state): State<AppState>,
+    axum::extract::Path(path): axum::extract::Path<ChannelKeyPath>,
+) -> Result<impl IntoResponse, ApiError> {
+    let res = storage::delete_channel_key(state.db_path(), path.key_id).await;
+    map_storage_unit_no_content(res, |msg| {
+        msg.starts_with("key not found")
+            .then(|| ApiError::NotFound("key not found".to_string()))
+    })
+}
+
+pub(in crate::server) async fn enable_channel_key(
+    State(state): State<AppState>,
+    axum::extract::Path(path): axum::extract::Path<ChannelKeyPath>,
+) -> Result<impl IntoResponse, ApiError> {
+    let res = storage::set_channel_key_enabled(state.db_path(), path.key_id, true).await;
+    map_storage_unit_no_content(res, |msg| {
+        msg.starts_with("key not found")
+            .then(|| ApiError::NotFound("key not found".to_string()))
+    })
+}
+
+pub(in crate::server) async fn disable_channel_key(
+    State(state): State<AppState>,
+    axum::extract::Path(path): axum::extract::Path<ChannelKeyPath>,
+) -> Result<impl IntoResponse, ApiError> {
+    let res = storage::set_channel_key_enabled(state.db_path(), path.key_id, false).await;
+    map_storage_unit_no_content(res, |msg| {
+        msg.starts_with("key not found")
+            .then(|| ApiError::NotFound("key not found".to_string()))
+    })
+}
+
+// ========== Channel Endpoints API ==========
+
+pub(in crate::server) async fn list_channel_endpoints(
+    State(state): State<AppState>,
+    axum::extract::Path(channel_id): axum::extract::Path<String>,
+) -> Result<impl IntoResponse, ApiError> {
+    // 确保渠道存在
+    let Some(_channel) = storage::get_channel(state.db_path(), channel_id.clone()).await? else {
+        return Err(ApiError::NotFound("channel not found".to_string()));
+    };
+    let endpoints = storage::list_channel_endpoints(state.db_path(), channel_id).await?;
+    Ok(Json(endpoints))
+}
+
+pub(in crate::server) async fn create_channel_endpoint(
+    State(state): State<AppState>,
+    axum::extract::Path(channel_id): axum::extract::Path<String>,
+    Json(input): Json<storage::CreateChannelEndpoint>,
+) -> Result<impl IntoResponse, ApiError> {
+    // 确保渠道存在
+    let Some(channel) = storage::get_channel(state.db_path(), channel_id.clone()).await? else {
+        return Err(ApiError::NotFound("channel not found".to_string()));
+    };
+    if input.base_url.trim().is_empty() {
+        return Err(ApiError::BadRequest("base_url 不能为空".to_string()));
+    }
+    let endpoint = storage::create_channel_endpoint(state.db_path(), channel_id, channel.protocol, input).await?;
+    Ok((StatusCode::CREATED, Json(endpoint)))
+}
+
+#[derive(Debug, Deserialize)]
+pub(in crate::server) struct ChannelEndpointPath {
+    channel_id: String,
+    endpoint_id: String,
+}
+
+pub(in crate::server) async fn update_channel_endpoint(
+    State(state): State<AppState>,
+    axum::extract::Path(path): axum::extract::Path<ChannelEndpointPath>,
+    Json(input): Json<storage::UpdateChannelEndpoint>,
+) -> Result<impl IntoResponse, ApiError> {
+    // 获取渠道以获取协议
+    let Some(channel) = storage::get_channel(state.db_path(), path.channel_id.clone()).await? else {
+        return Err(ApiError::NotFound("channel not found".to_string()));
+    };
+    let res = storage::update_channel_endpoint(state.db_path(), path.endpoint_id, channel.protocol, input).await;
+    map_storage_unit_no_content(res, |msg| {
+        msg.starts_with("endpoint not found")
+            .then(|| ApiError::NotFound("endpoint not found".to_string()))
+    })
+}
+
+pub(in crate::server) async fn delete_channel_endpoint(
+    State(state): State<AppState>,
+    axum::extract::Path(path): axum::extract::Path<ChannelEndpointPath>,
+) -> Result<impl IntoResponse, ApiError> {
+    let res = storage::delete_channel_endpoint(state.db_path(), path.endpoint_id).await;
+    map_storage_unit_no_content(res, |msg| {
+        msg.starts_with("endpoint not found")
+            .then(|| ApiError::NotFound("endpoint not found".to_string()))
+    })
+}
+
+pub(in crate::server) async fn enable_channel_endpoint(
+    State(state): State<AppState>,
+    axum::extract::Path(path): axum::extract::Path<ChannelEndpointPath>,
+) -> Result<impl IntoResponse, ApiError> {
+    let res = storage::set_channel_endpoint_enabled(state.db_path(), path.endpoint_id, true).await;
+    map_storage_unit_no_content(res, |msg| {
+        msg.starts_with("endpoint not found")
+            .then(|| ApiError::NotFound("endpoint not found".to_string()))
+    })
+}
+
+pub(in crate::server) async fn disable_channel_endpoint(
+    State(state): State<AppState>,
+    axum::extract::Path(path): axum::extract::Path<ChannelEndpointPath>,
+) -> Result<impl IntoResponse, ApiError> {
+    let res = storage::set_channel_endpoint_enabled(state.db_path(), path.endpoint_id, false).await;
+    map_storage_unit_no_content(res, |msg| {
+        msg.starts_with("endpoint not found")
+            .then(|| ApiError::NotFound("endpoint not found".to_string()))
+    })
+}

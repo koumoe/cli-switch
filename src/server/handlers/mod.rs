@@ -10,8 +10,11 @@ pub(super) mod update;
 pub(super) mod usage;
 
 pub(super) use channel::{
-    create_channel, delete_channel, disable_channel, enable_channel, list_channels,
-    reorder_channels, test_channel, update_channel,
+    create_channel, create_channel_endpoint, create_channel_key, delete_channel,
+    delete_channel_endpoint, delete_channel_key, disable_channel, disable_channel_endpoint,
+    disable_channel_key, enable_channel, enable_channel_endpoint, enable_channel_key,
+    list_channel_endpoints, list_channel_keys, list_channels, reorder_channels, test_channel,
+    update_channel, update_channel_endpoint, update_channel_key,
 };
 pub(super) use health::health;
 pub(super) use maintenance::{db_size, frontend_log_ingest, logs_clear, logs_size, records_clear};

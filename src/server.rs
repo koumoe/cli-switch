@@ -62,6 +62,44 @@ fn request_endpoint_template(method: &Method, path: &str) -> Option<&'static str
                 }
                 ["api", "channels", _] if method == Method::PUT => Some("/api/channels/{id}"),
                 ["api", "channels", _] if method == Method::DELETE => Some("/api/channels/{id}"),
+                // Channel Keys
+                ["api", "channels", _, "keys"] if method == Method::GET => {
+                    Some("/api/channels/{id}/keys")
+                }
+                ["api", "channels", _, "keys"] if method == Method::POST => {
+                    Some("/api/channels/{id}/keys")
+                }
+                ["api", "channels", _, "keys", _] if method == Method::PUT => {
+                    Some("/api/channels/{id}/keys/{kid}")
+                }
+                ["api", "channels", _, "keys", _] if method == Method::DELETE => {
+                    Some("/api/channels/{id}/keys/{kid}")
+                }
+                ["api", "channels", _, "keys", _, "enable"] if method == Method::POST => {
+                    Some("/api/channels/{id}/keys/{kid}/enable")
+                }
+                ["api", "channels", _, "keys", _, "disable"] if method == Method::POST => {
+                    Some("/api/channels/{id}/keys/{kid}/disable")
+                }
+                // Channel Endpoints
+                ["api", "channels", _, "endpoints"] if method == Method::GET => {
+                    Some("/api/channels/{id}/endpoints")
+                }
+                ["api", "channels", _, "endpoints"] if method == Method::POST => {
+                    Some("/api/channels/{id}/endpoints")
+                }
+                ["api", "channels", _, "endpoints", _] if method == Method::PUT => {
+                    Some("/api/channels/{id}/endpoints/{eid}")
+                }
+                ["api", "channels", _, "endpoints", _] if method == Method::DELETE => {
+                    Some("/api/channels/{id}/endpoints/{eid}")
+                }
+                ["api", "channels", _, "endpoints", _, "enable"] if method == Method::POST => {
+                    Some("/api/channels/{id}/endpoints/{eid}/enable")
+                }
+                ["api", "channels", _, "endpoints", _, "disable"] if method == Method::POST => {
+                    Some("/api/channels/{id}/endpoints/{eid}/disable")
+                }
                 ["api", "routes", _] if method == Method::PUT => Some("/api/routes/{id}"),
                 ["api", "routes", _] if method == Method::DELETE => Some("/api/routes/{id}"),
                 ["api", "routes", _, "channels"] if method == Method::GET => {
@@ -118,6 +156,44 @@ fn request_purpose(method: &Method, path: &str) -> &'static str {
                 }
                 ["api", "channels", _] if method == Method::PUT => "handlers::update_channel",
                 ["api", "channels", _] if method == Method::DELETE => "handlers::delete_channel",
+                // Channel Keys
+                ["api", "channels", _, "keys"] if method == Method::GET => {
+                    "handlers::list_channel_keys"
+                }
+                ["api", "channels", _, "keys"] if method == Method::POST => {
+                    "handlers::create_channel_key"
+                }
+                ["api", "channels", _, "keys", _] if method == Method::PUT => {
+                    "handlers::update_channel_key"
+                }
+                ["api", "channels", _, "keys", _] if method == Method::DELETE => {
+                    "handlers::delete_channel_key"
+                }
+                ["api", "channels", _, "keys", _, "enable"] if method == Method::POST => {
+                    "handlers::enable_channel_key"
+                }
+                ["api", "channels", _, "keys", _, "disable"] if method == Method::POST => {
+                    "handlers::disable_channel_key"
+                }
+                // Channel Endpoints
+                ["api", "channels", _, "endpoints"] if method == Method::GET => {
+                    "handlers::list_channel_endpoints"
+                }
+                ["api", "channels", _, "endpoints"] if method == Method::POST => {
+                    "handlers::create_channel_endpoint"
+                }
+                ["api", "channels", _, "endpoints", _] if method == Method::PUT => {
+                    "handlers::update_channel_endpoint"
+                }
+                ["api", "channels", _, "endpoints", _] if method == Method::DELETE => {
+                    "handlers::delete_channel_endpoint"
+                }
+                ["api", "channels", _, "endpoints", _, "enable"] if method == Method::POST => {
+                    "handlers::enable_channel_endpoint"
+                }
+                ["api", "channels", _, "endpoints", _, "disable"] if method == Method::POST => {
+                    "handlers::disable_channel_endpoint"
+                }
                 ["api", "routes", _] if method == Method::PUT => "handlers::update_route",
                 ["api", "routes", _] if method == Method::DELETE => "handlers::delete_route",
                 ["api", "routes", _, "channels"] if method == Method::GET => {
@@ -191,6 +267,40 @@ fn build_app(state: AppState) -> Router {
             post(handlers::disable_channel),
         )
         .route("/api/channels/{id}/test", post(handlers::test_channel))
+        // Channel Keys
+        .route(
+            "/api/channels/{channel_id}/keys",
+            get(handlers::list_channel_keys).post(handlers::create_channel_key),
+        )
+        .route(
+            "/api/channels/{channel_id}/keys/{key_id}",
+            put(handlers::update_channel_key).delete(handlers::delete_channel_key),
+        )
+        .route(
+            "/api/channels/{channel_id}/keys/{key_id}/enable",
+            post(handlers::enable_channel_key),
+        )
+        .route(
+            "/api/channels/{channel_id}/keys/{key_id}/disable",
+            post(handlers::disable_channel_key),
+        )
+        // Channel Endpoints
+        .route(
+            "/api/channels/{channel_id}/endpoints",
+            get(handlers::list_channel_endpoints).post(handlers::create_channel_endpoint),
+        )
+        .route(
+            "/api/channels/{channel_id}/endpoints/{endpoint_id}",
+            put(handlers::update_channel_endpoint).delete(handlers::delete_channel_endpoint),
+        )
+        .route(
+            "/api/channels/{channel_id}/endpoints/{endpoint_id}/enable",
+            post(handlers::enable_channel_endpoint),
+        )
+        .route(
+            "/api/channels/{channel_id}/endpoints/{endpoint_id}/disable",
+            post(handlers::disable_channel_endpoint),
+        )
         .route(
             "/api/routes",
             get(handlers::list_routes).post(handlers::create_route),
