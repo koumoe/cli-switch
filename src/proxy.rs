@@ -19,21 +19,46 @@ const MAX_INBOUND_BODY_BYTES: usize = 64 * 1024 * 1024;
 const MAX_JSON_CAPTURE_BYTES: usize = 8 * 1024 * 1024;
 const MAX_ERROR_DETAIL_BYTES: usize = 256 * 1024;
 
+/// 代理尝试时使用的端点和密钥信息
+#[derive(Debug, Clone)]
+struct ProxyTarget {
+    channel: Channel,
+    /// 使用的端点 URL（来自 channel.base_url 或 channel_endpoints 表）
+    base_url: String,
+    /// 使用的认证信息（来自 channel.auth_ref 或 channel_keys 表）
+    auth_ref: String,
+    /// 如果使用多端点池，记录端点 ID
+    endpoint_id: Option<String>,
+    /// 如果使用多密钥池，记录密钥 ID
+    key_id: Option<String>,
+}
+
 struct AttemptCtx<'a> {
     db_path: &'a Path,
     settings: &'a storage::AppSettings,
     protocol: Protocol,
     channel_id: &'a str,
+    endpoint_id: Option<&'a str>,
+    key_id: Option<&'a str>,
     attempt: usize,
     total: usize,
 }
 
 impl AttemptCtx<'_> {
     async fn fail(&self, err: &ProxyError, msg: &'static str) {
-        maybe_record_failure(self.db_path, self.settings, self.channel_id).await;
+        maybe_record_failure(
+            self.db_path,
+            self.settings,
+            self.channel_id,
+            self.endpoint_id,
+            self.key_id,
+        )
+        .await;
         tracing::warn!(
             protocol = self.protocol.as_str(),
             channel_id = %self.channel_id,
+            endpoint_id = self.endpoint_id.unwrap_or("-"),
+            key_id = self.key_id.unwrap_or("-"),
             attempt = self.attempt,
             total = self.total,
             err = %err,
@@ -69,8 +94,8 @@ pub async fn forward(
     let request_id: Arc<str> = Arc::from(Uuid::new_v4().to_string());
     let settings = storage::get_app_settings(db_path.clone()).await?;
     let now_ms = storage::now_ms();
-    let channels = list_available_channels(db_path.clone(), protocol, now_ms, &settings).await?;
-    let total_channels = channels.len();
+    let targets = list_available_targets(db_path.clone(), protocol, now_ms, &settings).await?;
+    let total_targets = targets.len();
 
     let (parts, body) = req.into_parts();
     let is_count_tokens = protocol == Protocol::Anthropic
@@ -86,30 +111,34 @@ pub async fn forward(
 
     let mut last_err: Option<ProxyError> = None;
 
-    for (idx, channel) in channels.into_iter().enumerate() {
-        let is_last = idx + 1 >= total_channels;
+    for (idx, target) in targets.into_iter().enumerate() {
+        let is_last = idx + 1 >= total_targets;
         let started = Instant::now();
 
         let attempt_ctx = AttemptCtx {
             db_path: db_path_ref,
             settings: &settings,
             protocol,
-            channel_id: channel.id.as_str(),
+            channel_id: target.channel.id.as_str(),
+            endpoint_id: target.endpoint_id.as_deref(),
+            key_id: target.key_id.as_deref(),
             attempt: idx + 1,
-            total: total_channels,
+            total: total_targets,
         };
 
         if !is_count_tokens {
             tracing::debug!(
                 protocol = protocol.as_str(),
-                channel_id = %channel.id,
+                channel_id = %target.channel.id,
+                endpoint_id = target.endpoint_id.as_deref().unwrap_or("-"),
+                key_id = target.key_id.as_deref().unwrap_or("-"),
                 attempt = idx + 1,
-                total = total_channels,
+                total = total_targets,
                 "proxy attempt start"
             );
         }
 
-        let mut url = match build_upstream_url(&channel.base_url, &parts.uri, protocol_root) {
+        let mut url = match build_upstream_url(&target.base_url, &parts.uri, protocol_root) {
             Ok(v) => v,
             Err(e) => {
                 if !is_count_tokens {
@@ -126,7 +155,7 @@ pub async fn forward(
         };
 
         let mut out_headers = filtered_headers(&parts.headers);
-        if let Err(e) = apply_auth(&channel, protocol, &mut url, &mut out_headers) {
+        if let Err(e) = apply_auth_with_token(&target.auth_ref, protocol, &mut url, &mut out_headers) {
             if !is_count_tokens {
                 attempt_ctx
                     .fail(&e, "proxy attempt failed (apply auth)")
@@ -149,12 +178,21 @@ pub async fn forward(
             Ok(r) => r,
             Err(e) => {
                 if !is_count_tokens {
-                    maybe_record_failure(db_path_ref, &settings, &channel.id).await;
+                    maybe_record_failure(
+                        db_path_ref,
+                        &settings,
+                        &target.channel.id,
+                        target.endpoint_id.as_deref(),
+                        target.key_id.as_deref(),
+                    )
+                    .await;
                     tracing::warn!(
                         protocol = protocol.as_str(),
-                        channel_id = %channel.id,
+                        channel_id = %target.channel.id,
+                        endpoint_id = target.endpoint_id.as_deref().unwrap_or("-"),
+                        key_id = target.key_id.as_deref().unwrap_or("-"),
                         attempt = idx + 1,
-                        total = total_channels,
+                        total = total_targets,
                         err = %e,
                         "proxy attempt failed (request error)"
                     );
@@ -162,7 +200,7 @@ pub async fn forward(
                         build_usage_event(UsageEventParams {
                             request_id: Some(request_id.clone()),
                             protocol,
-                            channel_id: channel.id.clone(),
+                            channel_id: target.channel.id.clone(),
                             model: model.clone(),
                             success: false,
                             http_status: None,
@@ -190,23 +228,32 @@ pub async fn forward(
 
         let status = upstream.status();
         if !is_count_tokens && !status.is_success() {
-            maybe_record_failure(db_path_ref, &settings, &channel.id).await;
+            maybe_record_failure(
+                db_path_ref,
+                &settings,
+                &target.channel.id,
+                target.endpoint_id.as_deref(),
+                target.key_id.as_deref(),
+            )
+            .await;
         }
         if !is_count_tokens && !status.is_success() && !is_last {
             tracing::warn!(
                 protocol = protocol.as_str(),
-                channel_id = %channel.id,
+                channel_id = %target.channel.id,
+                endpoint_id = target.endpoint_id.as_deref().unwrap_or("-"),
+                key_id = target.key_id.as_deref().unwrap_or("-"),
                 attempt = idx + 1,
-                total = total_channels,
+                total = total_targets,
                 http_status = status.as_u16(),
-                "proxy attempt got non-2xx, retry next channel"
+                "proxy attempt got non-2xx, retry next target"
             );
             let error_detail = read_error_detail(protocol, upstream).await;
             spawn_usage_event(
                 build_usage_event(UsageEventParams {
                     request_id: Some(request_id.clone()),
                     protocol,
-                    channel_id: channel.id.clone(),
+                    channel_id: target.channel.id.clone(),
                     model: model.clone(),
                     success: false,
                     http_status: Some(status.as_u16() as i64),
@@ -221,16 +268,15 @@ pub async fn forward(
             continue;
         }
 
-        if !is_count_tokens
-            && status.is_success()
-            && let Err(e) =
-                storage::clear_channel_failures(db_path.clone(), channel.id.clone()).await
-        {
-            tracing::warn!(
-                channel_id = %channel.id,
-                err = %e,
-                "clear channel failures failed"
-            );
+        if !is_count_tokens && status.is_success() {
+            // 清除相关的失败记录
+            clear_failures_on_success(
+                db_path.clone(),
+                &target.channel.id,
+                target.endpoint_id.as_deref(),
+                target.key_id.as_deref(),
+            )
+            .await;
         }
 
         return proxy_upstream_response(
@@ -238,29 +284,29 @@ pub async fn forward(
             StreamRecordContext {
                 db_path: db_path.clone(),
                 protocol,
-                channel_id: channel.id.clone(),
+                channel_id: target.channel.id.clone(),
                 model: model.clone(),
                 request_id: request_id.clone(),
                 http_status: 0,
                 status_is_success: false,
                 started,
-                parse_sse: false, // 将在内部按 Content-Type 决定
+                parse_sse: false,
                 record_usage: !is_count_tokens,
             },
         )
         .await;
     }
 
-    Err(last_err.unwrap_or_else(|| ProxyError::Upstream("all channels failed".to_string())))
+    Err(last_err.unwrap_or_else(|| ProxyError::Upstream("all targets failed".to_string())))
 }
 
-async fn list_available_channels(
+async fn list_available_targets(
     db_path: std::path::PathBuf,
     protocol: Protocol,
     now_ms: i64,
     settings: &storage::AppSettings,
-) -> Result<Vec<Channel>, ProxyError> {
-    let channels = storage::list_channels(db_path).await?;
+) -> Result<Vec<ProxyTarget>, ProxyError> {
+    let channels = storage::list_channels(db_path.clone()).await?;
     let enabled: Vec<Channel> = channels
         .into_iter()
         .filter(|c| c.enabled && c.protocol == protocol)
@@ -269,49 +315,175 @@ async fn list_available_channels(
         return Err(ProxyError::NoEnabledChannel(protocol));
     }
 
-    if !settings.auto_disable_enabled {
-        return Ok(enabled);
+    let mut targets = Vec::new();
+
+    for channel in enabled {
+        // 检查渠道是否被自动禁用
+        if settings.auto_disable_enabled && storage::channel_is_auto_disabled(&channel, now_ms) {
+            continue;
+        }
+
+        // 获取端点列表
+        let endpoints: Vec<(String, Option<String>)> = if channel.use_endpoint_pool {
+            let eps = storage::list_channel_endpoints(db_path.clone(), channel.id.clone()).await?;
+            eps.into_iter()
+                .filter(|e| e.enabled && (!settings.auto_disable_enabled || !storage::endpoint_is_auto_disabled(e, now_ms)))
+                .map(|e| (e.base_url, Some(e.id)))
+                .collect()
+        } else {
+            vec![(channel.base_url.clone(), None)]
+        };
+
+        if endpoints.is_empty() {
+            continue;
+        }
+
+        // 获取密钥列表
+        let keys: Vec<(String, Option<String>)> = if channel.use_key_pool {
+            let ks = storage::list_channel_keys(db_path.clone(), channel.id.clone()).await?;
+            ks.into_iter()
+                .filter(|k| k.enabled && (!settings.auto_disable_enabled || !storage::key_is_auto_disabled(k, now_ms)))
+                .map(|k| (k.auth_ref, Some(k.id)))
+                .collect()
+        } else {
+            vec![(channel.auth_ref.clone(), None)]
+        };
+
+        if keys.is_empty() {
+            continue;
+        }
+
+        // 生成端点 x 密钥的组合
+        for (base_url, endpoint_id) in &endpoints {
+            for (auth_ref, key_id) in &keys {
+                targets.push(ProxyTarget {
+                    channel: channel.clone(),
+                    base_url: base_url.clone(),
+                    auth_ref: auth_ref.clone(),
+                    endpoint_id: endpoint_id.clone(),
+                    key_id: key_id.clone(),
+                });
+            }
+        }
     }
 
-    let out: Vec<Channel> = enabled
-        .into_iter()
-        .filter(|c| !storage::channel_is_auto_disabled(c, now_ms))
-        .collect();
-    if out.is_empty() {
+    if targets.is_empty() {
         return Err(ProxyError::NoAvailableChannel(protocol));
     }
-    Ok(out)
+
+    Ok(targets)
 }
 
-async fn maybe_record_failure(db_path: &Path, settings: &storage::AppSettings, channel_id: &str) {
+async fn maybe_record_failure(
+    db_path: &Path,
+    settings: &storage::AppSettings,
+    channel_id: &str,
+    endpoint_id: Option<&str>,
+    key_id: Option<&str>,
+) {
     if !settings.auto_disable_enabled {
         return;
     }
     let now_ms = storage::now_ms();
-    match storage::record_channel_failure_and_maybe_disable(
-        db_path.to_path_buf(),
-        channel_id.to_string(),
-        now_ms,
-        settings.auto_disable_window_minutes,
-        settings.auto_disable_failure_times,
-        settings.auto_disable_disable_minutes,
-    )
-    .await
-    {
-        Ok(Some(until_ms)) => {
-            tracing::warn!(
-                channel_id = channel_id,
-                disabled_until_ms = until_ms,
-                "channel auto disabled"
-            );
+
+    // 如果使用多端点/多密钥，只记录对应的细粒度失败
+    // 否则记录渠道级别的失败
+    if let Some(eid) = endpoint_id {
+        match storage::record_endpoint_failure_and_maybe_disable(
+            db_path.to_path_buf(),
+            eid.to_string(),
+            now_ms,
+            settings.auto_disable_window_minutes,
+            settings.auto_disable_failure_times,
+            settings.auto_disable_disable_minutes,
+        )
+        .await
+        {
+            Ok(Some(until_ms)) => {
+                tracing::warn!(
+                    endpoint_id = eid,
+                    disabled_until_ms = until_ms,
+                    "endpoint auto disabled"
+                );
+            }
+            Ok(None) => {}
+            Err(e) => {
+                tracing::warn!(endpoint_id = eid, err = %e, "record endpoint failure failed");
+            }
         }
-        Ok(None) => {}
-        Err(e) => {
-            tracing::warn!(
-                channel_id = channel_id,
-                err = %e,
-                "record channel failure failed"
-            );
+    }
+
+    if let Some(kid) = key_id {
+        match storage::record_key_failure_and_maybe_disable(
+            db_path.to_path_buf(),
+            kid.to_string(),
+            now_ms,
+            settings.auto_disable_window_minutes,
+            settings.auto_disable_failure_times,
+            settings.auto_disable_disable_minutes,
+        )
+        .await
+        {
+            Ok(Some(until_ms)) => {
+                tracing::warn!(
+                    key_id = kid,
+                    disabled_until_ms = until_ms,
+                    "key auto disabled"
+                );
+            }
+            Ok(None) => {}
+            Err(e) => {
+                tracing::warn!(key_id = kid, err = %e, "record key failure failed");
+            }
+        }
+    }
+
+    // 如果没有使用多端点/多密钥，记录渠道级别的失败
+    if endpoint_id.is_none() && key_id.is_none() {
+        match storage::record_channel_failure_and_maybe_disable(
+            db_path.to_path_buf(),
+            channel_id.to_string(),
+            now_ms,
+            settings.auto_disable_window_minutes,
+            settings.auto_disable_failure_times,
+            settings.auto_disable_disable_minutes,
+        )
+        .await
+        {
+            Ok(Some(until_ms)) => {
+                tracing::warn!(
+                    channel_id = channel_id,
+                    disabled_until_ms = until_ms,
+                    "channel auto disabled"
+                );
+            }
+            Ok(None) => {}
+            Err(e) => {
+                tracing::warn!(channel_id = channel_id, err = %e, "record channel failure failed");
+            }
+        }
+    }
+}
+
+async fn clear_failures_on_success(
+    db_path: std::path::PathBuf,
+    channel_id: &str,
+    endpoint_id: Option<&str>,
+    key_id: Option<&str>,
+) {
+    if let Some(eid) = endpoint_id {
+        if let Err(e) = storage::clear_endpoint_failures(db_path.clone(), eid.to_string()).await {
+            tracing::warn!(endpoint_id = eid, err = %e, "clear endpoint failures failed");
+        }
+    }
+    if let Some(kid) = key_id {
+        if let Err(e) = storage::clear_key_failures(db_path.clone(), kid.to_string()).await {
+            tracing::warn!(key_id = kid, err = %e, "clear key failures failed");
+        }
+    }
+    if endpoint_id.is_none() && key_id.is_none() {
+        if let Err(e) = storage::clear_channel_failures(db_path, channel_id.to_string()).await {
+            tracing::warn!(channel_id = channel_id, err = %e, "clear channel failures failed");
         }
     }
 }
@@ -603,7 +775,16 @@ pub(crate) fn apply_auth(
     url: &mut Url,
     headers: &mut HeaderMap,
 ) -> Result<(), ProxyError> {
-    let token = channel.auth_ref.trim();
+    apply_auth_with_token(&channel.auth_ref, protocol, url, headers)
+}
+
+fn apply_auth_with_token(
+    auth_ref: &str,
+    protocol: Protocol,
+    url: &mut Url,
+    headers: &mut HeaderMap,
+) -> Result<(), ProxyError> {
+    let token = auth_ref.trim();
 
     let detected = detect_request_auth_kind(protocol, headers, url);
     let auth_kind = resolve_auth_kind(protocol, detected);
