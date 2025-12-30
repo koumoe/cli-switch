@@ -38,6 +38,7 @@
     "details": "Details",
     "enabled": "Enabled",
     "disabled": "Disabled",
+    "free": "Free",
     "actions": "Actions",
     "channel": "Channel",
     "route": "Route"
@@ -101,6 +102,7 @@
       "name": "Name",
       "terminal": "Terminal",
       "priority": "Priority",
+      "realMultiplier": "Multiplier",
       "baseUrl": "Base URL",
       "status": "Status",
       "updatedAt": "Updated At",

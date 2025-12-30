@@ -38,6 +38,7 @@
     "details": "详情",
     "enabled": "启用",
     "disabled": "禁用",
+    "free": "免费",
     "actions": "操作",
     "channel": "渠道",
     "route": "路由"
@@ -101,6 +102,7 @@
       "name": "名称",
       "terminal": "终端",
       "priority": "优先级",
+      "realMultiplier": "实际倍率",
       "baseUrl": "Base URL",
       "status": "状态",
       "updatedAt": "更新时间",
