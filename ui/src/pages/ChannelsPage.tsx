@@ -77,6 +77,40 @@ function formatFixed2(n: number): string {
   return n.toFixed(2);
 }
 
+function getRealMultiplierDisplay(raw: unknown):
+  | { kind: "invalid" }
+  | { kind: "free" }
+  | { kind: "value"; value: number; text: string } {
+  const real = Number(raw ?? 1);
+  if (!Number.isFinite(real) || real < 0) return { kind: "invalid" };
+  if (real === 0) return { kind: "free" };
+  return { kind: "value", value: real, text: `×${formatFixed2(real)}` };
+}
+
+function clamp(n: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, n));
+}
+
+function multiplierStyle(real: number): React.CSSProperties {
+  const r = clamp(real, 0, 2);
+  // 系统配色: success=142 76% 36%, warning=38 92% 50%, destructive=0 84% 60%
+  const hueSuccess = 142;
+  const hueWarning = 38;
+  const hueDestructive = 0;
+  const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+  const hue =
+    r <= 1 ? lerp(hueSuccess, hueWarning, r) : lerp(hueWarning, hueDestructive, r - 1);
+  const sat = r <= 1 ? lerp(76, 92, r) : lerp(92, 84, r - 1);
+  const light = r <= 1 ? lerp(36, 50, r) : lerp(50, 60, r - 1);
+
+  // 与 Badge warning 样式完全一致: bg-warning/10, border-warning/50, text-warning
+  return {
+    backgroundColor: `hsl(${hue} ${sat}% ${light}% / 0.1)`,
+    borderColor: `hsl(${hue} ${sat}% ${light}% / 0.5)`,
+    color: `hsl(${hue} ${sat}% ${light}%)`,
+  };
+}
+
 function hasMoreThanTwoDecimals(raw: string): boolean {
   const s = raw.trim();
   if (!s) return false;
@@ -435,6 +469,7 @@ export function ChannelsPage() {
       drag: "w-10",
       name: "w-44",
       priority: "w-20",
+      realMultiplier: "w-24",
       status: "w-20",
       updatedAt: "w-44",
       actions: "w-32",
@@ -449,6 +484,9 @@ export function ChannelsPage() {
                 <TableHead className={colClass.name}>{t("channels.table.name")}</TableHead>
                 <TableHead className={colClass.priority}>
                   {t("channels.table.priority")}
+                </TableHead>
+                <TableHead className={`${colClass.realMultiplier} text-center`}>
+                  {t("channels.table.realMultiplier")}
                 </TableHead>
                 <TableHead className={colClass.status}>
                   {t("channels.table.status")}
@@ -482,7 +520,7 @@ export function ChannelsPage() {
               {tabChannels.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={6}
+                    colSpan={7}
                     className="text-center text-muted-foreground py-8"
                   >
                     {t("channels.table.empty")}
@@ -496,6 +534,9 @@ export function ChannelsPage() {
                   const autoDisabledMinutes = Math.max(
                     1,
                     Math.ceil(((c.auto_disabled_until_ms ?? 0) - renderNowMs) / 60000)
+                  );
+                  const realMultiplierDisplay = getRealMultiplierDisplay(
+                    c.real_multiplier
                   );
 
                   return (
@@ -569,6 +610,27 @@ export function ChannelsPage() {
                     </TableCell>
                     <TableCell className="font-mono text-sm">
                       {c.priority}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      {realMultiplierDisplay.kind === "invalid" ? (
+                        <Badge variant="secondary">—</Badge>
+                      ) : realMultiplierDisplay.kind === "free" ? (
+                        <Badge
+                          variant="outline"
+                          className="border"
+                          style={multiplierStyle(0)}
+                        >
+                          {t("common.free")}
+                        </Badge>
+                      ) : (
+                        <Badge
+                          variant="outline"
+                          className="border tabular-nums"
+                          style={multiplierStyle(realMultiplierDisplay.value)}
+                        >
+                          {realMultiplierDisplay.text}
+                        </Badge>
+                      )}
                     </TableCell>
                     <TableCell>
                       {isAutoDisabled ? (
