@@ -845,7 +845,20 @@ export function SettingsPage() {
                         if (st) setUpdateStatus(st);
 
                         if (st?.pending_version) {
-                          reopenUpdateReadyPrompt(st);
+                          const pending = st.pending_version;
+                          const latest = res.latest_version;
+                          if (res.update_available && latest && latest !== pending) {
+                            toast.success(t("settings.update.found", { version: latest }));
+                            if (!appSettings?.app_auto_update_enabled) {
+                              setUpdatePromptOpen(true);
+                            } else {
+                              const dl = await downloadUpdate();
+                              setUpdateStatus(dl.status);
+                              if (dl.started) toast.success(t("settings.update.downloading"));
+                            }
+                          } else {
+                            reopenUpdateReadyPrompt(st);
+                          }
                           return;
                         }
 
