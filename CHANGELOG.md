@@ -1,3 +1,8 @@
+## [0.13.2](https://github.com/koumoe/cli-switch/compare/v0.13.1...v0.13.2) (2025-12-30)
+
+### Bug Fixes
+
+* **ui:** keep stable order for equal multipliers ([d619e92](https://github.com/koumoe/cli-switch/commit/d619e929e801982837a0db8b77fb03aac4d5177b))
 ## [0.13.1](https://github.com/koumoe/cli-switch/compare/v0.13.0...v0.13.1) (2025-12-24)
 
 ### Bug Fixes
