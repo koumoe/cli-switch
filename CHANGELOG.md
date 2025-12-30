@@ -1,3 +1,9 @@
+## [0.15.0](https://github.com/koumoe/cli-switch/compare/v0.14.0...v0.15.0) (2025-12-30)
+
+### Features
+
+* **ui:** move toast to top-center ([d4cdbcf](https://github.com/koumoe/cli-switch/commit/d4cdbcf2bfeed4b2238580dd0a7f2aa46bd4a24e))
+* **vite:** split vendor chunks ([5694e7d](https://github.com/koumoe/cli-switch/commit/5694e7dca2154e229b575a1dce1b250b57172635))
 ## [0.14.0](https://github.com/koumoe/cli-switch/compare/v0.13.2...v0.14.0) (2025-12-30)
 
 ### Features
