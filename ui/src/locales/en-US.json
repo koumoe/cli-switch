@@ -105,7 +105,7 @@
       "realMultiplier": "Multiplier",
       "baseUrl": "Base URL",
       "status": "Status",
-      "updatedAt": "Check-in",
+      "checkin": "Check-in",
       "empty": "No channels. Click 'New Channel' to add one."
     },
     "actions": {

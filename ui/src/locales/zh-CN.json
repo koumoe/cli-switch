@@ -105,7 +105,7 @@
       "realMultiplier": "实际倍率",
       "baseUrl": "Base URL",
       "status": "状态",
-      "updatedAt": "签到",
+      "checkin": "签到",
       "empty": "暂无渠道，点击「新建渠道」添加"
     },
     "actions": {

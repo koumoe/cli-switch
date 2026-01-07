@@ -544,7 +544,7 @@ export function ChannelsPage() {
                   {t("channels.table.status")}
                 </TableHead>
                 <TableHead className={colClass.updatedAt}>
-                  {t("channels.table.updatedAt")}
+                  {t("channels.table.checkin")}
                 </TableHead>
                 <TableHead className={colClass.actions}>{t("common.actions")}</TableHead>
               </TableRow>
