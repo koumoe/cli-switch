@@ -1,3 +1,9 @@
+## [0.17.0](https://github.com/koumoe/cli-switch/compare/v0.16.0...v0.17.0) (2026-01-07)
+
+### Features
+
+* **api:** return error code and english message ([3ff16f4](https://github.com/koumoe/cli-switch/commit/3ff16f4b7f25dc73007aeda93de991770a95d7e7))
+* **ui:** localize api error codes ([9aa1fc4](https://github.com/koumoe/cli-switch/commit/9aa1fc487f773bfcb89820de31b14c603287e1bf))
 ## [0.16.0](https://github.com/koumoe/cli-switch/compare/v0.15.2...v0.16.0) (2026-01-07)
 
 ### Features
