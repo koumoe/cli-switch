@@ -8,7 +8,6 @@ import {
   PowerOff,
   TestTube,
   ArrowDownUp,
-  LogIn,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -58,7 +57,7 @@ import {
   type CreateChannelInput,
   type Protocol,
 } from "../api";
-import { formatDateTime, protocolLabel } from "../lib";
+import { protocolLabel } from "../lib";
 
 type ChannelDraft = CreateChannelInput;
 
@@ -518,7 +517,6 @@ export function ChannelsPage() {
 
   function renderTable(protocol: Protocol) {
     const tabChannels = channelsByProtocol[protocol];
-    const afterNoon = new Date(nowMs).getHours() >= 12;
     const colClass = {
       drag: "w-10",
       name: "w-44",
@@ -526,7 +524,7 @@ export function ChannelsPage() {
       realMultiplier: "w-24",
       status: "w-20",
       updatedAt: "w-44",
-      actions: "w-40",
+      actions: "w-32",
     } as const;
     return (
       <Card>
@@ -591,11 +589,28 @@ export function ChannelsPage() {
                   );
                   const checkinUrl = (c.checkin_url ?? "").trim();
                   const checkinDone = !!checkinCompleted[c.id];
-                  const checkinDue = afterNoon && checkinUrl.length > 0 && !checkinDone;
-                  const checkinDisabled = checkinUrl.length === 0 || checkinDone;
                   const realMultiplierDisplay = getRealMultiplierDisplay(
                     c.real_multiplier
                   );
+
+                  const checkinStatus = (() => {
+                    if (checkinUrl.length === 0)
+                      return {
+                        variant: "secondary" as const,
+                        text: t("channels.checkin.status.none"),
+                      };
+                    if (checkinDone)
+                      return {
+                        variant: "success" as const,
+                        text: t("channels.checkin.status.done"),
+                      };
+                    return {
+                      variant: "destructive" as const,
+                      text: t("channels.checkin.status.todo"),
+                    };
+                  })();
+
+                  const checkinClickable = checkinUrl.length > 0 && !checkinDone;
 
                   return (
                     <TableRow
@@ -701,39 +716,37 @@ export function ChannelsPage() {
                         </Badge>
                       )}
                     </TableCell>
-                    <TableCell className="text-muted-foreground text-sm">
-                      {formatDateTime(c.updated_at_ms)}
+                    <TableCell>
+                      <button
+                        type="button"
+                        className="inline-flex"
+                        disabled={!checkinClickable}
+                        title={checkinClickable ? t("channels.actions.checkin") : undefined}
+                        onClick={() => {
+                          if (!checkinClickable) return;
+                          void (async () => {
+                            try {
+                              await openInBrowser(checkinUrl);
+                              setCheckinTarget(c);
+                              setCheckinPromptOpen(true);
+                            } catch (e) {
+                              toast.error(t("channels.toast.actionFail"), {
+                                description: String(e),
+                              });
+                            }
+                          })();
+                        }}
+                      >
+                        <Badge
+                          variant={checkinStatus.variant}
+                          className={checkinClickable ? "cursor-pointer hover:opacity-90" : ""}
+                        >
+                          {checkinStatus.text}
+                        </Badge>
+                      </button>
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center justify-center gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="relative"
-                          onClick={() => {
-                            if (checkinDisabled) return;
-                            void (async () => {
-                              try {
-                                await openInBrowser(checkinUrl);
-                                setCheckinTarget(c);
-                                setCheckinPromptOpen(true);
-                              } catch (e) {
-                                toast.error(t("channels.toast.actionFail"), { description: String(e) });
-                              }
-                            })();
-                          }}
-                          disabled={checkinDisabled}
-                          title={
-                            checkinUrl.length > 0
-                              ? t("channels.actions.checkin")
-                              : t("channels.actions.checkinMissing")
-                          }
-                        >
-                          <LogIn className="h-4 w-4" />
-                          {checkinDue && (
-                            <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-destructive" />
-                          )}
-                        </Button>
                         <Button
                           variant="ghost"
                           size="icon"
@@ -836,8 +849,8 @@ export function ChannelsPage() {
 
       {/* 新建/编辑弹窗 */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
-        <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader>
+        <DialogContent className="sm:max-w-[500px] max-h-[85vh] overflow-hidden flex flex-col">
+          <DialogHeader className="shrink-0">
             <DialogTitle>
               {modalMode === "create" ? t("channels.modal.createTitle") : t("channels.modal.editTitle")}
             </DialogTitle>
@@ -846,7 +859,7 @@ export function ChannelsPage() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 py-4">
+          <div className="flex-1 min-h-0 space-y-4 py-4 overflow-y-auto pr-1">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <label className="text-sm font-medium">{t("channels.modal.name")}</label>
@@ -1027,7 +1040,7 @@ export function ChannelsPage() {
             </div>
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="shrink-0">
             <Button variant="outline" onClick={() => setModalOpen(false)}>
               {t("common.cancel")}
             </Button>

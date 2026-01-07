@@ -105,7 +105,7 @@
       "realMultiplier": "Multiplier",
       "baseUrl": "Base URL",
       "status": "Status",
-      "updatedAt": "Updated At",
+      "updatedAt": "Check-in",
       "empty": "No channels. Click 'New Channel' to add one."
     },
     "actions": {
@@ -143,6 +143,11 @@
       "enabled": "Enabled"
     },
     "checkin": {
+      "status": {
+        "todo": "Not checked in",
+        "done": "Checked in",
+        "none": "No check-in"
+      },
       "dialog": {
         "title": "Check-in",
         "description": "Opened the check-in page for {{name}}. Have you completed it?",

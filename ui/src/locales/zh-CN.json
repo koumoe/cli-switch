@@ -105,7 +105,7 @@
       "realMultiplier": "实际倍率",
       "baseUrl": "Base URL",
       "status": "状态",
-      "updatedAt": "更新时间",
+      "updatedAt": "签到",
       "empty": "暂无渠道，点击「新建渠道」添加"
     },
     "actions": {
@@ -143,6 +143,11 @@
       "enabled": "启用"
     },
     "checkin": {
+      "status": {
+        "todo": "未签到",
+        "done": "已签到",
+        "none": "无签到"
+      },
       "dialog": {
         "title": "签到确认",
         "description": "已打开 {{name}} 的签到页面，是否已完成签到？",
