@@ -4,6 +4,7 @@ use serde::Serialize;
 use std::path::{Path, PathBuf};
 
 mod channel;
+mod checkin;
 mod pricing;
 mod protocol;
 mod route;
@@ -16,6 +17,9 @@ pub use channel::{
     clear_channel_failures, create_channel, delete_channel, get_channel, list_channels,
     record_channel_failure_and_maybe_disable, reorder_channels, set_channel_enabled,
     update_channel,
+};
+pub use checkin::{
+    ChannelCheckinsToday, complete_channel_checkin_today, get_channel_checkins_today,
 };
 pub use pricing::{
     PricingModel, PricingStatus, UpsertPricingModel, pricing_status, search_pricing_models,
@@ -48,6 +52,7 @@ pub fn init_db(db_path: &Path) -> anyhow::Result<()> {
 
     ensure_channels_schema(&conn)?;
     ensure_channel_failures_schema(&conn)?;
+    ensure_channel_checkins_schema(&conn)?;
     ensure_app_settings_schema(&conn)?;
     ensure_pricing_models_schema(&conn)?;
     ensure_usage_events_schema(&conn)?;
@@ -75,6 +80,7 @@ fn ensure_channels_schema(conn: &Connection) -> anyhow::Result<()> {
         "auto_disabled_until_ms",
         "INTEGER NOT NULL DEFAULT 0",
     )?;
+    ensure_column(conn, "channels", "checkin_url", "TEXT NULL")?;
     Ok(())
 }
 
@@ -91,6 +97,25 @@ fn ensure_channel_failures_schema(conn: &Connection) -> anyhow::Result<()> {
     )?;
     conn.execute(
         r#"CREATE INDEX IF NOT EXISTS idx_channel_failures_channel_ts ON channel_failures(channel_id, at_ms)"#,
+        [],
+    )?;
+    Ok(())
+}
+
+fn ensure_channel_checkins_schema(conn: &Connection) -> anyhow::Result<()> {
+    conn.execute(
+        r#"
+        CREATE TABLE IF NOT EXISTS channel_checkins (
+          channel_id TEXT NOT NULL,
+          date TEXT NOT NULL,
+          completed_at_ms INTEGER NOT NULL,
+          PRIMARY KEY (channel_id, date)
+        )
+        "#,
+        [],
+    )?;
+    conn.execute(
+        r#"CREATE INDEX IF NOT EXISTS idx_channel_checkins_date ON channel_checkins(date, completed_at_ms)"#,
         [],
     )?;
     Ok(())

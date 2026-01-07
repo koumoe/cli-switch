@@ -50,11 +50,14 @@ import {
   disableChannel,
   testChannel,
   reorderChannels,
+  channelCheckinsToday,
+  completeChannelCheckinToday,
+  openInBrowser,
   type Channel,
   type CreateChannelInput,
   type Protocol,
 } from "../api";
-import { formatDateTime, protocolLabel } from "../lib";
+import { protocolLabel } from "../lib";
 
 type ChannelDraft = CreateChannelInput;
 
@@ -65,6 +68,7 @@ function emptyDraft(): ChannelDraft {
     base_url: "https://api.openai.com",
     auth_type: "auto",
     auth_ref: "",
+    checkin_url: "",
     priority: 0,
     recharge_currency: "CNY",
     real_multiplier: 1,
@@ -181,7 +185,7 @@ export function ChannelsPage() {
   const dragOverId = dragState.dragOverId;
   const dragSnapshot = dragState.snapshot;
   const dragCommittedRef = useRef(false);
-  const renderNowMs = Date.now();
+  const [nowMs, setNowMs] = useState(() => Date.now());
 
   const [modalOpen, setModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<"create" | "edit">("create");
@@ -195,13 +199,39 @@ export function ChannelsPage() {
   const [deleting, setDeleting] = useState(false);
   const [autoSortOpen, setAutoSortOpen] = useState(false);
   const [autoSortApplying, setAutoSortApplying] = useState(false);
+  const [checkinsDate, setCheckinsDate] = useState<string | null>(null);
+  const [checkinCompleted, setCheckinCompleted] = useState<Record<string, boolean>>({});
+  const [checkinPromptOpen, setCheckinPromptOpen] = useState(false);
+  const [checkinTarget, setCheckinTarget] = useState<Channel | null>(null);
+  const [checkinCompleting, setCheckinCompleting] = useState(false);
+
+  function localYmd(ms: number): string {
+    const d = new Date(ms);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  }
 
   async function refresh() {
     try {
-      const cs = await listChannels();
+      const [cs, checkins] = await Promise.all([
+        listChannels(),
+        channelCheckinsToday().catch(() => null),
+      ]);
       const by: Record<Protocol, Channel[]> = { openai: [], anthropic: [], gemini: [] };
       for (const c of cs) by[c.protocol].push(c);
       setChannelsByProtocol(by);
+
+      if (checkins) {
+        setCheckinsDate(checkins.date);
+        const completed: Record<string, boolean> = {};
+        for (const id of checkins.completed_channel_ids) completed[id] = true;
+        setCheckinCompleted(completed);
+      } else {
+        setCheckinsDate(null);
+        setCheckinCompleted({});
+      }
     } catch (e) {
       toast.error(t("channels.toast.loadFail"), { description: String(e) });
     }
@@ -210,6 +240,26 @@ export function ChannelsPage() {
   useEffect(() => {
     refresh();
   }, []);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNowMs(Date.now()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (!checkinsDate) return;
+    if (localYmd(nowMs) === checkinsDate) return;
+    void channelCheckinsToday()
+      .then((checkins) => {
+        setCheckinsDate(checkins.date);
+        const completed: Record<string, boolean> = {};
+        for (const id of checkins.completed_channel_ids) completed[id] = true;
+        setCheckinCompleted(completed);
+      })
+      .catch(() => {
+        // ignore: 仅用于跨天刷新签到状态
+      });
+  }, [nowMs, checkinsDate]);
 
   function effectiveCostFactor(c: Channel): number {
     const real = Number(c.real_multiplier ?? 1);
@@ -274,6 +324,7 @@ export function ChannelsPage() {
       base_url: c.base_url,
       auth_type: "auto",
       auth_ref: c.auth_ref,
+      checkin_url: c.checkin_url ?? "",
       priority: c.priority ?? 0,
       recharge_currency: c.recharge_currency ?? "CNY",
       real_multiplier: c.real_multiplier ?? 1,
@@ -305,6 +356,7 @@ export function ChannelsPage() {
           base_url: draft.base_url.trim(),
           auth_type: "auto",
           auth_ref: draft.auth_ref,
+          checkin_url: draft.checkin_url ?? "",
           priority: draft.priority,
           recharge_currency: draft.recharge_currency,
           real_multiplier: draft.real_multiplier,
@@ -492,7 +544,7 @@ export function ChannelsPage() {
                   {t("channels.table.status")}
                 </TableHead>
                 <TableHead className={colClass.updatedAt}>
-                  {t("channels.table.updatedAt")}
+                  {t("channels.table.checkin")}
                 </TableHead>
                 <TableHead className={colClass.actions}>{t("common.actions")}</TableHead>
               </TableRow>
@@ -529,15 +581,36 @@ export function ChannelsPage() {
               ) : (
                 tabChannels.map((c) => {
                   const isAutoDisabled =
-                    c.enabled && (c.auto_disabled_until_ms ?? 0) > renderNowMs;
+                    c.enabled && (c.auto_disabled_until_ms ?? 0) > nowMs;
                   const effectiveEnabled = c.enabled && !isAutoDisabled;
                   const autoDisabledMinutes = Math.max(
                     1,
-                    Math.ceil(((c.auto_disabled_until_ms ?? 0) - renderNowMs) / 60000)
+                    Math.ceil(((c.auto_disabled_until_ms ?? 0) - nowMs) / 60000)
                   );
+                  const checkinUrl = (c.checkin_url ?? "").trim();
+                  const checkinDone = !!checkinCompleted[c.id];
                   const realMultiplierDisplay = getRealMultiplierDisplay(
                     c.real_multiplier
                   );
+
+                  const checkinStatus = (() => {
+                    if (checkinUrl.length === 0)
+                      return {
+                        variant: "secondary" as const,
+                        text: t("channels.checkin.status.none"),
+                      };
+                    if (checkinDone)
+                      return {
+                        variant: "success" as const,
+                        text: t("channels.checkin.status.done"),
+                      };
+                    return {
+                      variant: "destructive" as const,
+                      text: t("channels.checkin.status.todo"),
+                    };
+                  })();
+
+                  const checkinClickable = checkinUrl.length > 0 && !checkinDone;
 
                   return (
                     <TableRow
@@ -643,8 +716,34 @@ export function ChannelsPage() {
                         </Badge>
                       )}
                     </TableCell>
-                    <TableCell className="text-muted-foreground text-sm">
-                      {formatDateTime(c.updated_at_ms)}
+                    <TableCell>
+                      <button
+                        type="button"
+                        className="inline-flex"
+                        disabled={!checkinClickable}
+                        title={checkinClickable ? t("channels.actions.checkin") : undefined}
+                        onClick={() => {
+                          if (!checkinClickable) return;
+                          void (async () => {
+                            try {
+                              await openInBrowser(checkinUrl);
+                              setCheckinTarget(c);
+                              setCheckinPromptOpen(true);
+                            } catch (e) {
+                              toast.error(t("channels.toast.actionFail"), {
+                                description: String(e),
+                              });
+                            }
+                          })();
+                        }}
+                      >
+                        <Badge
+                          variant={checkinStatus.variant}
+                          className={checkinClickable ? "cursor-pointer hover:opacity-90" : ""}
+                        >
+                          {checkinStatus.text}
+                        </Badge>
+                      </button>
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center justify-center gap-1">
@@ -750,8 +849,8 @@ export function ChannelsPage() {
 
       {/* 新建/编辑弹窗 */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
-        <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader>
+        <DialogContent className="sm:max-w-[500px] max-h-[85vh] overflow-hidden flex flex-col">
+          <DialogHeader className="shrink-0">
             <DialogTitle>
               {modalMode === "create" ? t("channels.modal.createTitle") : t("channels.modal.editTitle")}
             </DialogTitle>
@@ -760,7 +859,7 @@ export function ChannelsPage() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 py-4">
+          <div className="flex-1 min-h-0 space-y-4 py-4 overflow-y-auto pr-1">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <label className="text-sm font-medium">{t("channels.modal.name")}</label>
@@ -911,6 +1010,18 @@ export function ChannelsPage() {
             </div>
 
             <div className="space-y-2">
+              <label className="text-sm font-medium">{t("channels.modal.checkinUrl")}</label>
+              <Input
+                value={draft.checkin_url ?? ""}
+                onChange={(e) => setDraft((d) => ({ ...d, checkin_url: e.target.value }))}
+                placeholder="https://example.com/checkin"
+              />
+              <p className="text-xs text-muted-foreground">
+                {t("channels.modal.checkinUrlHint")}
+              </p>
+            </div>
+
+            <div className="space-y-2">
               <label className="text-sm font-medium">{t("channels.modal.apiKey")}</label>
               <Input
                 type="password"
@@ -929,11 +1040,58 @@ export function ChannelsPage() {
             </div>
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="shrink-0">
             <Button variant="outline" onClick={() => setModalOpen(false)}>
               {t("common.cancel")}
             </Button>
             <Button onClick={submit}>{t("common.save")}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 签到确认 */}
+      <Dialog open={checkinPromptOpen} onOpenChange={setCheckinPromptOpen}>
+        <DialogContent className="sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle>{t("channels.checkin.dialog.title")}</DialogTitle>
+            <DialogDescription>
+              {t("channels.checkin.dialog.description", { name: checkinTarget?.name ?? "" })}
+            </DialogDescription>
+          </DialogHeader>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setCheckinPromptOpen(false);
+                setCheckinTarget(null);
+              }}
+              disabled={checkinCompleting}
+            >
+              {t("channels.checkin.dialog.notDone")}
+            </Button>
+            <Button
+              onClick={() => {
+                if (!checkinTarget) return;
+                void (async () => {
+                  setCheckinCompleting(true);
+                  try {
+                    await completeChannelCheckinToday(checkinTarget.id);
+                    setCheckinCompleted((m) => ({ ...m, [checkinTarget.id]: true }));
+                    toast.success(t("channels.checkin.toast.done", { name: checkinTarget.name }));
+                    setCheckinPromptOpen(false);
+                    setCheckinTarget(null);
+                  } catch (e) {
+                    toast.error(t("channels.toast.actionFail"), { description: String(e) });
+                  } finally {
+                    setCheckinCompleting(false);
+                  }
+                })();
+              }}
+              disabled={checkinCompleting}
+            >
+              {t("channels.checkin.dialog.done")}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -37,6 +37,7 @@ export type Channel = {
   base_url: string;
   auth_type: string;
   auth_ref: string;
+  checkin_url: string | null;
   priority: number;
   recharge_currency: "USD" | "CNY";
   real_multiplier: number;
@@ -52,6 +53,7 @@ export type CreateChannelInput = {
   base_url: string;
   auth_type: string;
   auth_ref: string;
+  checkin_url: string;
   priority: number;
   recharge_currency: "USD" | "CNY";
   real_multiplier: number;
@@ -63,11 +65,17 @@ export type UpdateChannelInput = Partial<{
   base_url: string;
   auth_type: string;
   auth_ref: string;
+  checkin_url: string;
   priority: number;
   recharge_currency: "USD" | "CNY";
   real_multiplier: number;
   enabled: boolean;
 }>;
+
+export type ChannelCheckinsToday = {
+  date: string;
+  completed_channel_ids: string[];
+};
 
 export type ChannelTestResponse = {
   reachable: boolean;
@@ -301,6 +309,18 @@ export function testChannel(id: string): Promise<ChannelTestResponse> {
 
 export function reorderChannels(protocol: Protocol, channelIds: string[]): Promise<void> {
   return http<void>("POST", "/api/channels/reorder", { protocol, channel_ids: channelIds });
+}
+
+export function channelCheckinsToday(): Promise<ChannelCheckinsToday> {
+  return http<ChannelCheckinsToday>("GET", "/api/channels/checkins/today");
+}
+
+export function completeChannelCheckinToday(id: string): Promise<void> {
+  return http<void>("POST", `/api/channels/${encodeURIComponent(id)}/checkins/complete`);
+}
+
+export function openInBrowser(url: string): Promise<void> {
+  return http<void>("POST", "/api/system/open", { url });
 }
 
 export function listRoutes(): Promise<Route[]> {

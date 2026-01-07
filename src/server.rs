@@ -39,6 +39,8 @@ fn request_endpoint_template(method: &Method, path: &str) -> Option<&'static str
         ("GET", "/api/channels") => Some("/api/channels"),
         ("POST", "/api/channels") => Some("/api/channels"),
         ("POST", "/api/channels/reorder") => Some("/api/channels/reorder"),
+        ("GET", "/api/channels/checkins/today") => Some("/api/channels/checkins/today"),
+        ("POST", "/api/system/open") => Some("/api/system/open"),
         ("GET", "/api/routes") => Some("/api/routes"),
         ("POST", "/api/routes") => Some("/api/routes"),
         ("GET", "/api/pricing/status") => Some("/api/pricing/status"),
@@ -59,6 +61,9 @@ fn request_endpoint_template(method: &Method, path: &str) -> Option<&'static str
                 }
                 ["api", "channels", _, "test"] if method == Method::POST => {
                     Some("/api/channels/{id}/test")
+                }
+                ["api", "channels", _, "checkins", "complete"] if method == Method::POST => {
+                    Some("/api/channels/{id}/checkins/complete")
                 }
                 ["api", "channels", _] if method == Method::PUT => Some("/api/channels/{id}"),
                 ["api", "channels", _] if method == Method::DELETE => Some("/api/channels/{id}"),
@@ -95,6 +100,8 @@ fn request_purpose(method: &Method, path: &str) -> &'static str {
         ("GET", "/api/channels") => "handlers::list_channels",
         ("POST", "/api/channels") => "handlers::create_channel",
         ("POST", "/api/channels/reorder") => "handlers::reorder_channels",
+        ("GET", "/api/channels/checkins/today") => "handlers::channel_checkins_today",
+        ("POST", "/api/system/open") => "handlers::open_in_browser",
         ("GET", "/api/routes") => "handlers::list_routes",
         ("POST", "/api/routes") => "handlers::create_route",
         ("GET", "/api/pricing/status") => "handlers::pricing_status",
@@ -115,6 +122,9 @@ fn request_purpose(method: &Method, path: &str) -> &'static str {
                 }
                 ["api", "channels", _, "test"] if method == Method::POST => {
                     "handlers::test_channel"
+                }
+                ["api", "channels", _, "checkins", "complete"] if method == Method::POST => {
+                    "handlers::complete_channel_checkin_today"
                 }
                 ["api", "channels", _] if method == Method::PUT => "handlers::update_channel",
                 ["api", "channels", _] if method == Method::DELETE => "handlers::delete_channel",
@@ -182,6 +192,10 @@ fn build_app(state: AppState) -> Router {
         )
         .route("/api/channels/reorder", post(handlers::reorder_channels))
         .route(
+            "/api/channels/checkins/today",
+            get(handlers::channel_checkins_today),
+        )
+        .route(
             "/api/channels/{id}",
             put(handlers::update_channel).delete(handlers::delete_channel),
         )
@@ -191,6 +205,11 @@ fn build_app(state: AppState) -> Router {
             post(handlers::disable_channel),
         )
         .route("/api/channels/{id}/test", post(handlers::test_channel))
+        .route(
+            "/api/channels/{id}/checkins/complete",
+            post(handlers::complete_channel_checkin_today),
+        )
+        .route("/api/system/open", post(handlers::open_in_browser))
         .route(
             "/api/routes",
             get(handlers::list_routes).post(handlers::create_route),

@@ -6,12 +6,13 @@ pub(super) mod proxy;
 pub(super) mod route;
 pub(super) mod settings;
 pub(super) mod stats;
+pub(super) mod system;
 pub(super) mod update;
 pub(super) mod usage;
 
 pub(super) use channel::{
-    create_channel, delete_channel, disable_channel, enable_channel, list_channels,
-    reorder_channels, test_channel, update_channel,
+    channel_checkins_today, complete_channel_checkin_today, create_channel, delete_channel,
+    disable_channel, enable_channel, list_channels, reorder_channels, test_channel, update_channel,
 };
 pub(super) use health::health;
 pub(super) use maintenance::{db_size, frontend_log_ingest, logs_clear, logs_size, records_clear};
@@ -23,5 +24,6 @@ pub(super) use route::{
 };
 pub(super) use settings::{get_settings, update_settings};
 pub(super) use stats::{stats_channels, stats_summary, stats_trend};
+pub(super) use system::open_in_browser;
 pub(super) use update::{update_check, update_download, update_status};
 pub(super) use usage::usage_list;
