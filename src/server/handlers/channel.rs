@@ -24,6 +24,24 @@ pub(in crate::server) async fn list_channels(
     Ok(Json(channels))
 }
 
+pub(in crate::server) async fn channel_checkins_today(
+    State(state): State<AppState>,
+) -> Result<impl IntoResponse, ApiError> {
+    let res = storage::get_channel_checkins_today(state.db_path()).await?;
+    Ok(Json(res))
+}
+
+pub(in crate::server) async fn complete_channel_checkin_today(
+    State(state): State<AppState>,
+    axum::extract::Path(channel_id): axum::extract::Path<String>,
+) -> Result<impl IntoResponse, ApiError> {
+    let res = storage::complete_channel_checkin_today(state.db_path(), channel_id).await;
+    map_storage_unit_no_content(res, |msg| {
+        msg.starts_with("channel not found")
+            .then(|| ApiError::NotFound("channel not found".to_string()))
+    })
+}
+
 #[derive(Debug, Deserialize)]
 pub(in crate::server) struct ReorderChannelsInput {
     protocol: Option<storage::Protocol>,
