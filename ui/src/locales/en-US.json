@@ -110,6 +110,8 @@
     },
     "actions": {
       "drag": "Drag to reorder",
+      "checkin": "Check-in",
+      "checkinMissing": "No check-in URL",
       "test": "Test Connection",
       "edit": "Edit",
       "delete": "Delete",
@@ -135,8 +137,21 @@
       "realMultiplierHint": "0 means free channel; up to 2 decimals",
       "realMultiplierTooManyDecimals": "Up to 2 decimal places",
       "baseUrl": "Base URL",
+      "checkinUrl": "Check-in URL",
+      "checkinUrlHint": "Optional: after 12:00, a red dot appears until you confirm completion",
       "apiKey": "API Key / Token",
       "enabled": "Enabled"
+    },
+    "checkin": {
+      "dialog": {
+        "title": "Check-in",
+        "description": "Opened the check-in page for {{name}}. Have you completed it?",
+        "notDone": "Not yet",
+        "done": "Done"
+      },
+      "toast": {
+        "done": "{{name}} check-in completed"
+      }
     },
     "deleteDialog": {
       "title": "Delete Channel",

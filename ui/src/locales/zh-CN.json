@@ -110,6 +110,8 @@
     },
     "actions": {
       "drag": "拖拽排序",
+      "checkin": "签到",
+      "checkinMissing": "未设置签到地址",
       "test": "测试连接",
       "edit": "编辑",
       "delete": "删除",
@@ -135,8 +137,21 @@
       "realMultiplierHint": "支持 0 表示免费渠道，最多 2 位小数",
       "realMultiplierTooManyDecimals": "最多只能输入 2 位小数",
       "baseUrl": "Base URL",
+      "checkinUrl": "签到地址",
+      "checkinUrlHint": "可选：设置后，12 点后会在列表显示红点提醒",
       "apiKey": "API Key / Token",
       "enabled": "启用"
+    },
+    "checkin": {
+      "dialog": {
+        "title": "签到确认",
+        "description": "已打开 {{name}} 的签到页面，是否已完成签到？",
+        "notDone": "未完成",
+        "done": "已完成"
+      },
+      "toast": {
+        "done": "{{name}} 签到完成"
+      }
     },
     "deleteDialog": {
       "title": "删除渠道",
