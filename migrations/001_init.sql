@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS channels (
   base_url TEXT NOT NULL,
   auth_type TEXT NOT NULL,
   auth_ref TEXT NOT NULL,
+  checkin_url TEXT NULL,
   priority INTEGER NOT NULL DEFAULT 0,
   recharge_currency TEXT NOT NULL DEFAULT 'CNY' CHECK(recharge_currency IN ('CNY','USD')),
   real_multiplier REAL NOT NULL DEFAULT 1.0,
@@ -79,6 +80,15 @@ CREATE TABLE IF NOT EXISTS channel_failures (
 );
 
 CREATE INDEX IF NOT EXISTS idx_channel_failures_channel_ts ON channel_failures(channel_id, at_ms);
+
+CREATE TABLE IF NOT EXISTS channel_checkins (
+  channel_id TEXT NOT NULL,
+  date TEXT NOT NULL,
+  completed_at_ms INTEGER NOT NULL,
+  PRIMARY KEY (channel_id, date)
+);
+
+CREATE INDEX IF NOT EXISTS idx_channel_checkins_date ON channel_checkins(date, completed_at_ms);
 
 CREATE TABLE IF NOT EXISTS app_settings (
   key TEXT PRIMARY KEY,
