@@ -40,6 +40,7 @@ import {
   TabsTrigger,
 } from "@/components/ui";
 import { useI18n } from "@/lib/i18n";
+import { humanizeApiError } from "@/lib/error";
 import { useCurrency } from "@/lib/currency";
 import {
   listChannels,
@@ -233,7 +234,7 @@ export function ChannelsPage() {
         setCheckinCompleted({});
       }
     } catch (e) {
-      toast.error(t("channels.toast.loadFail"), { description: String(e) });
+      toast.error(t("channels.toast.loadFail"), { description: humanizeApiError(e, t) });
     }
   }
 
@@ -295,7 +296,7 @@ export function ChannelsPage() {
       setAutoSortOpen(false);
       await refresh();
     } catch (e) {
-      toast.error(t("channels.toast.reorderFail"), { description: String(e) });
+      toast.error(t("channels.toast.reorderFail"), { description: humanizeApiError(e, t) });
     } finally {
       setAutoSortApplying(false);
     }
@@ -367,7 +368,7 @@ export function ChannelsPage() {
       setModalOpen(false);
       await refresh();
     } catch (e) {
-      toast.error(t("channels.toast.actionFail"), { description: String(e) });
+      toast.error(t("channels.toast.actionFail"), { description: humanizeApiError(e, t) });
     }
   }
 
@@ -384,7 +385,7 @@ export function ChannelsPage() {
       }
       await refresh();
     } catch (e) {
-      toast.error(t("channels.toast.actionFail"), { description: String(e) });
+      toast.error(t("channels.toast.actionFail"), { description: humanizeApiError(e, t) });
     }
   }
 
@@ -403,7 +404,7 @@ export function ChannelsPage() {
       setDeleteTarget(null);
       await refresh();
     } catch (e) {
-      toast.error(t("channels.toast.deleteFail"), { description: String(e) });
+      toast.error(t("channels.toast.deleteFail"), { description: humanizeApiError(e, t) });
     } finally {
       setDeleting(false);
     }
@@ -433,7 +434,7 @@ export function ChannelsPage() {
         });
       }
     } catch (e) {
-      toast.error(t("channels.toast.testFail"), { description: String(e) });
+      toast.error(t("channels.toast.testFail"), { description: humanizeApiError(e, t) });
     } finally {
       setTesting((m) => ({ ...m, [c.id]: false }));
     }
@@ -446,7 +447,7 @@ export function ChannelsPage() {
       toast.success(t("channels.toast.reorderOk"));
       await refresh();
     } catch (e) {
-      toast.error(t("channels.toast.reorderFail"), { description: String(e) });
+      toast.error(t("channels.toast.reorderFail"), { description: humanizeApiError(e, t) });
       await refresh();
     } finally {
       setReordering(false);
@@ -731,7 +732,7 @@ export function ChannelsPage() {
                               setCheckinPromptOpen(true);
                             } catch (e) {
                               toast.error(t("channels.toast.actionFail"), {
-                                description: String(e),
+                                description: humanizeApiError(e, t),
                               });
                             }
                           })();
@@ -1082,7 +1083,7 @@ export function ChannelsPage() {
                     setCheckinPromptOpen(false);
                     setCheckinTarget(null);
                   } catch (e) {
-                    toast.error(t("channels.toast.actionFail"), { description: String(e) });
+                    toast.error(t("channels.toast.actionFail"), { description: humanizeApiError(e, t) });
                   } finally {
                     setCheckinCompleting(false);
                   }

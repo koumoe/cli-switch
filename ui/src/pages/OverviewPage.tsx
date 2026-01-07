@@ -13,6 +13,7 @@ import {
   TabsTrigger,
 } from "@/components/ui";
 import { useI18n } from "@/lib/i18n";
+import { humanizeApiError } from "@/lib/error";
 import { useCurrency, formatMoney, parseDecimalLike } from "@/lib/currency";
 import {
   listChannels,
@@ -251,7 +252,7 @@ export function OverviewPage() {
         setTrendItems(tr.items);
       })
       .catch((e) => {
-        toast.error(t("overview.toast.loadFail"), { description: String(e) });
+        toast.error(t("overview.toast.loadFail"), { description: humanizeApiError(e, t) });
       })
       .finally(() => setLoading(false));
   }, []);

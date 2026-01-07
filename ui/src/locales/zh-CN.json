@@ -3,6 +3,64 @@
     "zhCN": "简体中文",
     "enUS": "English"
   },
+  "errors": {
+    "internal_error": "内部错误",
+    "proxy_no_enabled_channel": "未配置启用渠道",
+    "proxy_no_available_channel": "无可用渠道（可能被自动禁用）",
+    "proxy_invalid_base_url": "渠道 base_url 无效",
+    "proxy_read_body_failed": "读取请求体失败",
+    "proxy_upstream_failed": "上游请求失败",
+
+    "settings_pricing_auto_update_interval_hours_out_of_range": "自动同步间隔必须在 1~8760 小时之间",
+    "settings_auto_disable_window_minutes_out_of_range": "自动禁用窗口分钟数必须 >= 1",
+    "settings_auto_disable_failure_times_out_of_range": "自动禁用失败次数必须 >= 1",
+    "settings_auto_disable_disable_minutes_out_of_range": "自动禁用时长分钟数必须 >= 1",
+    "settings_log_retention_days_out_of_range": "日志保留天数必须在 1~3650 之间",
+    "settings_autostart_set_failed": "设置开机自启动失败",
+    "settings_autostart_args_update_failed": "更新开机自启动参数失败",
+
+    "stats_range_invalid": "统计范围参数无效",
+    "stats_trend_range_unsupported": "趋势统计仅支持 range=month",
+
+    "pricing_metadata_request_failed": "获取价格数据失败",
+    "pricing_metadata_read_failed": "读取价格数据响应失败",
+    "pricing_metadata_status_not_success": "价格数据返回非成功状态",
+    "pricing_metadata_json_parse_failed": "解析价格数据失败",
+    "pricing_metadata_json_root_not_object": "价格数据格式错误",
+
+    "usage_query_param_invalid": "查询参数无效",
+    "usage_start_ms_invalid": "start_ms 参数无效",
+    "usage_end_ms_invalid": "end_ms 参数无效",
+    "usage_limit_invalid": "limit 参数无效",
+    "usage_offset_invalid": "offset 参数无效",
+    "usage_success_invalid": "success 参数无效",
+    "usage_protocol_invalid": "protocol 参数无效",
+
+    "system_url_required": "URL 不能为空",
+    "system_url_invalid": "URL 无效",
+    "system_url_scheme_not_supported": "仅支持 http/https URL",
+
+    "channel_ids_duplicate": "channel_ids 存在重复项",
+    "channel_ids_mismatch": "channel_ids 需要覆盖所有渠道",
+    "channel_name_required": "渠道名称不能为空",
+    "channel_base_url_required": "base_url 不能为空",
+    "channel_real_multiplier_invalid": "倍率参数无效",
+    "channel_base_url_invalid": "base_url 无效",
+    "channel_auth_apply_failed": "渠道鉴权配置无效",
+    "channel_not_found": "渠道不存在",
+
+    "route_name_required": "路由名称不能为空",
+    "route_not_found": "路由不存在",
+    "route_channel_ids_duplicate": "channel_ids 存在重复项",
+    "route_channel_protocol_mismatch": "路由与渠道协议不匹配",
+
+    "maintenance_records_start_ms_required": "清理记录时 start_ms 必填",
+    "maintenance_records_end_ms_required": "清理记录时 end_ms 必填",
+    "maintenance_records_start_ms_gt_end_ms": "start_ms 不能大于 end_ms",
+    "maintenance_logs_date_format_invalid": "日期格式非法（期望 YYYY-MM-DD 或 YYYY/MM/DD）",
+    "maintenance_logs_date_range_requires_one": "清理日志时 start_date/end_date 至少填一个",
+    "maintenance_logs_start_date_gt_end_date": "start_date 不能大于 end_date"
+  },
   "nav": {
     "overview": "概览",
     "channels": "渠道",
