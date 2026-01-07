@@ -1,3 +1,15 @@
+## [0.16.0](https://github.com/koumoe/cli-switch/compare/v0.15.2...v0.16.0) (2026-01-07)
+
+### Features
+
+* add channel check-in schema ([a1133ac](https://github.com/koumoe/cli-switch/commit/a1133ac98e7422bf690ed8652f1d0432957b17b4))
+* add check-in APIs ([145a048](https://github.com/koumoe/cli-switch/commit/145a0488c5bf8e6058c977ebc50f3cd2f4a8bf38))
+* **ui:** add check-in action ([a5127af](https://github.com/koumoe/cli-switch/commit/a5127af52965cb6a2682d55ea8b9b553f249472e))
+
+### Bug Fixes
+
+* **ui:** improve channel modal and check-in display ([ff17c3a](https://github.com/koumoe/cli-switch/commit/ff17c3ae6a93760a281f9e5e23875e5f62ba1d07))
+* **ui:** rename check-in table header key ([6c2635b](https://github.com/koumoe/cli-switch/commit/6c2635be322f0b6de5904bff85ba8b1de5f6105b))
 ## [0.15.2](https://github.com/koumoe/cli-switch/compare/v0.15.1...v0.15.2) (2025-12-30)
 
 ### Bug Fixes
