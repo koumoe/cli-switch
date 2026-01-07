@@ -20,7 +20,10 @@ pub(in crate::server) async fn create_route(
     Json(input): Json<storage::CreateRoute>,
 ) -> Result<impl IntoResponse, ApiError> {
     if input.name.trim().is_empty() {
-        return Err(ApiError::BadRequest("name 不能为空".to_string()));
+        return Err(ApiError::bad_request(
+            "route_name_required",
+            "Route name is required",
+        ));
     }
     let route = storage::create_route(state.db_path(), input).await?;
     Ok((StatusCode::CREATED, Json(route)))
@@ -34,7 +37,7 @@ pub(in crate::server) async fn update_route(
     let res = storage::update_route(state.db_path(), route_id, input).await;
     map_storage_unit_no_content(res, |msg| {
         msg.starts_with("route not found")
-            .then(|| ApiError::NotFound("route not found".to_string()))
+            .then(|| ApiError::not_found("route_not_found", "Route not found"))
     })
 }
 
@@ -45,7 +48,7 @@ pub(in crate::server) async fn delete_route(
     let res = storage::delete_route(state.db_path(), route_id).await;
     map_storage_unit_no_content(res, |msg| {
         msg.starts_with("route not found")
-            .then(|| ApiError::NotFound("route not found".to_string()))
+            .then(|| ApiError::not_found("route_not_found", "Route not found"))
     })
 }
 
@@ -55,7 +58,7 @@ pub(in crate::server) async fn list_route_channels(
 ) -> Result<impl IntoResponse, ApiError> {
     let db_path = state.db_path();
     let Some(_) = storage::get_route(db_path.clone(), route_id.clone()).await? else {
-        return Err(ApiError::NotFound("route not found".to_string()));
+        return Err(ApiError::not_found("route_not_found", "Route not found"));
     };
     let items = storage::list_route_channels(db_path, route_id).await?;
     Ok(Json(items))
@@ -74,18 +77,27 @@ pub(in crate::server) async fn reorder_route_channels(
     let mut seen = std::collections::HashSet::<String>::new();
     for id in &input.channel_ids {
         if !seen.insert(id.clone()) {
-            return Err(ApiError::BadRequest("channel_ids 存在重复项".to_string()));
+            return Err(ApiError::bad_request(
+                "route_channel_ids_duplicate",
+                "channel_ids contains duplicates",
+            ));
         }
     }
 
     let res = storage::set_route_channels(state.db_path(), route_id, input.channel_ids).await;
     map_storage_unit_no_content(res, |msg| {
         if msg.starts_with("route not found") {
-            Some(ApiError::NotFound("route not found".to_string()))
+            Some(ApiError::not_found("route_not_found", "Route not found"))
         } else if msg.starts_with("channel not found") {
-            Some(ApiError::NotFound("channel not found".to_string()))
+            Some(ApiError::not_found(
+                "channel_not_found",
+                "Channel not found",
+            ))
         } else if msg.starts_with("channel protocol mismatch") {
-            Some(ApiError::BadRequest(msg.to_string()))
+            Some(ApiError::bad_request(
+                "route_channel_protocol_mismatch",
+                "Channel protocol does not match route protocol",
+            ))
         } else {
             None
         }

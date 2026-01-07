@@ -79,36 +79,41 @@ pub(in crate::server) async fn update_settings(
     if let Some(h) = input.pricing_auto_update_interval_hours
         && !(1..=8760).contains(&h)
     {
-        return Err(ApiError::BadRequest(
-            "pricing_auto_update_interval_hours 必须在 1..=8760 之间".to_string(),
+        return Err(ApiError::bad_request(
+            "settings_pricing_auto_update_interval_hours_out_of_range",
+            "pricing_auto_update_interval_hours must be between 1 and 8760",
         ));
     }
     if let Some(v) = input.auto_disable_window_minutes
         && v < 1
     {
-        return Err(ApiError::BadRequest(
-            "auto_disable_window_minutes 必须 >= 1".to_string(),
+        return Err(ApiError::bad_request(
+            "settings_auto_disable_window_minutes_out_of_range",
+            "auto_disable_window_minutes must be >= 1",
         ));
     }
     if let Some(v) = input.auto_disable_failure_times
         && v < 1
     {
-        return Err(ApiError::BadRequest(
-            "auto_disable_failure_times 必须 >= 1".to_string(),
+        return Err(ApiError::bad_request(
+            "settings_auto_disable_failure_times_out_of_range",
+            "auto_disable_failure_times must be >= 1",
         ));
     }
     if let Some(v) = input.auto_disable_disable_minutes
         && v < 1
     {
-        return Err(ApiError::BadRequest(
-            "auto_disable_disable_minutes 必须 >= 1".to_string(),
+        return Err(ApiError::bad_request(
+            "settings_auto_disable_disable_minutes_out_of_range",
+            "auto_disable_disable_minutes must be >= 1",
         ));
     }
     if let Some(v) = input.log_retention_days
         && !(1..=3650).contains(&v)
     {
-        return Err(ApiError::BadRequest(
-            "log_retention_days 必须在 1..=3650 之间".to_string(),
+        return Err(ApiError::bad_request(
+            "settings_log_retention_days_out_of_range",
+            "log_retention_days must be between 1 and 3650",
         ));
     }
 
@@ -119,11 +124,17 @@ pub(in crate::server) async fn update_settings(
             Ok(Ok(())) => {}
             Ok(Err(e)) => {
                 tracing::warn!(desired = enabled, err = %e, "set autostart failed");
-                return Err(ApiError::BadRequest(format!("设置开机自启动失败：{e}")));
+                return Err(ApiError::bad_request(
+                    "settings_autostart_set_failed",
+                    format!("Failed to update auto-start: {e}"),
+                ));
             }
             Err(e) => {
                 tracing::warn!(desired = enabled, err = %e, "set autostart failed");
-                return Err(ApiError::BadRequest(format!("设置开机自启动失败：{e}")));
+                return Err(ApiError::bad_request(
+                    "settings_autostart_set_failed",
+                    format!("Failed to update auto-start: {e}"),
+                ));
             }
         }
     }
@@ -153,11 +164,17 @@ pub(in crate::server) async fn update_settings(
             Ok(Ok(())) => {}
             Ok(Err(e)) => {
                 tracing::warn!(err = %e, "rewrite autostart args failed");
-                return Err(ApiError::BadRequest(format!("更新开机自启动参数失败：{e}")));
+                return Err(ApiError::bad_request(
+                    "settings_autostart_args_update_failed",
+                    format!("Failed to update auto-start args: {e}"),
+                ));
             }
             Err(e) => {
                 tracing::warn!(err = %e, "rewrite autostart args failed");
-                return Err(ApiError::BadRequest(format!("更新开机自启动参数失败：{e}")));
+                return Err(ApiError::bad_request(
+                    "settings_autostart_args_update_failed",
+                    format!("Failed to update auto-start args: {e}"),
+                ));
             }
         }
     }

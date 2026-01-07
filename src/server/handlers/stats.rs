@@ -28,7 +28,7 @@ impl std::str::FromStr for StatsRange {
         match s {
             "today" => Ok(StatsRange::Today),
             "month" => Ok(StatsRange::Month),
-            other => Err(format!("未知 range：{other}")),
+            other => Err(format!("Invalid range: {other}")),
         }
     }
 }
@@ -79,7 +79,7 @@ pub(in crate::server) async fn stats_summary(
         .as_deref()
         .unwrap_or("today")
         .parse::<StatsRange>()
-        .map_err(ApiError::BadRequest)?;
+        .map_err(|e| ApiError::bad_request("stats_range_invalid", e))?;
     let start_ms = start_ms_for_range(range);
     let summary = storage::stats_summary(state.db_path(), start_ms).await?;
     Ok(Json(StatsSummaryResponse {
@@ -104,7 +104,7 @@ pub(in crate::server) async fn stats_channels(
         .as_deref()
         .unwrap_or("today")
         .parse::<StatsRange>()
-        .map_err(ApiError::BadRequest)?;
+        .map_err(|e| ApiError::bad_request("stats_range_invalid", e))?;
     let start_ms = start_ms_for_range(range);
     let items = storage::stats_channels(state.db_path(), start_ms).await?;
     Ok(Json(StatsChannelsResponse {
@@ -131,7 +131,7 @@ pub(in crate::server) async fn stats_trend(
         .as_deref()
         .unwrap_or("today")
         .parse::<StatsRange>()
-        .map_err(ApiError::BadRequest)?;
+        .map_err(|e| ApiError::bad_request("stats_range_invalid", e))?;
 
     match range {
         StatsRange::Month => {
@@ -149,6 +149,9 @@ pub(in crate::server) async fn stats_trend(
                 items,
             }))
         }
-        StatsRange::Today => Err(ApiError::BadRequest("trend 仅支持 range=month".to_string())),
+        StatsRange::Today => Err(ApiError::bad_request(
+            "stats_trend_range_unsupported",
+            "trend only supports range=month",
+        )),
     }
 }

@@ -15,16 +15,20 @@ pub(in crate::server) async fn open_in_browser(
 ) -> Result<impl IntoResponse, ApiError> {
     let url = input.url.trim();
     if url.is_empty() {
-        return Err(ApiError::BadRequest("url 不能为空".to_string()));
+        return Err(ApiError::bad_request(
+            "system_url_required",
+            "url is required",
+        ));
     }
-    let parsed =
-        reqwest::Url::parse(url).map_err(|e| ApiError::BadRequest(format!("url 无效：{e}")))?;
+    let parsed = reqwest::Url::parse(url)
+        .map_err(|e| ApiError::bad_request("system_url_invalid", format!("Invalid url: {e}")))?;
     match parsed.scheme() {
         "http" | "https" => {}
         other => {
-            return Err(ApiError::BadRequest(format!(
-                "仅支持 http/https url，当前 scheme={other}"
-            )));
+            return Err(ApiError::bad_request(
+                "system_url_scheme_not_supported",
+                format!("Only http/https is supported, scheme={other}"),
+            ));
         }
     }
 
