@@ -1,4 +1,4 @@
-import { extractErrorMessage } from "@/lib/error";
+import { ApiRequestError, extractErrorCode, extractErrorMessage } from "@/lib/error";
 import { logger, type LogLevel } from "@/lib/logger";
 
 export type Protocol = "openai" | "anthropic" | "gemini";
@@ -242,10 +242,12 @@ async function http<T>(method: string, path: string, body?: unknown): Promise<T>
   const text = await res.text().catch(() => "");
   const trimmed = text.trim();
 
+  let code: string | null = null;
   let msg: string | null = null;
   if (trimmed.length > 0) {
     try {
       const parsed = JSON.parse(trimmed);
+      code = extractErrorCode(parsed);
       msg = extractErrorMessage(parsed);
       if (!msg) msg = trimmed;
     } catch {
@@ -253,16 +255,22 @@ async function http<T>(method: string, path: string, body?: unknown): Promise<T>
     }
   }
 
-  const fallback = `${method} ${path} failed: ${res.status}`;
   if (path !== "/api/logs/ingest") {
     logger.error("api request failed", {
       method,
       path,
       status: res.status,
+      code,
       error: msg ?? null
     }, "api_request_failed");
   }
-  throw new Error(msg ? `${msg}` : fallback);
+  throw new ApiRequestError({
+    code,
+    message: msg,
+    status: res.status,
+    method,
+    path
+  });
 }
 
 export function getHealth(): Promise<Health> {

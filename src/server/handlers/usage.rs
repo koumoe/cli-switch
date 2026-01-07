@@ -25,6 +25,16 @@ pub(in crate::server) async fn usage_list(
     Query(q): Query<UsageListQueryParams>,
 ) -> Result<impl IntoResponse, ApiError> {
     fn parse_i64(name: &str, v: Option<String>) -> Result<Option<i64>, ApiError> {
+        fn code_for(name: &str) -> &'static str {
+            match name {
+                "start_ms" => "usage_start_ms_invalid",
+                "end_ms" => "usage_end_ms_invalid",
+                "limit" => "usage_limit_invalid",
+                "offset" => "usage_offset_invalid",
+                _ => "usage_query_param_invalid",
+            }
+        }
+
         let Some(v) = v else { return Ok(None) };
         let s = v.trim();
         if s.is_empty() {
@@ -32,10 +42,17 @@ pub(in crate::server) async fn usage_list(
         }
         s.parse::<i64>()
             .map(Some)
-            .map_err(|e| ApiError::BadRequest(format!("{name} 无效：{e}")))
+            .map_err(|e| ApiError::bad_request(code_for(name), format!("Invalid {name}: {e}")))
     }
 
     fn parse_bool(name: &str, v: Option<String>) -> Result<Option<bool>, ApiError> {
+        fn code_for(name: &str) -> &'static str {
+            match name {
+                "success" => "usage_success_invalid",
+                _ => "usage_query_param_invalid",
+            }
+        }
+
         let Some(v) = v else { return Ok(None) };
         let s = v.trim().to_ascii_lowercase();
         if s.is_empty() {
@@ -44,7 +61,10 @@ pub(in crate::server) async fn usage_list(
         match s.as_str() {
             "true" | "1" => Ok(Some(true)),
             "false" | "0" => Ok(Some(false)),
-            _ => Err(ApiError::BadRequest(format!("{name} 无效：{v}"))),
+            _ => Err(ApiError::bad_request(
+                code_for(name),
+                format!("Invalid {name}: {v}"),
+            )),
         }
     }
 
@@ -57,10 +77,11 @@ pub(in crate::server) async fn usage_list(
     let success = parse_bool("success", q.success)?;
 
     let protocol = match q.protocol.as_deref() {
-        Some(s) if !s.trim().is_empty() => Some(
-            s.parse::<storage::Protocol>()
-                .map_err(|e| ApiError::BadRequest(e.to_string()))?,
-        ),
+        Some(s) if !s.trim().is_empty() => {
+            Some(s.trim().parse::<storage::Protocol>().map_err(|_| {
+                ApiError::bad_request("usage_protocol_invalid", format!("Invalid protocol: {s}"))
+            })?)
+        }
         _ => None,
     };
 

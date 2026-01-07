@@ -22,6 +22,7 @@ import {
   TableRow,
 } from "@/components/ui";
 import { useI18n } from "@/lib/i18n";
+import { humanizeApiError } from "@/lib/error";
 import { useWindowEvent } from "@/lib/useWindowEvent";
 import { useCurrency, formatMoney, parseDecimalLike } from "@/lib/currency";
 import {
@@ -70,7 +71,7 @@ export function MonitorPage() {
         })
       );
     } catch (e) {
-      toast.error(t("monitor.toast.loadFail"), { description: String(e) });
+      toast.error(t("monitor.toast.loadFail"), { description: humanizeApiError(e, t) });
     } finally {
       setLoading(false);
       loadingRef.current = false;

@@ -33,7 +33,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui";
-import { humanizeErrorText } from "@/lib/error";
+import { humanizeApiError, humanizeErrorText } from "@/lib/error";
 import { useI18n } from "@/lib/i18n";
 import { useWindowEvent } from "@/lib/useWindowEvent";
 import { formatMoney, parseDecimalLike, useCurrency } from "@/lib/currency";
@@ -122,7 +122,7 @@ export function LogsPage() {
       setTotal(res.total);
       setPage(nextPage);
     } catch (e) {
-      toast.error(t("logs.toast.loadFail"), { description: String(e) });
+      toast.error(t("logs.toast.loadFail"), { description: humanizeApiError(e, t) });
     } finally {
       setLoading(false);
       loadingRef.current = false;

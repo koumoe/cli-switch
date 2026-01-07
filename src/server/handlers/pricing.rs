@@ -90,25 +90,40 @@ pub(crate) async fn run_pricing_sync(
         .get(PRICING_METADATA_URL)
         .send()
         .await
-        .map_err(|e| ApiError::BadGateway(format!("请求 llm-metadata 失败：{e}")))?;
+        .map_err(|e| {
+            ApiError::bad_gateway(
+                "pricing_metadata_request_failed",
+                format!("Failed to request llm-metadata: {e}"),
+            )
+        })?;
 
     let status = resp.status();
-    let body = resp
-        .bytes()
-        .await
-        .map_err(|e| ApiError::BadGateway(format!("读取 llm-metadata 响应失败：{e}")))?;
+    let body = resp.bytes().await.map_err(|e| {
+        ApiError::bad_gateway(
+            "pricing_metadata_read_failed",
+            format!("Failed to read llm-metadata response: {e}"),
+        )
+    })?;
 
     if !status.is_success() {
         let snippet = String::from_utf8_lossy(&body);
-        return Err(ApiError::BadGateway(format!(
-            "llm-metadata 返回非成功状态：{status} body={snippet}"
-        )));
+        return Err(ApiError::bad_gateway(
+            "pricing_metadata_status_not_success",
+            format!("llm-metadata returned non-success status: {status} body={snippet}"),
+        ));
     }
 
-    let root: serde_json::Value = serde_json::from_slice(&body)
-        .map_err(|e| ApiError::BadGateway(format!("解析 llm-metadata JSON 失败：{e}")))?;
+    let root: serde_json::Value = serde_json::from_slice(&body).map_err(|e| {
+        ApiError::bad_gateway(
+            "pricing_metadata_json_parse_failed",
+            format!("Failed to parse llm-metadata JSON: {e}"),
+        )
+    })?;
     let providers = root.as_object().ok_or_else(|| {
-        ApiError::BadGateway("llm-metadata JSON 顶层不是对象 (object)".to_string())
+        ApiError::bad_gateway(
+            "pricing_metadata_json_root_not_object",
+            "llm-metadata JSON root is not an object",
+        )
     })?;
 
     let updated_at_ms = storage::now_ms();

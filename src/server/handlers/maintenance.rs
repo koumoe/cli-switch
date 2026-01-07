@@ -31,13 +31,22 @@ pub(in crate::server) async fn records_clear(
     let kind = match input.mode {
         RecordsClearMode::DateRange => {
             let start_ms = input.start_ms.ok_or_else(|| {
-                ApiError::BadRequest("mode=date_range 时 start_ms 必填".to_string())
+                ApiError::bad_request(
+                    "maintenance_records_start_ms_required",
+                    "start_ms is required when mode=date_range",
+                )
             })?;
             let end_ms = input.end_ms.ok_or_else(|| {
-                ApiError::BadRequest("mode=date_range 时 end_ms 必填".to_string())
+                ApiError::bad_request(
+                    "maintenance_records_end_ms_required",
+                    "end_ms is required when mode=date_range",
+                )
             })?;
             if start_ms > end_ms {
-                return Err(ApiError::BadRequest("start_ms 不能大于 end_ms".to_string()));
+                return Err(ApiError::bad_request(
+                    "maintenance_records_start_ms_gt_end_ms",
+                    "start_ms must be <= end_ms",
+                ));
             }
             storage::RecordsClearKind::DateRange { start_ms, end_ms }
         }
@@ -91,8 +100,9 @@ fn parse_ymd_date(input: &str) -> Result<time::Date, ApiError> {
         return Ok(d);
     }
 
-    Err(ApiError::BadRequest(
-        "日期格式非法，期望 YYYY-MM-DD 或 YYYY/MM/DD".to_string(),
+    Err(ApiError::bad_request(
+        "maintenance_logs_date_format_invalid",
+        "Invalid date format, expected YYYY-MM-DD or YYYY/MM/DD",
     ))
 }
 
@@ -118,8 +128,9 @@ pub(in crate::server) async fn logs_clear(
                 .filter(|s| !s.is_empty());
 
             let start_raw = start_opt.or(end_opt).ok_or_else(|| {
-                ApiError::BadRequest(
-                    "mode=date_range 时 start_date/end_date 至少填一个".to_string(),
+                ApiError::bad_request(
+                    "maintenance_logs_date_range_requires_one",
+                    "start_date or end_date is required when mode=date_range",
                 )
             })?;
             let end_raw = end_opt.or(start_opt).unwrap_or(start_raw);
@@ -127,8 +138,9 @@ pub(in crate::server) async fn logs_clear(
             let start = parse_ymd_date(start_raw)?;
             let end = parse_ymd_date(end_raw)?;
             if start > end {
-                return Err(ApiError::BadRequest(
-                    "start_date 不能大于 end_date".to_string(),
+                return Err(ApiError::bad_request(
+                    "maintenance_logs_start_date_gt_end_date",
+                    "start_date must be <= end_date",
                 ));
             }
             log_files::LogsClearKind::DateRange { start, end }

@@ -34,6 +34,7 @@ import {
 } from "@/components/ui";
 import { useTheme, type Theme } from "@/lib/theme";
 import { type Locale, useI18n } from "@/lib/i18n";
+import { humanizeApiError } from "@/lib/error";
 import { useCurrency, type CurrencyMode } from "@/lib/currency";
 import { setLogLevel } from "@/lib/logger";
 import { formatBytes, formatDateTime } from "../lib";
@@ -90,7 +91,7 @@ export function SettingsPage() {
       const next = await getDbSize();
       setDbSize(next);
     } catch (e) {
-      toast.error(t("settings.storage.dbSizeFail"), { description: String(e) });
+      toast.error(t("settings.storage.dbSizeFail"), { description: humanizeApiError(e, t) });
     } finally {
       setDbSizeLoading(false);
     }
@@ -102,7 +103,7 @@ export function SettingsPage() {
       const next = await getLogsSize();
       setLogsSize(next);
     } catch (e) {
-      toast.error(t("settings.maintenance.logsSizeFail"), { description: String(e) });
+      toast.error(t("settings.maintenance.logsSizeFail"), { description: humanizeApiError(e, t) });
     } finally {
       setLogsSizeLoading(false);
     }
@@ -471,7 +472,7 @@ export function SettingsPage() {
                       setAppSettings(next);
                       toast.success(t("settings.channelProtection.saved"));
                     } catch (e) {
-                      toast.error(t("settings.channelProtection.saveFail"), { description: String(e) });
+                      toast.error(t("settings.channelProtection.saveFail"), { description: humanizeApiError(e, t) });
                     } finally {
                       setAutoDisableSaving(false);
                     }
@@ -516,7 +517,7 @@ export function SettingsPage() {
                       setPricing(st);
                       toast.success(t("settings.pricingData.syncOk"));
                     } catch (e) {
-                      toast.error(t("settings.pricingData.syncFail"), { description: String(e) });
+                      toast.error(t("settings.pricingData.syncFail"), { description: humanizeApiError(e, t) });
                     } finally {
                       setSyncing(false);
                     }
@@ -592,7 +593,7 @@ export function SettingsPage() {
                       setAppSettings(next);
                       toast.success(t("settings.pricingData.saved"));
                     } catch (e) {
-                      toast.error(t("settings.pricingData.saveFail"), { description: String(e) });
+                      toast.error(t("settings.pricingData.saveFail"), { description: humanizeApiError(e, t) });
                     } finally {
                       setSaving(false);
                     }
@@ -654,7 +655,7 @@ export function SettingsPage() {
                       setAppSettings(next);
                       toast.success(t("settings.windowClose.saved"));
                     } catch (e) {
-                      toast.error(t("settings.windowClose.saveFail"), { description: String(e) });
+                      toast.error(t("settings.windowClose.saveFail"), { description: humanizeApiError(e, t) });
                     } finally {
                       setCloseSaving(false);
                     }
@@ -695,7 +696,7 @@ export function SettingsPage() {
                       toast.success(t("settings.startup.saved"));
                     } catch (e) {
                       setAppSettings({ ...appSettings, auto_start_enabled: prev });
-                      toast.error(t("settings.startup.saveFail"), { description: String(e) });
+                      toast.error(t("settings.startup.saveFail"), { description: humanizeApiError(e, t) });
                     } finally {
                       setAutoStartSaving(false);
                     }
@@ -723,7 +724,7 @@ export function SettingsPage() {
                         toast.success(t("settings.startup.launchSaved"));
                       } catch (e) {
                         setAppSettings({ ...appSettings, auto_start_launch_mode: prev });
-                        toast.error(t("settings.startup.saveFail"), { description: String(e) });
+                        toast.error(t("settings.startup.saveFail"), { description: humanizeApiError(e, t) });
                       } finally {
                         setAutoStartLaunchSaving(false);
                       }
@@ -780,7 +781,7 @@ export function SettingsPage() {
                           toast.success(t("settings.update.downloading"));
                           setUpdatePromptOpen(false);
                         } catch (e) {
-                          toast.error(t("settings.update.downloadFail"), { description: String(e) });
+                          toast.error(t("settings.update.downloadFail"), { description: humanizeApiError(e, t) });
                         } finally {
                           setUpdateDownloading(false);
                         }
@@ -815,7 +816,7 @@ export function SettingsPage() {
                       }
                     } catch (e) {
                       setAppSettings({ ...appSettings, app_auto_update_enabled: prev });
-                      toast.error(t("settings.update.saveFail"), { description: String(e) });
+                      toast.error(t("settings.update.saveFail"), { description: humanizeApiError(e, t) });
                     }
                   }}
                   disabled={!appSettings}
@@ -879,7 +880,7 @@ export function SettingsPage() {
                           if (dl.started) toast.success(t("settings.update.downloading"));
                         }
                       } catch (e) {
-                        toast.error(t("settings.update.checkFail"), { description: String(e) });
+                        toast.error(t("settings.update.checkFail"), { description: humanizeApiError(e, t) });
                       } finally {
                         setUpdateChecking(false);
                       }
@@ -1012,7 +1013,7 @@ export function SettingsPage() {
                           setRecordsDateRange(undefined);
                           await refreshDbSize();
                         } catch (e) {
-                          toast.error(t("settings.records.clearFail"), { description: String(e) });
+                          toast.error(t("settings.records.clearFail"), { description: humanizeApiError(e, t) });
                         } finally {
                           setRecordsClearing(false);
                         }
@@ -1099,7 +1100,7 @@ export function SettingsPage() {
                       toast.success(t("settings.logging.saved"));
                     } catch (e) {
                       setAppSettings({ ...appSettings, log_level: prev });
-                      toast.error(t("settings.logging.saveFail"), { description: String(e) });
+                      toast.error(t("settings.logging.saveFail"), { description: humanizeApiError(e, t) });
                     } finally {
                       setLogSaving(false);
                     }
@@ -1154,7 +1155,7 @@ export function SettingsPage() {
                         toast.success(t("settings.logging.saved"));
                       } catch (e) {
                         setLogRetentionDraft(String(prev));
-                        toast.error(t("settings.logging.saveFail"), { description: String(e) });
+                        toast.error(t("settings.logging.saveFail"), { description: humanizeApiError(e, t) });
                       } finally {
                         setLogSaving(false);
                       }
@@ -1237,7 +1238,7 @@ export function SettingsPage() {
                           setLogsDateRange(undefined);
                           await refreshLogsSize();
                         } catch (e) {
-                          toast.error(t("settings.logging.clearFail"), { description: String(e) });
+                          toast.error(t("settings.logging.clearFail"), { description: humanizeApiError(e, t) });
                         } finally {
                           setLogsClearing(false);
                         }

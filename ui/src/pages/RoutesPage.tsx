@@ -33,6 +33,7 @@ import {
   TableRow,
 } from "@/components/ui";
 import { useI18n } from "@/lib/i18n";
+import { humanizeApiError } from "@/lib/error";
 import {
   listRoutes,
   listChannels,
@@ -93,7 +94,7 @@ export function RoutesPage() {
       setRoutes(rs);
       setChannels(cs);
     } catch (e) {
-      toast.error(t("routes.toast.loadFail"), { description: String(e) });
+      toast.error(t("routes.toast.loadFail"), { description: humanizeApiError(e, t) });
     } finally {
       setLoading(false);
     }
@@ -140,7 +141,7 @@ export function RoutesPage() {
       setRouteModalOpen(false);
       await refresh();
     } catch (e) {
-      toast.error(t("routes.toast.actionFail"), { description: String(e) });
+      toast.error(t("routes.toast.actionFail"), { description: humanizeApiError(e, t) });
     }
   }
 
@@ -159,7 +160,7 @@ export function RoutesPage() {
       setDeleteTarget(null);
       await refresh();
     } catch (e) {
-      toast.error(t("routes.toast.deleteFail"), { description: String(e) });
+      toast.error(t("routes.toast.deleteFail"), { description: humanizeApiError(e, t) });
     } finally {
       setDeleting(false);
     }
@@ -176,7 +177,7 @@ export function RoutesPage() {
         .map((i) => i.channel_id);
       setAssigned(ordered);
     } catch (e) {
-      toast.error(t("routes.toast.loadFail"), { description: String(e) });
+      toast.error(t("routes.toast.loadFail"), { description: humanizeApiError(e, t) });
     } finally {
       setManageLoading(false);
     }
@@ -211,7 +212,7 @@ export function RoutesPage() {
       setManageOpen(false);
       setManageRoute(null);
     } catch (e) {
-      toast.error(t("routes.toast.saveFail"), { description: String(e) });
+      toast.error(t("routes.toast.saveFail"), { description: humanizeApiError(e, t) });
     } finally {
       setManageLoading(false);
     }

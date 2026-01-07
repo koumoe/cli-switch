@@ -3,6 +3,64 @@
     "zhCN": "Chinese (Simplified)",
     "enUS": "English"
   },
+  "errors": {
+    "internal_error": "Internal error",
+    "proxy_no_enabled_channel": "No enabled channel configured",
+    "proxy_no_available_channel": "No available channel (may be auto-disabled)",
+    "proxy_invalid_base_url": "Invalid channel base_url",
+    "proxy_read_body_failed": "Failed to read request body",
+    "proxy_upstream_failed": "Upstream request failed",
+
+    "settings_pricing_auto_update_interval_hours_out_of_range": "Auto sync interval must be between 1 and 8760 hours",
+    "settings_auto_disable_window_minutes_out_of_range": "Auto-disable window minutes must be >= 1",
+    "settings_auto_disable_failure_times_out_of_range": "Auto-disable failure times must be >= 1",
+    "settings_auto_disable_disable_minutes_out_of_range": "Auto-disable duration minutes must be >= 1",
+    "settings_log_retention_days_out_of_range": "Log retention days must be between 1 and 3650",
+    "settings_autostart_set_failed": "Failed to update auto-start",
+    "settings_autostart_args_update_failed": "Failed to update auto-start args",
+
+    "stats_range_invalid": "Invalid stats range",
+    "stats_trend_range_unsupported": "Trend only supports range=month",
+
+    "pricing_metadata_request_failed": "Failed to fetch pricing data",
+    "pricing_metadata_read_failed": "Failed to read pricing data response",
+    "pricing_metadata_status_not_success": "Pricing data returned non-success status",
+    "pricing_metadata_json_parse_failed": "Failed to parse pricing data",
+    "pricing_metadata_json_root_not_object": "Invalid pricing data format",
+
+    "usage_query_param_invalid": "Invalid query parameter",
+    "usage_start_ms_invalid": "Invalid start_ms",
+    "usage_end_ms_invalid": "Invalid end_ms",
+    "usage_limit_invalid": "Invalid limit",
+    "usage_offset_invalid": "Invalid offset",
+    "usage_success_invalid": "Invalid success",
+    "usage_protocol_invalid": "Invalid protocol",
+
+    "system_url_required": "URL is required",
+    "system_url_invalid": "Invalid URL",
+    "system_url_scheme_not_supported": "Only http/https URLs are supported",
+
+    "channel_ids_duplicate": "channel_ids contains duplicates",
+    "channel_ids_mismatch": "channel_ids must cover all channels",
+    "channel_name_required": "Channel name is required",
+    "channel_base_url_required": "base_url is required",
+    "channel_real_multiplier_invalid": "Invalid multiplier value",
+    "channel_base_url_invalid": "Invalid base_url",
+    "channel_auth_apply_failed": "Invalid channel auth config",
+    "channel_not_found": "Channel not found",
+
+    "route_name_required": "Route name is required",
+    "route_not_found": "Route not found",
+    "route_channel_ids_duplicate": "channel_ids contains duplicates",
+    "route_channel_protocol_mismatch": "Channel protocol does not match route protocol",
+
+    "maintenance_records_start_ms_required": "start_ms is required for record cleanup",
+    "maintenance_records_end_ms_required": "end_ms is required for record cleanup",
+    "maintenance_records_start_ms_gt_end_ms": "start_ms must be <= end_ms",
+    "maintenance_logs_date_format_invalid": "Invalid date format (expected YYYY-MM-DD or YYYY/MM/DD)",
+    "maintenance_logs_date_range_requires_one": "start_date or end_date is required for log cleanup",
+    "maintenance_logs_start_date_gt_end_date": "start_date must be <= end_date"
+  },
   "nav": {
     "overview": "Overview",
     "channels": "Channels",
