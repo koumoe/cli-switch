@@ -135,10 +135,7 @@ pub(in crate::server) async fn stats_summary(
 ) -> Result<impl IntoResponse, ApiError> {
     let (range, start_ms, end_ms) = resolve_stats_window(&q)?;
     let summary = storage::stats_summary(state.db_path(), start_ms, end_ms).await?;
-    Ok(Json(StatsSummaryResponse {
-        range,
-        summary,
-    }))
+    Ok(Json(StatsSummaryResponse { range, summary }))
 }
 
 #[derive(Serialize)]
