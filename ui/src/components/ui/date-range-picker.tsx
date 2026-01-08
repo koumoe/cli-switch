@@ -78,6 +78,32 @@ export function DateRangePicker({
     return { today: "Today", yesterday: "Yesterday", week: "This week", month: "This month" } as const
   }, [locale])
 
+  const handleSelect = React.useCallback((range: DateRange | undefined, selectedDay?: Date) => {
+    if (!selectedDay) {
+      onChange?.(range)
+      return
+    }
+    if (phase === "start") {
+      const next: DateRange = { from: selectedDay, to: undefined }
+      onChange?.(next)
+      setPhase("end")
+      return
+    }
+
+    if (!range?.from) {
+      onChange?.({ from: selectedDay, to: undefined })
+      setPhase("end")
+      return
+    }
+    onChange?.(range)
+    if (range?.from && range?.to) {
+      setOpen(false)
+      setPhase("start")
+    } else {
+      setPhase("end")
+    }
+  }, [onChange, phase])
+
   return (
     <Popover
       open={open}
@@ -121,31 +147,7 @@ export function DateRangePicker({
                 setStartMonth(startOfMonth(m))
               }}
               selected={value}
-              onSelect={(range, selectedDay) => {
-                if (!selectedDay) {
-                  onChange?.(range)
-                  return
-                }
-                if (phase === "start") {
-                  const next: DateRange = { from: selectedDay, to: undefined }
-                  onChange?.(next)
-                  setPhase("end")
-                  return
-                }
-
-                if (!range?.from) {
-                  onChange?.({ from: selectedDay, to: undefined })
-                  setPhase("end")
-                  return
-                }
-                onChange?.(range)
-                if (range?.from && range?.to) {
-                  setOpen(false)
-                  setPhase("start")
-                } else {
-                  setPhase("end")
-                }
-              }}
+              onSelect={handleSelect}
               locale={dateFnsLocale}
             />
             <Calendar
@@ -156,31 +158,7 @@ export function DateRangePicker({
                 setEndMonth(startOfMonth(m))
               }}
               selected={value}
-              onSelect={(range, selectedDay) => {
-                if (!selectedDay) {
-                  onChange?.(range)
-                  return
-                }
-                if (phase === "start") {
-                  const next: DateRange = { from: selectedDay, to: undefined }
-                  onChange?.(next)
-                  setPhase("end")
-                  return
-                }
-
-                if (!range?.from) {
-                  onChange?.({ from: selectedDay, to: undefined })
-                  setPhase("end")
-                  return
-                }
-                onChange?.(range)
-                if (range?.from && range?.to) {
-                  setOpen(false)
-                  setPhase("start")
-                } else {
-                  setPhase("end")
-                }
-              }}
+              onSelect={handleSelect}
               locale={dateFnsLocale}
             />
           </div>
