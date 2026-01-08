@@ -590,7 +590,11 @@
       "clearHint": "选择范围后进行清理",
       "scopeAll": "全部",
       "scopeErrors": "仅错误",
-      "scopeRange": "按时间"
+      "scopeRange": "按时间",
+      "recordsTypeAll": "全部类型",
+      "recordsTypeErrors": "仅错误",
+      "recordsTimeAll": "全部时间",
+      "recordsTimeRange": "按时间"
     },
     "records": {
       "title": "请求记录",
@@ -605,6 +609,7 @@
       "clearAll": "清理全部",
       "confirmTitle": "确认清理",
       "confirmDateRange": "将清理 {{range}} 的记录，是否继续？",
+      "confirmErrorsDateRange": "将清理 {{range}} 的错误记录，是否继续？",
       "confirmErrors": "将清理所有错误记录，是否继续？",
       "confirmAll": "将清理全部记录，是否继续？",
       "invalidDate": "请先选择日期区间",

@@ -13,6 +13,7 @@ use crate::{log_files, logging, storage};
 #[serde(rename_all = "snake_case")]
 enum RecordsClearMode {
     DateRange,
+    ErrorsDateRange,
     Errors,
     All,
 }
@@ -49,6 +50,27 @@ pub(in crate::server) async fn records_clear(
                 ));
             }
             storage::RecordsClearKind::DateRange { start_ms, end_ms }
+        }
+        RecordsClearMode::ErrorsDateRange => {
+            let start_ms = input.start_ms.ok_or_else(|| {
+                ApiError::bad_request(
+                    "maintenance_records_start_ms_required",
+                    "start_ms is required when mode=errors_date_range",
+                )
+            })?;
+            let end_ms = input.end_ms.ok_or_else(|| {
+                ApiError::bad_request(
+                    "maintenance_records_end_ms_required",
+                    "end_ms is required when mode=errors_date_range",
+                )
+            })?;
+            if start_ms > end_ms {
+                return Err(ApiError::bad_request(
+                    "maintenance_records_start_ms_gt_end_ms",
+                    "start_ms must be <= end_ms",
+                ));
+            }
+            storage::RecordsClearKind::ErrorsDateRange { start_ms, end_ms }
         }
         RecordsClearMode::Errors => storage::RecordsClearKind::Errors,
         RecordsClearMode::All => storage::RecordsClearKind::All,

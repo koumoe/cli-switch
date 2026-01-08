@@ -461,7 +461,7 @@ export function getLogsSize(): Promise<LogsSize> {
   return http<LogsSize>("GET", "/api/maintenance/logs/size");
 }
 
-export type RecordsClearMode = "date_range" | "errors" | "all";
+export type RecordsClearMode = "date_range" | "errors_date_range" | "errors" | "all";
 
 export type ClearRecordsResult = {
   usage_events_deleted: number;
