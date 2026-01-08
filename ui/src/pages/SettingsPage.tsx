@@ -72,7 +72,8 @@ export function SettingsPage() {
   // 数据库相关 state
   const [dbSize, setDbSize] = useState<DbSize | null>(null);
   const [dbSizeLoading, setDbSizeLoading] = useState(false);
-  const [recordsScope, setRecordsScope] = useState<RecordsClearMode>("all");
+  const [recordsType, setRecordsType] = useState<Exclude<RecordsClearMode, "date_range">>("all");
+  const [recordsTimeScope, setRecordsTimeScope] = useState<"all" | "date_range">("all");
   const [recordsDateRange, setRecordsDateRange] = useState<DateRange | undefined>(undefined);
   const [recordsPromptOpen, setRecordsPromptOpen] = useState(false);
   const [recordsClearing, setRecordsClearing] = useState(false);
@@ -970,9 +971,11 @@ export function SettingsPage() {
                     <DialogTitle>{t("settings.records.confirmTitle")}</DialogTitle>
                     <DialogDescription>
                       {t(
-                        recordsScope === "date_range"
-                          ? "settings.records.confirmDateRange"
-                          : recordsScope === "errors"
+                        recordsTimeScope === "date_range"
+                          ? recordsType === "errors"
+                            ? "settings.records.confirmDateRangeErrors"
+                            : "settings.records.confirmDateRange"
+                          : recordsType === "errors"
                             ? "settings.records.confirmErrors"
                             : "settings.records.confirmAll",
                         { range: recordsDateStr }
@@ -988,20 +991,20 @@ export function SettingsPage() {
                       onClick={async () => {
                         setRecordsClearing(true);
                         try {
-                          const msRange = recordsScope === "date_range" ? dateRangeToMs(recordsDateRange) : null;
-                          if (recordsScope === "date_range" && !msRange) {
+                          const msRange = recordsTimeScope === "date_range" ? dateRangeToMs(recordsDateRange) : null;
+                          if (recordsTimeScope === "date_range" && !msRange) {
                             toast.error(t("settings.records.invalidDate"));
                             return;
                           }
 
                           const res = await clearRecords({
-                            mode: recordsScope,
+                            mode: recordsType,
                             start_ms: msRange?.start_ms,
                             end_ms: msRange?.end_ms,
                           });
                           toast.success(t("settings.records.cleared"), {
                             description: t(
-                              recordsScope === "errors"
+                              recordsType === "errors"
                                 ? "settings.records.clearedDetailErrors"
                                 : "settings.records.clearedDetail",
                               {
@@ -1032,17 +1035,25 @@ export function SettingsPage() {
                   <div className="text-xs text-muted-foreground">{t("settings.maintenance.clearHint")}</div>
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0">
-                  <Select value={recordsScope} onValueChange={(v) => setRecordsScope(v as RecordsClearMode)} disabled={recordsClearing}>
+                  <Select value={recordsType} onValueChange={(v) => setRecordsType(v as typeof recordsType)} disabled={recordsClearing}>
                     <SelectTrigger className="w-[140px]">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">{t("settings.maintenance.scopeAll")}</SelectItem>
-                      <SelectItem value="errors">{t("settings.maintenance.scopeErrors")}</SelectItem>
-                      <SelectItem value="date_range">{t("settings.maintenance.scopeRange")}</SelectItem>
+                      <SelectItem value="all">{t("settings.maintenance.typeAll")}</SelectItem>
+                      <SelectItem value="errors">{t("settings.maintenance.typeErrors")}</SelectItem>
                     </SelectContent>
                   </Select>
-                  {recordsScope === "date_range" && (
+                  <Select value={recordsTimeScope} onValueChange={(v) => setRecordsTimeScope(v as typeof recordsTimeScope)} disabled={recordsClearing}>
+                    <SelectTrigger className="w-[120px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">{t("settings.maintenance.timeAll")}</SelectItem>
+                      <SelectItem value="date_range">{t("settings.maintenance.timeRange")}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {recordsTimeScope === "date_range" && (
                     <DateRangePicker
                       value={recordsDateRange}
                       onChange={setRecordsDateRange}
@@ -1056,13 +1067,13 @@ export function SettingsPage() {
                     variant="destructive"
                     size="sm"
                     onClick={() => {
-                      if (recordsScope === "date_range" && !recordsDateRange?.from) {
+                      if (recordsTimeScope === "date_range" && !recordsDateRange?.from) {
                         toast.error(t("settings.records.invalidDate"));
                         return;
                       }
                       setRecordsPromptOpen(true);
                     }}
-                    disabled={recordsClearing || (recordsScope === "date_range" && !recordsDateRange?.from)}
+                    disabled={recordsClearing || (recordsTimeScope === "date_range" && !recordsDateRange?.from)}
                   >
                     {t("settings.records.clear")}
                   </Button>
@@ -1262,8 +1273,8 @@ export function SettingsPage() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">{t("settings.maintenance.scopeAll")}</SelectItem>
-                      <SelectItem value="date_range">{t("settings.maintenance.scopeRange")}</SelectItem>
+                      <SelectItem value="all">{t("settings.maintenance.timeAll")}</SelectItem>
+                      <SelectItem value="date_range">{t("settings.maintenance.timeRange")}</SelectItem>
                     </SelectContent>
                   </Select>
                   {logsScope === "date_range" && (
