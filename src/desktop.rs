@@ -267,7 +267,7 @@ fn handle_close_requested(
     event: &Event<UserEvent>,
     state: &mut DesktopState,
     proxy: &tao::event_loop::EventLoopProxy<UserEvent>,
-    db_path: &std::path::PathBuf,
+    db_path: &std::path::Path,
 ) -> bool {
     let Event::WindowEvent { event, .. } = event else {
         return false;
@@ -281,17 +281,18 @@ fn handle_close_requested(
     }
 
     state.close_request_inflight = true;
-    request_close_behavior(proxy.clone(), db_path.clone());
+    request_close_behavior(proxy.clone(), db_path.to_path_buf());
     true
 }
 
+#[allow(clippy::too_many_arguments)]
 fn handle_user_event(
     ev: UserEvent,
     state: &mut DesktopState,
     control_flow: &mut ControlFlow,
     proxy: &tao::event_loop::EventLoopProxy<UserEvent>,
     server_handle: &tokio::task::JoinHandle<()>,
-    data_dir: &std::path::PathBuf,
+    data_dir: &std::path::Path,
     window: &tao::window::Window,
     webview: &wry::WebView,
     tray_id: &tray_icon::TrayIconId,
@@ -302,7 +303,7 @@ fn handle_user_event(
     tray_show_id: &MenuId,
     tray_hide_id: &MenuId,
     tray_quit_id: &MenuId,
-    db_path: &std::path::PathBuf,
+    db_path: &std::path::Path,
 ) {
     match ev {
         UserEvent::TrayIcon(e) => {
@@ -321,20 +322,20 @@ fn handle_user_event(
             apply_window_visible(window, state, tray_show, tray_hide, next, true);
         }
         UserEvent::Menu(e) => {
-            let id: MenuId = e.id;
-            if &id == tray_show_id {
+            let id = &e.id;
+            if id == tray_show_id {
                 apply_window_visible(window, state, tray_show, tray_hide, true, true);
-            } else if &id == tray_hide_id {
+            } else if id == tray_hide_id {
                 apply_window_visible(window, state, tray_show, tray_hide, false, false);
-            } else if &id == tray_quit_id {
-                quit_app(data_dir.as_path(), server_handle, control_flow, false);
+            } else if id == tray_quit_id {
+                quit_app(data_dir, server_handle, control_flow, false);
             }
         }
         UserEvent::CloseRequested(settings) => {
             state.close_request_inflight = false;
             match settings.close_behavior {
                 storage::CloseBehavior::Quit => {
-                    quit_app(data_dir.as_path(), server_handle, control_flow, false);
+                    quit_app(data_dir, server_handle, control_flow, false);
                 }
                 storage::CloseBehavior::MinimizeToTray => {
                     apply_window_visible(window, state, tray_show, tray_hide, false, false);
@@ -366,7 +367,7 @@ fn handle_user_event(
                         CloseDecisionAction::MinimizeToTray => {
                             apply_window_visible(window, state, tray_show, tray_hide, false, false);
                             if remember {
-                                let db_path = db_path.clone();
+                                let db_path = db_path.to_path_buf();
                                 tokio::spawn(async move {
                                     let _ = storage::update_app_settings(
                                         db_path,
@@ -383,12 +384,9 @@ fn handle_user_event(
                         }
                         CloseDecisionAction::Quit => {
                             if remember {
-                                persist_close_behavior_sync(
-                                    db_path.as_path(),
-                                    storage::CloseBehavior::Quit,
-                                );
+                                persist_close_behavior_sync(db_path, storage::CloseBehavior::Quit);
                             }
-                            quit_app(data_dir.as_path(), server_handle, control_flow, false);
+                            quit_app(data_dir, server_handle, control_flow, false);
                         }
                     }
                 }
@@ -408,7 +406,7 @@ fn handle_user_event(
                     }
                 }
                 IpcMessage::RequestQuit => {
-                    quit_app(data_dir.as_path(), server_handle, control_flow, true);
+                    quit_app(data_dir, server_handle, control_flow, true);
                 }
                 IpcMessage::UiReady => {
                     state.ui_ready = true;
