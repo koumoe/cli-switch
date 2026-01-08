@@ -1,5 +1,5 @@
 import * as React from "react"
-import { format, isValid, parse } from "date-fns"
+import { format, isValid, parse, startOfDay, startOfMonth, startOfWeek, endOfMonth, endOfWeek, subDays } from "date-fns"
 import { zhCN, enUS } from "date-fns/locale"
 import { Calendar as CalendarIcon } from "lucide-react"
 import type { DateRange } from "react-day-picker"
@@ -37,6 +37,34 @@ export function DateRangePicker({
 }: DateRangePickerProps) {
   const [open, setOpen] = React.useState(false)
   const dateFnsLocale = localeMap[locale] ?? zhCN
+  const selectStepRef = React.useRef<0 | 1>(0)
+
+  React.useEffect(() => {
+    if (!open) selectStepRef.current = 0
+  }, [open])
+
+  const presetLabels = React.useMemo(() => {
+    if (locale.startsWith("zh")) {
+      return { today: "今日", yesterday: "昨日", week: "本周", month: "本月" } as const
+    }
+    return { today: "Today", yesterday: "Yesterday", week: "This week", month: "This month" } as const
+  }, [locale])
+
+  const presets = React.useMemo(() => {
+    const now = new Date()
+    const today = startOfDay(now)
+    const yesterday = startOfDay(subDays(today, 1))
+    const weekStart = startOfDay(startOfWeek(now, { locale: dateFnsLocale }))
+    const weekEnd = startOfDay(endOfWeek(now, { locale: dateFnsLocale }))
+    const monthStart = startOfDay(startOfMonth(now))
+    const monthEnd = startOfDay(endOfMonth(now))
+    return [
+      { key: "today", label: presetLabels.today, range: { from: today, to: today } as DateRange },
+      { key: "yesterday", label: presetLabels.yesterday, range: { from: yesterday, to: yesterday } as DateRange },
+      { key: "week", label: presetLabels.week, range: { from: weekStart, to: weekEnd } as DateRange },
+      { key: "month", label: presetLabels.month, range: { from: monthStart, to: monthEnd } as DateRange },
+    ] as const
+  }, [dateFnsLocale, presetLabels.month, presetLabels.today, presetLabels.week, presetLabels.yesterday])
 
   const displayText = React.useMemo(() => {
     if (!value?.from) return placeholder
@@ -63,20 +91,64 @@ export function DateRangePicker({
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-auto p-0" align="start">
-        <Calendar
-          initialFocus
-          mode="range"
-          defaultMonth={value?.from}
-          selected={value}
-          onSelect={(range) => {
-            onChange?.(range)
-            if (range?.from && range?.to) {
+        <div className="p-0">
+          <Calendar
+            initialFocus
+            mode="range"
+            defaultMonth={value?.from}
+            selected={value}
+            onSelect={(range, selectedDay) => {
+              const clickedDay = selectedDay instanceof Date ? selectedDay : null
+
+              if (value?.from && value?.to && selectStepRef.current === 0 && clickedDay) {
+                selectStepRef.current = 1
+                onChange?.({ from: clickedDay, to: undefined })
+                return
+              }
+
+              if (!range?.from) {
+                selectStepRef.current = 0
+                onChange?.(range)
+                return
+              }
+
+              if (!range.to) {
+                selectStepRef.current = 1
+                onChange?.(range)
+                return
+              }
+
+              if (selectStepRef.current !== 1) {
+                selectStepRef.current = 1
+                onChange?.({ from: clickedDay ?? range.from, to: undefined })
+                return
+              }
+
+              onChange?.(range)
               setOpen(false)
-            }
-          }}
-          numberOfMonths={2}
-          locale={dateFnsLocale}
-        />
+            }}
+            numberOfMonths={2}
+            locale={dateFnsLocale}
+          />
+          <div className="border-t px-3 py-2">
+            <div className="flex flex-wrap gap-2">
+              {presets.map((p) => (
+                <Button
+                  key={p.key}
+                  size="sm"
+                  variant="outline"
+                  className="h-7 px-2 text-xs"
+                  onClick={() => {
+                    onChange?.(p.range)
+                    setOpen(false)
+                  }}
+                >
+                  {p.label}
+                </Button>
+              ))}
+            </div>
+          </div>
+        </div>
       </PopoverContent>
     </Popover>
   )
