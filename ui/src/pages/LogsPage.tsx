@@ -55,8 +55,6 @@ export function LogsPage() {
   const loadingRef = useRef(false);
   const pendingRefreshRef = useRef(false);
   const pendingRefreshPageRef = useRef(1);
-  const refreshRef = useRef<(nextPage?: number) => Promise<void>>(async () => {});
-  const pageRef = useRef(1);
   const [total, setTotal] = useState(0);
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailEvent, setDetailEvent] = useState<UsageEvent | null>(null);
@@ -137,9 +135,6 @@ export function LogsPage() {
     }
   }
 
-  refreshRef.current = (nextPage = pageRef.current) => refresh(nextPage);
-  pageRef.current = page;
-
   useEffect(() => {
     listChannels()
       .then(setChannels)
@@ -149,18 +144,6 @@ export function LogsPage() {
   useEffect(() => {
     refresh(1);
   }, [pageSize]);
-
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      if (loadingRef.current) {
-        pendingRefreshRef.current = true;
-        pendingRefreshPageRef.current = pageRef.current;
-        return;
-      }
-      void refreshRef.current(pageRef.current);
-    }, 60_000);
-    return () => window.clearInterval(timer);
-  }, []);
 
   useWindowEvent("cliswitch-usage-changed", () => {
     if (loadingRef.current) {

@@ -52,7 +52,6 @@ export function MonitorPage() {
   const [loading, setLoading] = useState(false);
   const loadingRef = useRef(false);
   const pendingRefreshRef = useRef(false);
-  const refreshRef = useRef<() => Promise<void>>(async () => {});
 
   const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
     const today = new Date();
@@ -96,22 +95,9 @@ export function MonitorPage() {
     }
   }
 
-  refreshRef.current = refresh;
-
   useEffect(() => {
     refresh();
   }, [dateRange]);
-
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      if (loadingRef.current) {
-        pendingRefreshRef.current = true;
-        return;
-      }
-      void refreshRef.current();
-    }, 60_000);
-    return () => window.clearInterval(timer);
-  }, []);
 
   useWindowEvent("cliswitch-usage-changed", () => {
     if (loadingRef.current) {
