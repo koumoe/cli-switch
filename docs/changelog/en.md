@@ -1,3 +1,8 @@
+## [0.19.1](https://github.com/koumoe/cli-switch/compare/v0.19.0...v0.19.1) (2026-01-08)
+
+### Bug Fixes
+
+* **updater:** detach apply helper from parent session ([b6f5d2b](https://github.com/koumoe/cli-switch/commit/b6f5d2b1f24404061da3eac9866dd87c479afd38))
 ## [0.19.0](https://github.com/koumoe/cli-switch/compare/v0.18.3...v0.19.0) (2026-01-08)
 
 ### Features
