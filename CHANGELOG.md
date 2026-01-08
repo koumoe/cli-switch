@@ -1,3 +1,8 @@
+## [0.18.2](https://github.com/koumoe/cli-switch/compare/v0.18.1...v0.18.2) (2026-01-08)
+
+### Bug Fixes
+
+* improve date picker nav hit area ([16aa2e9](https://github.com/koumoe/cli-switch/commit/16aa2e983d85abef879532151e3a17f63d53064c))
 ## [0.18.1](https://github.com/koumoe/cli-switch/compare/v0.18.0...v0.18.1) (2026-01-08)
 
 ### Bug Fixes
