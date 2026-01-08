@@ -1,3 +1,8 @@
+## [0.18.1](https://github.com/koumoe/cli-switch/compare/v0.18.0...v0.18.1) (2026-01-08)
+
+### Bug Fixes
+
+* **ui:** align date picker nav buttons ([d8f9101](https://github.com/koumoe/cli-switch/commit/d8f91017ee2af706086b036af4d3fac8ffe3d916))
 ## [0.18.0](https://github.com/koumoe/cli-switch/compare/v0.17.0...v0.18.0) (2026-01-08)
 
 ### Features
