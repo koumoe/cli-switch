@@ -17,7 +17,11 @@ pub struct StatsSummary {
     pub estimated_cost_usd: Option<String>,
 }
 
-pub async fn stats_summary(db_path: PathBuf, start_ms: i64) -> anyhow::Result<StatsSummary> {
+pub async fn stats_summary(
+    db_path: PathBuf,
+    start_ms: i64,
+    end_ms: Option<i64>,
+) -> anyhow::Result<StatsSummary> {
     with_conn(db_path, move |conn| {
         let mut stmt = conn.prepare(
             r#"
@@ -27,6 +31,7 @@ pub async fn stats_summary(db_path: PathBuf, start_ms: i64) -> anyhow::Result<St
                 MAX(success) AS any_success
               FROM usage_events
               WHERE ts_ms >= ?1
+                AND (?2 IS NULL OR ts_ms <= ?2)
               GROUP BY rid
             ),
             req_agg AS (
@@ -46,9 +51,10 @@ pub async fn stats_summary(db_path: PathBuf, start_ms: i64) -> anyhow::Result<St
               SUM(COALESCE(CAST(estimated_cost_usd AS REAL), 0.0)) AS estimated_cost
             FROM usage_events
             WHERE ts_ms >= ?1
+              AND (?2 IS NULL OR ts_ms <= ?2)
             "#,
         )?;
-        let row = stmt.query_row(params![start_ms], |row| {
+        let row = stmt.query_row(params![start_ms, end_ms], |row| {
             let requests: i64 = row.get(0)?;
             let success: Option<i64> = row.get(1)?;
             let failed: Option<i64> = row.get(2)?;
@@ -139,7 +145,11 @@ pub struct ChannelStats {
     pub estimated_cost_usd: Option<String>,
 }
 
-pub async fn stats_channels(db_path: PathBuf, start_ms: i64) -> anyhow::Result<Vec<ChannelStats>> {
+pub async fn stats_channels(
+    db_path: PathBuf,
+    start_ms: i64,
+    end_ms: Option<i64>,
+) -> anyhow::Result<Vec<ChannelStats>> {
     with_conn(db_path, move |conn| {
         let mut stmt = conn.prepare(
             r#"
@@ -157,11 +167,12 @@ pub async fn stats_channels(db_path: PathBuf, start_ms: i64) -> anyhow::Result<V
             LEFT JOIN usage_events u
               ON u.channel_id = c.id
              AND u.ts_ms >= ?1
+             AND (?2 IS NULL OR u.ts_ms <= ?2)
             GROUP BY c.id, c.name, c.protocol
             ORDER BY c.name ASC
             "#,
         )?;
-        let rows = stmt.query_map(params![start_ms], |row| {
+        let rows = stmt.query_map(params![start_ms, end_ms], |row| {
             Ok(ChannelStats {
                 channel_id: row.get(0)?,
                 name: row.get(1)?,
