@@ -1,3 +1,8 @@
+## [0.19.0](https://github.com/koumoe/cli-switch/compare/v0.18.3...v0.19.0) (2026-01-08)
+
+### Features
+
+* changelog i18n + update prompt ([#58](https://github.com/koumoe/cli-switch/issues/58)) ([18dbb2b](https://github.com/koumoe/cli-switch/commit/18dbb2bce07c5a326b2cb9b39e0d44e003edc250))
 ## [0.18.3](https://github.com/koumoe/cli-switch/compare/v0.18.2...v0.18.3) (2026-01-08)
 
 ### Bug Fixes
