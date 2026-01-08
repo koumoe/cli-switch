@@ -590,7 +590,11 @@
       "clearHint": "Choose a scope then clear",
       "scopeAll": "All",
       "scopeErrors": "Errors only",
-      "scopeRange": "By time"
+      "scopeRange": "By time",
+      "typeAll": "All types",
+      "typeErrors": "Errors only",
+      "timeAll": "All",
+      "timeRange": "By time"
     },
     "records": {
       "title": "Request Records",
@@ -605,6 +609,7 @@
       "clearAll": "Clear all",
       "confirmTitle": "Confirm clear",
       "confirmDateRange": "This will clear records for {{range}}. Continue?",
+      "confirmDateRangeErrors": "This will clear error records for {{range}}. Continue?",
       "confirmErrors": "This will clear all error records. Continue?",
       "confirmAll": "This will clear all records. Continue?",
       "invalidDate": "Please select a date range first",
