@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   LayoutGrid,
   Radio,
@@ -12,6 +12,7 @@ import {
 import { useI18n } from "@/lib/i18n";
 import { useTheme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
+import { humanizeApiError } from "@/lib/error";
 import {
   Button,
   Dialog,
@@ -26,10 +27,11 @@ import {
   TooltipTrigger,
 } from "@/components/ui";
 import { toast } from "sonner";
-import { getHealth, getSettings, pricingStatus, pricingSync } from "./api";
+import { downloadUpdate, getHealth, getSettings, getUpdateChangelog, ignoreUpdate, pricingStatus, pricingSync, type ChangelogSection } from "./api";
 import { logger, setLogLevel } from "@/lib/logger";
 import type { CliswitchUpdateStatusEvent } from "@/lib/cliswitchEvents";
 import { isUpdateReadyShown, markUpdateReadyShown } from "@/lib/updateReadyPrompt";
+import { UpdatePromptDialog } from "@/components/UpdatePromptDialog";
 
 import { OverviewPage } from "./pages/OverviewPage";
 import { ChannelsPage } from "./pages/ChannelsPage";
@@ -190,9 +192,21 @@ export default function App() {
   const [pricingSyncing, setPricingSyncing] = useState(false);
   const [updateReadyOpen, setUpdateReadyOpen] = useState(false);
   const [updateReadyVersion, setUpdateReadyVersion] = useState<string | null>(null);
+  const [updatePromptOpen, setUpdatePromptOpen] = useState(false);
+  const [updatePromptVersion, setUpdatePromptVersion] = useState<string | null>(null);
+  const [updateChangelogSections, setUpdateChangelogSections] = useState<ChangelogSection[] | null>(null);
+  const [updateChangelogLoading, setUpdateChangelogLoading] = useState(false);
+  const [updateChangelogError, setUpdateChangelogError] = useState<string | null>(null);
+  const [updatePromptBusy, setUpdatePromptBusy] = useState(false);
   const [closePromptOpen, setClosePromptOpen] = useState(false);
   const [closeRemember, setCloseRemember] = useState(false);
   const [closeDecisionSent, setCloseDecisionSent] = useState(false);
+  const updatePromptOpenRef = useRef(false);
+  const updatePromptedVersionRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    updatePromptOpenRef.current = updatePromptOpen;
+  }, [updatePromptOpen]);
 
   // 确保主题在应用启动时被应用
   useTheme();
@@ -215,6 +229,57 @@ export default function App() {
     };
     window.addEventListener("cliswitch-update-status", onUpdateStatus as EventListener);
     postIpc({ type: "ui-ready" });
+    return () => {
+      window.removeEventListener("cliswitch-update-status", onUpdateStatus as EventListener);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!updatePromptOpen || !updatePromptVersion) return;
+    let cancelled = false;
+    setUpdateChangelogLoading(true);
+    setUpdateChangelogError(null);
+    getUpdateChangelog(updatePromptVersion, locale)
+      .then((res) => {
+        if (cancelled) return;
+        setUpdateChangelogSections(res.sections);
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        setUpdateChangelogError(humanizeApiError(e, t));
+        setUpdateChangelogSections(null);
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setUpdateChangelogLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [updatePromptOpen, updatePromptVersion, locale, t]);
+
+  useEffect(() => {
+    const onUpdateStatus = (e: Event) => {
+      const st = (e as CliswitchUpdateStatusEvent).detail;
+      const latest = st?.latest_version;
+      if (!latest) return;
+      if (!st.auto_update_enabled) return;
+      if (!st.update_available) return;
+      if (st.latest_ignored) return;
+      if (st.pending_version) return;
+      if (st.stage !== "idle") return;
+
+      if (updatePromptOpenRef.current) return;
+      if (updatePromptedVersionRef.current === latest) return;
+
+      updatePromptedVersionRef.current = latest;
+      setUpdatePromptVersion(latest);
+      setUpdateChangelogSections(null);
+      setUpdateChangelogError(null);
+      setUpdatePromptOpen(true);
+    };
+
+    window.addEventListener("cliswitch-update-status", onUpdateStatus as EventListener);
     return () => {
       window.removeEventListener("cliswitch-update-status", onUpdateStatus as EventListener);
     };
@@ -301,6 +366,52 @@ export default function App() {
 
   return (
     <div className="flex h-full bg-background text-foreground">
+      <UpdatePromptDialog
+        open={updatePromptOpen}
+        onOpenChange={setUpdatePromptOpen}
+        title={t("settings.update.promptTitle")}
+        description={t("settings.update.promptDesc", { version: updatePromptVersion ?? "-" })}
+        overviewTitle={t("settings.update.promptOverviewTitle")}
+        loadingText={t("settings.update.promptLoading")}
+        loadFailText={t("settings.update.promptLoadFail")}
+        sections={updateChangelogSections}
+        loading={updateChangelogLoading}
+        loadError={updateChangelogError}
+        updateText={t("settings.update.updateNow")}
+        laterText={t("settings.update.later")}
+        ignoreText={t("settings.update.ignore")}
+        busy={updatePromptBusy}
+        onLater={() => setUpdatePromptOpen(false)}
+        onUpdate={async () => {
+          const v = updatePromptVersion;
+          if (!v) return;
+          setUpdatePromptBusy(true);
+          try {
+            const dl = await downloadUpdate();
+            if (dl.started) toast.success(t("settings.update.downloading"));
+            setUpdatePromptOpen(false);
+          } catch (e) {
+            toast.error(t("settings.update.downloadFail"), { description: humanizeApiError(e, t) });
+          } finally {
+            setUpdatePromptBusy(false);
+          }
+        }}
+        onIgnore={async () => {
+          const v = updatePromptVersion;
+          if (!v) return;
+          setUpdatePromptBusy(true);
+          try {
+            await ignoreUpdate(v);
+            toast.success(t("settings.update.ignoredToast", { version: v }));
+            setUpdatePromptOpen(false);
+          } catch (e) {
+            toast.error(t("settings.update.ignoreFail"), { description: humanizeApiError(e, t) });
+          } finally {
+            setUpdatePromptBusy(false);
+          }
+        }}
+      />
+
       <Dialog open={updateReadyOpen} onOpenChange={setUpdateReadyOpen}>
         <DialogContent className="sm:max-w-[520px]">
           <DialogHeader>

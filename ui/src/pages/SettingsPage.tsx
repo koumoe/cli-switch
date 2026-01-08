@@ -37,8 +37,9 @@ import { type Locale, useI18n } from "@/lib/i18n";
 import { humanizeApiError } from "@/lib/error";
 import { useCurrency, type CurrencyMode } from "@/lib/currency";
 import { setLogLevel } from "@/lib/logger";
+import { UpdatePromptDialog } from "@/components/UpdatePromptDialog";
 import { formatBytes, formatDateTime } from "../lib";
-import { checkUpdate, clearLogs, clearRecords, downloadUpdate, getDbSize, getHealth, getLogsSize, getSettings, getUpdateStatus, pricingStatus, pricingSync, updateSettings, type AppSettings, type AutoStartLaunchMode, type CloseBehavior, type DbSize, type Health, type LogsSize, type PricingStatus, type RecordsClearMode, type UpdateCheck, type UpdateStatus } from "../api";
+import { checkUpdate, clearLogs, clearRecords, downloadUpdate, getDbSize, getHealth, getLogsSize, getSettings, getUpdateChangelog, getUpdateStatus, ignoreUpdate, pricingStatus, pricingSync, updateSettings, type AppSettings, type AutoStartLaunchMode, type CloseBehavior, type DbSize, type Health, type LogsSize, type PricingStatus, type RecordsClearMode, type UpdateCheck, type UpdateStatus, type ChangelogSection } from "../api";
 import type { CliswitchUpdateStatusEvent } from "@/lib/cliswitchEvents";
 import { clearUpdateReadyShown } from "@/lib/updateReadyPrompt";
 
@@ -58,8 +59,13 @@ export function SettingsPage() {
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null);
   const [updateChecking, setUpdateChecking] = useState(false);
   const [updatePromptOpen, setUpdatePromptOpen] = useState(false);
+  const [updatePromptVersion, setUpdatePromptVersion] = useState<string | null>(null);
   const [updateCheckResult, setUpdateCheckResult] = useState<UpdateCheck | null>(null);
+  const [updateChangelogSections, setUpdateChangelogSections] = useState<ChangelogSection[] | null>(null);
+  const [updateChangelogLoading, setUpdateChangelogLoading] = useState(false);
+  const [updateChangelogError, setUpdateChangelogError] = useState<string | null>(null);
   const [updateDownloading, setUpdateDownloading] = useState(false);
+  const [updateIgnoring, setUpdateIgnoring] = useState(false);
   const [saving, setSaving] = useState(false);
   const [autoDisableSaving, setAutoDisableSaving] = useState(false);
   const [closeSaving, setCloseSaving] = useState(false);
@@ -179,6 +185,8 @@ export function SettingsPage() {
         : health?.status ?? t("status.checking");
 
   const updateServerVersion = updateStatus?.latest_version ?? updateCheckResult?.latest_version ?? null;
+  const updateIgnored =
+    (updateStatus?.latest_ignored ?? updateCheckResult?.latest_ignored ?? false) && !!updateServerVersion;
   const updateDownloadingSuffix =
     updateStatus && updateStatus.stage === "downloading"
       ? updateStatus.download_percent !== null
@@ -192,7 +200,11 @@ export function SettingsPage() {
     : updateStatus?.stage === "downloading"
       ? `${t("settings.update.latest")}${updateDownloadingSuffix}`
       : updateServerVersion
-        ? t("settings.update.latest")
+        ? (updateStatus?.update_available ?? updateCheckResult?.update_available)
+          ? updateIgnored
+            ? `${t("settings.update.available", { version: updateServerVersion })}${t("settings.update.ignoredSuffix")}`
+            : t("settings.update.available", { version: updateServerVersion })
+          : t("settings.update.latest")
         : "-";
 
   const recordsDateStr = recordsDateRange?.from
@@ -209,6 +221,37 @@ export function SettingsPage() {
     clearUpdateReadyShown(version);
     window.dispatchEvent(new CustomEvent<UpdateStatus>("cliswitch-update-status", { detail: status }));
   }
+
+  function openUpdatePrompt(version: string) {
+    setUpdatePromptVersion(version);
+    setUpdateChangelogSections(null);
+    setUpdateChangelogError(null);
+    setUpdatePromptOpen(true);
+  }
+
+  useEffect(() => {
+    if (!updatePromptOpen || !updatePromptVersion) return;
+    let cancelled = false;
+    setUpdateChangelogLoading(true);
+    setUpdateChangelogError(null);
+    getUpdateChangelog(updatePromptVersion, locale)
+      .then((res) => {
+        if (cancelled) return;
+        setUpdateChangelogSections(res.sections);
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        setUpdateChangelogError(humanizeApiError(e, t));
+        setUpdateChangelogSections(null);
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setUpdateChangelogLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [updatePromptOpen, updatePromptVersion, locale, t]);
 
   return (
     <div className="space-y-4 pb-4">
@@ -755,45 +798,51 @@ export function SettingsPage() {
               <CardDescription>{t("settings.update.subtitle")}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <Dialog open={updatePromptOpen} onOpenChange={setUpdatePromptOpen}>
-                <DialogContent className="sm:max-w-[520px]">
-                  <DialogHeader>
-                    <DialogTitle>{t("settings.update.promptTitle")}</DialogTitle>
-                    <DialogDescription>
-                      {t("settings.update.promptDesc", {
-                        version: updateCheckResult?.latest_version ?? "-",
-                      })}
-                    </DialogDescription>
-                  </DialogHeader>
-                  <DialogFooter>
-                    <Button
-                      variant="outline"
-                      onClick={() => setUpdatePromptOpen(false)}
-                      disabled={updateDownloading}
-                    >
-                      {t("common.cancel")}
-                    </Button>
-                    <Button
-                      onClick={async () => {
-                        setUpdateDownloading(true);
-                        try {
-                          const dl = await downloadUpdate();
-                          setUpdateStatus(dl.status);
-                          toast.success(t("settings.update.downloading"));
-                          setUpdatePromptOpen(false);
-                        } catch (e) {
-                          toast.error(t("settings.update.downloadFail"), { description: humanizeApiError(e, t) });
-                        } finally {
-                          setUpdateDownloading(false);
-                        }
-                      }}
-                      disabled={updateDownloading}
-                    >
-                      {t("settings.update.updateNow")}
-                    </Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
+              <UpdatePromptDialog
+                open={updatePromptOpen}
+                onOpenChange={setUpdatePromptOpen}
+                title={t("settings.update.promptTitle")}
+                description={t("settings.update.promptDesc", { version: updatePromptVersion ?? "-" })}
+                overviewTitle={t("settings.update.promptOverviewTitle")}
+                loadingText={t("settings.update.promptLoading")}
+                loadFailText={t("settings.update.promptLoadFail")}
+                sections={updateChangelogSections}
+                loading={updateChangelogLoading}
+                loadError={updateChangelogError}
+                updateText={t("settings.update.updateNow")}
+                laterText={t("settings.update.later")}
+                ignoreText={t("settings.update.ignore")}
+                busy={updateDownloading || updateIgnoring}
+                onLater={() => setUpdatePromptOpen(false)}
+                onUpdate={async () => {
+                  setUpdateDownloading(true);
+                  try {
+                    const dl = await downloadUpdate();
+                    setUpdateStatus(dl.status);
+                    toast.success(t("settings.update.downloading"));
+                    setUpdatePromptOpen(false);
+                  } catch (e) {
+                    toast.error(t("settings.update.downloadFail"), { description: humanizeApiError(e, t) });
+                  } finally {
+                    setUpdateDownloading(false);
+                  }
+                }}
+                onIgnore={async () => {
+                  const v = updatePromptVersion;
+                  if (!v) return;
+                  setUpdateIgnoring(true);
+                  try {
+                    const st = await ignoreUpdate(v);
+                    setUpdateStatus(st);
+                    toast.success(t("settings.update.ignoredToast", { version: v }));
+                    setUpdatePromptOpen(false);
+                  } catch (e) {
+                    toast.error(t("settings.update.ignoreFail"), { description: humanizeApiError(e, t) });
+                  } finally {
+                    setUpdateIgnoring(false);
+                  }
+                }}
+              />
 
               <div className="flex items-center justify-between gap-4">
                 <div>
@@ -811,9 +860,17 @@ export function SettingsPage() {
                       setAppSettings(next);
                       toast.success(t("settings.update.saved"));
                       if (v) {
-                        const dl = await downloadUpdate();
-                        setUpdateStatus(dl.status);
-                        if (dl.started) toast.success(t("settings.update.autoStarted"));
+                        const res = await checkUpdate();
+                        setUpdateCheckResult(res);
+                        if (res.update_available && res.latest_version) {
+                          if (res.latest_ignored) {
+                            toast.info(t("settings.update.ignoredToast", { version: res.latest_version }));
+                          } else {
+                            openUpdatePrompt(res.latest_version);
+                          }
+                        }
+                        const st = await getUpdateStatus().catch(() => null);
+                        if (st) setUpdateStatus(st);
                       }
                     } catch (e) {
                       setAppSettings({ ...appSettings, app_auto_update_enabled: prev });
@@ -850,17 +907,15 @@ export function SettingsPage() {
                           const pending = st.pending_version;
                           const latest = res.latest_version;
                           if (res.update_available && latest && latest !== pending) {
-                            toast.success(t("settings.update.found", { version: latest }));
-                            if (!appSettings?.app_auto_update_enabled) {
-                              setUpdatePromptOpen(true);
-                            } else {
-                              const dl = await downloadUpdate();
-                              setUpdateStatus(dl.status);
-                              if (dl.started) toast.success(t("settings.update.downloading"));
+                            if (res.latest_ignored) {
+                              toast.info(t("settings.update.ignoredToast", { version: latest }));
+                              return;
                             }
-                          } else {
-                            reopenUpdateReadyPrompt(st);
+                            toast.success(t("settings.update.found", { version: latest }));
+                            openUpdatePrompt(latest);
+                            return;
                           }
+                          reopenUpdateReadyPrompt(st);
                           return;
                         }
 
@@ -869,17 +924,13 @@ export function SettingsPage() {
                           return;
                         }
 
-                        toast.success(
-                          t("settings.update.found", { version: res.latest_version ?? "-" })
-                        );
-
-                        if (!appSettings?.app_auto_update_enabled) {
-                          setUpdatePromptOpen(true);
-                        } else {
-                          const dl = await downloadUpdate();
-                          setUpdateStatus(dl.status);
-                          if (dl.started) toast.success(t("settings.update.downloading"));
+                        const latest = res.latest_version ?? "-";
+                        if (res.latest_ignored) {
+                          toast.info(t("settings.update.ignoredToast", { version: latest }));
+                          return;
                         }
+                        toast.success(t("settings.update.found", { version: latest }));
+                        if (res.latest_version) openUpdatePrompt(res.latest_version);
                       } catch (e) {
                         toast.error(t("settings.update.checkFail"), { description: humanizeApiError(e, t) });
                       } finally {

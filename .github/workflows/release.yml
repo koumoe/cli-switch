@@ -157,10 +157,13 @@ jobs:
 
           # 生成 CHANGELOG（只追加新条目）
           npm install -g conventional-changelog-cli
-          conventional-changelog -p conventionalcommits -k ui/package.json -i CHANGELOG.md -s
+          conventional-changelog -p conventionalcommits -k ui/package.json -i docs/changelog/en.md -s
+
+          # 同步中文版本（缺失版本会从英文复制并翻译标题）
+          node scripts/changelog-i18n.mjs sync docs/changelog/en.md docs/changelog/cn.md
 
           # 提交变更
-          git add Cargo.toml Cargo.lock ui/package.json ui/package-lock.json CHANGELOG.md
+          git add Cargo.toml Cargo.lock ui/package.json ui/package-lock.json docs/changelog/en.md docs/changelog/cn.md
           git commit -m "chore(release): v${VERSION} [skip ci]"
           git push
 

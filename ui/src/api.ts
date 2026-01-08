@@ -138,6 +138,7 @@ export type UpdateStatus = {
   auto_update_enabled: boolean;
   stage: "idle" | "checking" | "downloading" | "staging" | "ready" | "error";
   latest_version: string | null;
+  latest_ignored: boolean;
   update_available: boolean;
   pending_version: string | null;
   download_percent: number | null;
@@ -147,12 +148,24 @@ export type UpdateStatus = {
 export type UpdateCheck = {
   current_version: string;
   latest_version: string | null;
+  latest_ignored: boolean;
   update_available: boolean;
 };
 
 export type UpdateDownloadResponse = {
   started: boolean;
   status: UpdateStatus;
+};
+
+export type ChangelogSection = {
+  title: string;
+  items: string[];
+};
+
+export type ChangelogOverview = {
+  version: string;
+  locale: string;
+  sections: ChangelogSection[];
 };
 
 export type StatsRange = "today" | "yesterday" | "week" | "month" | "custom";
@@ -388,8 +401,19 @@ export function checkUpdate(): Promise<UpdateCheck> {
   return http<UpdateCheck>("POST", "/api/update/check");
 }
 
+export function getUpdateChangelog(version: string, locale?: string): Promise<ChangelogOverview> {
+  const p = new URLSearchParams();
+  p.set("version", version);
+  if (locale) p.set("locale", locale);
+  return http<ChangelogOverview>("GET", `/api/update/changelog?${p.toString()}`);
+}
+
 export function downloadUpdate(): Promise<UpdateDownloadResponse> {
   return http<UpdateDownloadResponse>("POST", "/api/update/download");
+}
+
+export function ignoreUpdate(version: string): Promise<UpdateStatus> {
+  return http<UpdateStatus>("POST", "/api/update/ignore", { version });
 }
 
 function statsQueryToParams(query?: StatsQuery): string {

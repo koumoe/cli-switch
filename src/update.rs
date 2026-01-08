@@ -52,6 +52,7 @@ impl Stage {
 pub struct UpdateRuntime {
     pub stage: Stage,
     pub latest_version: Option<String>,
+    pub latest_ignored: bool,
     pub update_available: bool,
     pub downloading_version: Option<String>,
     pub download_percent: Option<u8>,
@@ -75,6 +76,7 @@ pub struct UpdateStatus {
     pub auto_update_enabled: bool,
     pub stage: String,
     pub latest_version: Option<String>,
+    pub latest_ignored: bool,
     pub update_available: bool,
     pub pending_version: Option<String>,
     pub download_percent: Option<u8>,
@@ -87,6 +89,7 @@ fn snapshot_status(rt: &UpdateRuntime, pending_version: Option<String>) -> Updat
         auto_update_enabled: false,
         stage: rt.stage.as_str().to_string(),
         latest_version: rt.latest_version.clone(),
+        latest_ignored: rt.latest_ignored,
         update_available: rt.update_available,
         pending_version,
         download_percent: if rt.stage == Stage::Downloading {
@@ -106,6 +109,7 @@ fn publish_status(rt: &UpdateRuntime, pending_version: Option<String>) {
 pub struct UpdateCheck {
     pub current_version: String,
     pub latest_version: Option<String>,
+    pub latest_ignored: bool,
     pub update_available: bool,
 }
 
@@ -119,6 +123,77 @@ pub struct PendingUpdate {
 
 fn normalize_version_tag(tag: &str) -> &str {
     tag.strip_prefix('v').unwrap_or(tag)
+}
+
+fn normalize_version_str(version: &str) -> String {
+    normalize_version_tag(version.trim()).to_string()
+}
+
+fn load_ignored_versions(data_dir: &Path) -> Vec<String> {
+    let path = ignored_path(data_dir);
+    let text = match std::fs::read_to_string(&path) {
+        Ok(t) => t,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Vec::new(),
+        Err(e) => {
+            tracing::warn!(err = %e, path = %path.display(), "read ignored versions failed");
+            return Vec::new();
+        }
+    };
+
+    let list: Vec<String> = match serde_json::from_str(&text) {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::warn!(err = %e, path = %path.display(), "parse ignored versions failed");
+            return Vec::new();
+        }
+    };
+
+    list.into_iter()
+        .map(|v| normalize_version_str(&v))
+        .filter(|v| !v.is_empty())
+        .collect()
+}
+
+fn save_ignored_versions(data_dir: &Path, versions: &[String]) -> anyhow::Result<()> {
+    std::fs::create_dir_all(updates_dir(data_dir)).with_context(|| {
+        format!(
+            "create updates dir failed: {}",
+            updates_dir(data_dir).display()
+        )
+    })?;
+    let path = ignored_path(data_dir);
+    let text =
+        serde_json::to_string_pretty(versions).context("serialize ignored versions failed")?;
+    std::fs::write(&path, text)
+        .with_context(|| format!("write ignored versions failed: {}", path.display()))?;
+    Ok(())
+}
+
+pub fn ignore_version(data_dir: &Path, version: &str) -> anyhow::Result<()> {
+    let v = normalize_version_str(version);
+    if v.is_empty() {
+        anyhow::bail!("version is empty");
+    }
+
+    let mut versions = load_ignored_versions(data_dir);
+    if versions.iter().any(|x| x == &v) {
+        return Ok(());
+    }
+
+    versions.insert(0, v);
+    let mut seen = std::collections::HashSet::<String>::new();
+    versions.retain(|x| seen.insert(x.clone()));
+    versions.truncate(50);
+    save_ignored_versions(data_dir, &versions)?;
+    Ok(())
+}
+
+fn is_version_ignored(data_dir: &Path, version: &str) -> bool {
+    let v = normalize_version_str(version);
+    if v.is_empty() {
+        return false;
+    }
+    load_ignored_versions(data_dir).iter().any(|x| x == &v)
 }
 
 fn current_platform_key() -> &'static str {
@@ -139,6 +214,10 @@ fn updates_dir(data_dir: &Path) -> PathBuf {
 
 fn pending_path(data_dir: &Path) -> PathBuf {
     updates_dir(data_dir).join("pending.json")
+}
+
+fn ignored_path(data_dir: &Path) -> PathBuf {
+    updates_dir(data_dir).join("ignored.json")
 }
 
 fn update_downloads_dir(data_dir: &Path) -> PathBuf {
@@ -342,6 +421,7 @@ pub async fn check_latest(
             return UpdateCheck {
                 current_version: env!("CARGO_PKG_VERSION").to_string(),
                 latest_version: rt.latest_version.clone(),
+                latest_ignored: rt.latest_ignored,
                 update_available: rt.update_available,
             };
         }
@@ -357,12 +437,14 @@ pub async fn check_latest(
     let current = semver::Version::parse(env!("CARGO_PKG_VERSION")).ok();
     let mut latest_str: Option<String> = None;
     let mut available = false;
+    let mut latest_ignored = false;
     let mut err: Option<String> = None;
 
     match github_latest_release(client).await {
         Ok(release) => {
             let tag = normalize_version_tag(&release.tag_name).to_string();
             latest_str = Some(tag.clone());
+            latest_ignored = is_version_ignored(data_dir, &tag);
             match (current, semver::Version::parse(&tag)) {
                 (Some(cur), Ok(lat)) => {
                     available = lat > cur;
@@ -382,6 +464,7 @@ pub async fn check_latest(
     {
         let mut rt = runtime.lock().await;
         rt.latest_version = latest_str.clone();
+        rt.latest_ignored = latest_ignored;
         rt.update_available = available;
         rt.error = err.clone();
         if err.is_some() {
@@ -398,6 +481,7 @@ pub async fn check_latest(
     UpdateCheck {
         current_version: env!("CARGO_PKG_VERSION").to_string(),
         latest_version: latest_str,
+        latest_ignored,
         update_available: available,
     }
 }
@@ -410,6 +494,10 @@ pub async fn get_status(
     let pending = load_pending_update(data_dir);
     let pending_version = pending.as_ref().map(|p| p.version.clone());
     let mut rt = runtime.lock().await;
+    rt.latest_ignored = rt
+        .latest_version
+        .as_ref()
+        .is_some_and(|v| is_version_ignored(data_dir, v));
     if pending.is_some() && rt.stage != Stage::Downloading {
         rt.stage = Stage::Ready;
     }
@@ -419,6 +507,7 @@ pub async fn get_status(
         auto_update_enabled,
         stage: rt.stage.as_str().to_string(),
         latest_version: rt.latest_version.clone(),
+        latest_ignored: rt.latest_ignored,
         update_available: rt.update_available,
         pending_version,
         download_percent: if rt.stage == Stage::Downloading {
@@ -464,6 +553,7 @@ pub async fn spawn_download_latest(
     };
 
     let latest = normalize_version_tag(&release.tag_name).to_string();
+    let ignored_latest = is_version_ignored(&data_dir, &latest);
     let (available, version_err) = match (
         semver::Version::parse(env!("CARGO_PKG_VERSION")),
         semver::Version::parse(&latest),
@@ -476,6 +566,7 @@ pub async fn spawn_download_latest(
         tracing::warn!(err = %err, latest = %latest, "update download check failed: version parse");
         let mut rt = runtime.lock().await;
         rt.latest_version = Some(latest);
+        rt.latest_ignored = ignored_latest;
         rt.update_available = false;
         rt.stage = Stage::Error;
         rt.error = Some(err);
@@ -499,6 +590,7 @@ pub async fn spawn_download_latest(
         );
         let mut rt = runtime.lock().await;
         rt.latest_version = Some(latest);
+        rt.latest_ignored = ignored_latest;
         rt.update_available = available;
         rt.stage = Stage::Ready;
         rt.error = None;
@@ -511,6 +603,7 @@ pub async fn spawn_download_latest(
         tracing::debug!(latest = %latest, "update download skipped: already pending");
         let mut rt = runtime.lock().await;
         rt.latest_version = Some(latest);
+        rt.latest_ignored = ignored_latest;
         rt.update_available = available;
         rt.stage = Stage::Ready;
         rt.error = None;
@@ -523,6 +616,7 @@ pub async fn spawn_download_latest(
         tracing::debug!(latest = %latest, "update download skipped: no update available");
         let mut rt = runtime.lock().await;
         rt.latest_version = Some(latest);
+        rt.latest_ignored = ignored_latest;
         rt.update_available = false;
         rt.stage = Stage::Idle;
         rt.error = None;
@@ -531,10 +625,25 @@ pub async fn spawn_download_latest(
         return false;
     }
 
+    if ignored_latest {
+        tracing::info!(latest = %latest, "update download skipped: ignored");
+        let pending_version = load_pending_update(&data_dir).map(|p| p.version);
+        let mut rt = runtime.lock().await;
+        rt.latest_version = Some(latest);
+        rt.latest_ignored = true;
+        rt.update_available = true;
+        rt.stage = Stage::Idle;
+        rt.error = None;
+        rt.reset_download_state();
+        publish_status(&rt, pending_version);
+        return false;
+    }
+
     if pick_asset(&release).is_none() {
         tracing::warn!(latest = %latest, platform = %current_platform_key(), "update download skipped: no matching asset");
         let mut rt = runtime.lock().await;
         rt.latest_version = Some(latest);
+        rt.latest_ignored = false;
         rt.update_available = true;
         rt.stage = Stage::Error;
         rt.error = Some("未找到适配当前平台的 Release 资源".to_string());
@@ -547,6 +656,7 @@ pub async fn spawn_download_latest(
         tracing::info!(latest = %latest, "update download started");
         let mut rt = runtime.lock().await;
         rt.latest_version = Some(latest);
+        rt.latest_ignored = false;
         rt.update_available = true;
         rt.stage = Stage::Downloading;
         rt.error = None;

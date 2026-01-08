@@ -29,6 +29,9 @@ jobs:
         working-directory: ui
         run: npm ci
 
+      - name: Check changelog i18n
+        run: node scripts/changelog-i18n.mjs check docs/changelog/en.md docs/changelog/cn.md
+
       - name: Build UI
         working-directory: ui
         run: npm run build

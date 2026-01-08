@@ -1,8 +1,11 @@
 use axum::Json;
-use axum::extract::State;
+use axum::extract::{Query, State};
 use axum::response::IntoResponse;
+use serde::Deserialize;
 use serde::Serialize;
 
+use crate::changelog;
+use crate::events::{self, AppEvent};
 use crate::server::AppState;
 use crate::server::error::ApiError;
 use crate::{storage, update};
@@ -31,6 +34,27 @@ pub(in crate::server) async fn update_check(
     Ok(Json(res))
 }
 
+#[derive(Debug, Deserialize)]
+pub(crate) struct UpdateChangelogQuery {
+    pub version: String,
+    pub locale: Option<String>,
+}
+
+pub(in crate::server) async fn update_changelog(
+    State(state): State<AppState>,
+    Query(q): Query<UpdateChangelogQuery>,
+) -> Result<impl IntoResponse, ApiError> {
+    if q.version.trim().is_empty() {
+        return Err(ApiError::bad_request(
+            "update_version_required",
+            "version is required",
+        ));
+    }
+    let locale = q.locale.unwrap_or_else(|| "en".to_string());
+    let res = changelog::fetch_update_overview(&state.http_client, &q.version, &locale).await?;
+    Ok(Json(res))
+}
+
 #[derive(Serialize)]
 struct UpdateDownloadResponse {
     started: bool,
@@ -55,4 +79,33 @@ pub(in crate::server) async fn update_download(
     )
     .await;
     Ok(Json(UpdateDownloadResponse { started, status }))
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct UpdateIgnoreInput {
+    pub version: String,
+}
+
+pub(in crate::server) async fn update_ignore(
+    State(state): State<AppState>,
+    Json(input): Json<UpdateIgnoreInput>,
+) -> Result<impl IntoResponse, ApiError> {
+    if input.version.trim().is_empty() {
+        return Err(ApiError::bad_request(
+            "update_version_required",
+            "version is required",
+        ));
+    }
+    let data_dir = state.data_dir();
+    update::ignore_version(&data_dir, &input.version)?;
+
+    let settings = storage::get_app_settings(state.db_path()).await?;
+    let status = update::get_status(
+        state.update_runtime.clone(),
+        &data_dir,
+        settings.app_auto_update_enabled,
+    )
+    .await;
+    events::publish(AppEvent::UpdateStatus(status.clone()));
+    Ok(Json(status))
 }
