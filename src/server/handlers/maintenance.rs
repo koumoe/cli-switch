@@ -28,7 +28,10 @@ pub(in crate::server) async fn records_clear(
     State(state): State<AppState>,
     Json(input): Json<RecordsClearInput>,
 ) -> Result<impl IntoResponse, ApiError> {
-    fn validate_range(start_ms: Option<i64>, end_ms: Option<i64>) -> Result<Option<(i64, i64)>, ApiError> {
+    fn validate_range(
+        start_ms: Option<i64>,
+        end_ms: Option<i64>,
+    ) -> Result<Option<(i64, i64)>, ApiError> {
         match (start_ms, end_ms) {
             (None, None) => Ok(None),
             (Some(_), None) | (None, Some(_)) => Err(ApiError::bad_request(
@@ -70,7 +73,9 @@ pub(in crate::server) async fn records_clear(
             storage::RecordsClearKind::DateRange { start_ms, end_ms }
         }
         RecordsClearMode::Errors => match validate_range(input.start_ms, input.end_ms)? {
-            Some((start_ms, end_ms)) => storage::RecordsClearKind::ErrorsDateRange { start_ms, end_ms },
+            Some((start_ms, end_ms)) => {
+                storage::RecordsClearKind::ErrorsDateRange { start_ms, end_ms }
+            }
             None => storage::RecordsClearKind::Errors,
         },
         RecordsClearMode::All => match validate_range(input.start_ms, input.end_ms)? {
