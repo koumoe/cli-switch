@@ -1,3 +1,8 @@
+## [0.18.3](https://github.com/koumoe/cli-switch/compare/v0.18.2...v0.18.3) (2026-01-08)
+
+### Bug Fixes
+
+* date range picker and cleanup filters ([#57](https://github.com/koumoe/cli-switch/issues/57)) ([0fb7997](https://github.com/koumoe/cli-switch/commit/0fb79979eeb98d5a69eaf23fdff64864bbcc5611))
 ## [0.18.2](https://github.com/koumoe/cli-switch/compare/v0.18.1...v0.18.2) (2026-01-08)
 
 ### Bug Fixes
