@@ -1,5 +1,5 @@
 import * as React from "react"
-import { format, isValid, parse } from "date-fns"
+import { addMonths, format, isSameMonth, isValid, parse, startOfMonth, startOfWeek, subDays } from "date-fns"
 import { zhCN, enUS } from "date-fns/locale"
 import { Calendar as CalendarIcon } from "lucide-react"
 import type { DateRange } from "react-day-picker"
@@ -37,6 +37,12 @@ export function DateRangePicker({
 }: DateRangePickerProps) {
   const [open, setOpen] = React.useState(false)
   const dateFnsLocale = localeMap[locale] ?? zhCN
+  const [startMonth, setStartMonth] = React.useState<Date>(() => startOfMonth(value?.from ?? new Date()))
+  const [endMonth, setEndMonth] = React.useState<Date>(() => {
+    const base = value?.to ?? value?.from ?? new Date()
+    return startOfMonth(base)
+  })
+  const [phase, setPhase] = React.useState<"start" | "end">("start")
 
   const displayText = React.useMemo(() => {
     if (!value?.from) return placeholder
@@ -46,8 +52,49 @@ export function DateRangePicker({
     return `${format(value.from, "yyyy-MM-dd")} ~ ${format(value.to, "yyyy-MM-dd")}`
   }, [value, placeholder])
 
+  const applyPreset = React.useCallback((preset: "today" | "yesterday" | "week" | "month") => {
+    const now = new Date()
+    const range: DateRange =
+      preset === "today"
+        ? { from: now, to: now }
+        : preset === "yesterday"
+          ? (() => {
+              const d = subDays(now, 1)
+              return { from: d, to: d }
+            })()
+          : preset === "week"
+            ? { from: startOfWeek(now, { weekStartsOn: 1 }), to: now }
+            : { from: startOfMonth(now), to: now }
+
+    onChange?.(range)
+    setOpen(false)
+    setPhase("start")
+  }, [onChange])
+
+  const presetLabels = React.useMemo(() => {
+    if (locale === "zh-CN") {
+      return { today: "今日", yesterday: "昨日", week: "本周", month: "本月" } as const
+    }
+    return { today: "Today", yesterday: "Yesterday", week: "This week", month: "This month" } as const
+  }, [locale])
+
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover
+      open={open}
+      onOpenChange={(v) => {
+        setOpen(v)
+        if (v) {
+          const from = value?.from ?? new Date()
+          const fromMonth = startOfMonth(from)
+          const rawTo = value?.to ?? null
+          const toMonth = rawTo ? startOfMonth(rawTo) : addMonths(fromMonth, 1)
+
+          setStartMonth(fromMonth)
+          setEndMonth(isSameMonth(fromMonth, toMonth) ? addMonths(fromMonth, 1) : toMonth)
+          setPhase(value?.from && !value?.to ? "end" : "start")
+        }
+      }}
+    >
       <PopoverTrigger asChild>
         <Button
           variant="outline"
@@ -63,20 +110,96 @@ export function DateRangePicker({
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-auto p-0" align="start">
-        <Calendar
-          initialFocus
-          mode="range"
-          defaultMonth={value?.from}
-          selected={value}
-          onSelect={(range) => {
-            onChange?.(range)
-            if (range?.from && range?.to) {
-              setOpen(false)
-            }
-          }}
-          numberOfMonths={2}
-          locale={dateFnsLocale}
-        />
+        <div className="p-3 space-y-3">
+          <div className="flex flex-col sm:flex-row gap-3">
+            <Calendar
+              className="p-0"
+              initialFocus
+              mode="range"
+              month={startMonth}
+              onMonthChange={(m) => {
+                setStartMonth(startOfMonth(m))
+              }}
+              selected={value}
+              onSelect={(range, selectedDay) => {
+                if (!selectedDay) {
+                  onChange?.(range)
+                  return
+                }
+                if (phase === "start") {
+                  const next: DateRange = { from: selectedDay, to: undefined }
+                  onChange?.(next)
+                  setPhase("end")
+                  return
+                }
+
+                if (!range?.from) {
+                  onChange?.({ from: selectedDay, to: undefined })
+                  setPhase("end")
+                  return
+                }
+                onChange?.(range)
+                if (range?.from && range?.to) {
+                  setOpen(false)
+                  setPhase("start")
+                } else {
+                  setPhase("end")
+                }
+              }}
+              locale={dateFnsLocale}
+            />
+            <Calendar
+              className="p-0"
+              mode="range"
+              month={endMonth}
+              onMonthChange={(m) => {
+                setEndMonth(startOfMonth(m))
+              }}
+              selected={value}
+              onSelect={(range, selectedDay) => {
+                if (!selectedDay) {
+                  onChange?.(range)
+                  return
+                }
+                if (phase === "start") {
+                  const next: DateRange = { from: selectedDay, to: undefined }
+                  onChange?.(next)
+                  setPhase("end")
+                  return
+                }
+
+                if (!range?.from) {
+                  onChange?.({ from: selectedDay, to: undefined })
+                  setPhase("end")
+                  return
+                }
+                onChange?.(range)
+                if (range?.from && range?.to) {
+                  setOpen(false)
+                  setPhase("start")
+                } else {
+                  setPhase("end")
+                }
+              }}
+              locale={dateFnsLocale}
+            />
+          </div>
+
+          <div className="border-t pt-3 flex flex-wrap gap-2">
+            <Button type="button" size="sm" variant="secondary" onClick={() => applyPreset("today")} disabled={disabled}>
+              {presetLabels.today}
+            </Button>
+            <Button type="button" size="sm" variant="secondary" onClick={() => applyPreset("yesterday")} disabled={disabled}>
+              {presetLabels.yesterday}
+            </Button>
+            <Button type="button" size="sm" variant="secondary" onClick={() => applyPreset("week")} disabled={disabled}>
+              {presetLabels.week}
+            </Button>
+            <Button type="button" size="sm" variant="secondary" onClick={() => applyPreset("month")} disabled={disabled}>
+              {presetLabels.month}
+            </Button>
+          </div>
+        </div>
       </PopoverContent>
     </Popover>
   )

@@ -12,11 +12,6 @@ import {
   Badge,
   DateRangePicker,
   dateRangeToMs,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
   Table,
   TableBody,
   TableCell,
@@ -35,7 +30,6 @@ import {
   type Channel,
   type StatsSummary,
   type ChannelStats,
-  type StatsRange,
 } from "../api";
 import { protocolLabel } from "../lib";
 
@@ -58,8 +52,10 @@ export function MonitorPage() {
   const [loading, setLoading] = useState(false);
   const loadingRef = useRef(false);
 
-  const [range, setRange] = useState<StatsRange>("today");
-  const [customDateRange, setCustomDateRange] = useState<DateRange | undefined>(undefined);
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
+    const now = new Date();
+    return { from: now, to: now };
+  });
 
   async function refresh() {
     setLoading(true);
@@ -68,14 +64,14 @@ export function MonitorPage() {
       const cs = await listChannels();
       setChannels(cs);
 
-      const msRange = range === "custom" ? dateRangeToMs(customDateRange) : null;
-      if (range === "custom" && !msRange) {
+      const msRange = dateRangeToMs(dateRange);
+      if (!msRange) {
         setStats(null);
         setChannelStats([]);
         return;
       }
 
-      const q = range === "custom" ? { start_ms: msRange!.start_ms, end_ms: msRange!.end_ms } : { range };
+      const q = { start_ms: msRange.start_ms, end_ms: msRange.end_ms };
       const [st, cst] = await Promise.all([statsSummary(q), statsChannels(q)]);
       setStats(st);
       setChannelStats(
@@ -94,14 +90,8 @@ export function MonitorPage() {
   }
 
   useEffect(() => {
-    if (range === "custom") return;
     refresh();
-  }, [range]);
-
-  useEffect(() => {
-    if (range !== "custom") return;
-    refresh();
-  }, [range, customDateRange]);
+  }, [dateRange?.from, dateRange?.to]);
 
   useWindowEvent("cliswitch-usage-changed", () => {
     if (loadingRef.current) return;
@@ -143,36 +133,19 @@ export function MonitorPage() {
         </div>
         <div className="flex flex-col items-end gap-1">
           <div className="flex items-center gap-2">
-            <Select
-              value={range}
-              onValueChange={(v) => setRange(v as StatsRange)}
-            >
-              <SelectTrigger className="w-[130px] h-8">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="today">{t("monitor.range.today")}</SelectItem>
-                <SelectItem value="yesterday">{t("monitor.range.yesterday")}</SelectItem>
-                <SelectItem value="week">{t("monitor.range.week")}</SelectItem>
-                <SelectItem value="month">{t("monitor.range.month")}</SelectItem>
-                <SelectItem value="custom">{t("monitor.range.custom")}</SelectItem>
-              </SelectContent>
-            </Select>
-            {range === "custom" && (
-              <DateRangePicker
-                value={customDateRange}
-                onChange={setCustomDateRange}
-                placeholder={t("monitor.range.selectRange")}
-                className="w-[260px] h-8"
-                disabled={loading}
-                locale={locale}
-              />
-            )}
+            <DateRangePicker
+              value={dateRange}
+              onChange={setDateRange}
+              placeholder={t("monitor.range.selectRange")}
+              className="w-[260px] h-8"
+              disabled={loading}
+              locale={locale}
+            />
             <Button
               size="sm"
               variant="outline"
               onClick={refresh}
-              disabled={loading || (range === "custom" && !customDateRange?.from)}
+              disabled={loading || !dateRange?.from}
             >
               <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
               {t("common.refresh")}
