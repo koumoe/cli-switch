@@ -302,7 +302,11 @@
     "subtitle": "Statistics and channel performance",
     "range": {
       "today": "Today",
-      "month": "This Month"
+      "yesterday": "Yesterday",
+      "week": "This Week",
+      "month": "This Month",
+      "custom": "Custom",
+      "selectRange": "Select date range"
     },
     "cards": {
       "totalRequests": "Total Requests",

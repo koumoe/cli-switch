@@ -155,6 +155,14 @@ export type UpdateDownloadResponse = {
   status: UpdateStatus;
 };
 
+export type StatsRange = "today" | "yesterday" | "week" | "month" | "custom";
+
+export type StatsQuery = Partial<{
+  range: StatsRange;
+  start_ms: number;
+  end_ms: number;
+}>;
+
 export type StatsSummary = {
   range: string;
   start_ms: number;
@@ -384,12 +392,21 @@ export function downloadUpdate(): Promise<UpdateDownloadResponse> {
   return http<UpdateDownloadResponse>("POST", "/api/update/download");
 }
 
-export function statsSummary(range: "today" | "month"): Promise<StatsSummary> {
-  return http<StatsSummary>("GET", `/api/stats/summary?range=${encodeURIComponent(range)}`);
+function statsQueryToParams(query?: StatsQuery): string {
+  const p = new URLSearchParams();
+  if (query?.range) p.set("range", query.range);
+  if (query?.start_ms !== undefined) p.set("start_ms", String(query.start_ms));
+  if (query?.end_ms !== undefined) p.set("end_ms", String(query.end_ms));
+  const s = p.toString();
+  return s.length > 0 ? `?${s}` : "";
 }
 
-export function statsChannels(range: "today" | "month"): Promise<StatsChannels> {
-  return http<StatsChannels>("GET", `/api/stats/channels?range=${encodeURIComponent(range)}`);
+export function statsSummary(query?: StatsQuery): Promise<StatsSummary> {
+  return http<StatsSummary>("GET", `/api/stats/summary${statsQueryToParams(query)}`);
+}
+
+export function statsChannels(query?: StatsQuery): Promise<StatsChannels> {
+  return http<StatsChannels>("GET", `/api/stats/channels${statsQueryToParams(query)}`);
 }
 
 export function statsTrend(range: "month"): Promise<StatsTrend> {

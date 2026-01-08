@@ -302,7 +302,11 @@
     "subtitle": "统计和渠道性能",
     "range": {
       "today": "今天",
-      "month": "本月"
+      "yesterday": "昨天",
+      "week": "本周",
+      "month": "本月",
+      "custom": "自定义",
+      "selectRange": "选择日期区间"
     },
     "cards": {
       "totalRequests": "总请求",

@@ -241,8 +241,8 @@ export function OverviewPage() {
   useEffect(() => {
     Promise.all([
       listChannels(),
-      statsSummary("month"),
-      statsChannels("month"),
+      statsSummary({ range: "month" }),
+      statsChannels({ range: "month" }),
       statsTrend("month"),
     ])
       .then(([cs, st, cst, tr]) => {

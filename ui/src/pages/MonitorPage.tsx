@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { toast } from "sonner";
+import type { DateRange } from "react-day-picker";
 import {
   Button,
   Card,
@@ -9,6 +10,8 @@ import {
   CardHeader,
   CardTitle,
   Badge,
+  DateRangePicker,
+  dateRangeToMs,
   Select,
   SelectContent,
   SelectItem,
@@ -32,11 +35,12 @@ import {
   type Channel,
   type StatsSummary,
   type ChannelStats,
+  type StatsRange,
 } from "../api";
 import { protocolLabel } from "../lib";
 
 export function MonitorPage() {
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
   const { currency } = useCurrency();
   const colClass = {
     channel: "w-28",
@@ -54,14 +58,25 @@ export function MonitorPage() {
   const [loading, setLoading] = useState(false);
   const loadingRef = useRef(false);
 
-  const [range, setRange] = useState<"today" | "month">("today");
+  const [range, setRange] = useState<StatsRange>("today");
+  const [customDateRange, setCustomDateRange] = useState<DateRange | undefined>(undefined);
 
   async function refresh() {
     setLoading(true);
     try {
       loadingRef.current = true;
-      const [cs, st, cst] = await Promise.all([listChannels(), statsSummary(range), statsChannels(range)]);
+      const cs = await listChannels();
       setChannels(cs);
+
+      const msRange = range === "custom" ? dateRangeToMs(customDateRange) : null;
+      if (range === "custom" && !msRange) {
+        setStats(null);
+        setChannelStats([]);
+        return;
+      }
+
+      const q = range === "custom" ? { start_ms: msRange!.start_ms, end_ms: msRange!.end_ms } : { range };
+      const [st, cst] = await Promise.all([statsSummary(q), statsChannels(q)]);
       setStats(st);
       setChannelStats(
         [...cst.items].sort((a, b) => {
@@ -79,8 +94,14 @@ export function MonitorPage() {
   }
 
   useEffect(() => {
+    if (range === "custom") return;
     refresh();
   }, [range]);
+
+  useEffect(() => {
+    if (range !== "custom") return;
+    refresh();
+  }, [range, customDateRange]);
 
   useWindowEvent("cliswitch-usage-changed", () => {
     if (loadingRef.current) return;
@@ -124,17 +145,35 @@ export function MonitorPage() {
           <div className="flex items-center gap-2">
             <Select
               value={range}
-              onValueChange={(v) => setRange(v as "today" | "month")}
+              onValueChange={(v) => setRange(v as StatsRange)}
             >
-              <SelectTrigger className="w-[110px] h-8">
+              <SelectTrigger className="w-[130px] h-8">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="today">{t("monitor.range.today")}</SelectItem>
+                <SelectItem value="yesterday">{t("monitor.range.yesterday")}</SelectItem>
+                <SelectItem value="week">{t("monitor.range.week")}</SelectItem>
                 <SelectItem value="month">{t("monitor.range.month")}</SelectItem>
+                <SelectItem value="custom">{t("monitor.range.custom")}</SelectItem>
               </SelectContent>
             </Select>
-            <Button size="sm" variant="outline" onClick={refresh} disabled={loading}>
+            {range === "custom" && (
+              <DateRangePicker
+                value={customDateRange}
+                onChange={setCustomDateRange}
+                placeholder={t("monitor.range.selectRange")}
+                className="w-[260px] h-8"
+                disabled={loading}
+                locale={locale}
+              />
+            )}
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={refresh}
+              disabled={loading || (range === "custom" && !customDateRange?.from)}
+            >
               <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
               {t("common.refresh")}
             </Button>
