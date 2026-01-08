@@ -28,6 +28,25 @@ pub(in crate::server) async fn records_clear(
     State(state): State<AppState>,
     Json(input): Json<RecordsClearInput>,
 ) -> Result<impl IntoResponse, ApiError> {
+    fn validate_range(start_ms: Option<i64>, end_ms: Option<i64>) -> Result<Option<(i64, i64)>, ApiError> {
+        match (start_ms, end_ms) {
+            (None, None) => Ok(None),
+            (Some(_), None) | (None, Some(_)) => Err(ApiError::bad_request(
+                "maintenance_records_start_end_ms_required",
+                "start_ms and end_ms must be provided together",
+            )),
+            (Some(start_ms), Some(end_ms)) => {
+                if start_ms > end_ms {
+                    return Err(ApiError::bad_request(
+                        "maintenance_records_start_ms_gt_end_ms",
+                        "start_ms must be <= end_ms",
+                    ));
+                }
+                Ok(Some((start_ms, end_ms)))
+            }
+        }
+    }
+
     let kind = match input.mode {
         RecordsClearMode::DateRange => {
             let start_ms = input.start_ms.ok_or_else(|| {
@@ -50,8 +69,14 @@ pub(in crate::server) async fn records_clear(
             }
             storage::RecordsClearKind::DateRange { start_ms, end_ms }
         }
-        RecordsClearMode::Errors => storage::RecordsClearKind::Errors,
-        RecordsClearMode::All => storage::RecordsClearKind::All,
+        RecordsClearMode::Errors => match validate_range(input.start_ms, input.end_ms)? {
+            Some((start_ms, end_ms)) => storage::RecordsClearKind::ErrorsDateRange { start_ms, end_ms },
+            None => storage::RecordsClearKind::Errors,
+        },
+        RecordsClearMode::All => match validate_range(input.start_ms, input.end_ms)? {
+            Some((start_ms, end_ms)) => storage::RecordsClearKind::DateRange { start_ms, end_ms },
+            None => storage::RecordsClearKind::All,
+        },
     };
 
     let res = storage::clear_records(state.db_path(), kind).await?;

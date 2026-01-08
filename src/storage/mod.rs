@@ -189,6 +189,7 @@ pub fn now_ms() -> i64 {
 #[derive(Debug, Clone, Copy)]
 pub enum RecordsClearKind {
     DateRange { start_ms: i64, end_ms: i64 },
+    ErrorsDateRange { start_ms: i64, end_ms: i64 },
     Errors,
     All,
 }
@@ -210,6 +211,13 @@ pub async fn clear_records(
             RecordsClearKind::DateRange { start_ms, end_ms } => conn
                 .execute(
                     r#"DELETE FROM usage_events WHERE ts_ms >= ?1 AND ts_ms <= ?2"#,
+                    params![start_ms, end_ms],
+                )?
+                .try_into()
+                .unwrap_or(i64::MAX),
+            RecordsClearKind::ErrorsDateRange { start_ms, end_ms } => conn
+                .execute(
+                    r#"DELETE FROM usage_events WHERE success = 0 AND ts_ms >= ?1 AND ts_ms <= ?2"#,
                     params![start_ms, end_ms],
                 )?
                 .try_into()
