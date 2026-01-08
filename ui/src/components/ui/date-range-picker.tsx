@@ -1,5 +1,5 @@
 import * as React from "react"
-import { format, isValid, parse, startOfDay, startOfMonth, startOfWeek, endOfMonth, endOfWeek, subDays } from "date-fns"
+import { format, isValid, parse, startOfDay, startOfMonth, startOfWeek, subDays } from "date-fns"
 import { zhCN, enUS } from "date-fns/locale"
 import { Calendar as CalendarIcon } from "lucide-react"
 import type { DateRange } from "react-day-picker"
@@ -18,9 +18,37 @@ const localeMap: Record<string, DateFnsLocale> = {
   "en-US": enUS,
 }
 
+export type DateRangePresetKey = "today" | "yesterday" | "week" | "month"
+
+export function resolveDateFnsLocale(locale: string | undefined): DateFnsLocale {
+  return localeMap[locale ?? ""] ?? zhCN
+}
+
+export function computePresetDateRange(preset: DateRangePresetKey, locale: string | undefined, now = new Date()): DateRange {
+  const dateFnsLocale = resolveDateFnsLocale(locale)
+  const today = startOfDay(now)
+  switch (preset) {
+    case "today":
+      return { from: today, to: today }
+    case "yesterday": {
+      const yesterday = startOfDay(subDays(today, 1))
+      return { from: yesterday, to: yesterday }
+    }
+    case "week": {
+      const weekStart = startOfDay(startOfWeek(now, { locale: dateFnsLocale }))
+      return { from: weekStart, to: today }
+    }
+    case "month": {
+      const monthStart = startOfDay(startOfMonth(now))
+      return { from: monthStart, to: today }
+    }
+  }
+}
+
 interface DateRangePickerProps {
   value?: DateRange
   onChange?: (range: DateRange | undefined) => void
+  onPresetChange?: (preset: DateRangePresetKey | null) => void
   placeholder?: string
   className?: string
   disabled?: boolean
@@ -30,13 +58,14 @@ interface DateRangePickerProps {
 export function DateRangePicker({
   value,
   onChange,
+  onPresetChange,
   placeholder = "Select date range",
   className,
   disabled,
   locale = "zh-CN",
 }: DateRangePickerProps) {
   const [open, setOpen] = React.useState(false)
-  const dateFnsLocale = localeMap[locale] ?? zhCN
+  const dateFnsLocale = resolveDateFnsLocale(locale)
   const selectStepRef = React.useRef<0 | 1>(0)
 
   React.useEffect(() => {
@@ -49,22 +78,12 @@ export function DateRangePicker({
     }
     return { today: "Today", yesterday: "Yesterday", week: "This week", month: "This month" } as const
   }, [locale])
-
-  const presets = React.useMemo(() => {
-    const now = new Date()
-    const today = startOfDay(now)
-    const yesterday = startOfDay(subDays(today, 1))
-    const weekStart = startOfDay(startOfWeek(now, { locale: dateFnsLocale }))
-    const weekEnd = startOfDay(endOfWeek(now, { locale: dateFnsLocale }))
-    const monthStart = startOfDay(startOfMonth(now))
-    const monthEnd = startOfDay(endOfMonth(now))
-    return [
-      { key: "today", label: presetLabels.today, range: { from: today, to: today } as DateRange },
-      { key: "yesterday", label: presetLabels.yesterday, range: { from: yesterday, to: yesterday } as DateRange },
-      { key: "week", label: presetLabels.week, range: { from: weekStart, to: weekEnd } as DateRange },
-      { key: "month", label: presetLabels.month, range: { from: monthStart, to: monthEnd } as DateRange },
-    ] as const
-  }, [dateFnsLocale, presetLabels.month, presetLabels.today, presetLabels.week, presetLabels.yesterday])
+  const presets = [
+    { key: "today", label: presetLabels.today },
+    { key: "yesterday", label: presetLabels.yesterday },
+    { key: "week", label: presetLabels.week },
+    { key: "month", label: presetLabels.month },
+  ] as const
 
   const displayText = React.useMemo(() => {
     if (!value?.from) return placeholder
@@ -99,6 +118,7 @@ export function DateRangePicker({
             selected={value}
             onSelect={(range, selectedDay) => {
               const clickedDay = selectedDay instanceof Date ? selectedDay : null
+              if (clickedDay) onPresetChange?.(null)
 
               if (value?.from && value?.to && selectStepRef.current === 0 && clickedDay) {
                 selectStepRef.current = 1
@@ -139,7 +159,12 @@ export function DateRangePicker({
                   variant="outline"
                   className="h-7 px-2 text-xs"
                   onClick={() => {
-                    onChange?.(p.range)
+                    const range = computePresetDateRange(p.key, locale)
+                    if (onPresetChange) {
+                      onPresetChange(p.key)
+                    } else {
+                      onChange?.(range)
+                    }
                     setOpen(false)
                   }}
                 >
