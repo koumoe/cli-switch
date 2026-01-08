@@ -25,5 +25,7 @@ pub(super) use route::{
 pub(super) use settings::{get_settings, update_settings};
 pub(super) use stats::{stats_channels, stats_summary, stats_trend};
 pub(super) use system::open_in_browser;
-pub(super) use update::{update_check, update_download, update_status};
+pub(super) use update::{
+    update_changelog, update_check, update_download, update_ignore, update_status,
+};
 pub(super) use usage::usage_list;

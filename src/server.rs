@@ -185,7 +185,9 @@ fn build_app(state: AppState) -> Router {
         .route("/api/logs/ingest", post(handlers::frontend_log_ingest))
         .route("/api/update/status", get(handlers::update_status))
         .route("/api/update/check", post(handlers::update_check))
+        .route("/api/update/changelog", get(handlers::update_changelog))
         .route("/api/update/download", post(handlers::update_download))
+        .route("/api/update/ignore", post(handlers::update_ignore))
         .route(
             "/api/channels",
             get(handlers::list_channels).post(handlers::create_channel),
