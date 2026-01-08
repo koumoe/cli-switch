@@ -123,7 +123,7 @@ fn parse_sections(block: &str) -> Vec<ChangelogSection> {
             return;
         }
         sections.push(ChangelogSection {
-            title: title.take().unwrap_or_else(|| "更新内容".to_string()),
+            title: title.take().unwrap_or_else(|| "Changes".to_string()),
             items: std::mem::take(items),
         });
     };
