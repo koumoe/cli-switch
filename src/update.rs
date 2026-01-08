@@ -1271,7 +1271,9 @@ exit 0
         .arg(restart_flag)
         .arg(log.as_os_str());
     cmd.args(args);
-    cmd.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
+    cmd.stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
     #[cfg(unix)]
     {
         use std::os::unix::process::CommandExt as _;
