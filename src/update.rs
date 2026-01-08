@@ -6,6 +6,8 @@ use std::time::SystemTime;
 
 #[cfg(not(target_os = "windows"))]
 use std::ffi::{OsStr, OsString};
+#[cfg(not(target_os = "windows"))]
+use std::process::Stdio;
 
 use crate::events::{self, AppEvent};
 
@@ -1269,6 +1271,22 @@ exit 0
         .arg(restart_flag)
         .arg(log.as_os_str());
     cmd.args(args);
+    cmd.stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt as _;
+        unsafe {
+            cmd.pre_exec(|| {
+                unsafe extern "C" {
+                    fn setsid() -> i32;
+                }
+                let _ = setsid();
+                Ok(())
+            });
+        }
+    }
     cmd.spawn().with_context(|| "spawn apply helper failed")?;
     tracing::info!(
         script = %script.display(),
