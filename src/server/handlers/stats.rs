@@ -100,13 +100,13 @@ fn resolve_stats_window(q: &StatsQuery) -> Result<(String, i64, Option<i64>), Ap
             .start_ms
             .ok_or_else(|| ApiError::bad_request("stats_missing_start_ms", "Missing start_ms"))?;
         let end_ms = q.end_ms;
-        if let Some(end_ms) = end_ms {
-            if end_ms < start_ms {
-                return Err(ApiError::bad_request(
-                    "stats_invalid_ms_range",
-                    "end_ms must be >= start_ms",
-                ));
-            }
+        if let Some(end_ms) = end_ms
+            && end_ms < start_ms
+        {
+            return Err(ApiError::bad_request(
+                "stats_invalid_ms_range",
+                "end_ms must be >= start_ms",
+            ));
         }
         return Ok(("custom".to_string(), start_ms, end_ms));
     }
