@@ -1,3 +1,8 @@
+## [0.18.0](https://github.com/koumoe/cli-switch/compare/v0.17.0...v0.18.0) (2026-01-08)
+
+### Features
+
+* extend monitor time range filter ([#53](https://github.com/koumoe/cli-switch/issues/53)) ([cf0a442](https://github.com/koumoe/cli-switch/commit/cf0a4423bef1c052acd9b528e20b11af2a6e9c5f))
 ## [0.17.0](https://github.com/koumoe/cli-switch/compare/v0.16.0...v0.17.0) (2026-01-07)
 
 ### Features
