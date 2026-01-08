@@ -53,6 +53,8 @@ export function LogsPage() {
   const [channels, setChannels] = useState<Channel[]>([]);
   const [loading, setLoading] = useState(false);
   const loadingRef = useRef(false);
+  const pendingRefreshRef = useRef(false);
+  const pendingRefreshPageRef = useRef(1);
   const [total, setTotal] = useState(0);
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailEvent, setDetailEvent] = useState<UsageEvent | null>(null);
@@ -126,6 +128,10 @@ export function LogsPage() {
     } finally {
       setLoading(false);
       loadingRef.current = false;
+      if (pendingRefreshRef.current) {
+        pendingRefreshRef.current = false;
+        void refresh(pendingRefreshPageRef.current);
+      }
     }
   }
 
@@ -140,7 +146,11 @@ export function LogsPage() {
   }, [pageSize]);
 
   useWindowEvent("cliswitch-usage-changed", () => {
-    if (loadingRef.current) return;
+    if (loadingRef.current) {
+      pendingRefreshRef.current = true;
+      pendingRefreshPageRef.current = page;
+      return;
+    }
     void refresh(page);
   });
 
