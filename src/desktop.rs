@@ -543,14 +543,26 @@ pub async fn run(
         .context("初始化托盘失败")?;
 
     let proxy_for_webview = proxy.clone();
+    let open_devtools = std::env::var("CLISWITCH_DEVTOOLS")
+        .map(|v| {
+            let s = v.trim().to_ascii_lowercase();
+            !(s == "0" || s == "false" || s == "off")
+        })
+        .unwrap_or(true);
+
     let webview = WebViewBuilder::new()
         .with_url(&base_url)
+        .with_devtools(open_devtools)
         .with_ipc_handler(move |req| {
             let msg = req.body().clone();
             let _ = proxy_for_webview.send_event(UserEvent::Ipc(msg));
         })
         .build(&window)
         .context("创建 WebView 失败")?;
+
+    if open_devtools {
+        webview.open_devtools();
+    }
 
     {
         let proxy = proxy.clone();

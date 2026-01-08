@@ -31,7 +31,7 @@ tracing = "0.1"
 tracing-appender = "0.2"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 uuid = { version = "1", features = ["v4", "serde"] }
-wry = { version = "0.53", optional = true }
+wry = { version = "0.53", optional = true, features = ["devtools"] }
 muda = { version = "0.17", optional = true }
 tray-icon = { version = "0.21", optional = true }
 image = { version = "0.25", default-features = false, features = ["png"] }
