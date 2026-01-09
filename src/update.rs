@@ -10,6 +10,7 @@ use std::ffi::{OsStr, OsString};
 use std::process::Stdio;
 
 use crate::events::{self, AppEvent};
+use crate::storage;
 
 const GITHUB_OWNER: &str = "koumoe";
 const GITHUB_REPO: &str = "cli-switch";
@@ -131,13 +132,17 @@ fn normalize_version_str(version: &str) -> String {
     normalize_version_tag(version.trim()).to_string()
 }
 
-fn load_ignored_versions(data_dir: &Path) -> Vec<String> {
-    let path = ignored_path(data_dir);
+fn ignored_json_path(data_dir: &Path) -> PathBuf {
+    updates_dir(data_dir).join("ignored.json")
+}
+
+fn load_ignored_versions_from_json(data_dir: &Path) -> Vec<String> {
+    let path = ignored_json_path(data_dir);
     let text = match std::fs::read_to_string(&path) {
         Ok(t) => t,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Vec::new(),
         Err(e) => {
-            tracing::warn!(err = %e, path = %path.display(), "read ignored versions failed");
+            tracing::warn!(err = %e, path = %path.display(), "read ignored versions json failed");
             return Vec::new();
         }
     };
@@ -145,7 +150,7 @@ fn load_ignored_versions(data_dir: &Path) -> Vec<String> {
     let list: Vec<String> = match serde_json::from_str(&text) {
         Ok(v) => v,
         Err(e) => {
-            tracing::warn!(err = %e, path = %path.display(), "parse ignored versions failed");
+            tracing::warn!(err = %e, path = %path.display(), "parse ignored versions json failed");
             return Vec::new();
         }
     };
@@ -156,46 +161,35 @@ fn load_ignored_versions(data_dir: &Path) -> Vec<String> {
         .collect()
 }
 
-fn save_ignored_versions(data_dir: &Path, versions: &[String]) -> anyhow::Result<()> {
-    std::fs::create_dir_all(updates_dir(data_dir)).with_context(|| {
-        format!(
-            "create updates dir failed: {}",
-            updates_dir(data_dir).display()
-        )
-    })?;
-    let path = ignored_path(data_dir);
-    let text =
-        serde_json::to_string_pretty(versions).context("serialize ignored versions failed")?;
-    std::fs::write(&path, text)
-        .with_context(|| format!("write ignored versions failed: {}", path.display()))?;
-    Ok(())
+pub async fn migrate_ignored_json_to_db_if_present(
+    db_path: PathBuf,
+    data_dir: &Path,
+) -> anyhow::Result<bool> {
+    let path = ignored_json_path(data_dir);
+    if !path.exists() {
+        return Ok(false);
+    }
+
+    let versions = load_ignored_versions_from_json(data_dir);
+    if versions.is_empty() {
+        let _ = std::fs::remove_file(&path);
+        return Ok(false);
+    }
+
+    let inserted = storage::upsert_ignored_update_versions(db_path, versions).await?;
+    let _ = std::fs::remove_file(&path);
+    tracing::info!(count = inserted, path = %path.display(), "migrated ignored update versions from json");
+    Ok(true)
 }
 
-pub fn ignore_version(data_dir: &Path, version: &str) -> anyhow::Result<()> {
-    let v = normalize_version_str(version);
-    if v.is_empty() {
-        anyhow::bail!("version is empty");
+async fn is_version_ignored(db_path: PathBuf, version: &str) -> bool {
+    match storage::is_update_version_ignored(db_path, version).await {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::warn!(err = %e, "check ignored update version failed");
+            false
+        }
     }
-
-    let mut versions = load_ignored_versions(data_dir);
-    if versions.iter().any(|x| x == &v) {
-        return Ok(());
-    }
-
-    versions.insert(0, v);
-    let mut seen = std::collections::HashSet::<String>::new();
-    versions.retain(|x| seen.insert(x.clone()));
-    versions.truncate(50);
-    save_ignored_versions(data_dir, &versions)?;
-    Ok(())
-}
-
-fn is_version_ignored(data_dir: &Path, version: &str) -> bool {
-    let v = normalize_version_str(version);
-    if v.is_empty() {
-        return false;
-    }
-    load_ignored_versions(data_dir).iter().any(|x| x == &v)
 }
 
 fn current_platform_key() -> &'static str {
@@ -216,10 +210,6 @@ fn updates_dir(data_dir: &Path) -> PathBuf {
 
 fn pending_path(data_dir: &Path) -> PathBuf {
     updates_dir(data_dir).join("pending.json")
-}
-
-fn ignored_path(data_dir: &Path) -> PathBuf {
-    updates_dir(data_dir).join("ignored.json")
 }
 
 fn update_downloads_dir(data_dir: &Path) -> PathBuf {
@@ -411,6 +401,7 @@ fn pick_asset(release: &GitHubRelease) -> Option<(&GitHubAsset, Option<&GitHubAs
 pub async fn check_latest(
     client: &reqwest::Client,
     runtime: std::sync::Arc<tokio::sync::Mutex<UpdateRuntime>>,
+    db_path: PathBuf,
     data_dir: &Path,
 ) -> UpdateCheck {
     {
@@ -446,7 +437,7 @@ pub async fn check_latest(
         Ok(release) => {
             let tag = normalize_version_tag(&release.tag_name).to_string();
             latest_str = Some(tag.clone());
-            latest_ignored = is_version_ignored(data_dir, &tag);
+            latest_ignored = is_version_ignored(db_path.clone(), &tag).await;
             match (current, semver::Version::parse(&tag)) {
                 (Some(cur), Ok(lat)) => {
                     available = lat > cur;
@@ -490,16 +481,18 @@ pub async fn check_latest(
 
 pub async fn get_status(
     runtime: std::sync::Arc<tokio::sync::Mutex<UpdateRuntime>>,
+    db_path: PathBuf,
     data_dir: &Path,
     auto_update_enabled: bool,
 ) -> UpdateStatus {
     let pending = load_pending_update(data_dir);
     let pending_version = pending.as_ref().map(|p| p.version.clone());
     let mut rt = runtime.lock().await;
-    rt.latest_ignored = rt
-        .latest_version
-        .as_ref()
-        .is_some_and(|v| is_version_ignored(data_dir, v));
+    rt.latest_ignored = if let Some(v) = rt.latest_version.as_ref() {
+        is_version_ignored(db_path.clone(), v).await
+    } else {
+        false
+    };
     if pending.is_some() && rt.stage != Stage::Downloading {
         rt.stage = Stage::Ready;
     }
@@ -524,6 +517,7 @@ pub async fn get_status(
 pub async fn spawn_download_latest(
     client: reqwest::Client,
     runtime: std::sync::Arc<tokio::sync::Mutex<UpdateRuntime>>,
+    db_path: PathBuf,
     data_dir: PathBuf,
 ) -> bool {
     {
@@ -555,7 +549,7 @@ pub async fn spawn_download_latest(
     };
 
     let latest = normalize_version_tag(&release.tag_name).to_string();
-    let ignored_latest = is_version_ignored(&data_dir, &latest);
+    let ignored_latest = is_version_ignored(db_path, &latest).await;
     let (available, version_err) = match (
         semver::Version::parse(env!("CARGO_PKG_VERSION")),
         semver::Version::parse(&latest),

@@ -70,7 +70,13 @@ pub(crate) async fn app_update_auto_loop(
         }
 
         let data_dir = data_dir_from_db_path(db_path.as_path());
-        let _ = update::check_latest(&http_client, update_runtime.clone(), &data_dir).await;
+        let _ = update::check_latest(
+            &http_client,
+            update_runtime.clone(),
+            db_path.clone(),
+            &data_dir,
+        )
+        .await;
 
         tokio::select! {
             _ = tokio::time::sleep(interval) => {}

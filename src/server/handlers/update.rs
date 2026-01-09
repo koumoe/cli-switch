@@ -15,9 +15,11 @@ pub(in crate::server) async fn update_status(
 ) -> Result<impl IntoResponse, ApiError> {
     let settings = storage::get_app_settings(state.db_path()).await?;
     let data_dir = state.data_dir();
+    let db_path = state.db_path();
     Ok(Json(
         update::get_status(
             state.update_runtime.clone(),
+            db_path,
             &data_dir,
             settings.app_auto_update_enabled,
         )
@@ -29,8 +31,14 @@ pub(in crate::server) async fn update_check(
     State(state): State<AppState>,
 ) -> Result<impl IntoResponse, ApiError> {
     let data_dir = state.data_dir();
-    let res =
-        update::check_latest(&state.http_client, state.update_runtime.clone(), &data_dir).await;
+    let db_path = state.db_path();
+    let res = update::check_latest(
+        &state.http_client,
+        state.update_runtime.clone(),
+        db_path,
+        &data_dir,
+    )
+    .await;
     Ok(Json(res))
 }
 
@@ -66,14 +74,17 @@ pub(in crate::server) async fn update_download(
 ) -> Result<impl IntoResponse, ApiError> {
     let settings = storage::get_app_settings(state.db_path()).await?;
     let data_dir = state.data_dir();
+    let db_path = state.db_path();
     let started = update::spawn_download_latest(
         state.http_client.clone(),
         state.update_runtime.clone(),
+        db_path.clone(),
         data_dir.clone(),
     )
     .await;
     let status = update::get_status(
         state.update_runtime.clone(),
+        db_path,
         &data_dir,
         settings.app_auto_update_enabled,
     )
@@ -96,12 +107,13 @@ pub(in crate::server) async fn update_ignore(
             "version is required",
         ));
     }
-    let data_dir = state.data_dir();
-    update::ignore_version(&data_dir, &input.version)?;
+    storage::ignore_update_version(state.db_path(), &input.version).await?;
 
     let settings = storage::get_app_settings(state.db_path()).await?;
+    let data_dir = state.data_dir();
     let status = update::get_status(
         state.update_runtime.clone(),
+        state.db_path(),
         &data_dir,
         settings.app_auto_update_enabled,
     )
