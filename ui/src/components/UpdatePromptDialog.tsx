@@ -62,19 +62,20 @@ export function UpdatePromptDialog(props: {
           </div>
         </div>
 
-        <DialogFooter className="gap-2 sm:gap-0">
-          <Button variant="outline" onClick={props.onIgnore} disabled={busy}>
+        <DialogFooter className="flex w-full items-center justify-between gap-2 sm:gap-0">
+          <Button variant="destructive" onClick={props.onIgnore} disabled={busy}>
             {props.ignoreText}
           </Button>
-          <Button variant="outline" onClick={props.onLater} disabled={busy}>
-            {props.laterText}
-          </Button>
-          <Button onClick={props.onUpdate} disabled={busy}>
-            {props.updateText}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button onClick={props.onUpdate} disabled={busy}>
+              {props.updateText}
+            </Button>
+            <Button variant="outline" onClick={props.onLater} disabled={busy}>
+              {props.laterText}
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>
   );
 }
-
