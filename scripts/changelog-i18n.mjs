@@ -26,6 +26,40 @@ function parseVersionBlocks(markdown) {
   return { order, blocks };
 }
 
+function normalizeBilingualBullets(markdown, keep) {
+  // Normalize bilingual commit subjects like:
+  //   * english message / 中文消息 ([...])
+  // keep="left"  -> keep English part (for en.md)
+  // keep="right" -> keep Chinese part (for cn.md)
+  return markdown
+    .split("\n")
+    .map((line) => {
+      const m = /^(\s*\*)\s+(.*)$/.exec(line);
+      if (!m) return line;
+
+      const bullet = m[1];
+      const rest = m[2];
+
+      const linkStart = rest.indexOf(" (");
+      const subject = linkStart === -1 ? rest : rest.slice(0, linkStart);
+      const suffix = linkStart === -1 ? "" : rest.slice(linkStart);
+
+      const sep = subject.indexOf(" / ");
+      if (sep === -1) return line;
+
+      const left = subject.slice(0, sep).trimEnd();
+      const right = subject.slice(sep + 3).trimStart();
+      if (!left || !right) return line;
+
+      // Only treat it as bilingual when the right side contains CJK characters.
+      if (!/[\u4E00-\u9FFF]/.test(right)) return line;
+
+      const chosen = keep === "right" ? right : left;
+      return `${bullet} ${chosen}${suffix}`;
+    })
+    .join("\n");
+}
+
 function translateSectionHeadingsToCn(block) {
   return block
     .replace(/^###\s+Bug Fixes\s*$/gm, "### 修复")
@@ -59,8 +93,20 @@ if (!fs.existsSync(cnPath)) {
   process.exit(1);
 }
 
-const enMd = fs.readFileSync(enPath, "utf8");
-const cnMd = fs.readFileSync(cnPath, "utf8");
+let enMd = fs.readFileSync(enPath, "utf8");
+let cnMd = fs.readFileSync(cnPath, "utf8");
+const cnMdOriginal = cnMd;
+
+if (mode === "sync") {
+  const normalizedEn = normalizeBilingualBullets(enMd, "left");
+  if (normalizedEn !== enMd) {
+    fs.writeFileSync(enPath, normalizedEn, "utf8");
+    enMd = normalizedEn;
+  }
+
+  // Keep Chinese-only subjects in cn.md when present.
+  cnMd = normalizeBilingualBullets(cnMd, "right");
+}
 
 const en = parseVersionBlocks(enMd);
 const cn = parseVersionBlocks(cnMd);
@@ -94,16 +140,16 @@ if (mode === "sync") {
   for (const version of en.order) {
     const cnBlock = cn.blocks.get(version);
     if (cnBlock) {
-      outBlocks.push(cnBlock);
+      outBlocks.push(normalizeBilingualBullets(cnBlock, "right"));
       continue;
     }
     const enBlock = en.blocks.get(version);
     if (!enBlock) continue;
-    outBlocks.push(translateSectionHeadingsToCn(enBlock));
+    outBlocks.push(normalizeBilingualBullets(translateSectionHeadingsToCn(enBlock), "right"));
   }
 
   const next = `${outBlocks.join("\n")}\n`;
-  if (next !== cnMd) {
+  if (next !== cnMdOriginal) {
     fs.writeFileSync(cnPath, next, "utf8");
   }
   process.exit(0);
