@@ -97,4 +97,3 @@ pub async fn upsert_ignored_update_versions(
     })
     .await
 }
-

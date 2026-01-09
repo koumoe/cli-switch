@@ -32,9 +32,13 @@ pub(in crate::server) async fn update_check(
 ) -> Result<impl IntoResponse, ApiError> {
     let data_dir = state.data_dir();
     let db_path = state.db_path();
-    let res =
-        update::check_latest(&state.http_client, state.update_runtime.clone(), db_path, &data_dir)
-            .await;
+    let res = update::check_latest(
+        &state.http_client,
+        state.update_runtime.clone(),
+        db_path,
+        &data_dir,
+    )
+    .await;
     Ok(Json(res))
 }
 
