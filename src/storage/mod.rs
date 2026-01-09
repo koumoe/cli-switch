@@ -10,6 +10,7 @@ mod protocol;
 mod route;
 mod settings;
 mod stats;
+mod update_ignore;
 mod usage;
 
 pub use channel::{
@@ -38,6 +39,9 @@ pub use stats::{
     ChannelStats, StatsSummary, TrendPoint, stats_channels, stats_summary,
     stats_trend_by_day_channel,
 };
+pub use update_ignore::{
+    ignore_update_version, is_update_version_ignored, upsert_ignored_update_versions,
+};
 pub use usage::{
     CreateUsageEvent, UsageEvent, UsageListQuery, UsageListResult, backfill_usage_event_costs,
     insert_usage_event, list_usage_events, list_usage_events_recent,
@@ -54,6 +58,7 @@ pub fn init_db(db_path: &Path) -> anyhow::Result<()> {
     ensure_channel_failures_schema(&conn)?;
     ensure_channel_checkins_schema(&conn)?;
     ensure_app_settings_schema(&conn)?;
+    ensure_ignored_updates_schema(&conn)?;
     ensure_pricing_models_schema(&conn)?;
     ensure_usage_events_schema(&conn)?;
 
@@ -133,6 +138,10 @@ fn ensure_app_settings_schema(conn: &Connection) -> anyhow::Result<()> {
         [],
     )?;
     Ok(())
+}
+
+fn ensure_ignored_updates_schema(conn: &Connection) -> anyhow::Result<()> {
+    update_ignore::ensure_ignored_updates_schema(conn)
 }
 
 fn ensure_pricing_models_schema(conn: &Connection) -> anyhow::Result<()> {
