@@ -2,7 +2,7 @@
 
 ### Bug Fixes
 
-* patch updater ignore + update prompt / 修复忽略更新与更新弹窗 ([#60](https://github.com/koumoe/cli-switch/issues/60)) ([31f4fe6](https://github.com/koumoe/cli-switch/commit/31f4fe64ffc3d2e706e1297792200a58435c585d))
+* patch updater ignore + update prompt ([#60](https://github.com/koumoe/cli-switch/issues/60)) ([31f4fe6](https://github.com/koumoe/cli-switch/commit/31f4fe64ffc3d2e706e1297792200a58435c585d))
 ## [0.19.1](https://github.com/koumoe/cli-switch/compare/v0.19.0...v0.19.1) (2026-01-08)
 
 ### Bug Fixes
