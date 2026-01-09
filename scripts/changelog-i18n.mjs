@@ -68,6 +68,19 @@ function translateSectionHeadingsToCn(block) {
     .replace(/^###\s+Reverts\s*$/gm, "### 回滚");
 }
 
+function validateCnBlockHasChinese(version, block, cnPath) {
+  const bulletRe = /^\s*[*-]\s+/;
+  const cjkRe = /[\u4E00-\u9FFF]/;
+  for (const line of block.split("\n")) {
+    if (!bulletRe.test(line)) continue;
+    if (cjkRe.test(line)) continue;
+    console.error(
+      `Chinese changelog has non-Chinese bullet in ${cnPath} (version ${version}): ${line.trim()}`
+    );
+    process.exit(1);
+  }
+}
+
 function usage() {
   console.error(
     [
@@ -130,6 +143,12 @@ if (mode === "check") {
       console.error(`Changelog version mismatch at #${i + 1}: en=${enList[i]} cn=${cnList[i]}`);
       process.exit(1);
     }
+  }
+
+  for (const version of cnList) {
+    const cnBlock = cn.blocks.get(version);
+    if (!cnBlock) continue;
+    validateCnBlockHasChinese(version, cnBlock, cnPath);
   }
 
   process.exit(0);
