@@ -1,3 +1,8 @@
+## [0.19.3](https://github.com/koumoe/cli-switch/compare/v0.19.2...v0.19.3) (2026-01-09)
+
+### Bug Fixes
+
+* split bilingual changelog entries by locale ([abc78a0](https://github.com/koumoe/cli-switch/commit/abc78a0d1c53cdc357abd85f9d81615880b1a084))
 ## [0.19.2](https://github.com/koumoe/cli-switch/compare/v0.19.1...v0.19.2) (2026-01-09)
 
 ### Bug Fixes
