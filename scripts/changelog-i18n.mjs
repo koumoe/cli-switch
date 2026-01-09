@@ -1,7 +1,12 @@
 import fs from "node:fs";
 
 function parseVersionBlocks(markdown) {
-  const re = /^##\s+(?:\[(?<v1>[^\]]+)\]|(?<v2>[0-9][^\s]*))\b.*$/gm;
+  // Supports conventional-changelog style:
+  //   ## [0.19.1](https://...) (2026-01-08)
+  // and plain style:
+  //   ## 0.19.1
+  const re =
+    /^##\s+(?:\[(?<v1>[^\]]+)\](?=\(|\s|$)|(?<v2>[0-9][^\s]*)(?=\(|\s|$)).*$/gm;
   const matches = [];
   for (;;) {
     const m = re.exec(markdown);
@@ -59,6 +64,11 @@ const cnMd = fs.readFileSync(cnPath, "utf8");
 
 const en = parseVersionBlocks(enMd);
 const cn = parseVersionBlocks(cnMd);
+
+if (en.order.length === 0) {
+  console.error(`No versions found in English changelog: ${enPath}`);
+  process.exit(1);
+}
 
 if (mode === "check") {
   const enList = en.order;

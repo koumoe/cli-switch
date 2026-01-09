@@ -63,6 +63,9 @@ jobs:
           cache: npm
           cache-dependency-path: ui/package-lock.json
 
+      - name: Check changelog i18n
+        run: node scripts/changelog-i18n.mjs check docs/changelog/en.md docs/changelog/cn.md
+
       - name: Build UI
         working-directory: ui
         run: npm ci && npm run build
@@ -161,6 +164,8 @@ jobs:
 
           # 同步中文版本（缺失版本会从英文复制并翻译标题）
           node scripts/changelog-i18n.mjs sync docs/changelog/en.md docs/changelog/cn.md
+          # 校验中英文版本块一致，避免发布空/不完整 cn.md
+          node scripts/changelog-i18n.mjs check docs/changelog/en.md docs/changelog/cn.md
 
           # 提交变更
           git add Cargo.toml Cargo.lock ui/package.json ui/package-lock.json docs/changelog/en.md docs/changelog/cn.md
