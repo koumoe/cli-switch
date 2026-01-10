@@ -3,6 +3,12 @@
 ### Features
 
 * add CLI tools status/install APIs ([7a10ade](https://github.com/koumoe/cli-switch/commit/7a10ade7b5b8014b7e1d2db4b82a9b94bfd2fccf))
+* add Updates tab and CLI tools onboarding ([ca500ef](https://github.com/koumoe/cli-switch/commit/ca500ef3cb8c9929db5e9b378d60ef2fd4dedb29))
+## [0.20.0](https://github.com/koumoe/cli-switch/compare/v0.19.3...v0.20.0) (2026-01-10)
+
+### Features
+
+* add CLI tools status/install APIs ([7a10ade](https://github.com/koumoe/cli-switch/commit/7a10ade7b5b8014b7e1d2db4b82a9b94bfd2fccf))
 * add Updates tab and CLI tools onboarding ([ca500ef](https://github.com/koumoe/cli-switch/commit/ca500ef29d64b1f9e84ddd3da69dfbdc8afbfa72))
 ## [0.19.3](https://github.com/koumoe/cli-switch/compare/v0.19.2...v0.19.3) (2026-01-09)
 
