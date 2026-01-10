@@ -1,6 +1,7 @@
 pub mod app;
 pub mod autostart;
 pub mod changelog;
+pub mod cli_tools;
 pub mod events;
 pub mod log_files;
 pub mod logging;

@@ -22,6 +22,9 @@ pub(in crate::server) struct UpdateSettingsInput {
     auto_start_enabled: Option<bool>,
     auto_start_launch_mode: Option<storage::AutoStartLaunchMode>,
     app_auto_update_enabled: Option<bool>,
+    gemini_cli_auto_update_enabled: Option<bool>,
+    claude_code_auto_update_enabled: Option<bool>,
+    codex_auto_update_enabled: Option<bool>,
     auto_disable_enabled: Option<bool>,
     auto_disable_window_minutes: Option<i64>,
     auto_disable_failure_times: Option<i64>,
@@ -55,6 +58,18 @@ pub(in crate::server) async fn update_settings(
         (
             "app_auto_update_enabled",
             input.app_auto_update_enabled.is_some(),
+        ),
+        (
+            "gemini_cli_auto_update_enabled",
+            input.gemini_cli_auto_update_enabled.is_some(),
+        ),
+        (
+            "claude_code_auto_update_enabled",
+            input.claude_code_auto_update_enabled.is_some(),
+        ),
+        (
+            "codex_auto_update_enabled",
+            input.codex_auto_update_enabled.is_some(),
         ),
         ("auto_disable_enabled", input.auto_disable_enabled.is_some()),
         (
@@ -148,6 +163,9 @@ pub(in crate::server) async fn update_settings(
             auto_start_enabled,
             auto_start_launch_mode: input.auto_start_launch_mode,
             app_auto_update_enabled: input.app_auto_update_enabled,
+            gemini_cli_auto_update_enabled: input.gemini_cli_auto_update_enabled,
+            claude_code_auto_update_enabled: input.claude_code_auto_update_enabled,
+            codex_auto_update_enabled: input.codex_auto_update_enabled,
             auto_disable_enabled: input.auto_disable_enabled,
             auto_disable_window_minutes: input.auto_disable_window_minutes,
             auto_disable_failure_times: input.auto_disable_failure_times,

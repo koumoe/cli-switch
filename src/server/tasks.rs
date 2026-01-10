@@ -5,6 +5,7 @@ use tokio::sync::watch;
 use tokio::time::Duration;
 
 use crate::{autostart, log_files, storage, update};
+use crate::cli_tools::CLI_TOOLS;
 
 use super::handlers::pricing::run_pricing_sync;
 use super::state::data_dir_from_db_path;
@@ -77,6 +78,79 @@ pub(crate) async fn app_update_auto_loop(
             &data_dir,
         )
         .await;
+
+        tokio::select! {
+            _ = tokio::time::sleep(interval) => {}
+            changed = notify.changed() => {
+                if changed.is_err() { break; }
+                continue;
+            }
+        }
+    }
+}
+
+pub(crate) async fn cli_tools_auto_update_loop(db_path: PathBuf, mut notify: watch::Receiver<u64>) {
+    let interval = Duration::from_secs(24 * 3600);
+
+    loop {
+        let settings = match storage::get_app_settings(db_path.clone()).await {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::warn!(err = %e, "load app settings failed");
+                storage::AppSettings::default()
+            }
+        };
+
+        let enabled = settings.gemini_cli_auto_update_enabled
+            || settings.claude_code_auto_update_enabled
+            || settings.codex_auto_update_enabled;
+
+        if !enabled {
+            if notify.changed().await.is_err() {
+                break;
+            }
+            continue;
+        }
+
+        let to_update: Vec<_> = CLI_TOOLS
+            .iter()
+            .filter(|d| match d.id {
+                crate::cli_tools::CliToolId::Gemini => settings.gemini_cli_auto_update_enabled,
+                crate::cli_tools::CliToolId::Claude => settings.claude_code_auto_update_enabled,
+                crate::cli_tools::CliToolId::Codex => settings.codex_auto_update_enabled,
+            })
+            .copied()
+            .collect();
+
+        let res = tokio::task::spawn_blocking(move || {
+            if !crate::cli_tools::npm_available() {
+                return;
+            }
+            for d in to_update {
+                match crate::cli_tools::npm_install_global(d.npm_package) {
+                    Ok(out) => {
+                        if !out.status.success() {
+                            let code = out.status.code();
+                            tracing::warn!(
+                                tool = d.name,
+                                pkg = d.npm_package,
+                                exit_code = ?code,
+                                stderr = %out.stderr.trim(),
+                                "cli tool auto update failed"
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!(tool = d.name, pkg = d.npm_package, err = %e, "cli tool auto update failed");
+                    }
+                }
+            }
+        })
+        .await;
+
+        if let Err(e) = res {
+            tracing::warn!(err = %e, "cli tool auto update task join failed");
+        }
 
         tokio::select! {
             _ = tokio::time::sleep(interval) => {}
