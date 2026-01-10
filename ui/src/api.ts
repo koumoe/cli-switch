@@ -22,12 +22,42 @@ export type AppSettings = {
   auto_start_enabled: boolean;
   auto_start_launch_mode: AutoStartLaunchMode;
   app_auto_update_enabled: boolean;
+  gemini_cli_auto_update_enabled: boolean;
+  claude_code_auto_update_enabled: boolean;
+  codex_auto_update_enabled: boolean;
   auto_disable_enabled: boolean;
   auto_disable_window_minutes: number;
   auto_disable_failure_times: number;
   auto_disable_disable_minutes: number;
   log_level: LogLevel;
   log_retention_days: number;
+};
+
+export type CliToolId = "gemini" | "claude" | "codex";
+
+export type CliToolStatus = {
+  id: CliToolId;
+  name: string;
+  bin: string;
+  npm_package: string;
+  installed: boolean;
+  version: string | null;
+};
+
+export type CliToolsStatus = {
+  os: string;
+  npm_available: boolean;
+  npm_version: string | null;
+  node_version: string | null;
+  tools: CliToolStatus[];
+};
+
+export type InstallCliToolResponse = {
+  ok: boolean;
+  exit_code: number | null;
+  stdout: string;
+  stderr: string;
+  tool: CliToolStatus;
 };
 
 export type Channel = {
@@ -306,6 +336,14 @@ export function updateSettings(
   patch: Partial<AppSettings>
 ): Promise<AppSettings> {
   return http<AppSettings>("PUT", "/api/settings", patch);
+}
+
+export function getCliToolsStatus(): Promise<CliToolsStatus> {
+  return http<CliToolsStatus>("GET", "/api/tools/status");
+}
+
+export function installCliTool(id: CliToolId): Promise<InstallCliToolResponse> {
+  return http<InstallCliToolResponse>("POST", "/api/tools/install", { id });
 }
 
 export function listChannels(): Promise<Channel[]> {

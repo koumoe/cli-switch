@@ -27,7 +27,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui";
 import { toast } from "sonner";
-import { downloadUpdate, getHealth, getSettings, getUpdateChangelog, ignoreUpdate, pricingStatus, pricingSync, type ChangelogSection } from "./api";
+import { downloadUpdate, getCliToolsStatus, getHealth, getSettings, getUpdateChangelog, ignoreUpdate, installCliTool, pricingStatus, pricingSync, type ChangelogSection, type CliToolId, type CliToolsStatus } from "./api";
 import { logger, setLogLevel } from "@/lib/logger";
 import type { CliswitchUpdateStatusEvent } from "@/lib/cliswitchEvents";
 import { isUpdateReadyShown, markUpdateReadyShown } from "@/lib/updateReadyPrompt";
@@ -51,6 +51,7 @@ const NAV_ITEMS: { route: AppRoute; labelKey: string; icon: React.ElementType }[
 
 const SIDEBAR_KEY = "cliswitch-sidebar-collapsed";
 const PRICING_ONBOARDING_SHOWN_KEY = "cliswitch-pricing-onboarding-shown";
+const CLI_TOOLS_ONBOARDING_SHOWN_KEY = "cliswitch-cli-tools-onboarding-shown";
 
 function routeFromPath(pathname: string): AppRoute {
   if (pathname === "/") return "overview";
@@ -190,6 +191,14 @@ export default function App() {
   const { t, locale } = useI18n();
   const [pricingOnboardingOpen, setPricingOnboardingOpen] = useState(false);
   const [pricingSyncing, setPricingSyncing] = useState(false);
+  const [cliToolsOnboardingOpen, setCliToolsOnboardingOpen] = useState(false);
+  const [cliToolsOnboardingStatus, setCliToolsOnboardingStatus] = useState<CliToolsStatus | null>(null);
+  const [cliToolsOnboardingBusy, setCliToolsOnboardingBusy] = useState(false);
+  const [cliToolOnboardingBusy, setCliToolOnboardingBusy] = useState<Record<CliToolId, boolean>>({
+    gemini: false,
+    claude: false,
+    codex: false,
+  });
   const [updateReadyOpen, setUpdateReadyOpen] = useState(false);
   const [updateReadyVersion, setUpdateReadyVersion] = useState<string | null>(null);
   const [updatePromptOpen, setUpdatePromptOpen] = useState(false);
@@ -339,6 +348,23 @@ export default function App() {
         if (st.count <= 0) {
           localStorage.setItem(PRICING_ONBOARDING_SHOWN_KEY, "true");
           setPricingOnboardingOpen(true);
+        }
+      })
+      .catch(() => {
+        // ignore
+      });
+  }, []);
+
+  useEffect(() => {
+    const shown = localStorage.getItem(CLI_TOOLS_ONBOARDING_SHOWN_KEY) === "true";
+    if (shown) return;
+
+    getCliToolsStatus()
+      .then((st) => {
+        localStorage.setItem(CLI_TOOLS_ONBOARDING_SHOWN_KEY, "true");
+        setCliToolsOnboardingStatus(st);
+        if (st.tools.some((t0) => !t0.installed)) {
+          setCliToolsOnboardingOpen(true);
         }
       })
       .catch(() => {
@@ -507,6 +533,136 @@ export default function App() {
               disabled={pricingSyncing}
             >
               {pricingSyncing ? t("pricing.onboarding.syncing") : t("pricing.onboarding.sync")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={cliToolsOnboardingOpen}
+        onOpenChange={(open) => {
+          if (!open) setCliToolsOnboardingOpen(false);
+          else setCliToolsOnboardingOpen(true);
+        }}
+      >
+        <DialogContent className="sm:max-w-[560px]">
+          <DialogHeader>
+            <DialogTitle>{t("settings.cliTools.onboardingTitle")}</DialogTitle>
+            <DialogDescription>{t("settings.cliTools.onboardingDesc")}</DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            {cliToolsOnboardingStatus && !cliToolsOnboardingStatus.npm_available ? (
+              <div className="text-sm text-muted-foreground">
+                {t("settings.cliTools.npmMissing")}
+                {" "}
+                {cliToolsOnboardingStatus.os === "macos"
+                  ? t("settings.cliTools.npmHintMac")
+                  : cliToolsOnboardingStatus.os === "windows"
+                    ? t("settings.cliTools.npmHintWindows")
+                    : t("settings.cliTools.npmHintLinux")}
+              </div>
+            ) : null}
+
+            {(cliToolsOnboardingStatus?.tools ?? [])
+              .filter((tool) => !tool.installed)
+              .map((tool) => {
+                const busy = cliToolOnboardingBusy[tool.id];
+                const npmOk = cliToolsOnboardingStatus?.npm_available ?? true;
+                return (
+                  <div key={tool.id} className="flex items-center justify-between gap-4">
+                    <div className="min-w-0">
+                      <div className="font-medium text-sm truncate">{tool.name}</div>
+                      <div className="text-xs text-muted-foreground">{t("settings.cliTools.notInstalled")}</div>
+                    </div>
+                    <Button
+                      size="sm"
+                      disabled={busy || !npmOk}
+                      onClick={async () => {
+                        if (!npmOk) {
+                          toast.error(t("settings.cliTools.npmMissing"));
+                          return;
+                        }
+                        setCliToolOnboardingBusy((prev) => ({ ...prev, [tool.id]: true }));
+                        try {
+                          const res = await installCliTool(tool.id);
+                          setCliToolsOnboardingStatus((prev) =>
+                            prev ? { ...prev, tools: prev.tools.map((t0) => (t0.id === tool.id ? res.tool : t0)) } : prev
+                          );
+                          if (res.ok) {
+                            toast.success(t("settings.cliTools.installOk", { name: tool.name }));
+                          } else {
+                            toast.error(t("settings.cliTools.installFail", { name: tool.name }), {
+                              description: res.stderr?.trim() || res.stdout?.trim() || "-",
+                            });
+                          }
+                        } catch (e) {
+                          toast.error(t("settings.cliTools.installFail", { name: tool.name }), { description: humanizeApiError(e, t) });
+                        } finally {
+                          setCliToolOnboardingBusy((prev) => ({ ...prev, [tool.id]: false }));
+                        }
+                      }}
+                    >
+                      {t("settings.cliTools.install")}
+                    </Button>
+                  </div>
+                );
+              })}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCliToolsOnboardingOpen(false)} disabled={cliToolsOnboardingBusy}>
+              {t("settings.cliTools.later")}
+            </Button>
+            <Button
+              onClick={async () => {
+                if (!cliToolsOnboardingStatus) return;
+                if (!cliToolsOnboardingStatus.npm_available) {
+                  toast.error(t("settings.cliTools.npmMissing"));
+                  return;
+                }
+                const missing = cliToolsOnboardingStatus.tools.filter((t0) => !t0.installed);
+                if (missing.length === 0) {
+                  setCliToolsOnboardingOpen(false);
+                  return;
+                }
+                setCliToolsOnboardingBusy(true);
+                try {
+                  for (const tool of missing) {
+                    setCliToolOnboardingBusy((prev) => ({ ...prev, [tool.id]: true }));
+                    try {
+                      const res = await installCliTool(tool.id);
+                      setCliToolsOnboardingStatus((prev) =>
+                        prev ? { ...prev, tools: prev.tools.map((t0) => (t0.id === tool.id ? res.tool : t0)) } : prev
+                      );
+                      if (res.ok) toast.success(t("settings.cliTools.installOk", { name: tool.name }));
+                      else {
+                        toast.error(t("settings.cliTools.installFail", { name: tool.name }), {
+                          description: res.stderr?.trim() || res.stdout?.trim() || "-",
+                        });
+                      }
+                    } finally {
+                      setCliToolOnboardingBusy((prev) => ({ ...prev, [tool.id]: false }));
+                    }
+                  }
+                } finally {
+                  setCliToolsOnboardingBusy(false);
+                }
+
+                const next = await getCliToolsStatus().catch(() => null);
+                if (next) {
+                  setCliToolsOnboardingStatus(next);
+                  if (!next.tools.some((t0) => !t0.installed)) setCliToolsOnboardingOpen(false);
+                }
+              }}
+              disabled={
+                cliToolsOnboardingBusy ||
+                !cliToolsOnboardingStatus ||
+                !cliToolsOnboardingStatus.npm_available ||
+                !(cliToolsOnboardingStatus.tools ?? []).some((t0) => !t0.installed)
+              }
+            >
+              {cliToolsOnboardingBusy ? t("settings.cliTools.installing") : t("settings.cliTools.installAll")}
             </Button>
           </DialogFooter>
         </DialogContent>

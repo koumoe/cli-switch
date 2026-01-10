@@ -39,7 +39,7 @@ import { useCurrency, type CurrencyMode } from "@/lib/currency";
 import { setLogLevel } from "@/lib/logger";
 import { UpdatePromptDialog } from "@/components/UpdatePromptDialog";
 import { formatBytes, formatDateTime } from "../lib";
-import { checkUpdate, clearLogs, clearRecords, downloadUpdate, getDbSize, getHealth, getLogsSize, getSettings, getUpdateChangelog, getUpdateStatus, ignoreUpdate, pricingStatus, pricingSync, updateSettings, type AppSettings, type AutoStartLaunchMode, type CloseBehavior, type DbSize, type Health, type LogsSize, type PricingStatus, type RecordsClearMode, type UpdateCheck, type UpdateStatus, type ChangelogSection } from "../api";
+import { checkUpdate, clearLogs, clearRecords, downloadUpdate, getCliToolsStatus, getDbSize, getHealth, getLogsSize, getSettings, getUpdateChangelog, getUpdateStatus, ignoreUpdate, installCliTool, pricingStatus, pricingSync, updateSettings, type AppSettings, type AutoStartLaunchMode, type CloseBehavior, type DbSize, type Health, type LogsSize, type PricingStatus, type RecordsClearMode, type UpdateCheck, type UpdateStatus, type ChangelogSection, type CliToolId, type CliToolsStatus, type CliToolStatus } from "../api";
 import type { CliswitchUpdateStatusEvent } from "@/lib/cliswitchEvents";
 import { clearUpdateReadyShown } from "@/lib/updateReadyPrompt";
 
@@ -66,6 +66,13 @@ export function SettingsPage() {
   const [updateChangelogError, setUpdateChangelogError] = useState<string | null>(null);
   const [updateDownloading, setUpdateDownloading] = useState(false);
   const [updateIgnoring, setUpdateIgnoring] = useState(false);
+  const [cliToolsStatus, setCliToolsStatus] = useState<CliToolsStatus | null>(null);
+  const [cliToolsLoading, setCliToolsLoading] = useState(false);
+  const [cliToolBusy, setCliToolBusy] = useState<Record<CliToolId, boolean>>({
+    gemini: false,
+    claude: false,
+    codex: false,
+  });
   const [saving, setSaving] = useState(false);
   const [autoDisableSaving, setAutoDisableSaving] = useState(false);
   const [closeSaving, setCloseSaving] = useState(false);
@@ -116,6 +123,18 @@ export function SettingsPage() {
     }
   }
 
+  async function refreshCliToolsStatus() {
+    setCliToolsLoading(true);
+    try {
+      const next = await getCliToolsStatus();
+      setCliToolsStatus(next);
+    } catch (e) {
+      toast.error(t("settings.cliTools.loadFail"), { description: humanizeApiError(e, t) });
+    } finally {
+      setCliToolsLoading(false);
+    }
+  }
+
   useEffect(() => {
     getHealth()
       .then(setHealth)
@@ -139,6 +158,7 @@ export function SettingsPage() {
 
     void refreshDbSize();
     void refreshLogsSize();
+    void refreshCliToolsStatus();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -277,6 +297,10 @@ export function SettingsPage() {
           <TabsTrigger value="application" className="gap-1.5">
             <Settings2 className="h-3.5 w-3.5" />
             {t("settings.tabs.application")}
+          </TabsTrigger>
+          <TabsTrigger value="update" className="gap-1.5">
+            <RefreshCw className="h-3.5 w-3.5" />
+            {t("settings.tabs.update")}
           </TabsTrigger>
           <TabsTrigger value="data" className="gap-1.5">
             <Database className="h-3.5 w-3.5" />
@@ -787,8 +811,153 @@ export function SettingsPage() {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
 
-          {/* 自动更新 */}
+        {/* 更新标签页 */}
+        <TabsContent value="update" className="space-y-4 mt-4">
+          {/* CLI 更新 */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-start justify-between gap-3">
+                <div className="space-y-1">
+                  <CardTitle className="flex items-center gap-2">
+                    <RefreshCw className="h-4 w-4" />
+                    {t("settings.cliTools.title")}
+                  </CardTitle>
+                  <CardDescription>{t("settings.cliTools.subtitle")}</CardDescription>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={refreshCliToolsStatus}
+                  disabled={cliToolsLoading}
+                  className="gap-2"
+                >
+                  <RefreshCw className={`h-4 w-4 ${cliToolsLoading ? "animate-spin" : ""}`} />
+                  {t("settings.cliTools.refresh")}
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {cliToolsStatus && !cliToolsStatus.npm_available ? (
+                <div className="text-xs text-muted-foreground">
+                  {t("settings.cliTools.npmMissing")}
+                  {" "}
+                  {cliToolsStatus.os === "macos"
+                    ? t("settings.cliTools.npmHintMac")
+                    : cliToolsStatus.os === "windows"
+                      ? t("settings.cliTools.npmHintWindows")
+                      : t("settings.cliTools.npmHintLinux")}
+                </div>
+              ) : null}
+
+              {!cliToolsStatus ? (
+                <div className="text-sm text-muted-foreground">
+                  {cliToolsLoading ? t("common.loading") : "-"}
+                </div>
+              ) : null}
+
+              {(cliToolsStatus?.tools ?? []).map((tool: CliToolStatus) => {
+                const installed = tool.installed;
+                const version = tool.version ?? "-";
+                const busy = cliToolBusy[tool.id];
+                const npmOk = cliToolsStatus?.npm_available ?? true;
+                const autoEnabled =
+                  tool.id === "gemini"
+                    ? (appSettings?.gemini_cli_auto_update_enabled ?? false)
+                    : tool.id === "claude"
+                      ? (appSettings?.claude_code_auto_update_enabled ?? false)
+                      : (appSettings?.codex_auto_update_enabled ?? false);
+
+                return (
+                  <div key={tool.id} className="flex items-center justify-between gap-4">
+                    <div className="min-w-0">
+                      <div className="font-medium text-sm truncate">{tool.name}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {installed
+                          ? t("settings.cliTools.installedWithVersion", { version })
+                          : t("settings.cliTools.notInstalled")}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={busy || !npmOk}
+                        onClick={async () => {
+                          if (!npmOk) {
+                            toast.error(t("settings.cliTools.npmMissing"));
+                            return;
+                          }
+                          setCliToolBusy((prev) => ({ ...prev, [tool.id]: true }));
+                          try {
+                            const res = await installCliTool(tool.id);
+                            setCliToolsStatus((prev) =>
+                              prev
+                                ? { ...prev, tools: prev.tools.map((t0) => (t0.id === tool.id ? res.tool : t0)) }
+                                : prev
+                            );
+                            if (res.ok) {
+                              toast.success(t("settings.cliTools.installOk", { name: tool.name }));
+                            } else {
+                              toast.error(t("settings.cliTools.installFail", { name: tool.name }), {
+                                description: res.stderr?.trim() || res.stdout?.trim() || "-",
+                              });
+                            }
+                          } catch (e) {
+                            toast.error(t("settings.cliTools.installFail", { name: tool.name }), {
+                              description: humanizeApiError(e, t),
+                            });
+                          } finally {
+                            setCliToolBusy((prev) => ({ ...prev, [tool.id]: false }));
+                          }
+                        }}
+                      >
+                        {installed ? t("settings.cliTools.update") : t("settings.cliTools.install")}
+                      </Button>
+
+                      <div className="flex items-center gap-2">
+                        <div className="text-xs text-muted-foreground">
+                          {t("settings.cliTools.autoEnable")}
+                        </div>
+                        <Switch
+                          checked={autoEnabled}
+                          onCheckedChange={async (v) => {
+                            if (!appSettings) return;
+                            const prev = autoEnabled;
+                            const patch =
+                              tool.id === "gemini"
+                                ? { gemini_cli_auto_update_enabled: v }
+                                : tool.id === "claude"
+                                  ? { claude_code_auto_update_enabled: v }
+                                  : { codex_auto_update_enabled: v };
+                            setAppSettings({ ...appSettings, ...patch } as AppSettings);
+                            try {
+                              const next = await updateSettings(patch);
+                              setAppSettings(next);
+                              toast.success(t("settings.cliTools.saved"));
+                            } catch (e) {
+                              setAppSettings({ ...appSettings, ...(
+                                tool.id === "gemini"
+                                  ? { gemini_cli_auto_update_enabled: prev }
+                                  : tool.id === "claude"
+                                    ? { claude_code_auto_update_enabled: prev }
+                                    : { codex_auto_update_enabled: prev }
+                              ) } as AppSettings);
+                              toast.error(t("settings.cliTools.saveFail"), { description: humanizeApiError(e, t) });
+                            }
+                          }}
+                          disabled={!appSettings}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </CardContent>
+          </Card>
+
+          {/* CliSwitch 更新 */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">

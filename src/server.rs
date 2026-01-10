@@ -36,6 +36,8 @@ fn request_endpoint_template(method: &Method, path: &str) -> Option<&'static str
         ("GET", "/api/update/status") => Some("/api/update/status"),
         ("POST", "/api/update/check") => Some("/api/update/check"),
         ("POST", "/api/update/download") => Some("/api/update/download"),
+        ("GET", "/api/tools/status") => Some("/api/tools/status"),
+        ("POST", "/api/tools/install") => Some("/api/tools/install"),
         ("GET", "/api/channels") => Some("/api/channels"),
         ("POST", "/api/channels") => Some("/api/channels"),
         ("POST", "/api/channels/reorder") => Some("/api/channels/reorder"),
@@ -97,6 +99,8 @@ fn request_purpose(method: &Method, path: &str) -> &'static str {
         ("GET", "/api/update/status") => "handlers::update_status",
         ("POST", "/api/update/check") => "handlers::update_check",
         ("POST", "/api/update/download") => "handlers::update_download",
+        ("GET", "/api/tools/status") => "handlers::cli_tools_status",
+        ("POST", "/api/tools/install") => "handlers::install_cli_tool",
         ("GET", "/api/channels") => "handlers::list_channels",
         ("POST", "/api/channels") => "handlers::create_channel",
         ("POST", "/api/channels/reorder") => "handlers::reorder_channels",
@@ -188,6 +192,8 @@ fn build_app(state: AppState) -> Router {
         .route("/api/update/changelog", get(handlers::update_changelog))
         .route("/api/update/download", post(handlers::update_download))
         .route("/api/update/ignore", post(handlers::update_ignore))
+        .route("/api/tools/status", get(handlers::cli_tools_status))
+        .route("/api/tools/install", post(handlers::install_cli_tool))
         .route(
             "/api/channels",
             get(handlers::list_channels).post(handlers::create_channel),
@@ -306,6 +312,7 @@ pub async fn serve_with_listener(
 
     let settings_rx2 = settings_rx.clone();
     let settings_rx3 = settings_rx.clone();
+    let settings_rx4 = settings_rx.clone();
     tokio::spawn(tasks::pricing_auto_update_loop(
         (*db_path).clone(),
         http_client.clone(),
@@ -317,6 +324,11 @@ pub async fn serve_with_listener(
         http_client.clone(),
         settings_rx2,
         update_runtime,
+    ));
+
+    tokio::spawn(tasks::cli_tools_auto_update_loop(
+        (*db_path).clone(),
+        settings_rx4,
     ));
 
     tokio::spawn(tasks::logs_retention_cleanup_loop(
