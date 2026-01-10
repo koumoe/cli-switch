@@ -4,8 +4,8 @@ use std::sync::Arc;
 use tokio::sync::watch;
 use tokio::time::Duration;
 
-use crate::{autostart, log_files, storage, update};
 use crate::cli_tools::CLI_TOOLS;
+use crate::{autostart, log_files, storage, update};
 
 use super::handlers::pricing::run_pricing_sync;
 use super::state::data_dir_from_db_path;

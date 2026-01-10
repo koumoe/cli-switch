@@ -104,8 +104,8 @@ pub(in crate::server) async fn install_cli_tool(
             ));
         }
 
-        let out = crate::cli_tools::npm_install_global(def.npm_package)
-            .map_err(ApiError::Internal)?;
+        let out =
+            crate::cli_tools::npm_install_global(def.npm_package).map_err(ApiError::Internal)?;
 
         let installed = crate::cli_tools::find_executable_in_path(def.bin).is_some();
         let version = if installed {

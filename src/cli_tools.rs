@@ -1,7 +1,7 @@
 use anyhow::Context as _;
 use serde::{Deserialize, Serialize};
 use std::ffi::OsString;
-use std::path::{PathBuf};
+use std::path::PathBuf;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -65,7 +65,8 @@ pub fn find_executable_in_path(name: &str) -> Option<PathBuf> {
         if std::path::Path::new(name).extension().is_some() {
             vec![base]
         } else {
-            let pathext = std::env::var_os("PATHEXT").unwrap_or_else(|| OsString::from(".EXE;.CMD;.BAT;.COM"));
+            let pathext = std::env::var_os("PATHEXT")
+                .unwrap_or_else(|| OsString::from(".EXE;.CMD;.BAT;.COM"));
             let exts: Vec<_> = pathext
                 .to_string_lossy()
                 .split(';')
@@ -125,7 +126,9 @@ pub fn try_get_cmd_version(program: &str) -> Option<String> {
 
 fn extract_semver(text: &str) -> Option<String> {
     for token in text.split_whitespace() {
-        let cleaned = token.trim_matches(|c: char| !(c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == '+'));
+        let cleaned = token.trim_matches(|c: char| {
+            !(c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == '+')
+        });
         let cleaned = cleaned.strip_prefix('v').unwrap_or(cleaned);
         if semver::Version::parse(cleaned).is_ok() {
             return Some(cleaned.to_string());
@@ -151,8 +154,8 @@ pub fn try_get_node_version() -> Option<String> {
 }
 
 pub fn npm_install_global(pkg: &str) -> anyhow::Result<CmdOutput> {
-    let npm = find_executable_in_path("npm")
-        .ok_or_else(|| anyhow::anyhow!("npm not found in PATH"))?;
+    let npm =
+        find_executable_in_path("npm").ok_or_else(|| anyhow::anyhow!("npm not found in PATH"))?;
 
     let out = std::process::Command::new(npm)
         .args(["install", "-g", pkg, "--no-fund", "--no-audit"])

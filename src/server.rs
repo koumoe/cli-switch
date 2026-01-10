@@ -326,7 +326,10 @@ pub async fn serve_with_listener(
         update_runtime,
     ));
 
-    tokio::spawn(tasks::cli_tools_auto_update_loop((*db_path).clone(), settings_rx4));
+    tokio::spawn(tasks::cli_tools_auto_update_loop(
+        (*db_path).clone(),
+        settings_rx4,
+    ));
 
     tokio::spawn(tasks::logs_retention_cleanup_loop(
         (*db_path).clone(),
