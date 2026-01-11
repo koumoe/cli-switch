@@ -21,13 +21,14 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  Input,
   Switch,
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui";
 import { toast } from "sonner";
-import { downloadUpdate, getCliToolsStatus, getHealth, getSettings, getUpdateChangelog, ignoreUpdate, installCliTool, pricingStatus, pricingSync, type ChangelogSection, type CliToolId, type CliToolsStatus } from "./api";
+import { downloadUpdate, getCliToolsStatus, getHealth, getSettings, getUpdateChangelog, ignoreUpdate, installCliTool, pricingStatus, pricingSync, updateSettings, type ChangelogSection, type CliToolId, type CliToolsStatus } from "./api";
 import { logger, setLogLevel } from "@/lib/logger";
 import type { CliswitchUpdateStatusEvent } from "@/lib/cliswitchEvents";
 import { isUpdateReadyShown, markUpdateReadyShown } from "@/lib/updateReadyPrompt";
@@ -194,6 +195,10 @@ export default function App() {
   const [cliToolsOnboardingOpen, setCliToolsOnboardingOpen] = useState(false);
   const [cliToolsOnboardingStatus, setCliToolsOnboardingStatus] = useState<CliToolsStatus | null>(null);
   const [cliToolsOnboardingBusy, setCliToolsOnboardingBusy] = useState(false);
+  const [cliToolsPathOpen, setCliToolsPathOpen] = useState(false);
+  const [cliNpmPathDraft, setCliNpmPathDraft] = useState("");
+  const [cliNodePathDraft, setCliNodePathDraft] = useState("");
+  const [cliToolsPathSaving, setCliToolsPathSaving] = useState(false);
   const [cliToolOnboardingBusy, setCliToolOnboardingBusy] = useState<Record<CliToolId, boolean>>({
     gemini: false,
     claude: false,
@@ -328,6 +333,8 @@ export default function App() {
       .then((s) => {
         if (cancelled) return;
         setLogLevel(s.log_level);
+        setCliNpmPathDraft((s.cli_tools_npm_path ?? "").trim());
+        setCliNodePathDraft((s.cli_tools_node_path ?? "").trim());
         logger.info("ui settings loaded", { log_level: s.log_level }, "ui_settings_loaded");
       })
       .catch((e) => {
@@ -338,6 +345,23 @@ export default function App() {
       cancelled = true;
     };
   }, []);
+
+  async function saveCliToolsPaths() {
+    setCliToolsPathSaving(true);
+    try {
+      await updateSettings({
+        cli_tools_npm_path: cliNpmPathDraft.trim(),
+        cli_tools_node_path: cliNodePathDraft.trim(),
+      });
+      const next = await getCliToolsStatus();
+      setCliToolsOnboardingStatus(next);
+      setCliToolsPathOpen(false);
+    } catch (e) {
+      toast.error(t("settings.cliTools.saveFail"), { description: humanizeApiError(e, t) });
+    } finally {
+      setCliToolsPathSaving(false);
+    }
+  }
 
   useEffect(() => {
     const shown = localStorage.getItem(PRICING_ONBOARDING_SHOWN_KEY) === "true";
@@ -553,14 +577,31 @@ export default function App() {
 
           <div className="space-y-3">
             {cliToolsOnboardingStatus && !cliToolsOnboardingStatus.npm_available ? (
-              <div className="text-sm text-muted-foreground">
-                {t("settings.cliTools.npmMissing")}
-                {" "}
-                {cliToolsOnboardingStatus.os === "macos"
-                  ? t("settings.cliTools.npmHintMac")
-                  : cliToolsOnboardingStatus.os === "windows"
-                    ? t("settings.cliTools.npmHintWindows")
-                    : t("settings.cliTools.npmHintLinux")}
+              <div className="space-y-2">
+                <div className="text-sm text-muted-foreground">
+                  {t("settings.cliTools.npmMissing")}
+                  {" "}
+                  {cliToolsOnboardingStatus.os === "macos"
+                    ? t("settings.cliTools.npmHintMac")
+                    : cliToolsOnboardingStatus.os === "windows"
+                      ? t("settings.cliTools.npmHintWindows")
+                      : t("settings.cliTools.npmHintLinux")}
+                </div>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" onClick={() => setCliToolsPathOpen(true)}>
+                    {t("settings.cliTools.setPath")}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setCliToolsOnboardingOpen(false);
+                      navigate("/settings");
+                    }}
+                  >
+                    {t("settings.cliTools.openSettings")}
+                  </Button>
+                </div>
               </div>
             ) : null}
 
@@ -577,10 +618,10 @@ export default function App() {
                     </div>
                     <Button
                       size="sm"
-                      disabled={busy || !npmOk}
+                      disabled={busy}
                       onClick={async () => {
                         if (!npmOk) {
-                          toast.error(t("settings.cliTools.npmMissing"));
+                          setCliToolsPathOpen(true);
                           return;
                         }
                         setCliToolOnboardingBusy((prev) => ({ ...prev, [tool.id]: true }));
@@ -618,7 +659,7 @@ export default function App() {
               onClick={async () => {
                 if (!cliToolsOnboardingStatus) return;
                 if (!cliToolsOnboardingStatus.npm_available) {
-                  toast.error(t("settings.cliTools.npmMissing"));
+                  setCliToolsPathOpen(true);
                   return;
                 }
                 const missing = cliToolsOnboardingStatus.tools.filter((t0) => !t0.installed);
@@ -663,6 +704,41 @@ export default function App() {
               }
             >
               {cliToolsOnboardingBusy ? t("settings.cliTools.installing") : t("settings.cliTools.installAll")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={cliToolsPathOpen} onOpenChange={setCliToolsPathOpen}>
+        <DialogContent className="sm:max-w-[560px]">
+          <DialogHeader>
+            <DialogTitle>{t("settings.cliTools.setPathTitle")}</DialogTitle>
+            <DialogDescription>{t("settings.cliTools.setPathDesc")}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <div className="text-sm font-medium">{t("settings.cliTools.npmPath")}</div>
+              <Input
+                value={cliNpmPathDraft}
+                onChange={(e) => setCliNpmPathDraft(e.target.value)}
+                placeholder={t("settings.cliTools.npmPathPlaceholder")}
+              />
+            </div>
+            <div className="space-y-1">
+              <div className="text-sm font-medium">{t("settings.cliTools.nodePath")}</div>
+              <Input
+                value={cliNodePathDraft}
+                onChange={(e) => setCliNodePathDraft(e.target.value)}
+                placeholder={t("settings.cliTools.nodePathPlaceholder")}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCliToolsPathOpen(false)} disabled={cliToolsPathSaving}>
+              {t("common.cancel")}
+            </Button>
+            <Button onClick={saveCliToolsPaths} disabled={cliToolsPathSaving}>
+              {cliToolsPathSaving ? t("common.loading") : t("common.save")}
             </Button>
           </DialogFooter>
         </DialogContent>

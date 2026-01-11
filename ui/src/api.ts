@@ -25,6 +25,8 @@ export type AppSettings = {
   gemini_cli_auto_update_enabled: boolean;
   claude_code_auto_update_enabled: boolean;
   codex_auto_update_enabled: boolean;
+  cli_tools_npm_path: string | null;
+  cli_tools_node_path: string | null;
   auto_disable_enabled: boolean;
   auto_disable_window_minutes: number;
   auto_disable_failure_times: number;
