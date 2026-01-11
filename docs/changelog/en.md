@@ -2,6 +2,16 @@
 
 ### Features
 
+* add UI for manual npm/node paths ([7a03705](https://github.com/koumoe/cli-switch/commit/7a037050037bcb59ddab558183f55e0bbcdc8d4f))
+* allow configuring npm/node paths ([e146647](https://github.com/koumoe/cli-switch/commit/e14664780c9597a32d503fdc6b0eaac1b698d84b))
+
+### Bug Fixes
+
+* address clippy lints ([2e770b5](https://github.com/koumoe/cli-switch/commit/2e770b53fbf61dc364a15c42d0951f2e922e9c81))
+## [0.21.0](https://github.com/koumoe/cli-switch/compare/v0.20.0...v0.21.0) (2026-01-11)
+
+### Features
+
 * allow configuring npm/node paths ([e146647](https://github.com/koumoe/cli-switch/commit/e146647))
 * add UI for manual npm/node paths ([7a03705](https://github.com/koumoe/cli-switch/commit/7a03705))
 
