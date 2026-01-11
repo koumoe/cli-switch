@@ -1,9 +1,10 @@
-## [0.20.0](https://github.com/koumoe/cli-switch/compare/v0.19.3...v0.20.0) (2026-01-10)
+## [0.21.0](https://github.com/koumoe/cli-switch/compare/v0.20.0...v0.21.0) (2026-01-11)
 
 ### 功能
 
-* 新增 CLI 工具状态/安装接口 ([7a10ade](https://github.com/koumoe/cli-switch/commit/7a10ade7b5b8014b7e1d2db4b82a9b94bfd2fccf))
-* 新增更新标签页与 CLI 工具引导 ([ca500ef](https://github.com/koumoe/cli-switch/commit/ca500ef29d64b1f9e84ddd3da69dfbdc8afbfa72))
+* 支持配置 npm/node 路径 ([e146647](https://github.com/koumoe/cli-switch/commit/e146647))
+* 新增手动指定 npm/node 路径的界面 ([7a03705](https://github.com/koumoe/cli-switch/commit/7a03705))
+
 ## [0.20.0](https://github.com/koumoe/cli-switch/compare/v0.19.3...v0.20.0) (2026-01-10)
 
 ### 功能
