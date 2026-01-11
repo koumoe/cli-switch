@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use crate::cli_tools::{CLI_TOOLS, CliToolId};
 use crate::server::AppState;
 use crate::server::error::ApiError;
+use crate::storage;
 
 #[derive(Debug, Clone, Serialize)]
 pub(crate) struct CliToolStatus {
@@ -27,19 +28,25 @@ pub(crate) struct CliToolsStatusResponse {
 }
 
 pub(in crate::server) async fn cli_tools_status(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let res = tokio::task::spawn_blocking(|| {
-        let npm_available = crate::cli_tools::npm_available();
-        let npm_version = crate::cli_tools::try_get_npm_version();
-        let node_version = crate::cli_tools::try_get_node_version();
+    let settings = storage::get_app_settings(state.db_path()).await?;
+    let npm_path = settings.cli_tools_npm_path.clone();
+    let node_path = settings.cli_tools_node_path.clone();
+
+    let res = tokio::task::spawn_blocking(move || {
+        let env = crate::cli_tools::CliExecEnv::new(npm_path.as_deref(), node_path.as_deref());
+
+        let npm_available = env.npm_available();
+        let npm_version = env.try_get_npm_version();
+        let node_version = env.try_get_node_version();
 
         let tools = CLI_TOOLS
             .iter()
             .map(|d| {
-                let installed = crate::cli_tools::find_executable_in_path(d.bin).is_some();
+                let installed = env.find_executable(d.bin).is_some();
                 let version = if installed {
-                    crate::cli_tools::try_get_cmd_version(d.bin)
+                    env.try_get_cmd_version(d.bin)
                         .map(|v| crate::cli_tools::normalize_version_string(&v))
                 } else {
                     None
@@ -88,7 +95,7 @@ pub(crate) struct InstallCliToolResponse {
 }
 
 pub(in crate::server) async fn install_cli_tool(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
     Json(input): Json<InstallCliToolRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
     let def = CLI_TOOLS
@@ -96,20 +103,28 @@ pub(in crate::server) async fn install_cli_tool(
         .find(|d| d.id == input.id)
         .ok_or_else(|| ApiError::bad_request("tools_unknown_id", "unknown tool id"))?;
 
+    let settings = storage::get_app_settings(state.db_path()).await?;
+    let npm_path = settings.cli_tools_npm_path.clone();
+    let node_path = settings.cli_tools_node_path.clone();
+
     let res = tokio::task::spawn_blocking(move || {
-        if !crate::cli_tools::npm_available() {
+        let env = crate::cli_tools::CliExecEnv::new(npm_path.as_deref(), node_path.as_deref());
+        if !env.npm_available() {
             return Err(ApiError::bad_request(
                 "tools_npm_missing",
                 "npm not found in PATH",
             ));
         }
 
-        let out =
-            crate::cli_tools::npm_install_global(def.npm_package).map_err(ApiError::Internal)?;
+        let out = env
+            .npm_install_global(def.npm_package)
+            .map_err(ApiError::Internal)?;
 
-        let installed = crate::cli_tools::find_executable_in_path(def.bin).is_some();
+        let env = crate::cli_tools::CliExecEnv::new(npm_path.as_deref(), node_path.as_deref());
+
+        let installed = env.find_executable(def.bin).is_some();
         let version = if installed {
-            crate::cli_tools::try_get_cmd_version(def.bin)
+            env.try_get_cmd_version(def.bin)
                 .map(|v| crate::cli_tools::normalize_version_string(&v))
         } else {
             None
