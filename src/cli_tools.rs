@@ -253,7 +253,7 @@ fn resolve_program(name: &str, user_path: Option<&str>) -> Option<PathBuf> {
 }
 
 fn user_path_dir(user_path: Option<&str>) -> Option<PathBuf> {
-    let Some(raw) = user_path else { return None };
+    let raw = user_path?;
     let trimmed = raw.trim();
     if trimmed.is_empty() {
         return None;
@@ -315,10 +315,10 @@ impl CliExecEnv {
             extra_dirs: child_dirs,
         };
 
-        if let Some(global_bin) = env.npm_global_bin_dir() {
-            if !env.extra_dirs.contains(&global_bin) {
-                env.extra_dirs.push(global_bin);
-            }
+        if let Some(global_bin) = env.npm_global_bin_dir()
+            && !env.extra_dirs.contains(&global_bin)
+        {
+            env.extra_dirs.push(global_bin);
         }
 
         env
