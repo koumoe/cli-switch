@@ -122,12 +122,16 @@ pub(crate) async fn cli_tools_auto_update_loop(db_path: PathBuf, mut notify: wat
             .copied()
             .collect();
 
+        let npm_path = settings.cli_tools_npm_path.clone();
+        let node_path = settings.cli_tools_node_path.clone();
+
         let res = tokio::task::spawn_blocking(move || {
-            if !crate::cli_tools::npm_available() {
+            let env = crate::cli_tools::CliExecEnv::new(npm_path.as_deref(), node_path.as_deref());
+            if !env.npm_available() {
                 return;
             }
             for d in to_update {
-                match crate::cli_tools::npm_install_global(d.npm_package) {
+                match env.npm_install_global(d.npm_package) {
                     Ok(out) => {
                         if !out.status.success() {
                             let code = out.status.code();

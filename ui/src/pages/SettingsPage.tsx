@@ -68,6 +68,10 @@ export function SettingsPage() {
   const [updateIgnoring, setUpdateIgnoring] = useState(false);
   const [cliToolsStatus, setCliToolsStatus] = useState<CliToolsStatus | null>(null);
   const [cliToolsLoading, setCliToolsLoading] = useState(false);
+  const [cliToolsPathOpen, setCliToolsPathOpen] = useState(false);
+  const [cliNpmPathDraft, setCliNpmPathDraft] = useState("");
+  const [cliNodePathDraft, setCliNodePathDraft] = useState("");
+  const [cliToolsPathSaving, setCliToolsPathSaving] = useState(false);
   const [cliToolBusy, setCliToolBusy] = useState<Record<CliToolId, boolean>>({
     gemini: false,
     claude: false,
@@ -135,6 +139,25 @@ export function SettingsPage() {
     }
   }
 
+  async function saveCliToolsPaths() {
+    if (!appSettings) return;
+    setCliToolsPathSaving(true);
+    try {
+      const next = await updateSettings({
+        cli_tools_npm_path: cliNpmPathDraft.trim(),
+        cli_tools_node_path: cliNodePathDraft.trim(),
+      } as Partial<AppSettings>);
+      setAppSettings(next);
+      toast.success(t("settings.cliTools.saved"));
+      await refreshCliToolsStatus();
+      setCliToolsPathOpen(false);
+    } catch (e) {
+      toast.error(t("settings.cliTools.saveFail"), { description: humanizeApiError(e, t) });
+    } finally {
+      setCliToolsPathSaving(false);
+    }
+  }
+
   useEffect(() => {
     getHealth()
       .then(setHealth)
@@ -147,6 +170,8 @@ export function SettingsPage() {
     getSettings()
       .then((s) => {
         setAppSettings(s);
+        setCliNpmPathDraft((s.cli_tools_npm_path ?? "").trim());
+        setCliNodePathDraft((s.cli_tools_node_path ?? "").trim());
         setLogRetentionDraft(String(s.log_retention_days ?? ""));
         setLogLevel(s.log_level);
       })
@@ -161,6 +186,12 @@ export function SettingsPage() {
     void refreshCliToolsStatus();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!appSettings) return;
+    setCliNpmPathDraft((appSettings.cli_tools_npm_path ?? "").trim());
+    setCliNodePathDraft((appSettings.cli_tools_node_path ?? "").trim());
+  }, [appSettings]);
 
   useEffect(() => {
     const onUpdateStatus = (e: Event) => {
@@ -840,14 +871,21 @@ export function SettingsPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               {cliToolsStatus && !cliToolsStatus.npm_available ? (
-                <div className="text-xs text-muted-foreground">
-                  {t("settings.cliTools.npmMissing")}
-                  {" "}
-                  {cliToolsStatus.os === "macos"
-                    ? t("settings.cliTools.npmHintMac")
-                    : cliToolsStatus.os === "windows"
-                      ? t("settings.cliTools.npmHintWindows")
-                      : t("settings.cliTools.npmHintLinux")}
+                <div className="space-y-2">
+                  <div className="text-xs text-muted-foreground">
+                    {t("settings.cliTools.npmMissing")}
+                    {" "}
+                    {cliToolsStatus.os === "macos"
+                      ? t("settings.cliTools.npmHintMac")
+                      : cliToolsStatus.os === "windows"
+                        ? t("settings.cliTools.npmHintWindows")
+                        : t("settings.cliTools.npmHintLinux")}
+                  </div>
+                  <div>
+                    <Button size="sm" variant="outline" onClick={() => setCliToolsPathOpen(true)}>
+                      {t("settings.cliTools.setPath")}
+                    </Button>
+                  </div>
                 </div>
               ) : null}
 
@@ -883,10 +921,10 @@ export function SettingsPage() {
                       <Button
                         size="sm"
                         variant="outline"
-                        disabled={busy || !npmOk}
+                        disabled={busy}
                         onClick={async () => {
                           if (!npmOk) {
-                            toast.error(t("settings.cliTools.npmMissing"));
+                            setCliToolsPathOpen(true);
                             return;
                           }
                           setCliToolBusy((prev) => ({ ...prev, [tool.id]: true }));
@@ -956,6 +994,41 @@ export function SettingsPage() {
               })}
             </CardContent>
           </Card>
+
+          <Dialog open={cliToolsPathOpen} onOpenChange={setCliToolsPathOpen}>
+            <DialogContent className="sm:max-w-[560px]">
+              <DialogHeader>
+                <DialogTitle>{t("settings.cliTools.setPathTitle")}</DialogTitle>
+                <DialogDescription>{t("settings.cliTools.setPathDesc")}</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <div className="text-sm font-medium">{t("settings.cliTools.npmPath")}</div>
+                  <Input
+                    value={cliNpmPathDraft}
+                    onChange={(e) => setCliNpmPathDraft(e.target.value)}
+                    placeholder={t("settings.cliTools.npmPathPlaceholder")}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <div className="text-sm font-medium">{t("settings.cliTools.nodePath")}</div>
+                  <Input
+                    value={cliNodePathDraft}
+                    onChange={(e) => setCliNodePathDraft(e.target.value)}
+                    placeholder={t("settings.cliTools.nodePathPlaceholder")}
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setCliToolsPathOpen(false)} disabled={cliToolsPathSaving}>
+                  {t("common.cancel")}
+                </Button>
+                <Button onClick={saveCliToolsPaths} disabled={!appSettings || cliToolsPathSaving}>
+                  {cliToolsPathSaving ? t("common.loading") : t("common.save")}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
 
           {/* CliSwitch 更新 */}
           <Card>

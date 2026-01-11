@@ -15,6 +15,8 @@ const KEY_APP_AUTO_UPDATE_ENABLED: &str = "app_auto_update_enabled";
 const KEY_GEMINI_CLI_AUTO_UPDATE_ENABLED: &str = "gemini_cli_auto_update_enabled";
 const KEY_CLAUDE_CODE_AUTO_UPDATE_ENABLED: &str = "claude_code_auto_update_enabled";
 const KEY_CODEX_AUTO_UPDATE_ENABLED: &str = "codex_auto_update_enabled";
+const KEY_CLI_TOOLS_NPM_PATH: &str = "cli_tools_npm_path";
+const KEY_CLI_TOOLS_NODE_PATH: &str = "cli_tools_node_path";
 const KEY_AUTO_DISABLE_ENABLED: &str = "auto_disable_enabled";
 const KEY_AUTO_DISABLE_WINDOW_MINUTES: &str = "auto_disable_window_minutes";
 const KEY_AUTO_DISABLE_FAILURE_TIMES: &str = "auto_disable_failure_times";
@@ -67,6 +69,8 @@ pub struct AppSettings {
     pub gemini_cli_auto_update_enabled: bool,
     pub claude_code_auto_update_enabled: bool,
     pub codex_auto_update_enabled: bool,
+    pub cli_tools_npm_path: Option<String>,
+    pub cli_tools_node_path: Option<String>,
     pub auto_disable_enabled: bool,
     pub auto_disable_window_minutes: i64,
     pub auto_disable_failure_times: i64,
@@ -87,6 +91,8 @@ impl Default for AppSettings {
             gemini_cli_auto_update_enabled: false,
             claude_code_auto_update_enabled: false,
             codex_auto_update_enabled: false,
+            cli_tools_npm_path: None,
+            cli_tools_node_path: None,
             auto_disable_enabled: false,
             auto_disable_window_minutes: 3,
             auto_disable_failure_times: 5,
@@ -108,6 +114,8 @@ pub struct AppSettingsPatch {
     pub gemini_cli_auto_update_enabled: Option<bool>,
     pub claude_code_auto_update_enabled: Option<bool>,
     pub codex_auto_update_enabled: Option<bool>,
+    pub cli_tools_npm_path: Option<String>,
+    pub cli_tools_node_path: Option<String>,
     pub auto_disable_enabled: Option<bool>,
     pub auto_disable_window_minutes: Option<i64>,
     pub auto_disable_failure_times: Option<i64>,
@@ -192,6 +200,18 @@ pub async fn get_app_settings(db_path: PathBuf) -> anyhow::Result<AppSettings> {
         }
         if let Some(v) = get_setting(conn, KEY_CODEX_AUTO_UPDATE_ENABLED)? {
             out.codex_auto_update_enabled = parse_bool(&v);
+        }
+        if let Some(v) = get_setting(conn, KEY_CLI_TOOLS_NPM_PATH)? {
+            let s = v.trim();
+            if !s.is_empty() {
+                out.cli_tools_npm_path = Some(s.to_string());
+            }
+        }
+        if let Some(v) = get_setting(conn, KEY_CLI_TOOLS_NODE_PATH)? {
+            let s = v.trim();
+            if !s.is_empty() {
+                out.cli_tools_node_path = Some(s.to_string());
+            }
         }
         if let Some(v) = get_setting(conn, KEY_AUTO_DISABLE_ENABLED)? {
             out.auto_disable_enabled = parse_bool(&v);
@@ -300,6 +320,12 @@ pub async fn update_app_settings(
                 if v { "true" } else { "false" },
                 updated_at_ms,
             )?;
+        }
+        if let Some(v) = patch.cli_tools_npm_path {
+            set_setting(conn, KEY_CLI_TOOLS_NPM_PATH, v.trim(), updated_at_ms)?;
+        }
+        if let Some(v) = patch.cli_tools_node_path {
+            set_setting(conn, KEY_CLI_TOOLS_NODE_PATH, v.trim(), updated_at_ms)?;
         }
         if let Some(v) = patch.auto_disable_enabled {
             set_setting(
