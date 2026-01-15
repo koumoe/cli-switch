@@ -1,3 +1,7 @@
+## [0.23.1](https://github.com/koumoe/cli-switch/compare/v0.23.0...v0.23.1) (2026-01-15)
+
+### 修复
+* 静态链接 MSVC CRT (#69) ([#69](https://github.com/koumoe/cli-switch/issues/69)) ([80ea1c3](https://github.com/koumoe/cli-switch/commit/80ea1c32ab4979c2d94b95b2c5e9e5d2faadf00f))
 ## [0.23.0](https://github.com/koumoe/cli-switch/compare/v0.22.1...v0.23.0) (2026-01-15)
 
 ### 功能
