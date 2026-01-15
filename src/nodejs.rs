@@ -1,6 +1,6 @@
 use anyhow::Context as _;
-use sha2::Digest as _;
 use serde::Deserialize;
+use sha2::Digest as _;
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, Copy)]

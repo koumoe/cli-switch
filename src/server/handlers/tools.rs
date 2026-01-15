@@ -102,7 +102,9 @@ pub(in crate::server) async fn install_npm_env(
         env.npm_available()
     })
     .await
-    .map_err(|e| ApiError::bad_request("tools_env_check_failed", format!("env check failed: {e}")))?;
+    .map_err(|e| {
+        ApiError::bad_request("tools_env_check_failed", format!("env check failed: {e}"))
+    })?;
 
     if already {
         return Ok(Json(InstallNpmEnvResponse {
