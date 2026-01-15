@@ -109,19 +109,22 @@ if (!fs.existsSync(cnPath)) {
 let enMd = fs.readFileSync(enPath, "utf8");
 let cnMd = fs.readFileSync(cnPath, "utf8");
 const cnMdOriginal = cnMd;
+// In sync mode we must build cn.md from the *raw* en.md produced by
+// conventional-changelog (which may contain bilingual bullets). We still want
+// to normalize en.md to English-only, but only after cn.md is derived.
+const enMdOriginal = enMd;
 
 if (mode === "sync") {
   const normalizedEn = normalizeBilingualBullets(enMd, "left");
   if (normalizedEn !== enMd) {
     fs.writeFileSync(enPath, normalizedEn, "utf8");
-    enMd = normalizedEn;
   }
 
   // Keep Chinese-only subjects in cn.md when present.
   cnMd = normalizeBilingualBullets(cnMd, "right");
 }
 
-const en = parseVersionBlocks(enMd);
+const en = parseVersionBlocks(mode === "sync" ? enMdOriginal : enMd);
 const cn = parseVersionBlocks(cnMd);
 
 if (en.order.length === 0) {
