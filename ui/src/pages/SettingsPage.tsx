@@ -70,7 +70,7 @@ export function SettingsPage() {
   const [cliToolsLoading, setCliToolsLoading] = useState(false);
   const [cliToolsNpmSetupOpen, setCliToolsNpmSetupOpen] = useState(false);
   const [cliToolsNpmInstalling, setCliToolsNpmInstalling] = useState(false);
-  const [cliToolsPathOpen, setCliToolsPathOpen] = useState(false);
+  const [cliToolsPathEditing, setCliToolsPathEditing] = useState(false);
   const [cliNpmPathDraft, setCliNpmPathDraft] = useState("");
   const [cliNodePathDraft, setCliNodePathDraft] = useState("");
   const [cliToolsPathSaving, setCliToolsPathSaving] = useState(false);
@@ -170,12 +170,18 @@ export function SettingsPage() {
       setAppSettings(next);
       toast.success(t("settings.cliTools.saved"));
       await refreshCliToolsStatus();
-      setCliToolsPathOpen(false);
+      setCliToolsPathEditing(false);
     } catch (e) {
       toast.error(t("settings.cliTools.saveFail"), { description: humanizeApiError(e, t) });
     } finally {
       setCliToolsPathSaving(false);
     }
+  }
+
+  function cancelCliToolsPathsEdit() {
+    setCliNpmPathDraft((appSettings?.cli_tools_npm_path ?? "").trim());
+    setCliNodePathDraft((appSettings?.cli_tools_node_path ?? "").trim());
+    setCliToolsPathEditing(false);
   }
 
   useEffect(() => {
@@ -208,10 +214,11 @@ export function SettingsPage() {
   }, []);
 
   useEffect(() => {
-    if (!appSettings) return;
+    // When user is editing the paths inline, keep their drafts stable.
+    if (!appSettings || cliToolsPathEditing) return;
     setCliNpmPathDraft((appSettings.cli_tools_npm_path ?? "").trim());
     setCliNodePathDraft((appSettings.cli_tools_node_path ?? "").trim());
-  }, [appSettings]);
+  }, [appSettings, cliToolsPathEditing]);
 
   useEffect(() => {
     const onUpdateStatus = (e: Event) => {
@@ -902,9 +909,11 @@ export function SettingsPage() {
                       })}
                     </div>
                   </div>
-                  <Button size="sm" variant="outline" onClick={() => setCliToolsPathOpen(true)}>
-                    {t("settings.cliTools.setPath")}
-                  </Button>
+                  {!cliToolsPathEditing ? (
+                    <Button size="sm" variant="outline" onClick={() => setCliToolsPathEditing(true)}>
+                      {t("settings.cliTools.setPath")}
+                    </Button>
+                  ) : null}
                 </div>
 
                 {cliToolsStatus && !cliToolsStatus.npm_available ? (
@@ -916,6 +925,37 @@ export function SettingsPage() {
                       : cliToolsStatus.os === "windows"
                         ? t("settings.cliTools.npmHintWindows")
                         : t("settings.cliTools.npmHintLinux")}
+                  </div>
+                ) : null}
+
+                {cliToolsPathEditing ? (
+                  <div className="space-y-3 pt-2">
+                    <div className="text-xs text-muted-foreground">{t("settings.cliTools.setPathDesc")}</div>
+                    <div className="space-y-1">
+                      <div className="text-sm font-medium">{t("settings.cliTools.npmPath")}</div>
+                      <Input
+                        value={cliNpmPathDraft}
+                        onChange={(e) => setCliNpmPathDraft(e.target.value)}
+                        placeholder={t("settings.cliTools.npmPathPlaceholder")}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <div className="text-sm font-medium">{t("settings.cliTools.nodePath")}</div>
+                      <Input
+                        value={cliNodePathDraft}
+                        onChange={(e) => setCliNodePathDraft(e.target.value)}
+                        placeholder={t("settings.cliTools.nodePathPlaceholder")}
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-end gap-2">
+                      <Button variant="outline" onClick={cancelCliToolsPathsEdit} disabled={cliToolsPathSaving}>
+                        {t("common.cancel")}
+                      </Button>
+                      <Button onClick={saveCliToolsPaths} disabled={!appSettings || cliToolsPathSaving}>
+                        {cliToolsPathSaving ? t("common.loading") : t("common.save")}
+                      </Button>
+                    </div>
                   </div>
                 ) : null}
               </div>
@@ -1030,41 +1070,6 @@ export function SettingsPage() {
             </CardContent>
           </Card>
 
-          <Dialog open={cliToolsPathOpen} onOpenChange={setCliToolsPathOpen}>
-            <DialogContent className="sm:max-w-[560px]">
-              <DialogHeader>
-                <DialogTitle>{t("settings.cliTools.setPathTitle")}</DialogTitle>
-                <DialogDescription>{t("settings.cliTools.setPathDesc")}</DialogDescription>
-              </DialogHeader>
-              <div className="space-y-3">
-                <div className="space-y-1">
-                  <div className="text-sm font-medium">{t("settings.cliTools.npmPath")}</div>
-                  <Input
-                    value={cliNpmPathDraft}
-                    onChange={(e) => setCliNpmPathDraft(e.target.value)}
-                    placeholder={t("settings.cliTools.npmPathPlaceholder")}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <div className="text-sm font-medium">{t("settings.cliTools.nodePath")}</div>
-                  <Input
-                    value={cliNodePathDraft}
-                    onChange={(e) => setCliNodePathDraft(e.target.value)}
-                    placeholder={t("settings.cliTools.nodePathPlaceholder")}
-                  />
-                </div>
-              </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setCliToolsPathOpen(false)} disabled={cliToolsPathSaving}>
-                  {t("common.cancel")}
-                </Button>
-                <Button onClick={saveCliToolsPaths} disabled={!appSettings || cliToolsPathSaving}>
-                  {cliToolsPathSaving ? t("common.loading") : t("common.save")}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-
           <Dialog open={cliToolsNpmSetupOpen} onOpenChange={setCliToolsNpmSetupOpen}>
             <DialogContent className="sm:max-w-[520px]">
               <DialogHeader>
@@ -1076,7 +1081,7 @@ export function SettingsPage() {
                   variant="outline"
                   onClick={() => {
                     setCliToolsNpmSetupOpen(false);
-                    setCliToolsPathOpen(true);
+                    setCliToolsPathEditing(true);
                   }}
                   disabled={cliToolsNpmInstalling}
                 >
