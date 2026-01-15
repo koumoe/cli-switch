@@ -5,3 +5,8 @@ gui = "run"
 gui-build = "build --release"
 # 构建：仅 Web 后端（不启用 `desktop`）
 web-build = "build --release --no-default-features -F embed-ui"
+
+# Windows 发行包只带一个 exe 时，默认会依赖 VC Runtime（如 vcruntime140_1.dll）。
+# 通过静态链接 MSVC CRT，避免用户额外安装运行库。
+[target.'cfg(all(target_os = "windows", target_env = "msvc"))']
+rustflags = ["-C", "target-feature=+crt-static"]
