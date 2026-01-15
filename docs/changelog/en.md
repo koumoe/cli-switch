@@ -1,3 +1,8 @@
+## [0.23.0](https://github.com/koumoe/cli-switch/compare/v0.22.1...v0.23.0) (2026-01-15)
+
+### Features
+
+* inline edit cli tools paths (#68) ([#68](https://github.com/koumoe/cli-switch/issues/68)) ([85e71a7](https://github.com/koumoe/cli-switch/commit/85e71a782057b3f54db326fa00643fd9fbb54458))
 ## [0.22.1](https://github.com/koumoe/cli-switch/compare/v0.21.0...v0.22.1) (2026-01-15)
 
 ### Features
