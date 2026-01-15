@@ -62,6 +62,13 @@ export type InstallCliToolResponse = {
   tool: CliToolStatus;
 };
 
+export type InstallNpmEnvResponse = {
+  ok: boolean;
+  installed: boolean;
+  npm_path: string | null;
+  node_path: string | null;
+};
+
 export type Channel = {
   id: string;
   name: string;
@@ -346,6 +353,10 @@ export function getCliToolsStatus(): Promise<CliToolsStatus> {
 
 export function installCliTool(id: CliToolId): Promise<InstallCliToolResponse> {
   return http<InstallCliToolResponse>("POST", "/api/tools/install", { id });
+}
+
+export function installNpmEnv(): Promise<InstallNpmEnvResponse> {
+  return http<InstallNpmEnvResponse>("POST", "/api/tools/npm/install");
 }
 
 export function listChannels(): Promise<Channel[]> {

@@ -4,6 +4,7 @@ use axum::response::IntoResponse;
 use serde::{Deserialize, Serialize};
 
 use crate::cli_tools::{CLI_TOOLS, CliToolId};
+use crate::nodejs;
 use crate::server::AppState;
 use crate::server::error::ApiError;
 use crate::storage;
@@ -25,6 +26,14 @@ pub(crate) struct CliToolsStatusResponse {
     pub(crate) npm_version: Option<String>,
     pub(crate) node_version: Option<String>,
     pub(crate) tools: Vec<CliToolStatus>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct InstallNpmEnvResponse {
+    pub(crate) ok: bool,
+    pub(crate) installed: bool,
+    pub(crate) npm_path: Option<String>,
+    pub(crate) node_path: Option<String>,
 }
 
 pub(in crate::server) async fn cli_tools_status(
@@ -78,6 +87,62 @@ pub(in crate::server) async fn cli_tools_status(
             "cli tools status task join failed: {e}"
         ))),
     }
+}
+
+pub(in crate::server) async fn install_npm_env(
+    State(state): State<AppState>,
+) -> Result<impl IntoResponse, ApiError> {
+    // First, check current env (PATH + user settings).
+    let settings = storage::get_app_settings(state.db_path()).await?;
+    let npm_path0 = settings.cli_tools_npm_path.clone();
+    let node_path0 = settings.cli_tools_node_path.clone();
+
+    let already = tokio::task::spawn_blocking(move || {
+        let env = crate::cli_tools::CliExecEnv::new(npm_path0.as_deref(), node_path0.as_deref());
+        env.npm_available()
+    })
+    .await
+    .map_err(|e| {
+        ApiError::bad_request("tools_env_check_failed", format!("env check failed: {e}"))
+    })?;
+
+    if already {
+        return Ok(Json(InstallNpmEnvResponse {
+            ok: true,
+            installed: false,
+            npm_path: settings.cli_tools_npm_path,
+            node_path: settings.cli_tools_node_path,
+        }));
+    }
+
+    let data_dir = state.data_dir();
+    let paths = nodejs::ensure_managed_node_installed(&state.http_client, &data_dir)
+        .await
+        .map_err(|e| ApiError::bad_request("tools_npm_env_install_failed", e.to_string()))?;
+
+    let npm_path = paths.npm_path.to_string_lossy().to_string();
+    let node_path = paths.node_path.to_string_lossy().to_string();
+
+    // Persist as the manual paths so all existing code paths (status/install/auto-update) work.
+    let _ = storage::update_app_settings(
+        state.db_path(),
+        storage::AppSettingsPatch {
+            cli_tools_npm_path: Some(npm_path.clone()),
+            cli_tools_node_path: Some(node_path.clone()),
+            ..Default::default()
+        },
+    )
+    .await?;
+
+    let next = *state.settings_notify.borrow() + 1;
+    let _ = state.settings_notify.send(next);
+
+    Ok(Json(InstallNpmEnvResponse {
+        ok: true,
+        installed: true,
+        npm_path: Some(npm_path),
+        node_path: Some(node_path),
+    }))
 }
 
 #[derive(Debug, Deserialize)]

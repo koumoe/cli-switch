@@ -39,7 +39,7 @@ import { useCurrency, type CurrencyMode } from "@/lib/currency";
 import { setLogLevel } from "@/lib/logger";
 import { UpdatePromptDialog } from "@/components/UpdatePromptDialog";
 import { formatBytes, formatDateTime } from "../lib";
-import { checkUpdate, clearLogs, clearRecords, downloadUpdate, getCliToolsStatus, getDbSize, getHealth, getLogsSize, getSettings, getUpdateChangelog, getUpdateStatus, ignoreUpdate, installCliTool, pricingStatus, pricingSync, updateSettings, type AppSettings, type AutoStartLaunchMode, type CloseBehavior, type DbSize, type Health, type LogsSize, type PricingStatus, type RecordsClearMode, type UpdateCheck, type UpdateStatus, type ChangelogSection, type CliToolId, type CliToolsStatus, type CliToolStatus } from "../api";
+import { checkUpdate, clearLogs, clearRecords, downloadUpdate, getCliToolsStatus, getDbSize, getHealth, getLogsSize, getSettings, getUpdateChangelog, getUpdateStatus, ignoreUpdate, installCliTool, installNpmEnv, pricingStatus, pricingSync, updateSettings, type AppSettings, type AutoStartLaunchMode, type CloseBehavior, type DbSize, type Health, type LogsSize, type PricingStatus, type RecordsClearMode, type UpdateCheck, type UpdateStatus, type ChangelogSection, type CliToolId, type CliToolsStatus, type CliToolStatus } from "../api";
 import type { CliswitchUpdateStatusEvent } from "@/lib/cliswitchEvents";
 import { clearUpdateReadyShown } from "@/lib/updateReadyPrompt";
 
@@ -68,6 +68,8 @@ export function SettingsPage() {
   const [updateIgnoring, setUpdateIgnoring] = useState(false);
   const [cliToolsStatus, setCliToolsStatus] = useState<CliToolsStatus | null>(null);
   const [cliToolsLoading, setCliToolsLoading] = useState(false);
+  const [cliToolsNpmSetupOpen, setCliToolsNpmSetupOpen] = useState(false);
+  const [cliToolsNpmInstalling, setCliToolsNpmInstalling] = useState(false);
   const [cliToolsPathOpen, setCliToolsPathOpen] = useState(false);
   const [cliNpmPathDraft, setCliNpmPathDraft] = useState("");
   const [cliNodePathDraft, setCliNodePathDraft] = useState("");
@@ -124,6 +126,24 @@ export function SettingsPage() {
       toast.error(t("settings.maintenance.logsSizeFail"), { description: humanizeApiError(e, t) });
     } finally {
       setLogsSizeLoading(false);
+    }
+  }
+
+  async function autoInstallNpmEnv() {
+    setCliToolsNpmInstalling(true);
+    try {
+      await installNpmEnv();
+      const s = await getSettings();
+      setAppSettings(s);
+      setCliNpmPathDraft((s.cli_tools_npm_path ?? "").trim());
+      setCliNodePathDraft((s.cli_tools_node_path ?? "").trim());
+      await refreshCliToolsStatus();
+      setCliToolsNpmSetupOpen(false);
+      toast.success(t("settings.cliTools.saved"));
+    } catch (e) {
+      toast.error(t("settings.cliTools.installFail", { name: "npm" }), { description: humanizeApiError(e, t) });
+    } finally {
+      setCliToolsNpmInstalling(false);
     }
   }
 
@@ -870,8 +890,24 @@ export function SettingsPage() {
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
-              {cliToolsStatus && !cliToolsStatus.npm_available ? (
-                <div className="space-y-2">
+              {/* Always show manual path entry so user can adjust it after initial setup. */}
+              <div className="space-y-2 rounded-md border p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 space-y-1">
+                    <div className="text-sm font-medium">{t("settings.cliTools.setPathTitle")}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {t("settings.cliTools.currentPaths", {
+                        npm: (appSettings?.cli_tools_npm_path ?? "").trim() || "-",
+                        node: (appSettings?.cli_tools_node_path ?? "").trim() || "-",
+                      })}
+                    </div>
+                  </div>
+                  <Button size="sm" variant="outline" onClick={() => setCliToolsPathOpen(true)}>
+                    {t("settings.cliTools.setPath")}
+                  </Button>
+                </div>
+
+                {cliToolsStatus && !cliToolsStatus.npm_available ? (
                   <div className="text-xs text-muted-foreground">
                     {t("settings.cliTools.npmMissing")}
                     {" "}
@@ -881,13 +917,8 @@ export function SettingsPage() {
                         ? t("settings.cliTools.npmHintWindows")
                         : t("settings.cliTools.npmHintLinux")}
                   </div>
-                  <div>
-                    <Button size="sm" variant="outline" onClick={() => setCliToolsPathOpen(true)}>
-                      {t("settings.cliTools.setPath")}
-                    </Button>
-                  </div>
-                </div>
-              ) : null}
+                ) : null}
+              </div>
 
               {!cliToolsStatus ? (
                 <div className="text-sm text-muted-foreground">
@@ -924,7 +955,7 @@ export function SettingsPage() {
                         disabled={busy}
                         onClick={async () => {
                           if (!npmOk) {
-                            setCliToolsPathOpen(true);
+                            setCliToolsNpmSetupOpen(true);
                             return;
                           }
                           setCliToolBusy((prev) => ({ ...prev, [tool.id]: true }));
@@ -962,6 +993,10 @@ export function SettingsPage() {
                           checked={autoEnabled}
                           onCheckedChange={async (v) => {
                             if (!appSettings) return;
+                            if (v && !(cliToolsStatus?.npm_available ?? true)) {
+                              setCliToolsNpmSetupOpen(true);
+                              return;
+                            }
                             const prev = autoEnabled;
                             const patch =
                               tool.id === "gemini"
@@ -1025,6 +1060,30 @@ export function SettingsPage() {
                 </Button>
                 <Button onClick={saveCliToolsPaths} disabled={!appSettings || cliToolsPathSaving}>
                   {cliToolsPathSaving ? t("common.loading") : t("common.save")}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={cliToolsNpmSetupOpen} onOpenChange={setCliToolsNpmSetupOpen}>
+            <DialogContent className="sm:max-w-[520px]">
+              <DialogHeader>
+                <DialogTitle>{t("settings.cliTools.npmSetupTitle")}</DialogTitle>
+                <DialogDescription>{t("settings.cliTools.npmSetupDesc")}</DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setCliToolsNpmSetupOpen(false);
+                    setCliToolsPathOpen(true);
+                  }}
+                  disabled={cliToolsNpmInstalling}
+                >
+                  {t("settings.cliTools.manualSpecify")}
+                </Button>
+                <Button onClick={autoInstallNpmEnv} disabled={cliToolsNpmInstalling}>
+                  {cliToolsNpmInstalling ? t("settings.cliTools.autoInstalling") : t("settings.cliTools.autoInstall")}
                 </Button>
               </DialogFooter>
             </DialogContent>

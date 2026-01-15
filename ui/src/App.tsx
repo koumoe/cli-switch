@@ -28,7 +28,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui";
 import { toast } from "sonner";
-import { downloadUpdate, getCliToolsStatus, getHealth, getSettings, getUpdateChangelog, ignoreUpdate, installCliTool, pricingStatus, pricingSync, updateSettings, type ChangelogSection, type CliToolId, type CliToolsStatus } from "./api";
+import { downloadUpdate, getCliToolsStatus, getHealth, getSettings, getUpdateChangelog, ignoreUpdate, installCliTool, installNpmEnv, pricingStatus, pricingSync, updateSettings, type ChangelogSection, type CliToolId, type CliToolsStatus } from "./api";
 import { logger, setLogLevel } from "@/lib/logger";
 import type { CliswitchUpdateStatusEvent } from "@/lib/cliswitchEvents";
 import { isUpdateReadyShown, markUpdateReadyShown } from "@/lib/updateReadyPrompt";
@@ -195,6 +195,7 @@ export default function App() {
   const [cliToolsOnboardingOpen, setCliToolsOnboardingOpen] = useState(false);
   const [cliToolsOnboardingStatus, setCliToolsOnboardingStatus] = useState<CliToolsStatus | null>(null);
   const [cliToolsOnboardingBusy, setCliToolsOnboardingBusy] = useState(false);
+  const [cliToolsNpmInstalling, setCliToolsNpmInstalling] = useState(false);
   const [cliToolsPathOpen, setCliToolsPathOpen] = useState(false);
   const [cliNpmPathDraft, setCliNpmPathDraft] = useState("");
   const [cliNodePathDraft, setCliNodePathDraft] = useState("");
@@ -345,6 +346,23 @@ export default function App() {
       cancelled = true;
     };
   }, []);
+
+  async function autoInstallNpmEnv() {
+    setCliToolsNpmInstalling(true);
+    try {
+      await installNpmEnv();
+      const s = await getSettings();
+      setCliNpmPathDraft((s.cli_tools_npm_path ?? "").trim());
+      setCliNodePathDraft((s.cli_tools_node_path ?? "").trim());
+      const st = await getCliToolsStatus().catch(() => null);
+      if (st) setCliToolsOnboardingStatus(st);
+      toast.success(t("settings.cliTools.saved"));
+    } catch (e) {
+      toast.error(t("settings.cliTools.installFail", { name: "npm" }), { description: humanizeApiError(e, t) });
+    } finally {
+      setCliToolsNpmInstalling(false);
+    }
+  }
 
   async function saveCliToolsPaths() {
     setCliToolsPathSaving(true);
@@ -588,18 +606,11 @@ export default function App() {
                       : t("settings.cliTools.npmHintLinux")}
                 </div>
                 <div className="flex gap-2">
-                  <Button size="sm" variant="outline" onClick={() => setCliToolsPathOpen(true)}>
-                    {t("settings.cliTools.setPath")}
+                  <Button size="sm" onClick={autoInstallNpmEnv} disabled={cliToolsNpmInstalling}>
+                    {cliToolsNpmInstalling ? t("settings.cliTools.autoInstalling") : t("settings.cliTools.autoInstall")}
                   </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      setCliToolsOnboardingOpen(false);
-                      navigate("/settings");
-                    }}
-                  >
-                    {t("settings.cliTools.openSettings")}
+                  <Button size="sm" variant="outline" onClick={() => setCliToolsPathOpen(true)} disabled={cliToolsNpmInstalling}>
+                    {t("settings.cliTools.manualSpecify")}
                   </Button>
                 </div>
               </div>
@@ -621,7 +632,8 @@ export default function App() {
                       disabled={busy}
                       onClick={async () => {
                         if (!npmOk) {
-                          setCliToolsPathOpen(true);
+                          // 用户也可能从这里触发安装，因此直接提示安装/手动指定。
+                          setCliToolsOnboardingOpen(true);
                           return;
                         }
                         setCliToolOnboardingBusy((prev) => ({ ...prev, [tool.id]: true }));
@@ -659,7 +671,7 @@ export default function App() {
               onClick={async () => {
                 if (!cliToolsOnboardingStatus) return;
                 if (!cliToolsOnboardingStatus.npm_available) {
-                  setCliToolsPathOpen(true);
+                  // npm 缺失时不直接继续安装，用户可在上面的提示中选择自动安装或手动指定。
                   return;
                 }
                 const missing = cliToolsOnboardingStatus.tools.filter((t0) => !t0.installed);

@@ -5,6 +5,7 @@ pub mod cli_tools;
 pub mod events;
 pub mod log_files;
 pub mod logging;
+pub mod nodejs;
 pub mod proxy;
 pub mod server;
 pub mod storage;
