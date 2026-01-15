@@ -42,3 +42,4 @@ hex = "0.4"
 sha2 = "0.10"
 tar = "0.4"
 zip = { version = "6", default-features = false, features = ["deflate-flate2"] }
+xz2 = "0.1"

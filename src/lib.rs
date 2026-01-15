@@ -2,6 +2,7 @@ pub mod app;
 pub mod autostart;
 pub mod changelog;
 pub mod cli_tools;
+pub mod nodejs;
 pub mod events;
 pub mod log_files;
 pub mod logging;

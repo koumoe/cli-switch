@@ -341,6 +341,26 @@ impl CliExecEnv {
     }
 
     fn cmd(&self, program_path: PathBuf) -> std::process::Command {
+        // On Windows, npm is commonly a .cmd shim. CreateProcess can't execute it directly,
+        // so we route through `cmd /C`.
+        #[cfg(target_os = "windows")]
+        {
+            let is_cmd = program_path
+                .extension()
+                .and_then(|s| s.to_str())
+                .map(|s| s.eq_ignore_ascii_case("cmd") || s.eq_ignore_ascii_case("bat"))
+                .unwrap_or(false);
+            if is_cmd {
+                let p = program_path.to_string_lossy().to_string();
+                let mut cmd = std::process::Command::new("cmd");
+                cmd.args(["/C", &p]);
+                if let Some(p) = &self.child_path {
+                    cmd.env("PATH", p);
+                }
+                return cmd;
+            }
+        }
+
         let mut cmd = std::process::Command::new(program_path);
         if let Some(p) = &self.child_path {
             cmd.env("PATH", p);
