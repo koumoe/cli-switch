@@ -222,10 +222,10 @@ fn managed_node_paths_from_root(root: &Path) -> anyhow::Result<ManagedNodePaths>
         if !npm.is_file() {
             anyhow::bail!("managed npm missing: {}", npm.display());
         }
-        return Ok(ManagedNodePaths {
+        Ok(ManagedNodePaths {
             node_path: node,
             npm_path: npm,
-        });
+        })
     }
 
     #[cfg(not(target_os = "windows"))]
@@ -238,10 +238,10 @@ fn managed_node_paths_from_root(root: &Path) -> anyhow::Result<ManagedNodePaths>
         if !npm.is_file() {
             anyhow::bail!("managed npm missing: {}", npm.display());
         }
-        return Ok(ManagedNodePaths {
+        Ok(ManagedNodePaths {
             node_path: node,
             npm_path: npm,
-        });
+        })
     }
 }
 
