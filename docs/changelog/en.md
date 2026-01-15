@@ -1,3 +1,15 @@
+## [0.22.1](https://github.com/koumoe/cli-switch/compare/v0.21.0...v0.22.1) (2026-01-15)
+
+### Features
+
+* auto-install Node.js LTS for npm env ([e3d2674](https://github.com/koumoe/cli-switch/commit/e3d26741720e22dddb6a3c17d6d3f786e5af1a5d))
+* prompt npm setup and keep manual paths visible ([1e88b86](https://github.com/koumoe/cli-switch/commit/1e88b86bd0d9a34f7262ce5d5f5149740fa970ab))
+
+### Bug Fixes
+
+* align SettingsPage indentation ([b537a6e](https://github.com/koumoe/cli-switch/commit/b537a6e43d880c418fb9d18d1a75610bef8f38d8))
+* restore bilingual subjects from git log in changelog sync ([4406552](https://github.com/koumoe/cli-switch/commit/440655261ed0ed37a6e7c87806c16605156eefb6))
+* satisfy clippy warnings ([dd0431a](https://github.com/koumoe/cli-switch/commit/dd0431ab6a933d6486557d109c733f0d57c0e5f6))
 ## [0.21.0](https://github.com/koumoe/cli-switch/compare/v0.20.0...v0.21.0) (2026-01-11)
 
 ### Features
@@ -30,7 +42,7 @@
 
 ### Bug Fixes
 
-* patch updater ignore + update prompt ([#60](https://github.com/koumoe/cli-switch/issues/60)) ([31f4fe6](https://github.com/koumoe/cli-switch/commit/31f4fe64ffc3d2e706e1297792200a58435c585d))
+* patch updater ignore + update prompt (#60) ([#60](https://github.com/koumoe/cli-switch/issues/60)) ([31f4fe6](https://github.com/koumoe/cli-switch/commit/31f4fe64ffc3d2e706e1297792200a58435c585d))
 ## [0.19.1](https://github.com/koumoe/cli-switch/compare/v0.19.0...v0.19.1) (2026-01-08)
 
 ### Bug Fixes

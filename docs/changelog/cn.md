@@ -1,3 +1,13 @@
+## [0.22.1](https://github.com/koumoe/cli-switch/compare/v0.21.0...v0.22.1) (2026-01-15)
+
+### 功能
+* 自动安装 Node.js LTS 提供 npm 环境 ([e3d2674](https://github.com/koumoe/cli-switch/commit/e3d26741720e22dddb6a3c17d6d3f786e5af1a5d))
+* npm 缺失引导安装并常驻手动路径入口 ([1e88b86](https://github.com/koumoe/cli-switch/commit/1e88b86bd0d9a34f7262ce5d5f5149740fa970ab))
+
+### 修复
+* 修复 SettingsPage 缩进 ([b537a6e](https://github.com/koumoe/cli-switch/commit/b537a6e43d880c418fb9d18d1a75610bef8f38d8))
+* 修复 changelog 同步时从 git log 恢复双语内容 ([4406552](https://github.com/koumoe/cli-switch/commit/440655261ed0ed37a6e7c87806c16605156eefb6))
+* 修复 clippy 警告 ([dd0431a](https://github.com/koumoe/cli-switch/commit/dd0431ab6a933d6486557d109c733f0d57c0e5f6))
 ## [0.21.0](https://github.com/koumoe/cli-switch/compare/v0.20.0...v0.21.0) (2026-01-11)
 
 ### 功能
