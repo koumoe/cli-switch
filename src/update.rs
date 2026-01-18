@@ -220,6 +220,10 @@ fn update_staged_dir(data_dir: &Path) -> PathBuf {
     updates_dir(data_dir).join("staged")
 }
 
+fn update_backups_dir(data_dir: &Path) -> PathBuf {
+    updates_dir(data_dir).join("backups")
+}
+
 fn collect_update_versions(
     data_dir: &Path,
 ) -> anyhow::Result<std::collections::HashMap<String, SystemTime>> {
@@ -326,6 +330,19 @@ fn cleanup_update_artifacts_with_keep(
 
     cleanup_dir(&update_downloads_dir(data_dir), keep)?;
     cleanup_dir(&update_staged_dir(data_dir), keep)?;
+    cleanup_dir(&update_backups_dir(data_dir), keep)?;
+
+    // Legacy cleanup: older versions stored helper scripts/logs under updates/apply.
+    // Newer versions write logs into logs_dir and use a temporary script under updates/tmp.
+    let legacy_apply_dir = updates_dir(data_dir).join("apply");
+    match std::fs::remove_dir_all(&legacy_apply_dir) {
+        Ok(()) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        Err(e) => {
+            return Err(e)
+                .with_context(|| format!("remove dir failed: {}", legacy_apply_dir.display()));
+        }
+    }
     Ok(())
 }
 
@@ -1105,6 +1122,7 @@ fn spawn_apply_helper_after_exit(
     let parent_pid = std::process::id().to_string();
     let args: Vec<OsString> = std::env::args_os().skip(1).collect();
     let now = crate::storage::now_ms();
+    let old_version = env!("CARGO_PKG_VERSION");
 
     let file_name = target
         .file_name()
@@ -1113,7 +1131,7 @@ fn spawn_apply_helper_after_exit(
     let parent = target
         .parent()
         .ok_or_else(|| anyhow::anyhow!("invalid exe path: {}", target.display()))?;
-    let backup = parent.join(format!("{file_name}.bak.{now}"));
+    let backup = parent.join(format!("{file_name}.bak.{old_version}.{now}"));
     let temp = parent.join(format!("{file_name}.new.{now}"));
 
     let app = {
@@ -1132,12 +1150,11 @@ fn spawn_apply_helper_after_exit(
         }
     };
 
+    // Keep the updates directory clean: helper scripts are temporary and logs go to logs_dir.
     let script = updates_dir(data_dir)
-        .join("apply")
+        .join("tmp")
         .join(format!("apply-cliswitch.{}.{}.sh", pending.version, now));
-    let log = updates_dir(data_dir)
-        .join("apply")
-        .join(format!("apply-cliswitch.{}.{}.log", pending.version, now));
+    let log_dir = crate::app::logs_dir(data_dir);
 
     let pending_json = pending_path(data_dir);
     let staged = pending.staged_executable.clone();
@@ -1154,10 +1171,14 @@ STAGED="$5"
 BACKUP="$6"
 TEMP="$7"
 RESTART="$8"
-LOG="$9"
-shift 9
+OLD_VERSION="$9"
+LOG_DIR="${10}"
+RUN_ID="${11}"
+shift 11
 
-mkdir -p "$(dirname "$LOG")" >/dev/null 2>&1 || true
+mkdir -p "$LOG_DIR" >/dev/null 2>&1 || true
+NEW_VERSION="$(basename "$(dirname "$STAGED")")"
+LOG="$LOG_DIR/$(date +%Y-%m-%d).apply-cliswitch.$OLD_VERSION.to.$NEW_VERSION.$RUN_ID.log"
 exec >>"$LOG" 2>&1
 
 echo "[apply] started at $(date)"
@@ -1169,6 +1190,20 @@ echo "[apply] staged=$STAGED"
 echo "[apply] backup=$BACKUP"
 echo "[apply] temp=$TEMP"
 echo "[apply] restart=$RESTART"
+echo "[apply] old_version=$OLD_VERSION"
+echo "[apply] new_version=$NEW_VERSION"
+echo "[apply] run_id=$RUN_ID"
+
+cleanup() {
+  status=$?
+  rm -f "$TEMP" >/dev/null 2>&1 || true
+  rm -f "$0" >/dev/null 2>&1 || true
+  if [ $status -eq 0 ]; then
+    rm -f "$LOG" >/dev/null 2>&1 || true
+  fi
+  exit $status
+}
+trap cleanup EXIT
 
 while kill -0 "$PID" 2>/dev/null; do
   sleep 1
@@ -1207,6 +1242,42 @@ done
 
 echo "[apply] replace ok at $(date)"
 
+# Store the previous version binary under the user data dir, and keep the install dir clean.
+EXE_NAME="$(basename "$TARGET")"
+EXE_DIR="$(dirname "$TARGET")"
+UPDATES_DIR="$(dirname "$PENDING")"
+BACKUPS_DIR="$UPDATES_DIR/backups"
+BACKUP_VER_DIR="$BACKUPS_DIR/$OLD_VERSION"
+BACKUP_DST="$BACKUP_VER_DIR/$EXE_NAME"
+
+mkdir -p "$BACKUP_VER_DIR" >/dev/null 2>&1 || true
+
+if [ -e "$BACKUP" ]; then
+  if mv -f "$BACKUP" "$BACKUP_DST" >/dev/null 2>&1; then
+    echo "[apply] stored backup: $BACKUP_DST"
+  else
+    if cp -f "$BACKUP" "$BACKUP_DST" >/dev/null 2>&1; then
+      rm -f "$BACKUP" >/dev/null 2>&1 || true
+      echo "[apply] stored backup (copied): $BACKUP_DST"
+    else
+      echo "[apply] store backup failed: $BACKUP"
+    fi
+  fi
+fi
+
+# Clean up legacy backups / temp files left in the install dir from previous runs.
+for f in "$EXE_DIR/$EXE_NAME.bak."*; do
+  [ -e "$f" ] || continue
+  if [ "$f" = "$BACKUP" ]; then
+    continue
+  fi
+  rm -f "$f" >/dev/null 2>&1 || true
+done
+for f in "$EXE_DIR/$EXE_NAME.new."*; do
+  [ -e "$f" ] || continue
+  rm -f "$f" >/dev/null 2>&1 || true
+done
+
 if [ "$APP" != "-" ] && [ -n "$APP" ]; then
   if command -v codesign >/dev/null 2>&1; then
     echo "[apply] codesign started at $(date)"
@@ -1224,16 +1295,15 @@ fi
 
 rm -f "$PENDING" >/dev/null 2>&1 || true
 rm -f "$STAGED" >/dev/null 2>&1 || true
-rm -f "$0" >/dev/null 2>&1 || true
 
 echo "[apply] cleanup done at $(date)"
 
 if [ "$RESTART" = "1" ]; then
   echo "[apply] restarting at $(date)"
   if [ "$APP" != "-" ] && [ -n "$APP" ]; then
-    exec open -n "$APP" --args "$@"
+    open -n "$APP" --args "$@" >/dev/null 2>&1 || true
   else
-    exec "$TARGET" "$@"
+    "$TARGET" "$@" >/dev/null 2>&1 &
   fi
 fi
 
@@ -1263,7 +1333,9 @@ exit 0
         .arg(backup.as_os_str())
         .arg(temp.as_os_str())
         .arg(restart_flag)
-        .arg(log.as_os_str());
+        .arg(old_version)
+        .arg(log_dir.as_os_str())
+        .arg(OsString::from(now.to_string()).as_os_str());
     cmd.args(args);
     cmd.stdin(Stdio::null())
         .stdout(Stdio::null())
@@ -1284,7 +1356,7 @@ exit 0
     cmd.spawn().with_context(|| "spawn apply helper failed")?;
     tracing::info!(
         script = %script.display(),
-        log = %log.display(),
+        log_dir = %log_dir.display(),
         restart,
         "spawned update apply helper"
     );
@@ -1346,6 +1418,7 @@ mod tests {
         for v in versions {
             std::fs::create_dir_all(update_downloads_dir(&data_dir).join(v)).unwrap();
             std::fs::create_dir_all(update_staged_dir(&data_dir).join(v)).unwrap();
+            std::fs::create_dir_all(update_backups_dir(&data_dir).join(v)).unwrap();
         }
         std::fs::write(update_downloads_dir(&data_dir).join("keep.txt"), b"ok").unwrap();
 
@@ -1362,6 +1435,10 @@ mod tests {
         assert!(update_staged_dir(&data_dir).join("1.1.0").is_dir());
         assert!(update_staged_dir(&data_dir).join("1.0.0").is_dir());
         assert!(!update_staged_dir(&data_dir).join("0.9.0").exists());
+
+        assert!(update_backups_dir(&data_dir).join("1.1.0").is_dir());
+        assert!(update_backups_dir(&data_dir).join("1.0.0").is_dir());
+        assert!(!update_backups_dir(&data_dir).join("0.9.0").exists());
 
         std::fs::remove_dir_all(&data_dir).unwrap();
     }
