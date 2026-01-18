@@ -516,6 +516,26 @@
       "saved": "Saved",
       "saveFail": "Save failed"
     },
+    "baseDeps": {
+      "title": "Base Dependencies",
+      "subtitle": "Configure Node.js / npm (required for installing/updating CLI tools)",
+      "detected": "Detected: node {{node}} · npm {{npm}}",
+      "nodeDir": "Node directory",
+      "npmDir": "npm directory",
+      "browse": "Browse",
+      "nodeDirPlaceholder": "Select a folder that contains node (or input a directory/executable path)",
+      "npmDirPlaceholder": "Select a folder that contains npm (or input a directory/executable path)",
+      "pickNodeDirTitle": "Select Node folder",
+      "pickNpmDirTitle": "Select npm folder",
+      "pickFail": "Failed to open folder picker",
+      "saved": "Saved",
+      "saveFail": "Save failed",
+      "invalidNodeTitle": "Not a Node folder",
+      "invalidNodeDesc": "No usable node executable was found in the selected folder. Please choose a folder that contains node (e.g. Node install bin/ or a shims folder).",
+      "invalidNpmTitle": "Not an npm folder",
+      "invalidNpmDesc": "No usable npm executable was found in the selected folder. Please choose a folder that contains npm (e.g. Node install bin/ or a shims folder).",
+      "goConfigure": "Configure"
+    },
     "cliTools": {
       "title": "CLI Tools",
       "subtitle": "Install and update Gemini CLI / Claude Code / Codex",
