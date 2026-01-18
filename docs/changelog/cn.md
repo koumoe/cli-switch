@@ -1,3 +1,12 @@
+## [0.24.0](https://github.com/koumoe/cli-switch/compare/v0.23.1...v0.24.0) (2026-01-18)
+
+### 功能
+* 添加基础依赖设置界面 ([5da2432](https://github.com/koumoe/cli-switch/commit/5da2432fe18504648d332925c628740eae7916de))
+* 添加目录选择与环境校验接口 ([ca93943](https://github.com/koumoe/cli-switch/commit/ca93943d5e1ccec5e5ddc82af63478867a93370d))
+
+### 修复
+* 修复非桌面特性下 pick_folder 编译 ([e2e5130](https://github.com/koumoe/cli-switch/commit/e2e51305192cd945492de9777876eb74c39cec0f))
+* 升级 rfd 修复 Linux 构建 ([f99e0cc](https://github.com/koumoe/cli-switch/commit/f99e0cc676fb3dfa133843c74ba67298321c0c5c))
 ## [0.23.1](https://github.com/koumoe/cli-switch/compare/v0.23.0...v0.23.1) (2026-01-15)
 
 ### 修复

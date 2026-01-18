@@ -1,3 +1,14 @@
+## [0.24.0](https://github.com/koumoe/cli-switch/compare/v0.23.1...v0.24.0) (2026-01-18)
+
+### Features
+
+* add base deps settings UI ([5da2432](https://github.com/koumoe/cli-switch/commit/5da2432fe18504648d332925c628740eae7916de))
+* add folder picker & env validation APIs ([ca93943](https://github.com/koumoe/cli-switch/commit/ca93943d5e1ccec5e5ddc82af63478867a93370d))
+
+### Bug Fixes
+
+* make pick_folder build without desktop ([e2e5130](https://github.com/koumoe/cli-switch/commit/e2e51305192cd945492de9777876eb74c39cec0f))
+* upgrade rfd for linux build ([f99e0cc](https://github.com/koumoe/cli-switch/commit/f99e0cc676fb3dfa133843c74ba67298321c0c5c))
 ## [0.23.1](https://github.com/koumoe/cli-switch/compare/v0.23.0...v0.23.1) (2026-01-15)
 
 ### Bug Fixes
