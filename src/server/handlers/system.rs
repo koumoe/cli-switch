@@ -38,6 +38,7 @@ pub(in crate::server) async fn open_in_browser(
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 pub(in crate::server) struct PickFolderInput {
     title: Option<String>,
     directory: Option<String>,
@@ -50,14 +51,14 @@ pub(in crate::server) struct PickFolderResponse {
 
 pub(in crate::server) async fn pick_folder(
     Json(input): Json<PickFolderInput>,
-) -> Result<impl IntoResponse, ApiError> {
+) -> Result<Json<PickFolderResponse>, ApiError> {
     #[cfg(not(feature = "desktop"))]
     {
         let _ = input;
-        return Err(ApiError::bad_request(
+        Err(ApiError::bad_request(
             "system_dialog_not_supported",
             "folder picker not supported",
-        ));
+        ))
     }
 
     #[cfg(feature = "desktop")]
