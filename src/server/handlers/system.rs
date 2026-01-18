@@ -1,7 +1,7 @@
 use axum::Json;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::server::error::ApiError;
 
@@ -35,4 +35,48 @@ pub(in crate::server) async fn open_in_browser(
     crate::server::open_in_browser(parsed.as_str())
         .map_err(|e| ApiError::Internal(anyhow::anyhow!(e)))?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Debug, Deserialize)]
+pub(in crate::server) struct PickFolderInput {
+    title: Option<String>,
+    directory: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub(in crate::server) struct PickFolderResponse {
+    path: Option<String>,
+}
+
+pub(in crate::server) async fn pick_folder(
+    Json(input): Json<PickFolderInput>,
+) -> Result<impl IntoResponse, ApiError> {
+    #[cfg(not(feature = "desktop"))]
+    {
+        let _ = input;
+        return Err(ApiError::bad_request(
+            "system_dialog_not_supported",
+            "folder picker not supported",
+        ));
+    }
+
+    #[cfg(feature = "desktop")]
+    {
+        let title = input.title.unwrap_or_else(|| "Select folder".to_string());
+        let directory = input.directory.unwrap_or_default();
+        let res = tokio::task::spawn_blocking(move || {
+            let mut dlg = rfd::FileDialog::new().set_title(&title);
+            let dir = std::path::PathBuf::from(directory.trim());
+            if dir.is_dir() {
+                dlg = dlg.set_directory(dir);
+            }
+            dlg.pick_folder()
+        })
+        .await
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("pick folder join failed: {e}")))?;
+
+        Ok(Json(PickFolderResponse {
+            path: res.map(|p| p.to_string_lossy().to_string()),
+        }))
+    }
 }

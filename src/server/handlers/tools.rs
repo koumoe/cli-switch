@@ -9,6 +9,26 @@ use crate::server::AppState;
 use crate::server::error::ApiError;
 use crate::storage;
 
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum ValidateProgram {
+    Node,
+    Npm,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct ValidateProgramRequest {
+    pub(crate) program: ValidateProgram,
+    pub(crate) path: String,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct ValidateProgramResponse {
+    pub(crate) ok: bool,
+    pub(crate) version: String,
+    pub(crate) resolved_path: String,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub(crate) struct CliToolStatus {
     pub(crate) id: CliToolId,
@@ -217,6 +237,64 @@ pub(in crate::server) async fn install_cli_tool(
         Ok(Err(e)) => Err(e),
         Err(e) => Err(ApiError::Internal(anyhow::anyhow!(
             "cli tool install task join failed: {e}"
+        ))),
+    }
+}
+
+pub(in crate::server) async fn validate_program(
+    Json(input): Json<ValidateProgramRequest>,
+) -> Result<impl IntoResponse, ApiError> {
+    let raw = input.path.trim();
+    if raw.is_empty() {
+        return Err(ApiError::bad_request(
+            "tools_path_required",
+            "path is required",
+        ));
+    }
+
+    let program = match input.program {
+        ValidateProgram::Node => "node",
+        ValidateProgram::Npm => "npm",
+    };
+
+    let raw = raw.to_string();
+    let res = tokio::task::spawn_blocking(move || {
+        let resolved =
+            crate::cli_tools::resolve_program_from_user_path(program, &raw).ok_or_else(|| {
+                ApiError::bad_request(
+                    if program == "node" {
+                        "tools_node_path_invalid"
+                    } else {
+                        "tools_npm_path_invalid"
+                    },
+                    format!("invalid {program} path"),
+                )
+            })?;
+
+        let v = crate::cli_tools::try_get_cmd_version_at(&resolved).ok_or_else(|| {
+            ApiError::bad_request(
+                if program == "node" {
+                    "tools_node_not_executable"
+                } else {
+                    "tools_npm_not_executable"
+                },
+                format!("{program} is not executable"),
+            )
+        })?;
+
+        Ok::<_, ApiError>(ValidateProgramResponse {
+            ok: true,
+            version: crate::cli_tools::normalize_version_string(&v),
+            resolved_path: resolved.to_string_lossy().to_string(),
+        })
+    })
+    .await;
+
+    match res {
+        Ok(Ok(v)) => Ok(Json(v)),
+        Ok(Err(e)) => Err(e),
+        Err(e) => Err(ApiError::Internal(anyhow::anyhow!(
+            "validate program task join failed: {e}"
         ))),
     }
 }

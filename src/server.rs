@@ -39,11 +39,13 @@ fn request_endpoint_template(method: &Method, path: &str) -> Option<&'static str
         ("GET", "/api/tools/status") => Some("/api/tools/status"),
         ("POST", "/api/tools/install") => Some("/api/tools/install"),
         ("POST", "/api/tools/npm/install") => Some("/api/tools/npm/install"),
+        ("POST", "/api/tools/env/validate_program") => Some("/api/tools/env/validate_program"),
         ("GET", "/api/channels") => Some("/api/channels"),
         ("POST", "/api/channels") => Some("/api/channels"),
         ("POST", "/api/channels/reorder") => Some("/api/channels/reorder"),
         ("GET", "/api/channels/checkins/today") => Some("/api/channels/checkins/today"),
         ("POST", "/api/system/open") => Some("/api/system/open"),
+        ("POST", "/api/system/pick_folder") => Some("/api/system/pick_folder"),
         ("GET", "/api/routes") => Some("/api/routes"),
         ("POST", "/api/routes") => Some("/api/routes"),
         ("GET", "/api/pricing/status") => Some("/api/pricing/status"),
@@ -103,11 +105,13 @@ fn request_purpose(method: &Method, path: &str) -> &'static str {
         ("GET", "/api/tools/status") => "handlers::cli_tools_status",
         ("POST", "/api/tools/install") => "handlers::install_cli_tool",
         ("POST", "/api/tools/npm/install") => "handlers::install_npm_env",
+        ("POST", "/api/tools/env/validate_program") => "handlers::validate_program",
         ("GET", "/api/channels") => "handlers::list_channels",
         ("POST", "/api/channels") => "handlers::create_channel",
         ("POST", "/api/channels/reorder") => "handlers::reorder_channels",
         ("GET", "/api/channels/checkins/today") => "handlers::channel_checkins_today",
         ("POST", "/api/system/open") => "handlers::open_in_browser",
+        ("POST", "/api/system/pick_folder") => "handlers::pick_folder",
         ("GET", "/api/routes") => "handlers::list_routes",
         ("POST", "/api/routes") => "handlers::create_route",
         ("GET", "/api/pricing/status") => "handlers::pricing_status",
@@ -198,6 +202,10 @@ fn build_app(state: AppState) -> Router {
         .route("/api/tools/install", post(handlers::install_cli_tool))
         .route("/api/tools/npm/install", post(handlers::install_npm_env))
         .route(
+            "/api/tools/env/validate_program",
+            post(handlers::validate_program),
+        )
+        .route(
             "/api/channels",
             get(handlers::list_channels).post(handlers::create_channel),
         )
@@ -221,6 +229,7 @@ fn build_app(state: AppState) -> Router {
             post(handlers::complete_channel_checkin_today),
         )
         .route("/api/system/open", post(handlers::open_in_browser))
+        .route("/api/system/pick_folder", post(handlers::pick_folder))
         .route(
             "/api/routes",
             get(handlers::list_routes).post(handlers::create_route),
