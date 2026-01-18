@@ -1,3 +1,7 @@
+## [0.24.1](https://github.com/koumoe/cli-switch/compare/v0.24.0...v0.24.1) (2026-01-18)
+
+### 修复
+* 清理更新备份与 apply 产物 ([1c96bb0](https://github.com/koumoe/cli-switch/commit/1c96bb03463a8bcc8404b3f969cc980e4bae3b3e))
 ## [0.24.0](https://github.com/koumoe/cli-switch/compare/v0.23.1...v0.24.0) (2026-01-18)
 
 ### 功能
