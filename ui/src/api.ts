@@ -69,6 +69,23 @@ export type InstallNpmEnvResponse = {
   node_path: string | null;
 };
 
+export type PickFolderInput = {
+  title?: string;
+  directory?: string;
+};
+
+export type PickFolderResponse = {
+  path: string | null;
+};
+
+export type ValidateProgram = "node" | "npm";
+
+export type ValidateProgramResponse = {
+  ok: boolean;
+  version: string;
+  resolved_path: string;
+};
+
 export type Channel = {
   id: string;
   name: string;
@@ -357,6 +374,14 @@ export function installCliTool(id: CliToolId): Promise<InstallCliToolResponse> {
 
 export function installNpmEnv(): Promise<InstallNpmEnvResponse> {
   return http<InstallNpmEnvResponse>("POST", "/api/tools/npm/install");
+}
+
+export function validateProgram(program: ValidateProgram, path: string): Promise<ValidateProgramResponse> {
+  return http<ValidateProgramResponse>("POST", "/api/tools/env/validate_program", { program, path });
+}
+
+export function pickFolder(input: PickFolderInput = {}): Promise<PickFolderResponse> {
+  return http<PickFolderResponse>("POST", "/api/system/pick_folder", input);
 }
 
 export function listChannels(): Promise<Channel[]> {

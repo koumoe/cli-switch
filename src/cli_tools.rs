@@ -1,6 +1,7 @@
 use anyhow::Context as _;
 use serde::{Deserialize, Serialize};
 use std::ffi::OsString;
+use std::path::Path;
 use std::path::PathBuf;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -231,13 +232,76 @@ fn find_executable_in_dirs(name: &str, dirs: &[PathBuf]) -> Option<PathBuf> {
     None
 }
 
-fn resolve_program_from_user_path(name: &str, user_path: &str) -> Option<PathBuf> {
+pub(crate) fn resolve_program_from_user_path(name: &str, user_path: &str) -> Option<PathBuf> {
     let p = PathBuf::from(user_path.trim());
     if p.is_file() {
         return Some(p);
     }
     if p.is_dir() {
         return find_executable_in_dirs(name, &[p]);
+    }
+    None
+}
+
+pub(crate) fn try_get_cmd_version_at(program_path: &Path) -> Option<String> {
+    if !program_path.is_file() {
+        return None;
+    }
+
+    // Ensure scripts like npm(.cmd) can find sibling node by prefixing PATH with the program dir.
+    let program_dir = program_path.parent().map(|d| d.to_path_buf())?;
+    let mut dirs: Vec<PathBuf> = vec![program_dir];
+    if let Some(env_path) = std::env::var_os("PATH") {
+        dirs.extend(std::env::split_paths(&env_path));
+    }
+    let joined = std::env::join_paths(dirs).ok();
+
+    #[cfg(target_os = "windows")]
+    {
+        let is_cmd = program_path
+            .extension()
+            .and_then(|s| s.to_str())
+            .map(|s| s.eq_ignore_ascii_case("cmd") || s.eq_ignore_ascii_case("bat"))
+            .unwrap_or(false);
+        if is_cmd {
+            let p = program_path.to_string_lossy().to_string();
+            let mut cmd = std::process::Command::new("cmd");
+            cmd.args(["/C", &p, "--version"]);
+            if let Some(p) = &joined {
+                cmd.env("PATH", p);
+            }
+            let out = cmd.output().ok()?;
+            if !out.status.success() {
+                return None;
+            }
+            let stdout = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
+            if !stdout.is_empty() {
+                return Some(stdout);
+            }
+            if !stderr.is_empty() {
+                return Some(stderr);
+            }
+            return None;
+        }
+    }
+
+    let mut cmd = std::process::Command::new(program_path);
+    cmd.arg("--version");
+    if let Some(p) = &joined {
+        cmd.env("PATH", p);
+    }
+    let out = cmd.output().ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let stdout = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
+    if !stdout.is_empty() {
+        return Some(stdout);
+    }
+    if !stderr.is_empty() {
+        return Some(stderr);
     }
     None
 }

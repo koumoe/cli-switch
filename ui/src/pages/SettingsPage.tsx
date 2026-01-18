@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Sun, Moon, Monitor, FolderOpen, Info, Database, Languages, DollarSign, RefreshCw, Shield, Power, ScrollText, Palette, Settings2, Cpu } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -39,7 +39,7 @@ import { useCurrency, type CurrencyMode } from "@/lib/currency";
 import { setLogLevel } from "@/lib/logger";
 import { UpdatePromptDialog } from "@/components/UpdatePromptDialog";
 import { formatBytes, formatDateTime } from "../lib";
-import { checkUpdate, clearLogs, clearRecords, downloadUpdate, getCliToolsStatus, getDbSize, getHealth, getLogsSize, getSettings, getUpdateChangelog, getUpdateStatus, ignoreUpdate, installCliTool, installNpmEnv, pricingStatus, pricingSync, updateSettings, type AppSettings, type AutoStartLaunchMode, type CloseBehavior, type DbSize, type Health, type LogsSize, type PricingStatus, type RecordsClearMode, type UpdateCheck, type UpdateStatus, type ChangelogSection, type CliToolId, type CliToolsStatus, type CliToolStatus } from "../api";
+import { checkUpdate, clearLogs, clearRecords, downloadUpdate, getCliToolsStatus, getDbSize, getHealth, getLogsSize, getSettings, getUpdateChangelog, getUpdateStatus, ignoreUpdate, installCliTool, installNpmEnv, pickFolder, pricingStatus, pricingSync, updateSettings, validateProgram, type AppSettings, type AutoStartLaunchMode, type CloseBehavior, type DbSize, type Health, type LogsSize, type PricingStatus, type RecordsClearMode, type UpdateCheck, type UpdateStatus, type ChangelogSection, type CliToolId, type CliToolsStatus, type CliToolStatus } from "../api";
 import type { CliswitchUpdateStatusEvent } from "@/lib/cliswitchEvents";
 import { clearUpdateReadyShown } from "@/lib/updateReadyPrompt";
 
@@ -70,7 +70,11 @@ export function SettingsPage() {
   const [cliToolsLoading, setCliToolsLoading] = useState(false);
   const [cliToolsNpmSetupOpen, setCliToolsNpmSetupOpen] = useState(false);
   const [cliToolsNpmInstalling, setCliToolsNpmInstalling] = useState(false);
-  const [cliToolsPathEditing, setCliToolsPathEditing] = useState(false);
+  const baseDepsRef = useRef<HTMLDivElement | null>(null);
+  const [baseDepsInvalidOpen, setBaseDepsInvalidOpen] = useState(false);
+  const [baseDepsInvalidTitle, setBaseDepsInvalidTitle] = useState("");
+  const [baseDepsInvalidDesc, setBaseDepsInvalidDesc] = useState("");
+  const [cliToolsPathsDirty, setCliToolsPathsDirty] = useState(false);
   const [cliNpmPathDraft, setCliNpmPathDraft] = useState("");
   const [cliNodePathDraft, setCliNodePathDraft] = useState("");
   const [cliToolsPathSaving, setCliToolsPathSaving] = useState(false);
@@ -137,6 +141,7 @@ export function SettingsPage() {
       setAppSettings(s);
       setCliNpmPathDraft((s.cli_tools_npm_path ?? "").trim());
       setCliNodePathDraft((s.cli_tools_node_path ?? "").trim());
+      setCliToolsPathsDirty(false);
       await refreshCliToolsStatus();
       setCliToolsNpmSetupOpen(false);
       toast.success(t("settings.cliTools.saved"));
@@ -159,18 +164,46 @@ export function SettingsPage() {
     }
   }
 
+  function openBaseDepsInvalidDialog(program: "node" | "npm") {
+    if (program === "node") {
+      setBaseDepsInvalidTitle(t("settings.baseDeps.invalidNodeTitle"));
+      setBaseDepsInvalidDesc(t("settings.baseDeps.invalidNodeDesc"));
+    } else {
+      setBaseDepsInvalidTitle(t("settings.baseDeps.invalidNpmTitle"));
+      setBaseDepsInvalidDesc(t("settings.baseDeps.invalidNpmDesc"));
+    }
+    setBaseDepsInvalidOpen(true);
+  }
+
   async function saveCliToolsPaths() {
     if (!appSettings) return;
+    const nodePath = cliNodePathDraft.trim();
+    const npmPath = cliNpmPathDraft.trim();
+
+    try {
+      if (nodePath) await validateProgram("node", nodePath);
+    } catch {
+      openBaseDepsInvalidDialog("node");
+      return;
+    }
+
+    try {
+      if (npmPath) await validateProgram("npm", npmPath);
+    } catch {
+      openBaseDepsInvalidDialog("npm");
+      return;
+    }
+
     setCliToolsPathSaving(true);
     try {
       const next = await updateSettings({
-        cli_tools_npm_path: cliNpmPathDraft.trim(),
-        cli_tools_node_path: cliNodePathDraft.trim(),
+        cli_tools_npm_path: npmPath,
+        cli_tools_node_path: nodePath,
       } as Partial<AppSettings>);
       setAppSettings(next);
       toast.success(t("settings.cliTools.saved"));
       await refreshCliToolsStatus();
-      setCliToolsPathEditing(false);
+      setCliToolsPathsDirty(false);
     } catch (e) {
       toast.error(t("settings.cliTools.saveFail"), { description: humanizeApiError(e, t) });
     } finally {
@@ -178,10 +211,61 @@ export function SettingsPage() {
     }
   }
 
-  function cancelCliToolsPathsEdit() {
+  function resetCliToolsPathsDraft() {
     setCliNpmPathDraft((appSettings?.cli_tools_npm_path ?? "").trim());
     setCliNodePathDraft((appSettings?.cli_tools_node_path ?? "").trim());
-    setCliToolsPathEditing(false);
+    setCliToolsPathsDirty(false);
+  }
+
+  async function browseAndSaveCliProgramDir(program: "node" | "npm") {
+    const prev = program === "node" ? cliNodePathDraft : cliNpmPathDraft;
+    const title =
+      program === "node"
+        ? t("settings.baseDeps.pickNodeDirTitle")
+        : t("settings.baseDeps.pickNpmDirTitle");
+
+    let selected: string | null = null;
+    try {
+      const res = await pickFolder({ title, directory: prev.trim() || undefined });
+      selected = (res?.path ?? "").trim() || null;
+    } catch (e) {
+      toast.error(t("settings.baseDeps.pickFail"), { description: humanizeApiError(e, t) });
+      return;
+    }
+
+    // 用户取消选择不做任何校验/限制。
+    if (!selected) return;
+
+    if (program === "node") setCliNodePathDraft(selected);
+    else setCliNpmPathDraft(selected);
+
+    try {
+      await validateProgram(program, selected);
+    } catch {
+      if (program === "node") setCliNodePathDraft(prev);
+      else setCliNpmPathDraft(prev);
+      openBaseDepsInvalidDialog(program);
+      return;
+    }
+
+    setCliToolsPathSaving(true);
+    try {
+      const patch =
+        program === "node"
+          ? ({ cli_tools_node_path: selected } as Partial<AppSettings>)
+          : ({ cli_tools_npm_path: selected } as Partial<AppSettings>);
+      const next = await updateSettings(patch);
+      setAppSettings(next);
+      setCliToolsPathsDirty(false);
+      toast.success(t("settings.baseDeps.saved"));
+      await refreshCliToolsStatus();
+    } catch (e) {
+      if (program === "node") setCliNodePathDraft(prev);
+      else setCliNpmPathDraft(prev);
+      toast.error(t("settings.baseDeps.saveFail"), { description: humanizeApiError(e, t) });
+    } finally {
+      setCliToolsPathSaving(false);
+    }
   }
 
   useEffect(() => {
@@ -198,6 +282,7 @@ export function SettingsPage() {
         setAppSettings(s);
         setCliNpmPathDraft((s.cli_tools_npm_path ?? "").trim());
         setCliNodePathDraft((s.cli_tools_node_path ?? "").trim());
+        setCliToolsPathsDirty(false);
         setLogRetentionDraft(String(s.log_retention_days ?? ""));
         setLogLevel(s.log_level);
       })
@@ -214,11 +299,11 @@ export function SettingsPage() {
   }, []);
 
   useEffect(() => {
-    // When user is editing the paths inline, keep their drafts stable.
-    if (!appSettings || cliToolsPathEditing) return;
+    // When user is editing the paths, keep their drafts stable.
+    if (!appSettings || cliToolsPathsDirty) return;
     setCliNpmPathDraft((appSettings.cli_tools_npm_path ?? "").trim());
     setCliNodePathDraft((appSettings.cli_tools_node_path ?? "").trim());
-  }, [appSettings, cliToolsPathEditing]);
+  }, [appSettings, cliToolsPathsDirty]);
 
   useEffect(() => {
     const onUpdateStatus = (e: Event) => {
@@ -873,6 +958,121 @@ export function SettingsPage() {
 
         {/* 更新标签页 */}
         <TabsContent value="update" className="space-y-4 mt-4">
+          {/* 基础依赖 */}
+          <div ref={baseDepsRef} id="base-deps">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Cpu className="h-4 w-4" />
+                  {t("settings.baseDeps.title")}
+                </CardTitle>
+                <CardDescription>{t("settings.baseDeps.subtitle")}</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="text-xs text-muted-foreground">
+                  {t("settings.baseDeps.detected", {
+                    node: cliToolsStatus?.node_version?.trim() || "-",
+                    npm: cliToolsStatus?.npm_version?.trim() || "-",
+                  })}
+                </div>
+
+                {cliToolsStatus && !cliToolsStatus.npm_available ? (
+                  <div className="flex items-start justify-between gap-3 rounded-md border p-3">
+                    <div className="text-xs text-muted-foreground">
+                      {t("settings.cliTools.npmMissing")}
+                      {" "}
+                      {cliToolsStatus.os === "macos"
+                        ? t("settings.cliTools.npmHintMac")
+                        : cliToolsStatus.os === "windows"
+                          ? t("settings.cliTools.npmHintWindows")
+                          : t("settings.cliTools.npmHintLinux")}
+                    </div>
+                    <Button size="sm" onClick={autoInstallNpmEnv} disabled={cliToolsNpmInstalling || cliToolsPathSaving}>
+                      {cliToolsNpmInstalling ? t("settings.cliTools.autoInstalling") : t("settings.cliTools.autoInstall")}
+                    </Button>
+                  </div>
+                ) : null}
+
+                <div className="space-y-3">
+                  <div className="flex items-end gap-2">
+                    <div className="flex-1 space-y-1">
+                      <div className="text-sm font-medium">{t("settings.baseDeps.nodeDir")}</div>
+                      <Input
+                        value={cliNodePathDraft}
+                        onChange={(e) => {
+                          setCliNodePathDraft(e.target.value);
+                          setCliToolsPathsDirty(true);
+                        }}
+                        placeholder={t("settings.baseDeps.nodeDirPlaceholder")}
+                      />
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => browseAndSaveCliProgramDir("node")}
+                      disabled={cliToolsPathSaving}
+                      className="gap-2"
+                    >
+                      <FolderOpen className="h-4 w-4" />
+                      {t("settings.baseDeps.browse")}
+                    </Button>
+                  </div>
+
+                  <div className="flex items-end gap-2">
+                    <div className="flex-1 space-y-1">
+                      <div className="text-sm font-medium">{t("settings.baseDeps.npmDir")}</div>
+                      <Input
+                        value={cliNpmPathDraft}
+                        onChange={(e) => {
+                          setCliNpmPathDraft(e.target.value);
+                          setCliToolsPathsDirty(true);
+                        }}
+                        placeholder={t("settings.baseDeps.npmDirPlaceholder")}
+                      />
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => browseAndSaveCliProgramDir("npm")}
+                      disabled={cliToolsPathSaving}
+                      className="gap-2"
+                    >
+                      <FolderOpen className="h-4 w-4" />
+                      {t("settings.baseDeps.browse")}
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-end gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={resetCliToolsPathsDraft}
+                    disabled={!cliToolsPathsDirty || cliToolsPathSaving}
+                  >
+                    {t("common.cancel")}
+                  </Button>
+                  <Button onClick={saveCliToolsPaths} disabled={!appSettings || !cliToolsPathsDirty || cliToolsPathSaving}>
+                    {cliToolsPathSaving ? t("common.loading") : t("common.save")}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Dialog open={baseDepsInvalidOpen} onOpenChange={setBaseDepsInvalidOpen}>
+            <DialogContent className="sm:max-w-[520px]">
+              <DialogHeader>
+                <DialogTitle>{baseDepsInvalidTitle}</DialogTitle>
+                <DialogDescription>{baseDepsInvalidDesc}</DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <Button onClick={() => setBaseDepsInvalidOpen(false)}>
+                  {t("common.ok")}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
           {/* CLI 更新 */}
           <Card>
             <CardHeader>
@@ -897,69 +1097,6 @@ export function SettingsPage() {
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
-              {/* Always show manual path entry so user can adjust it after initial setup. */}
-              <div className="space-y-2 rounded-md border p-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0 space-y-1">
-                    <div className="text-sm font-medium">{t("settings.cliTools.setPathTitle")}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {t("settings.cliTools.currentPaths", {
-                        npm: (appSettings?.cli_tools_npm_path ?? "").trim() || "-",
-                        node: (appSettings?.cli_tools_node_path ?? "").trim() || "-",
-                      })}
-                    </div>
-                  </div>
-                  {!cliToolsPathEditing ? (
-                    <Button size="sm" variant="outline" onClick={() => setCliToolsPathEditing(true)}>
-                      {t("settings.cliTools.setPath")}
-                    </Button>
-                  ) : null}
-                </div>
-
-                {cliToolsStatus && !cliToolsStatus.npm_available ? (
-                  <div className="text-xs text-muted-foreground">
-                    {t("settings.cliTools.npmMissing")}
-                    {" "}
-                    {cliToolsStatus.os === "macos"
-                      ? t("settings.cliTools.npmHintMac")
-                      : cliToolsStatus.os === "windows"
-                        ? t("settings.cliTools.npmHintWindows")
-                        : t("settings.cliTools.npmHintLinux")}
-                  </div>
-                ) : null}
-
-                {cliToolsPathEditing ? (
-                  <div className="space-y-3 pt-2">
-                    <div className="text-xs text-muted-foreground">{t("settings.cliTools.setPathDesc")}</div>
-                    <div className="space-y-1">
-                      <div className="text-sm font-medium">{t("settings.cliTools.npmPath")}</div>
-                      <Input
-                        value={cliNpmPathDraft}
-                        onChange={(e) => setCliNpmPathDraft(e.target.value)}
-                        placeholder={t("settings.cliTools.npmPathPlaceholder")}
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <div className="text-sm font-medium">{t("settings.cliTools.nodePath")}</div>
-                      <Input
-                        value={cliNodePathDraft}
-                        onChange={(e) => setCliNodePathDraft(e.target.value)}
-                        placeholder={t("settings.cliTools.nodePathPlaceholder")}
-                      />
-                    </div>
-
-                    <div className="flex items-center justify-end gap-2">
-                      <Button variant="outline" onClick={cancelCliToolsPathsEdit} disabled={cliToolsPathSaving}>
-                        {t("common.cancel")}
-                      </Button>
-                      <Button onClick={saveCliToolsPaths} disabled={!appSettings || cliToolsPathSaving}>
-                        {cliToolsPathSaving ? t("common.loading") : t("common.save")}
-                      </Button>
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-
               {!cliToolsStatus ? (
                 <div className="text-sm text-muted-foreground">
                   {cliToolsLoading ? t("common.loading") : "-"}
@@ -1081,11 +1218,14 @@ export function SettingsPage() {
                   variant="outline"
                   onClick={() => {
                     setCliToolsNpmSetupOpen(false);
-                    setCliToolsPathEditing(true);
+                    // Bring user to the base deps card where node/npm can be configured.
+                    window.requestAnimationFrame(() => {
+                      baseDepsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+                    });
                   }}
                   disabled={cliToolsNpmInstalling}
                 >
-                  {t("settings.cliTools.manualSpecify")}
+                  {t("settings.baseDeps.goConfigure")}
                 </Button>
                 <Button onClick={autoInstallNpmEnv} disabled={cliToolsNpmInstalling}>
                   {cliToolsNpmInstalling ? t("settings.cliTools.autoInstalling") : t("settings.cliTools.autoInstall")}

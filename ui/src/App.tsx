@@ -196,10 +196,6 @@ export default function App() {
   const [cliToolsOnboardingStatus, setCliToolsOnboardingStatus] = useState<CliToolsStatus | null>(null);
   const [cliToolsOnboardingBusy, setCliToolsOnboardingBusy] = useState(false);
   const [cliToolsNpmInstalling, setCliToolsNpmInstalling] = useState(false);
-  const [cliToolsPathOpen, setCliToolsPathOpen] = useState(false);
-  const [cliNpmPathDraft, setCliNpmPathDraft] = useState("");
-  const [cliNodePathDraft, setCliNodePathDraft] = useState("");
-  const [cliToolsPathSaving, setCliToolsPathSaving] = useState(false);
   const [cliToolOnboardingBusy, setCliToolOnboardingBusy] = useState<Record<CliToolId, boolean>>({
     gemini: false,
     claude: false,
@@ -334,8 +330,6 @@ export default function App() {
       .then((s) => {
         if (cancelled) return;
         setLogLevel(s.log_level);
-        setCliNpmPathDraft((s.cli_tools_npm_path ?? "").trim());
-        setCliNodePathDraft((s.cli_tools_node_path ?? "").trim());
         logger.info("ui settings loaded", { log_level: s.log_level }, "ui_settings_loaded");
       })
       .catch((e) => {
@@ -351,9 +345,6 @@ export default function App() {
     setCliToolsNpmInstalling(true);
     try {
       await installNpmEnv();
-      const s = await getSettings();
-      setCliNpmPathDraft((s.cli_tools_npm_path ?? "").trim());
-      setCliNodePathDraft((s.cli_tools_node_path ?? "").trim());
       const st = await getCliToolsStatus().catch(() => null);
       if (st) setCliToolsOnboardingStatus(st);
       toast.success(t("settings.cliTools.saved"));
@@ -361,23 +352,6 @@ export default function App() {
       toast.error(t("settings.cliTools.installFail", { name: "npm" }), { description: humanizeApiError(e, t) });
     } finally {
       setCliToolsNpmInstalling(false);
-    }
-  }
-
-  async function saveCliToolsPaths() {
-    setCliToolsPathSaving(true);
-    try {
-      await updateSettings({
-        cli_tools_npm_path: cliNpmPathDraft.trim(),
-        cli_tools_node_path: cliNodePathDraft.trim(),
-      });
-      const next = await getCliToolsStatus();
-      setCliToolsOnboardingStatus(next);
-      setCliToolsPathOpen(false);
-    } catch (e) {
-      toast.error(t("settings.cliTools.saveFail"), { description: humanizeApiError(e, t) });
-    } finally {
-      setCliToolsPathSaving(false);
     }
   }
 
@@ -609,8 +583,16 @@ export default function App() {
                   <Button size="sm" onClick={autoInstallNpmEnv} disabled={cliToolsNpmInstalling}>
                     {cliToolsNpmInstalling ? t("settings.cliTools.autoInstalling") : t("settings.cliTools.autoInstall")}
                   </Button>
-                  <Button size="sm" variant="outline" onClick={() => setCliToolsPathOpen(true)} disabled={cliToolsNpmInstalling}>
-                    {t("settings.cliTools.manualSpecify")}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setCliToolsOnboardingOpen(false);
+                      navigate("/settings");
+                    }}
+                    disabled={cliToolsNpmInstalling}
+                  >
+                    {t("settings.cliTools.openSettings")}
                   </Button>
                 </div>
               </div>
@@ -716,41 +698,6 @@ export default function App() {
               }
             >
               {cliToolsOnboardingBusy ? t("settings.cliTools.installing") : t("settings.cliTools.installAll")}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={cliToolsPathOpen} onOpenChange={setCliToolsPathOpen}>
-        <DialogContent className="sm:max-w-[560px]">
-          <DialogHeader>
-            <DialogTitle>{t("settings.cliTools.setPathTitle")}</DialogTitle>
-            <DialogDescription>{t("settings.cliTools.setPathDesc")}</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3">
-            <div className="space-y-1">
-              <div className="text-sm font-medium">{t("settings.cliTools.npmPath")}</div>
-              <Input
-                value={cliNpmPathDraft}
-                onChange={(e) => setCliNpmPathDraft(e.target.value)}
-                placeholder={t("settings.cliTools.npmPathPlaceholder")}
-              />
-            </div>
-            <div className="space-y-1">
-              <div className="text-sm font-medium">{t("settings.cliTools.nodePath")}</div>
-              <Input
-                value={cliNodePathDraft}
-                onChange={(e) => setCliNodePathDraft(e.target.value)}
-                placeholder={t("settings.cliTools.nodePathPlaceholder")}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setCliToolsPathOpen(false)} disabled={cliToolsPathSaving}>
-              {t("common.cancel")}
-            </Button>
-            <Button onClick={saveCliToolsPaths} disabled={cliToolsPathSaving}>
-              {cliToolsPathSaving ? t("common.loading") : t("common.save")}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -25,8 +25,8 @@ pub(super) use route::{
 };
 pub(super) use settings::{get_settings, update_settings};
 pub(super) use stats::{stats_channels, stats_summary, stats_trend};
-pub(super) use system::open_in_browser;
-pub(super) use tools::{cli_tools_status, install_cli_tool, install_npm_env};
+pub(super) use system::{open_in_browser, pick_folder};
+pub(super) use tools::{cli_tools_status, install_cli_tool, install_npm_env, validate_program};
 pub(super) use update::{
     update_changelog, update_check, update_download, update_ignore, update_status,
 };
