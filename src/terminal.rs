@@ -20,6 +20,27 @@ pub fn cli_tools_shim_dir() -> anyhow::Result<PathBuf> {
     Ok(home_dir()?.join(".cliswitch").join("bin"))
 }
 
+pub fn cli_tool_shim_path(tool_bin: &str) -> anyhow::Result<PathBuf> {
+    let shim_dir = cli_tools_shim_dir()?;
+    Ok(tool_shim_path(&shim_dir, tool_bin))
+}
+
+pub fn remove_cli_tool_shim(tool_bin: &str) -> anyhow::Result<bool> {
+    let shim_dir = match cli_tools_shim_dir() {
+        Ok(p) => p,
+        Err(_) => return Ok(false),
+    };
+    if !shim_dir.is_dir() {
+        return Ok(false);
+    }
+    let p = tool_shim_path(&shim_dir, tool_bin);
+    if !p.is_file() {
+        return Ok(false);
+    }
+    std::fs::remove_file(&p).with_context(|| format!("remove shim failed: {}", p.display()))?;
+    Ok(true)
+}
+
 fn sh_single_quote(s: &str) -> String {
     // POSIX-safe single-quote escaping: ' -> '\''.
     let mut out = String::from("'");

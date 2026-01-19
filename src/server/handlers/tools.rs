@@ -73,6 +73,16 @@ pub(in crate::server) async fn cli_tools_status(
         let tools = CLI_TOOLS
             .iter()
             .map(|d| {
+                // If user uninstalls the underlying npm global package, our terminal shim may
+                // remain in ~/.cliswitch/bin and shadow real resolution. Best-effort: if the
+                // shim can't execute anymore, remove it.
+                if let Ok(shim_path) = crate::terminal::cli_tool_shim_path(d.bin)
+                    && shim_path.is_file()
+                    && crate::cli_tools::try_get_cmd_version_at(&shim_path).is_none()
+                {
+                    let _ = crate::terminal::remove_cli_tool_shim(d.bin);
+                }
+
                 let installed = env.find_executable(d.bin).is_some();
                 let version = if installed {
                     env.try_get_cmd_version(d.bin)
