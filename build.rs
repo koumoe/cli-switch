@@ -21,6 +21,11 @@ const PLACEHOLDER_INDEX_HTML: &str = r#"<!doctype html>
 "#;
 
 fn main() {
+    maybe_write_placeholder_ui();
+    maybe_embed_windows_icon();
+}
+
+fn maybe_write_placeholder_ui() {
     if env::var_os("CARGO_FEATURE_EMBED_UI").is_none() {
         return;
     }
@@ -46,3 +51,25 @@ fn main() {
         println!("cargo:warning=failed to write ui/dist/index.html: {e}");
     }
 }
+
+#[cfg(windows)]
+fn maybe_embed_windows_icon() {
+    // Embed application icon into the Windows executable (Explorer/Taskbar icon).
+    println!("cargo:rerun-if-changed=assets/logo.ico");
+
+    let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
+    if target_os != "windows" {
+        return;
+    }
+
+    let mut res = winres::WindowsResource::new();
+    res.set_icon("assets/logo.ico");
+
+    if let Err(e) = res.compile() {
+        // Don't fail builds if the Windows resource toolchain is missing/misconfigured.
+        println!("cargo:warning=failed to embed Windows icon: {e}");
+    }
+}
+
+#[cfg(not(windows))]
+fn maybe_embed_windows_icon() {}

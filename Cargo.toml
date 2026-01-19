@@ -47,3 +47,6 @@ xz2 = "0.1"
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.52"
+
+[target.'cfg(windows)'.build-dependencies]
+winres = "0.1"
