@@ -1,3 +1,8 @@
+## [0.25.0](https://github.com/koumoe/cli-switch/compare/v0.24.1...v0.25.0) (2026-01-19)
+
+### Features
+
+* make installed CLI tools runnable in terminal (#72) ([#72](https://github.com/koumoe/cli-switch/issues/72)) ([15a23ca](https://github.com/koumoe/cli-switch/commit/15a23ca45328285fc29f47d8eb56dd3794140b00))
 ## [0.24.1](https://github.com/koumoe/cli-switch/compare/v0.24.0...v0.24.1) (2026-01-18)
 
 ### Bug Fixes
