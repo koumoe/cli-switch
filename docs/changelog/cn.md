@@ -1,3 +1,7 @@
+## [0.25.1](https://github.com/koumoe/cli-switch/compare/v0.25.0...v0.25.1) (2026-01-19)
+
+### 修复
+* 改进 Windows 更新应用脚本 (#73) ([#73](https://github.com/koumoe/cli-switch/issues/73)) ([cf5cc04](https://github.com/koumoe/cli-switch/commit/cf5cc047d18d88256250775464e68442a3005cc0))
 ## [0.25.0](https://github.com/koumoe/cli-switch/compare/v0.24.1...v0.25.0) (2026-01-19)
 
 ### 功能
