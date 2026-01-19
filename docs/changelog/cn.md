@@ -1,3 +1,7 @@
+## [0.25.3](https://github.com/koumoe/cli-switch/compare/v0.25.2...v0.25.3) (2026-01-19)
+
+### 修复
+* 修复 Windows 更新重启时误传 helper 参数 ([3c075bb](https://github.com/koumoe/cli-switch/commit/3c075bba77dace4e30ac192b2d16b10a8ab31e24))
 ## [0.25.2](https://github.com/koumoe/cli-switch/compare/v0.25.1...v0.25.2) (2026-01-19)
 
 ### 修复
