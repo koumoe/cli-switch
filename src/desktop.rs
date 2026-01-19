@@ -508,8 +508,16 @@ pub async fn run(
     });
 
     let fixed_size = LogicalSize::new(1000.0, 680.0);
+    let window_icon = match build_window_icon() {
+        Ok(icon) => Some(icon),
+        Err(e) => {
+            tracing::warn!(err = %e, "build window icon failed");
+            None
+        }
+    };
     let window_builder = WindowBuilder::new()
         .with_title("CliSwitch")
+        .with_window_icon(window_icon)
         .with_inner_size(fixed_size)
         .with_min_inner_size(fixed_size)
         .with_max_inner_size(fixed_size)
@@ -650,6 +658,21 @@ async fn wait_for_health(base_url: &str) -> anyhow::Result<()> {
     }
 
     Err(anyhow::anyhow!("后端启动超时：{url}"))
+}
+
+fn build_window_icon() -> anyhow::Result<tao::window::Icon> {
+    let target_size = 256u32;
+
+    let bytes = include_bytes!("../assets/logo.png");
+    let img = image::load_from_memory(bytes).context("读取 assets/logo.png 失败")?;
+    let img = img.resize_exact(
+        target_size,
+        target_size,
+        image::imageops::FilterType::Lanczos3,
+    );
+    let rgba = img.to_rgba8().into_raw();
+    tao::window::Icon::from_rgba(rgba, target_size, target_size)
+        .map_err(|e| anyhow::anyhow!("构造窗口 Icon 失败：{e}"))
 }
 
 fn build_tray_icon() -> anyhow::Result<tray_icon::Icon> {
