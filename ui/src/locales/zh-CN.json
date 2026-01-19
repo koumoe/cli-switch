@@ -541,7 +541,7 @@
       "subtitle": "管理 Gemini CLI / Claude Code / Codex 的安装与更新",
       "refresh": "刷新",
       "loadFail": "获取 CLI 状态失败",
-      "npmMissing": "未检测到 npm，无法安装/更新 CLI。请先安装 Node.js或指定安装位置",
+      "npmMissing": "未检测到 npm，无法安装/更新 CLI。请先安装 Node.js 或指定安装位置",
       "npmHintMac": "macOS：可从 nodejs.org 下载或使用包管理器安装。",
       "npmHintWindows": "Windows：可从 nodejs.org 下载并安装。",
       "npmHintLinux": "Linux：请使用发行版包管理器安装 nodejs/npm。",
