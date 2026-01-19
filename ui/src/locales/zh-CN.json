@@ -564,6 +564,8 @@
       "install": "安装",
       "update": "更新",
       "installOk": "{{name}} 安装/更新成功",
+      "terminalReady": "终端命令已就绪（重启终端生效）",
+      "terminalSetupFailed": "终端命令配置失败：{{error}}",
       "installFail": "{{name}} 安装/更新失败",
       "autoEnable": "自动更新",
       "saved": "设置已保存",

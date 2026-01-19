@@ -177,6 +177,9 @@ pub(crate) struct InstallCliToolResponse {
     pub(crate) stdout: String,
     pub(crate) stderr: String,
     pub(crate) tool: CliToolStatus,
+    pub(crate) terminal_shim_ok: bool,
+    pub(crate) terminal_shim_dir: Option<String>,
+    pub(crate) terminal_shim_error: Option<String>,
 }
 
 pub(in crate::server) async fn install_cli_tool(
@@ -207,13 +210,50 @@ pub(in crate::server) async fn install_cli_tool(
 
         let env = crate::cli_tools::CliExecEnv::new(npm_path.as_deref(), node_path.as_deref());
 
-        let installed = env.find_executable(def.bin).is_some();
+        // Prefer the npm global bin dir so we don't accidentally pick up a shim from user's PATH.
+        let npm_global_bin_dir = env.npm_global_bin_dir();
+        let tool_path = npm_global_bin_dir
+            .as_ref()
+            .and_then(|d| {
+                crate::cli_tools::resolve_program_from_user_path(def.bin, &d.to_string_lossy())
+            })
+            .or_else(|| env.find_executable(def.bin));
+        let installed = tool_path.is_some();
         let version = if installed {
             env.try_get_cmd_version(def.bin)
                 .map(|v| crate::cli_tools::normalize_version_string(&v))
         } else {
             None
         };
+
+        let (terminal_shim_ok, terminal_shim_dir, terminal_shim_error) =
+            if let Some(tool_path) = tool_path.as_ref() {
+                let node_bin_dir = env.node_bin_dir();
+                let npm_global_bin_dir = npm_global_bin_dir.as_deref();
+                match crate::terminal::ensure_cli_tool_shim(
+                    def.bin,
+                    tool_path,
+                    node_bin_dir.as_deref(),
+                    npm_global_bin_dir,
+                ) {
+                    Ok(r) => (true, Some(r.shim_dir.to_string_lossy().to_string()), None),
+                    Err(e) => (
+                        false,
+                        crate::terminal::cli_tools_shim_dir()
+                            .ok()
+                            .map(|p| p.to_string_lossy().to_string()),
+                        Some(e.to_string()),
+                    ),
+                }
+            } else {
+                (
+                    false,
+                    crate::terminal::cli_tools_shim_dir()
+                        .ok()
+                        .map(|p| p.to_string_lossy().to_string()),
+                    None,
+                )
+            };
 
         Ok(InstallCliToolResponse {
             ok: out.status.success(),
@@ -228,6 +268,9 @@ pub(in crate::server) async fn install_cli_tool(
                 installed,
                 version,
             },
+            terminal_shim_ok,
+            terminal_shim_dir,
+            terminal_shim_error,
         })
     })
     .await;

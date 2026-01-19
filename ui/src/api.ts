@@ -60,6 +60,9 @@ export type InstallCliToolResponse = {
   stdout: string;
   stderr: string;
   tool: CliToolStatus;
+  terminal_shim_ok: boolean;
+  terminal_shim_dir: string | null;
+  terminal_shim_error: string | null;
 };
 
 export type InstallNpmEnvResponse = {
