@@ -1144,7 +1144,13 @@ export function SettingsPage() {
                                 : prev
                             );
                             if (res.ok) {
-                              toast.success(t("settings.cliTools.installOk", { name: tool.name }));
+                              toast.success(t("settings.cliTools.installOk", { name: tool.name }), {
+                                description: res.terminal_shim_ok
+                                  ? t("settings.cliTools.terminalReady")
+                                  : res.terminal_shim_error
+                                    ? t("settings.cliTools.terminalSetupFailed", { error: res.terminal_shim_error })
+                                    : undefined,
+                              });
                             } else {
                               toast.error(t("settings.cliTools.installFail", { name: tool.name }), {
                                 description: res.stderr?.trim() || res.stdout?.trim() || "-",

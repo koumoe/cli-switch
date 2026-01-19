@@ -564,6 +564,8 @@
       "install": "Install",
       "update": "Update",
       "installOk": "{{name}} installed/updated",
+      "terminalReady": "Terminal command is ready (restart your terminal to apply).",
+      "terminalSetupFailed": "Terminal command setup failed: {{error}}",
       "installFail": "Failed to install/update {{name}}",
       "autoEnable": "Auto update",
       "saved": "Saved",

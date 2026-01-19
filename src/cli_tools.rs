@@ -173,6 +173,8 @@ pub fn npm_install_global(pkg: &str) -> anyhow::Result<CmdOutput> {
 #[derive(Debug, Clone, Default)]
 pub struct CliExecEnv {
     npm: Option<PathBuf>,
+    node: Option<PathBuf>,
+    npm_global_bin: Option<PathBuf>,
     child_path: Option<OsString>,
     extra_dirs: Vec<PathBuf>,
 }
@@ -375,11 +377,15 @@ impl CliExecEnv {
 
         let mut env = Self {
             npm,
+            node,
+            npm_global_bin: None,
             child_path,
             extra_dirs: child_dirs,
         };
 
-        if let Some(global_bin) = env.npm_global_bin_dir()
+        let global_bin = env.compute_npm_global_bin_dir();
+        env.npm_global_bin = global_bin.clone();
+        if let Some(global_bin) = global_bin
             && !env.extra_dirs.contains(&global_bin)
         {
             env.extra_dirs.push(global_bin);
@@ -390,6 +396,24 @@ impl CliExecEnv {
 
     pub fn npm_available(&self) -> bool {
         self.npm.is_some()
+    }
+
+    pub fn resolved_npm_path(&self) -> Option<&Path> {
+        self.npm.as_deref()
+    }
+
+    pub fn resolved_node_path(&self) -> Option<&Path> {
+        self.node.as_deref()
+    }
+
+    pub fn node_bin_dir(&self) -> Option<PathBuf> {
+        self.node
+            .as_ref()
+            .and_then(|p| p.parent().map(|d| d.to_path_buf()))
+    }
+
+    pub fn npm_global_bin_dir(&self) -> Option<PathBuf> {
+        self.npm_global_bin.clone()
     }
 
     pub fn try_get_npm_version(&self) -> Option<String> {
@@ -449,7 +473,7 @@ impl CliExecEnv {
         None
     }
 
-    fn npm_global_bin_dir(&self) -> Option<PathBuf> {
+    fn compute_npm_global_bin_dir(&self) -> Option<PathBuf> {
         let npm = self.npm.as_ref()?;
         let out = self.cmd(npm.clone()).args(["bin", "-g"]).output().ok()?;
         if !out.status.success() {
