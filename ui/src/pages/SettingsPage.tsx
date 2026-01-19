@@ -35,6 +35,7 @@ import {
 import { useTheme, type Theme } from "@/lib/theme";
 import { type Locale, useI18n } from "@/lib/i18n";
 import { humanizeApiError } from "@/lib/error";
+import { formatNpmEnvInstallProgressText } from "@/lib/npmEnvInstallProgress";
 import { useCurrency, type CurrencyMode } from "@/lib/currency";
 import { setLogLevel } from "@/lib/logger";
 import { UpdatePromptDialog } from "@/components/UpdatePromptDialog";
@@ -387,23 +388,7 @@ export function SettingsPage() {
           : t("settings.update.latest")
         : "-";
 
-  const npmEnvInstallProgressText = (() => {
-    if (!cliToolsNpmInstalling) return null;
-    const p = npmEnvInstallProgress;
-    if (!p) return null;
-    if (p.stage === "resolving_version") return t("settings.cliTools.npmEnvProgressResolving");
-    if (p.stage === "downloading_shasums") return t("settings.cliTools.npmEnvProgressDownloadingShasums");
-    if (p.stage === "downloading_archive") {
-      return p.percent !== null
-        ? t("settings.cliTools.npmEnvProgressDownloadingArchivePercent", { percent: p.percent })
-        : t("settings.cliTools.npmEnvProgressDownloadingArchive");
-    }
-    if (p.stage === "verifying_sha256") return t("settings.cliTools.npmEnvProgressVerifying");
-    if (p.stage === "extracting") return t("settings.cliTools.npmEnvProgressExtracting");
-    if (p.stage === "done") return t("settings.cliTools.npmEnvProgressDone");
-    if (p.stage === "error") return t("settings.cliTools.npmEnvProgressError");
-    return null;
-  })();
+  const npmEnvInstallProgressText = formatNpmEnvInstallProgressText(t, cliToolsNpmInstalling, npmEnvInstallProgress);
 
   const recordsDateStr = recordsDateRange?.from
     ? `${format(recordsDateRange.from, "yyyy-MM-dd")}${recordsDateRange.to ? ` ~ ${format(recordsDateRange.to, "yyyy-MM-dd")}` : ""}`

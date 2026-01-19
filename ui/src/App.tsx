@@ -13,6 +13,7 @@ import { useI18n } from "@/lib/i18n";
 import { useTheme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 import { humanizeApiError } from "@/lib/error";
+import { formatNpmEnvInstallProgressText } from "@/lib/npmEnvInstallProgress";
 import {
   Button,
   Dialog,
@@ -423,23 +424,7 @@ export default function App() {
     setClosePromptOpen(false);
   };
 
-  const npmEnvInstallProgressText = (() => {
-    if (!cliToolsNpmInstalling) return null;
-    const p = npmEnvInstallProgress;
-    if (!p) return null;
-    if (p.stage === "resolving_version") return t("settings.cliTools.npmEnvProgressResolving");
-    if (p.stage === "downloading_shasums") return t("settings.cliTools.npmEnvProgressDownloadingShasums");
-    if (p.stage === "downloading_archive") {
-      return p.percent !== null
-        ? t("settings.cliTools.npmEnvProgressDownloadingArchivePercent", { percent: p.percent })
-        : t("settings.cliTools.npmEnvProgressDownloadingArchive");
-    }
-    if (p.stage === "verifying_sha256") return t("settings.cliTools.npmEnvProgressVerifying");
-    if (p.stage === "extracting") return t("settings.cliTools.npmEnvProgressExtracting");
-    if (p.stage === "done") return t("settings.cliTools.npmEnvProgressDone");
-    if (p.stage === "error") return t("settings.cliTools.npmEnvProgressError");
-    return null;
-  })();
+  const npmEnvInstallProgressText = formatNpmEnvInstallProgressText(t, cliToolsNpmInstalling, npmEnvInstallProgress);
 
   return (
     <div className="flex h-full bg-background text-foreground">
