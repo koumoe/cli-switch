@@ -30,7 +30,7 @@ import {
 import { toast } from "sonner";
 import { downloadUpdate, getCliToolsStatus, getHealth, getSettings, getUpdateChangelog, ignoreUpdate, installCliTool, installNpmEnv, pricingStatus, pricingSync, updateSettings, type ChangelogSection, type CliToolId, type CliToolsStatus } from "./api";
 import { logger, setLogLevel } from "@/lib/logger";
-import type { CliswitchUpdateStatusEvent } from "@/lib/cliswitchEvents";
+import type { CliswitchNpmEnvInstallProgressEvent, CliswitchUpdateStatusEvent, NpmEnvInstallProgress } from "@/lib/cliswitchEvents";
 import { isUpdateReadyShown, markUpdateReadyShown } from "@/lib/updateReadyPrompt";
 import { UpdatePromptDialog } from "@/components/UpdatePromptDialog";
 
@@ -196,6 +196,7 @@ export default function App() {
   const [cliToolsOnboardingStatus, setCliToolsOnboardingStatus] = useState<CliToolsStatus | null>(null);
   const [cliToolsOnboardingBusy, setCliToolsOnboardingBusy] = useState(false);
   const [cliToolsNpmInstalling, setCliToolsNpmInstalling] = useState(false);
+  const [npmEnvInstallProgress, setNpmEnvInstallProgress] = useState<NpmEnvInstallProgress | null>(null);
   const [cliToolOnboardingBusy, setCliToolOnboardingBusy] = useState<Record<CliToolId, boolean>>({
     gemini: false,
     claude: false,
@@ -244,6 +245,22 @@ export default function App() {
       window.removeEventListener("cliswitch-update-status", onUpdateStatus as EventListener);
     };
   }, []);
+
+  useEffect(() => {
+    const onProgress = (e: Event) => {
+      const p = (e as CliswitchNpmEnvInstallProgressEvent).detail;
+      if (!p) return;
+      setNpmEnvInstallProgress(p);
+    };
+    window.addEventListener("cliswitch-npm-env-install-progress", onProgress as EventListener);
+    return () => {
+      window.removeEventListener("cliswitch-npm-env-install-progress", onProgress as EventListener);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!cliToolsNpmInstalling) setNpmEnvInstallProgress(null);
+  }, [cliToolsNpmInstalling]);
 
   useEffect(() => {
     if (!updatePromptOpen || !updatePromptVersion) return;
@@ -405,6 +422,24 @@ export default function App() {
     postIpc({ type: "close-decision", action, remember });
     setClosePromptOpen(false);
   };
+
+  const npmEnvInstallProgressText = (() => {
+    if (!cliToolsNpmInstalling) return null;
+    const p = npmEnvInstallProgress;
+    if (!p) return null;
+    if (p.stage === "resolving_version") return t("settings.cliTools.npmEnvProgressResolving");
+    if (p.stage === "downloading_shasums") return t("settings.cliTools.npmEnvProgressDownloadingShasums");
+    if (p.stage === "downloading_archive") {
+      return p.percent !== null
+        ? t("settings.cliTools.npmEnvProgressDownloadingArchivePercent", { percent: p.percent })
+        : t("settings.cliTools.npmEnvProgressDownloadingArchive");
+    }
+    if (p.stage === "verifying_sha256") return t("settings.cliTools.npmEnvProgressVerifying");
+    if (p.stage === "extracting") return t("settings.cliTools.npmEnvProgressExtracting");
+    if (p.stage === "done") return t("settings.cliTools.npmEnvProgressDone");
+    if (p.stage === "error") return t("settings.cliTools.npmEnvProgressError");
+    return null;
+  })();
 
   return (
     <div className="flex h-full bg-background text-foreground">
@@ -570,14 +605,17 @@ export default function App() {
           <div className="space-y-3">
             {cliToolsOnboardingStatus && !cliToolsOnboardingStatus.npm_available ? (
               <div className="space-y-2">
-                <div className="text-sm text-muted-foreground">
-                  {t("settings.cliTools.npmMissing")}
-                  {" "}
-                  {cliToolsOnboardingStatus.os === "macos"
-                    ? t("settings.cliTools.npmHintMac")
-                    : cliToolsOnboardingStatus.os === "windows"
-                      ? t("settings.cliTools.npmHintWindows")
-                      : t("settings.cliTools.npmHintLinux")}
+                <div className="space-y-1 text-sm text-muted-foreground">
+                  <div>
+                    {t("settings.cliTools.npmMissing")}
+                    {" "}
+                    {cliToolsOnboardingStatus.os === "macos"
+                      ? t("settings.cliTools.npmHintMac")
+                      : cliToolsOnboardingStatus.os === "windows"
+                        ? t("settings.cliTools.npmHintWindows")
+                        : t("settings.cliTools.npmHintLinux")}
+                  </div>
+                  {npmEnvInstallProgressText ? <div className="text-xs">{npmEnvInstallProgressText}</div> : null}
                 </div>
                 <div className="flex gap-2">
                   <Button size="sm" onClick={autoInstallNpmEnv} disabled={cliToolsNpmInstalling}>

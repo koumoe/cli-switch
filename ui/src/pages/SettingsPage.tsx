@@ -40,7 +40,7 @@ import { setLogLevel } from "@/lib/logger";
 import { UpdatePromptDialog } from "@/components/UpdatePromptDialog";
 import { formatBytes, formatDateTime } from "../lib";
 import { checkUpdate, clearLogs, clearRecords, downloadUpdate, getCliToolsStatus, getDbSize, getHealth, getLogsSize, getSettings, getUpdateChangelog, getUpdateStatus, ignoreUpdate, installCliTool, installNpmEnv, pickFolder, pricingStatus, pricingSync, updateSettings, validateProgram, type AppSettings, type AutoStartLaunchMode, type CloseBehavior, type DbSize, type Health, type LogsSize, type PricingStatus, type RecordsClearMode, type UpdateCheck, type UpdateStatus, type ChangelogSection, type CliToolId, type CliToolsStatus, type CliToolStatus } from "../api";
-import type { CliswitchUpdateStatusEvent } from "@/lib/cliswitchEvents";
+import type { CliswitchNpmEnvInstallProgressEvent, CliswitchUpdateStatusEvent, NpmEnvInstallProgress } from "@/lib/cliswitchEvents";
 import { clearUpdateReadyShown } from "@/lib/updateReadyPrompt";
 
 function joinPath(base: string, sub: string): string {
@@ -70,6 +70,7 @@ export function SettingsPage() {
   const [cliToolsLoading, setCliToolsLoading] = useState(false);
   const [cliToolsNpmSetupOpen, setCliToolsNpmSetupOpen] = useState(false);
   const [cliToolsNpmInstalling, setCliToolsNpmInstalling] = useState(false);
+  const [npmEnvInstallProgress, setNpmEnvInstallProgress] = useState<NpmEnvInstallProgress | null>(null);
   const baseDepsRef = useRef<HTMLDivElement | null>(null);
   const [baseDepsInvalidOpen, setBaseDepsInvalidOpen] = useState(false);
   const [baseDepsInvalidTitle, setBaseDepsInvalidTitle] = useState("");
@@ -317,6 +318,22 @@ export function SettingsPage() {
     };
   }, []);
 
+  useEffect(() => {
+    const onProgress = (e: Event) => {
+      const p = (e as CliswitchNpmEnvInstallProgressEvent).detail;
+      if (!p) return;
+      setNpmEnvInstallProgress(p);
+    };
+    window.addEventListener("cliswitch-npm-env-install-progress", onProgress as EventListener);
+    return () => {
+      window.removeEventListener("cliswitch-npm-env-install-progress", onProgress as EventListener);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!cliToolsNpmInstalling) setNpmEnvInstallProgress(null);
+  }, [cliToolsNpmInstalling]);
+
   const apiEndpoint = (() => {
     const env = (import.meta.env.VITE_BACKEND_URL as string | undefined)?.trim();
     if (env) return env.replace(/\/+$/, "");
@@ -369,6 +386,24 @@ export function SettingsPage() {
             : t("settings.update.available", { version: updateServerVersion })
           : t("settings.update.latest")
         : "-";
+
+  const npmEnvInstallProgressText = (() => {
+    if (!cliToolsNpmInstalling) return null;
+    const p = npmEnvInstallProgress;
+    if (!p) return null;
+    if (p.stage === "resolving_version") return t("settings.cliTools.npmEnvProgressResolving");
+    if (p.stage === "downloading_shasums") return t("settings.cliTools.npmEnvProgressDownloadingShasums");
+    if (p.stage === "downloading_archive") {
+      return p.percent !== null
+        ? t("settings.cliTools.npmEnvProgressDownloadingArchivePercent", { percent: p.percent })
+        : t("settings.cliTools.npmEnvProgressDownloadingArchive");
+    }
+    if (p.stage === "verifying_sha256") return t("settings.cliTools.npmEnvProgressVerifying");
+    if (p.stage === "extracting") return t("settings.cliTools.npmEnvProgressExtracting");
+    if (p.stage === "done") return t("settings.cliTools.npmEnvProgressDone");
+    if (p.stage === "error") return t("settings.cliTools.npmEnvProgressError");
+    return null;
+  })();
 
   const recordsDateStr = recordsDateRange?.from
     ? `${format(recordsDateRange.from, "yyyy-MM-dd")}${recordsDateRange.to ? ` ~ ${format(recordsDateRange.to, "yyyy-MM-dd")}` : ""}`
@@ -978,14 +1013,17 @@ export function SettingsPage() {
 
                 {cliToolsStatus && !cliToolsStatus.npm_available ? (
                   <div className="flex items-start justify-between gap-3 rounded-md border p-3">
-                    <div className="text-xs text-muted-foreground">
-                      {t("settings.cliTools.npmMissing")}
-                      {" "}
-                      {cliToolsStatus.os === "macos"
-                        ? t("settings.cliTools.npmHintMac")
-                        : cliToolsStatus.os === "windows"
-                          ? t("settings.cliTools.npmHintWindows")
-                          : t("settings.cliTools.npmHintLinux")}
+                    <div className="space-y-1 text-xs text-muted-foreground">
+                      <div>
+                        {t("settings.cliTools.npmMissing")}
+                        {" "}
+                        {cliToolsStatus.os === "macos"
+                          ? t("settings.cliTools.npmHintMac")
+                          : cliToolsStatus.os === "windows"
+                            ? t("settings.cliTools.npmHintWindows")
+                            : t("settings.cliTools.npmHintLinux")}
+                      </div>
+                      {npmEnvInstallProgressText ? <div>{npmEnvInstallProgressText}</div> : null}
                     </div>
                     <Button size="sm" onClick={autoInstallNpmEnv} disabled={cliToolsNpmInstalling || cliToolsPathSaving}>
                       {cliToolsNpmInstalling ? t("settings.cliTools.autoInstalling") : t("settings.cliTools.autoInstall")}
@@ -1217,7 +1255,12 @@ export function SettingsPage() {
             <DialogContent className="sm:max-w-[520px]">
               <DialogHeader>
                 <DialogTitle>{t("settings.cliTools.npmSetupTitle")}</DialogTitle>
-                <DialogDescription>{t("settings.cliTools.npmSetupDesc")}</DialogDescription>
+                <DialogDescription>
+                  {t("settings.cliTools.npmSetupDesc")}
+                  {npmEnvInstallProgressText ? (
+                    <div className="mt-2 text-xs text-muted-foreground">{npmEnvInstallProgressText}</div>
+                  ) : null}
+                </DialogDescription>
               </DialogHeader>
               <DialogFooter>
                 <Button
