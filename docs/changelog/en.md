@@ -1,3 +1,11 @@
+## [0.25.2](https://github.com/koumoe/cli-switch/compare/v0.25.1...v0.25.2) (2026-01-19)
+
+### Bug Fixes
+
+* add space in zh npm missing copy ([87b0e66](https://github.com/koumoe/cli-switch/commit/87b0e667dd163ff350e1c29a4cae29c35fc2746c))
+* emit npm env install progress events ([50ba7f5](https://github.com/koumoe/cli-switch/commit/50ba7f58cd32801c0d4553ff1496f6118724ae15))
+* show npm env install progress in UI ([896818f](https://github.com/koumoe/cli-switch/commit/896818f2da381661db227cd8c868e93cc7da07b8))
+* update npm missing copy ([f12a0c7](https://github.com/koumoe/cli-switch/commit/f12a0c71506e041461c82bb7d10e17e80b8d5c5a))
 ## [0.25.1](https://github.com/koumoe/cli-switch/compare/v0.25.0...v0.25.1) (2026-01-19)
 
 ### Bug Fixes
