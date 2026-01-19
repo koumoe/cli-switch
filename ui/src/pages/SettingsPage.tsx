@@ -1014,15 +1014,7 @@ export function SettingsPage() {
                 {cliToolsStatus && !cliToolsStatus.npm_available ? (
                   <div className="flex items-start justify-between gap-3 rounded-md border p-3">
                     <div className="space-y-1 text-xs text-muted-foreground">
-                      <div>
-                        {t("settings.cliTools.npmMissing")}
-                        {" "}
-                        {cliToolsStatus.os === "macos"
-                          ? t("settings.cliTools.npmHintMac")
-                          : cliToolsStatus.os === "windows"
-                            ? t("settings.cliTools.npmHintWindows")
-                            : t("settings.cliTools.npmHintLinux")}
-                      </div>
+                      <div>{t("settings.cliTools.npmMissing")}</div>
                       {npmEnvInstallProgressText ? <div>{npmEnvInstallProgressText}</div> : null}
                     </div>
                     <Button size="sm" onClick={autoInstallNpmEnv} disabled={cliToolsNpmInstalling || cliToolsPathSaving}>

@@ -606,15 +606,7 @@ export default function App() {
             {cliToolsOnboardingStatus && !cliToolsOnboardingStatus.npm_available ? (
               <div className="space-y-2">
                 <div className="space-y-1 text-sm text-muted-foreground">
-                  <div>
-                    {t("settings.cliTools.npmMissing")}
-                    {" "}
-                    {cliToolsOnboardingStatus.os === "macos"
-                      ? t("settings.cliTools.npmHintMac")
-                      : cliToolsOnboardingStatus.os === "windows"
-                        ? t("settings.cliTools.npmHintWindows")
-                        : t("settings.cliTools.npmHintLinux")}
-                  </div>
+                  <div>{t("settings.cliTools.npmMissing")}</div>
                   {npmEnvInstallProgressText ? <div className="text-xs">{npmEnvInstallProgressText}</div> : null}
                 </div>
                 <div className="flex gap-2">

@@ -541,7 +541,7 @@
       "subtitle": "Install and update Gemini CLI / Claude Code / Codex",
       "refresh": "Refresh",
       "loadFail": "Failed to load CLI status",
-      "npmMissing": "npm not found. Install Node.js (includes npm) first.",
+      "npmMissing": "npm not found. Install Node.js or specify the install location first.",
       "npmHintMac": "macOS: install from nodejs.org or via a package manager.",
       "npmHintWindows": "Windows: install from nodejs.org.",
       "npmHintLinux": "Linux: install nodejs/npm via your distro package manager.",
