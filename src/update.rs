@@ -1002,20 +1002,106 @@ async fn download_latest_inner(
 }
 
 #[cfg(target_os = "windows")]
-const WINDOWS_APPLY_SCRIPT_TEMPLATE: &str = "@echo off\r\n\
-setlocal\r\n\
-set \"SRC={src}\"\r\n\
-set \"DST={dst}\"\r\n\
-set \"PENDING={pending}\"\r\n\
-set \"STAGED={staged}\"\r\n\
-:retry\r\n\
+const WINDOWS_APPLY_SCRIPT: &str = "@echo off\r\n\
+setlocal EnableExtensions\r\n\
+\r\n\
+set \"DST=%~1\"\r\n\
+set \"SRC=%~2\"\r\n\
+set \"PENDING=%~3\"\r\n\
+set \"STAGED=%~4\"\r\n\
+set \"PARENT_PID=%~5\"\r\n\
+set \"RESTART=%~6\"\r\n\
+set \"LOG=%~7\"\r\n\
+\r\n\
+for %%I in (\"%LOG%\") do if not exist \"%%~dpI\" mkdir \"%%~dpI\" >nul 2>nul\r\n\
+\r\n\
+call :main %* >> \"%LOG%\" 2>&1\r\n\
+set \"RC=%ERRORLEVEL%\"\r\n\
+if \"%RC%\"==\"0\" (\r\n\
+  del /F /Q \"%LOG%\" >nul 2>nul\r\n\
+  del /F /Q \"%~f0\" >nul 2>nul\r\n\
+)\r\n\
+exit /b %RC%\r\n\
+\r\n\
+:main\r\n\
+echo [apply] started\r\n\
+echo [apply] dst=%DST%\r\n\
+echo [apply] src=%SRC%\r\n\
+echo [apply] pending=%PENDING%\r\n\
+echo [apply] staged=%STAGED%\r\n\
+echo [apply] parent_pid=%PARENT_PID%\r\n\
+echo [apply] restart=%RESTART%\r\n\
+\r\n\
+rem Shift away the helper args so %%* becomes the original app args.\r\n\
+shift\r\n\
+shift\r\n\
+shift\r\n\
+shift\r\n\
+shift\r\n\
+shift\r\n\
+shift\r\n\
+\r\n\
+echo [apply] app_args=%*\r\n\
+\r\n\
+rem Wait for parent process to exit (best-effort).\r\n\
+set /a wait=0\r\n\
+:wait_loop\r\n\
+if \"%PARENT_PID%\"==\"\" goto wait_done\r\n\
+tasklist /FI \"PID eq %PARENT_PID%\" 2>nul | find \"%PARENT_PID%\" >nul\r\n\
+if errorlevel 1 goto wait_done\r\n\
+set /a wait+=1\r\n\
+if %wait% GEQ 120 goto wait_done\r\n\
 ping -n 2 127.0.0.1 >nul\r\n\
-copy /Y \"%SRC%\" \"%DST%\" >nul\r\n\
-if errorlevel 1 goto retry\r\n\
+goto wait_loop\r\n\
+:wait_done\r\n\
+\r\n\
+set \"RUN_ID=%PARENT_PID%.%RANDOM%\"\r\n\
+set \"TEMP=%DST%.new.%RUN_ID%\"\r\n\
+set \"BACKUP=%DST%.bak.%RUN_ID%\"\r\n\
+\r\n\
+set /a attempt=0\r\n\
+:retry\r\n\
+set /a attempt+=1\r\n\
+\r\n\
+del /F /Q \"%TEMP%\" >nul 2>nul\r\n\
+\r\n\
+copy /Y \"%SRC%\" \"%TEMP%\"\r\n\
+if errorlevel 1 goto retry_sleep\r\n\
+\r\n\
+move /Y \"%DST%\" \"%BACKUP%\"\r\n\
+if errorlevel 1 goto retry_sleep\r\n\
+\r\n\
+move /Y \"%TEMP%\" \"%DST%\"\r\n\
+if errorlevel 1 (\r\n\
+  move /Y \"%BACKUP%\" \"%DST%\" >nul 2>nul\r\n\
+  goto retry_sleep\r\n\
+)\r\n\
+\r\n\
+echo [apply] replace ok\r\n\
 del /F /Q \"%PENDING%\" >nul 2>nul\r\n\
 del /F /Q \"%STAGED%\" >nul 2>nul\r\n\
-{restart}\
-endlocal\r\n";
+\r\n\
+echo [apply] cleanup ok\r\n\
+if \"%RESTART%\"==\"1\" (\r\n\
+  echo [apply] restarting (updated)\r\n\
+  start \"\" \"%DST%\" %*\r\n\
+)\r\n\
+\r\n\
+exit /b 0\r\n\
+\r\n\
+:retry_sleep\r\n\
+echo [apply] attempt %attempt% failed (errorlevel=%ERRORLEVEL%)\r\n\
+if %attempt% GEQ 60 goto fail\r\n\
+ping -n 2 127.0.0.1 >nul\r\n\
+goto retry\r\n\
+\r\n\
+:fail\r\n\
+echo [apply] failed after %attempt% attempts\r\n\
+if \"%RESTART%\"==\"1\" (\r\n\
+  echo [apply] restarting (fallback)\r\n\
+  start \"\" \"%DST%\" %*\r\n\
+)\r\n\
+exit /b 1\r\n";
 
 pub fn apply_pending_on_exit(data_dir: &Path) -> anyhow::Result<bool> {
     apply_pending_on_exit_inner(data_dir, false)
@@ -1070,34 +1156,31 @@ fn apply_pending_on_exit_inner(data_dir: &Path, restart: bool) -> anyhow::Result
                 .with_context(|| format!("create dir failed: {}", parent.display()))?;
         }
 
-        let escape_for_set = |s: &str| s.replace('"', "^\"");
-        let restart_snippet = if restart {
-            "start \"\" \"%DST%\"\r\n"
-        } else {
-            ""
-        };
-        let script_body = WINDOWS_APPLY_SCRIPT_TEMPLATE
-            .replace(
-                "{src}",
-                &escape_for_set(&pending.staged_executable.display().to_string()),
-            )
-            .replace("{dst}", &escape_for_set(&target.display().to_string()))
-            .replace(
-                "{pending}",
-                &escape_for_set(&pending_path(data_dir).display().to_string()),
-            )
-            .replace(
-                "{staged}",
-                &escape_for_set(&pending.staged_executable.display().to_string()),
-            )
-            .replace("{restart}", restart_snippet);
-        std::fs::write(&script, script_body.as_bytes())
+        let log_dir = crate::app::logs_dir(data_dir);
+        let now = crate::storage::now_ms();
+        let old_version = env!("CARGO_PKG_VERSION");
+        let log = log_dir.join(format!(
+            "apply-cliswitch.{old_version}.to.{}.{}.log",
+            pending.version, now
+        ));
+
+        // Best-effort: log dir may not exist yet (e.g. before first log init).
+        let _ = std::fs::create_dir_all(&log_dir);
+
+        std::fs::write(&script, WINDOWS_APPLY_SCRIPT.as_bytes())
             .with_context(|| format!("write apply script failed: {}", script.display()))?;
 
-        std::process::Command::new("cmd")
-            .arg("/C")
-            .arg(script.as_os_str())
-            .spawn()
+        let mut cmd = std::process::Command::new("cmd");
+        cmd.arg("/C").arg(script.as_os_str());
+        cmd.arg(target.as_os_str());
+        cmd.arg(pending.staged_executable.as_os_str());
+        cmd.arg(pending_path(data_dir).as_os_str());
+        cmd.arg(pending.staged_executable.as_os_str());
+        cmd.arg(std::process::id().to_string());
+        cmd.arg(if restart { "1" } else { "0" });
+        cmd.arg(log.as_os_str());
+        cmd.args(std::env::args_os().skip(1));
+        cmd.spawn()
             .with_context(|| "spawn windows apply script failed")?;
 
         return Ok(true);
