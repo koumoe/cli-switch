@@ -432,6 +432,9 @@ fn handle_user_event(
                         &serde_json::json!({ "at_ms": at_ms }),
                     );
                 }
+                AppEvent::NpmEnvInstallProgress(progress) => {
+                    dispatch_custom_event(webview, "cliswitch-npm-env-install-progress", &progress);
+                }
             }
         }
     }
