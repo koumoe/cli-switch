@@ -1,3 +1,8 @@
+## [0.25.4](https://github.com/koumoe/cli-switch/compare/v0.25.3...v0.25.4) (2026-01-19)
+
+### 修复
+* 嵌入 Windows 可执行文件图标 ([51bf3bf](https://github.com/koumoe/cli-switch/commit/51bf3bf210a0afc80b78bc7d670390e6b54b7f32))
+* 设置桌面窗口图标 ([07282b3](https://github.com/koumoe/cli-switch/commit/07282b3be164b90a2ae0ca37282f9fb4ad0994a3))
 ## [0.25.3](https://github.com/koumoe/cli-switch/compare/v0.25.2...v0.25.3) (2026-01-19)
 
 ### 修复
