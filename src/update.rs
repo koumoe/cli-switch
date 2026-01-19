@@ -1041,7 +1041,7 @@ shift\r\n\
 shift\r\n\
 shift\r\n\
 \r\n\
-echo [apply] app_args=%*\r\n\
+echo [apply] app_args=%1 %2 %3 %4 %5 %6 %7 %8 %9\r\n\
 \r\n\
 rem Wait for parent process to exit (best-effort).\r\n\
 set /a wait=0\r\n\
@@ -1084,7 +1084,7 @@ del /F /Q \"%STAGED%\" >nul 2>nul\r\n\
 echo [apply] cleanup ok\r\n\
 if \"%RESTART%\"==\"1\" (\r\n\
   echo [apply] restarting (updated)\r\n\
-  start \"\" \"%DST%\" %*\r\n\
+  start \"\" \"%DST%\" %1 %2 %3 %4 %5 %6 %7 %8 %9\r\n\
 )\r\n\
 \r\n\
 exit /b 0\r\n\
@@ -1099,7 +1099,7 @@ goto retry\r\n\
 echo [apply] failed after %attempt% attempts\r\n\
 if \"%RESTART%\"==\"1\" (\r\n\
   echo [apply] restarting (fallback)\r\n\
-  start \"\" \"%DST%\" %*\r\n\
+  start \"\" \"%DST%\" %1 %2 %3 %4 %5 %6 %7 %8 %9\r\n\
 )\r\n\
 exit /b 1\r\n";
 
