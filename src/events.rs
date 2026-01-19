@@ -1,13 +1,25 @@
 use std::sync::{Mutex, OnceLock};
 
+use serde::Serialize;
 use tokio::sync::broadcast;
 
 use crate::update;
+
+#[derive(Debug, Clone, Serialize)]
+pub struct NpmEnvInstallProgress {
+    pub stage: String,
+    pub version: Option<String>,
+    pub percent: Option<u8>,
+    pub total_bytes: Option<u64>,
+    pub downloaded_bytes: Option<u64>,
+    pub message: Option<String>,
+}
 
 #[derive(Debug, Clone)]
 pub enum AppEvent {
     UpdateStatus(update::UpdateStatus),
     UsageChanged { at_ms: i64 },
+    NpmEnvInstallProgress(NpmEnvInstallProgress),
 }
 
 fn sender() -> &'static broadcast::Sender<AppEvent> {

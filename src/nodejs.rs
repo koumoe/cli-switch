@@ -2,6 +2,27 @@ use anyhow::Context as _;
 use serde::Deserialize;
 use sha2::Digest as _;
 use std::path::{Path, PathBuf};
+use std::time::Instant;
+
+use crate::events::{self, AppEvent, NpmEnvInstallProgress};
+
+fn publish_progress(
+    stage: &str,
+    version: Option<&str>,
+    percent: Option<u8>,
+    total_bytes: Option<u64>,
+    downloaded_bytes: Option<u64>,
+    message: Option<String>,
+) {
+    events::publish(AppEvent::NpmEnvInstallProgress(NpmEnvInstallProgress {
+        stage: stage.to_string(),
+        version: version.map(|v| v.to_string()),
+        percent,
+        total_bytes,
+        downloaded_bytes,
+        message,
+    }));
+}
 
 #[derive(Debug, Clone, Copy)]
 enum ArchiveKind {
@@ -116,6 +137,7 @@ async fn download_to_file_with_sha256(
     client: &reqwest::Client,
     url: &str,
     out: &Path,
+    version: &str,
 ) -> anyhow::Result<String> {
     use tokio::io::AsyncWriteExt as _;
 
@@ -141,6 +163,16 @@ async fn download_to_file_with_sha256(
         anyhow::bail!("download failed: {status} {body}");
     }
 
+    let total = res.content_length().filter(|t| *t > 0);
+    publish_progress(
+        "downloading_archive",
+        Some(version),
+        total.map(|_| 0),
+        total,
+        Some(0),
+        None,
+    );
+
     let tmp = out.with_extension("partial");
     let mut file = tokio::fs::File::create(&tmp)
         .await
@@ -148,14 +180,64 @@ async fn download_to_file_with_sha256(
 
     let mut hasher = sha2::Sha256::new();
     let mut stream = res.bytes_stream();
+    let mut downloaded: u64 = 0;
+    let mut last_percent: Option<u8> = None;
+    let mut last_reported_downloaded: u64 = 0;
+    let mut last_reported_at = Instant::now();
     use futures_util::StreamExt as _;
     while let Some(chunk) = stream.next().await {
         let chunk = chunk.with_context(|| "read download chunk failed")?;
+        downloaded = downloaded.saturating_add(chunk.len() as u64);
         hasher.update(&chunk);
         file.write_all(&chunk).await?;
+
+        if let Some(total) = total {
+            let mut percent = ((downloaded.saturating_mul(100)) / total) as u8;
+            if percent > 100 {
+                percent = 100;
+            }
+            if last_percent != Some(percent) {
+                last_percent = Some(percent);
+                publish_progress(
+                    "downloading_archive",
+                    Some(version),
+                    Some(percent),
+                    Some(total),
+                    Some(downloaded),
+                    None,
+                );
+            }
+        } else {
+            // Best-effort progress when server doesn't provide Content-Length.
+            let should_report = downloaded.saturating_sub(last_reported_downloaded) >= 1024 * 1024
+                || last_reported_at.elapsed() >= std::time::Duration::from_millis(500);
+            if should_report {
+                last_reported_downloaded = downloaded;
+                last_reported_at = Instant::now();
+                publish_progress(
+                    "downloading_archive",
+                    Some(version),
+                    None,
+                    None,
+                    Some(downloaded),
+                    None,
+                );
+            }
+        }
     }
     file.flush().await.ok();
     drop(file);
+
+    if total.is_some() {
+        publish_progress(
+            "downloading_archive",
+            Some(version),
+            Some(100),
+            total,
+            Some(downloaded),
+            None,
+        );
+    }
 
     tokio::fs::rename(&tmp, out)
         .await
@@ -249,14 +331,38 @@ pub async fn ensure_managed_node_installed(
     client: &reqwest::Client,
     data_dir: &Path,
 ) -> anyhow::Result<ManagedNodePaths> {
-    let version = resolve_latest_lts_version(client).await?;
-    let dist = node_dist_for_current_platform(&version)?;
+    publish_progress("start", None, None, None, None, None);
+    publish_progress("resolving_version", None, None, None, None, None);
+
+    let version = match resolve_latest_lts_version(client).await {
+        Ok(v) => v,
+        Err(e) => {
+            publish_progress("error", None, None, None, None, Some(e.to_string()));
+            return Err(e);
+        }
+    };
+
+    let dist = match node_dist_for_current_platform(&version) {
+        Ok(v) => v,
+        Err(e) => {
+            publish_progress(
+                "error",
+                Some(&version),
+                None,
+                None,
+                None,
+                Some(e.to_string()),
+            );
+            return Err(e);
+        }
+    };
 
     let install_base = data_dir.join("nodejs");
     let install_root = install_base.join(&dist.dir_name);
 
     // If already installed, reuse it.
     if let Ok(paths) = managed_node_paths_from_root(&install_root) {
+        publish_progress("done", Some(&version), Some(100), None, None, None);
         return Ok(paths);
     }
 
@@ -264,28 +370,112 @@ pub async fn ensure_managed_node_installed(
     let archive_path = downloads.join(&dist.filename);
 
     // Verify checksum against official SHASUMS256.
-    let shasums = download_text(client, &dist.shasums_url).await?;
-    let expected = expected_sha256(&shasums, &dist.filename)
-        .with_context(|| format!("sha256 not found in SHASUMS256.txt: {}", dist.filename))?;
+    publish_progress(
+        "downloading_shasums",
+        Some(&version),
+        None,
+        None,
+        None,
+        None,
+    );
+    let shasums = match download_text(client, &dist.shasums_url).await {
+        Ok(v) => v,
+        Err(e) => {
+            publish_progress(
+                "error",
+                Some(&version),
+                None,
+                None,
+                None,
+                Some(e.to_string()),
+            );
+            return Err(e);
+        }
+    };
+    let expected = match expected_sha256(&shasums, &dist.filename) {
+        Some(v) => v,
+        None => {
+            let msg = format!("sha256 not found in SHASUMS256.txt: {}", dist.filename);
+            publish_progress("error", Some(&version), None, None, None, Some(msg.clone()));
+            anyhow::bail!("{msg}");
+        }
+    };
 
-    let actual = download_to_file_with_sha256(client, &dist.url, &archive_path).await?;
+    let actual =
+        match download_to_file_with_sha256(client, &dist.url, &archive_path, &version).await {
+            Ok(v) => v,
+            Err(e) => {
+                publish_progress(
+                    "error",
+                    Some(&version),
+                    None,
+                    None,
+                    None,
+                    Some(e.to_string()),
+                );
+                return Err(e);
+            }
+        };
+    publish_progress("verifying_sha256", Some(&version), None, None, None, None);
     if !actual.eq_ignore_ascii_case(&expected) {
-        anyhow::bail!(
+        let msg = format!(
             "sha256 mismatch for {}: expected={} actual={}",
-            dist.filename,
-            expected,
-            actual
+            dist.filename, expected, actual
         );
+        publish_progress("error", Some(&version), None, None, None, Some(msg.clone()));
+        anyhow::bail!("{msg}");
     }
 
     // Extract (blocking) to avoid slowing down the async runtime.
+    publish_progress("extracting", Some(&version), None, None, None, None);
     let kind = dist.kind;
     let archive_path2 = archive_path.clone();
     let install_base2 = install_base.clone();
-    tokio::task::spawn_blocking(move || extract_archive(&archive_path2, kind, &install_base2))
-        .await
-        .context("extract task join failed")?
-        .context("extract node archive failed")?;
+    let join =
+        tokio::task::spawn_blocking(move || extract_archive(&archive_path2, kind, &install_base2))
+            .await;
+    let join = match join {
+        Ok(v) => v,
+        Err(e) => {
+            let err = anyhow::anyhow!("extract task join failed: {e}");
+            publish_progress(
+                "error",
+                Some(&version),
+                None,
+                None,
+                None,
+                Some(err.to_string()),
+            );
+            return Err(err);
+        }
+    };
+    if let Err(e) = join.context("extract node archive failed") {
+        publish_progress(
+            "error",
+            Some(&version),
+            None,
+            None,
+            None,
+            Some(e.to_string()),
+        );
+        return Err(e);
+    }
 
-    managed_node_paths_from_root(&install_root)
+    let paths = match managed_node_paths_from_root(&install_root) {
+        Ok(v) => v,
+        Err(e) => {
+            publish_progress(
+                "error",
+                Some(&version),
+                None,
+                None,
+                None,
+                Some(e.to_string()),
+            );
+            return Err(e);
+        }
+    };
+
+    publish_progress("done", Some(&version), Some(100), None, None, None);
+    Ok(paths)
 }
