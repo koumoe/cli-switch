@@ -174,8 +174,8 @@ fn ensure_unix_path_has_shim_dir(shim_dir: &Path) -> anyhow::Result<Vec<PathBuf>
 fn ensure_windows_path_has_shim_dir(shim_dir: &Path) -> anyhow::Result<Vec<PathBuf>> {
     // Best-effort: persist to the current user's PATH.
     use winreg::RegKey;
-    use winreg::enums::{HKEY_CURRENT_USER, KEY_READ, KEY_WRITE, REG_EXPAND_SZ, REG_SZ};
-    use winreg::types::RegValue;
+    use winreg::RegValue;
+    use winreg::enums::{HKEY_CURRENT_USER, KEY_READ, KEY_WRITE, REG_EXPAND_SZ, REG_SZ, RegType};
 
     let shim = shim_dir.to_str().ok_or_else(|| {
         anyhow::anyhow!("shim dir contains invalid utf-8: {}", shim_dir.display())
@@ -201,7 +201,7 @@ fn ensure_windows_path_has_shim_dir(shim_dir: &Path) -> anyhow::Result<Vec<PathB
         String::from_utf16_lossy(&u16s)
     }
 
-    fn string_to_reg_value(s: &str, vtype: u32) -> RegValue {
+    fn string_to_reg_value(s: &str, vtype: RegType) -> RegValue {
         let mut bytes: Vec<u8> = Vec::with_capacity((s.len() + 1) * 2);
         for u in s.encode_utf16().chain(std::iter::once(0)) {
             bytes.extend_from_slice(&u.to_le_bytes());
