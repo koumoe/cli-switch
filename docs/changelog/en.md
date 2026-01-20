@@ -1,3 +1,10 @@
+## [0.25.6](https://github.com/koumoe/cli-switch/compare/v0.25.4...v0.25.6) (2026-01-20)
+
+### Bug Fixes
+
+* hide console window when spawning cmd/npm ([b517347](https://github.com/koumoe/cli-switch/commit/b51734792750cf30ca365b92826cb4ead03f0a9b))
+* preserve Windows PATH type and broadcast env change ([548a80e](https://github.com/koumoe/cli-switch/commit/548a80e6ba21dfe23623951dd5baabf872370e5c))
+* repair Windows env update compilation ([d85930b](https://github.com/koumoe/cli-switch/commit/d85930b0e701292ba9758ae5b4ec237d0c02b658))
 ## [0.25.5](https://github.com/koumoe/cli-switch/compare/v0.25.4...v0.25.5) (2026-01-20)
 
 ### Bug Fixes
