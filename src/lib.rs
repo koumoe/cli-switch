@@ -6,6 +6,7 @@ pub mod events;
 pub mod log_files;
 pub mod logging;
 pub mod nodejs;
+pub(crate) mod process;
 pub mod proxy;
 pub mod server;
 pub mod storage;

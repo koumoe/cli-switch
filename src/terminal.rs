@@ -174,7 +174,8 @@ fn ensure_unix_path_has_shim_dir(shim_dir: &Path) -> anyhow::Result<Vec<PathBuf>
 fn ensure_windows_path_has_shim_dir(shim_dir: &Path) -> anyhow::Result<Vec<PathBuf>> {
     // Best-effort: persist to the current user's PATH.
     use winreg::RegKey;
-    use winreg::enums::{HKEY_CURRENT_USER, KEY_READ, KEY_WRITE};
+    use winreg::enums::{HKEY_CURRENT_USER, KEY_READ, KEY_WRITE, REG_EXPAND_SZ, REG_SZ};
+    use winreg::types::RegValue;
 
     let shim = shim_dir.to_str().ok_or_else(|| {
         anyhow::anyhow!("shim dir contains invalid utf-8: {}", shim_dir.display())
@@ -185,7 +186,36 @@ fn ensure_windows_path_has_shim_dir(shim_dir: &Path) -> anyhow::Result<Vec<PathB
         .open_subkey_with_flags("Environment", KEY_READ | KEY_WRITE)
         .context("open HKCU\\\\Environment failed")?;
 
-    let current: String = env.get_value("Path").unwrap_or_default();
+    fn reg_value_to_string(v: &RegValue) -> String {
+        if v.bytes.len() < 2 {
+            return String::new();
+        }
+        let mut u16s: Vec<u16> = v
+            .bytes
+            .chunks_exact(2)
+            .map(|c| u16::from_le_bytes([c[0], c[1]]))
+            .collect();
+        while matches!(u16s.last(), Some(0)) {
+            u16s.pop();
+        }
+        String::from_utf16_lossy(&u16s)
+    }
+
+    fn string_to_reg_value(s: &str, vtype: u32) -> RegValue {
+        let mut bytes: Vec<u8> = Vec::with_capacity((s.len() + 1) * 2);
+        for u in s.encode_utf16().chain(std::iter::once(0)) {
+            bytes.extend_from_slice(&u.to_le_bytes());
+        }
+        RegValue { vtype, bytes }
+    }
+
+    // Preserve the original value type to avoid breaking %VAR% entries in PATH.
+    let (current, vtype) = match env.get_raw_value("Path") {
+        Ok(raw) if raw.vtype == REG_SZ || raw.vtype == REG_EXPAND_SZ => {
+            (reg_value_to_string(&raw), raw.vtype)
+        }
+        _ => (String::new(), REG_EXPAND_SZ),
+    };
     let mut parts: Vec<String> = current
         .split(';')
         .map(|s| s.trim().to_string())
@@ -199,8 +229,9 @@ fn ensure_windows_path_has_shim_dir(shim_dir: &Path) -> anyhow::Result<Vec<PathB
     parts.push(shim.to_string());
     let next = parts.join(";");
 
-    env.set_value("Path", &next)
+    env.set_raw_value("Path", &string_to_reg_value(&next, vtype))
         .context("write HKCU\\\\Environment\\\\Path failed")?;
+    crate::process::notify_env_changed();
 
     Ok(vec![])
 }

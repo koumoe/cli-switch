@@ -374,9 +374,10 @@ fn open_in_browser(url: &str) -> std::io::Result<()> {
     }
     #[cfg(target_os = "windows")]
     {
-        std::process::Command::new("cmd")
-            .args(["/C", "start", "", url])
-            .spawn()?;
+        let mut cmd = std::process::Command::new("cmd");
+        cmd.args(["/C", "start", "", url]);
+        crate::process::command_silent(&mut cmd);
+        cmd.spawn()?;
         Ok(())
     }
     #[cfg(target_os = "linux")]
