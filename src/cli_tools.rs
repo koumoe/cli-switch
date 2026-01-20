@@ -107,10 +107,10 @@ pub fn find_executable_in_path(name: &str) -> Option<PathBuf> {
 
 pub fn try_get_cmd_version(program: &str) -> Option<String> {
     let program_path = find_executable_in_path(program)?;
-    let out = std::process::Command::new(program_path)
-        .arg("--version")
-        .output()
-        .ok()?;
+    let mut cmd = std::process::Command::new(program_path);
+    cmd.arg("--version");
+    crate::process::command_silent(&mut cmd);
+    let out = cmd.output().ok()?;
     if !out.status.success() {
         return None;
     }
@@ -158,8 +158,10 @@ pub fn npm_install_global(pkg: &str) -> anyhow::Result<CmdOutput> {
     let npm =
         find_executable_in_path("npm").ok_or_else(|| anyhow::anyhow!("npm not found in PATH"))?;
 
-    let out = std::process::Command::new(npm)
-        .args(["install", "-g", pkg, "--no-fund", "--no-audit"])
+    let mut cmd = std::process::Command::new(npm);
+    cmd.args(["install", "-g", pkg, "--no-fund", "--no-audit"]);
+    crate::process::command_silent(&mut cmd);
+    let out = cmd
         .output()
         .with_context(|| format!("run npm install -g {pkg} failed"))?;
 
@@ -272,6 +274,7 @@ pub(crate) fn try_get_cmd_version_at(program_path: &Path) -> Option<String> {
             if let Some(p) = &joined {
                 cmd.env("PATH", p);
             }
+            crate::process::command_silent(&mut cmd);
             let out = cmd.output().ok()?;
             if !out.status.success() {
                 return None;
@@ -293,6 +296,7 @@ pub(crate) fn try_get_cmd_version_at(program_path: &Path) -> Option<String> {
     if let Some(p) = &joined {
         cmd.env("PATH", p);
     }
+    crate::process::command_silent(&mut cmd);
     let out = cmd.output().ok()?;
     if !out.status.success() {
         return None;
@@ -445,6 +449,7 @@ impl CliExecEnv {
                 if let Some(p) = &self.child_path {
                     cmd.env("PATH", p);
                 }
+                crate::process::command_silent(&mut cmd);
                 return cmd;
             }
         }
@@ -453,6 +458,7 @@ impl CliExecEnv {
         if let Some(p) = &self.child_path {
             cmd.env("PATH", p);
         }
+        crate::process::command_silent(&mut cmd);
         cmd
     }
 
