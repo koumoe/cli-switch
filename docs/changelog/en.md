@@ -1,3 +1,8 @@
+## [0.25.7](https://github.com/koumoe/cli-switch/compare/v0.25.6...v0.25.7) (2026-01-20)
+
+### Bug Fixes
+
+* avoid overriding TEMP in windows update apply script ([4b908fd](https://github.com/koumoe/cli-switch/commit/4b908fdd797b1c41aab30ae30e9bdebfe5e777fc))
 ## [0.25.6](https://github.com/koumoe/cli-switch/compare/v0.25.4...v0.25.6) (2026-01-20)
 
 ### Bug Fixes
