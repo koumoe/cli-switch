@@ -1,3 +1,8 @@
+## [0.25.5](https://github.com/koumoe/cli-switch/compare/v0.25.4...v0.25.5) (2026-01-20)
+
+### 修复
+* 修复Windows下执行cmd/npm时弹窗 ([b517347](https://github.com/koumoe/cli-switch/commit/b51734792750cf30ca365b92826cb4ead03f0a9b))
+* 保留Windows PATH类型并广播环境变量变更 ([548a80e](https://github.com/koumoe/cli-switch/commit/548a80e6ba21dfe23623951dd5baabf872370e5c))
 ## [0.25.4](https://github.com/koumoe/cli-switch/compare/v0.25.3...v0.25.4) (2026-01-19)
 
 ### 修复
