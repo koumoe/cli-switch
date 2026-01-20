@@ -1056,22 +1056,22 @@ goto wait_loop\r\n\
 :wait_done\r\n\
 \r\n\
 set \"RUN_ID=%PARENT_PID%.%RANDOM%\"\r\n\
-set \"TEMP=%DST%.new.%RUN_ID%\"\r\n\
+set \"NEW_EXE=%DST%.new.%RUN_ID%\"\r\n\
 set \"BACKUP=%DST%.bak.%RUN_ID%\"\r\n\
 \r\n\
 set /a attempt=0\r\n\
 :retry\r\n\
 set /a attempt+=1\r\n\
 \r\n\
-del /F /Q \"%TEMP%\" >nul 2>nul\r\n\
+del /F /Q \"%NEW_EXE%\" >nul 2>nul\r\n\
 \r\n\
-copy /Y \"%SRC%\" \"%TEMP%\"\r\n\
+copy /Y \"%SRC%\" \"%NEW_EXE%\"\r\n\
 if errorlevel 1 goto retry_sleep\r\n\
 \r\n\
 move /Y \"%DST%\" \"%BACKUP%\"\r\n\
 if errorlevel 1 goto retry_sleep\r\n\
 \r\n\
-move /Y \"%TEMP%\" \"%DST%\"\r\n\
+move /Y \"%NEW_EXE%\" \"%DST%\"\r\n\
 if errorlevel 1 (\r\n\
   move /Y \"%BACKUP%\" \"%DST%\" >nul 2>nul\r\n\
   goto retry_sleep\r\n\
