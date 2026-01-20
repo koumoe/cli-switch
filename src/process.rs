@@ -19,9 +19,8 @@ pub(crate) fn command_silent(cmd: &mut Command) {
 /// Best-effort: notify Windows that user environment variables changed (e.g. PATH).
 #[cfg(windows)]
 pub(crate) fn notify_env_changed() {
-    use windows_sys::Win32::Foundation::HWND_BROADCAST;
     use windows_sys::Win32::UI::WindowsAndMessaging::{
-        SMTO_ABORTIFHUNG, SendMessageTimeoutW, WM_SETTINGCHANGE,
+        HWND_BROADCAST, SMTO_ABORTIFHUNG, SendMessageTimeoutW, WM_SETTINGCHANGE,
     };
 
     // lParam must be a null-terminated wide string.
