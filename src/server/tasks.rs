@@ -20,7 +20,14 @@ pub(crate) async fn pricing_auto_update_loop(
             Ok(s) => s,
             Err(e) => {
                 tracing::warn!(err = %e, "load app settings failed");
-                storage::AppSettings::default()
+                let changed = tokio::select! {
+                    _ = tokio::time::sleep(Duration::from_secs(30)) => Ok(()),
+                    changed = notify.changed() => changed,
+                };
+                if changed.is_err() {
+                    break;
+                }
+                continue;
             }
         };
 
@@ -59,7 +66,14 @@ pub(crate) async fn app_update_auto_loop(
             Ok(s) => s,
             Err(e) => {
                 tracing::warn!(err = %e, "load app settings failed");
-                storage::AppSettings::default()
+                let changed = tokio::select! {
+                    _ = tokio::time::sleep(Duration::from_secs(30)) => Ok(()),
+                    changed = notify.changed() => changed,
+                };
+                if changed.is_err() {
+                    break;
+                }
+                continue;
             }
         };
 
@@ -97,7 +111,14 @@ pub(crate) async fn cli_tools_auto_update_loop(db_path: PathBuf, mut notify: wat
             Ok(s) => s,
             Err(e) => {
                 tracing::warn!(err = %e, "load app settings failed");
-                storage::AppSettings::default()
+                let changed = tokio::select! {
+                    _ = tokio::time::sleep(Duration::from_secs(30)) => Ok(()),
+                    changed = notify.changed() => changed,
+                };
+                if changed.is_err() {
+                    break;
+                }
+                continue;
             }
         };
 
@@ -171,13 +192,19 @@ pub(crate) async fn apply_autostart_setting(db_path: PathBuf) {
         Ok(s) => s,
         Err(e) => {
             tracing::warn!(err = %e, "load app settings failed");
-            storage::AppSettings::default()
+            return;
         }
     };
 
     let desired = settings.auto_start_enabled;
     let _ = tokio::task::spawn_blocking(move || {
-        let actual = autostart::is_enabled().unwrap_or(false);
+        let actual = match autostart::is_enabled() {
+            Ok(v) => v,
+            Err(e) => {
+                tracing::warn!(err = %e, "read autostart state failed");
+                return;
+            }
+        };
         if actual != desired
             && let Err(e) = autostart::set_enabled(desired)
         {
@@ -198,7 +225,14 @@ pub(crate) async fn logs_retention_cleanup_loop(
             Ok(s) => s,
             Err(e) => {
                 tracing::warn!(err = %e, "load app settings failed");
-                storage::AppSettings::default()
+                let changed = tokio::select! {
+                    _ = tokio::time::sleep(Duration::from_secs(30)) => Ok(()),
+                    changed = notify.changed() => changed,
+                };
+                if changed.is_err() {
+                    break;
+                }
+                continue;
             }
         };
 
