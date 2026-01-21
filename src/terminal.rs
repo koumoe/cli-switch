@@ -55,8 +55,16 @@ fn sh_single_quote(s: &str) -> String {
     out
 }
 
+fn read_text_or_empty_if_missing(path: &Path) -> anyhow::Result<String> {
+    match std::fs::read_to_string(path) {
+        Ok(s) => Ok(s),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(String::new()),
+        Err(e) => Err(e).with_context(|| format!("read failed: {}", path.display())),
+    }
+}
+
 fn write_if_changed(path: &Path, content: &str) -> anyhow::Result<bool> {
-    let prev = std::fs::read_to_string(path).unwrap_or_default();
+    let prev = read_text_or_empty_if_missing(path)?;
     if prev == content {
         return Ok(false);
     }
@@ -69,7 +77,7 @@ fn write_if_changed(path: &Path, content: &str) -> anyhow::Result<bool> {
 }
 
 fn upsert_marked_block(path: &Path, block_lines: &[String]) -> anyhow::Result<bool> {
-    let prev = std::fs::read_to_string(path).unwrap_or_default();
+    let prev = read_text_or_empty_if_missing(path)?;
     let lines: Vec<&str> = prev.lines().collect();
     let mut out: Vec<String> = Vec::new();
 
@@ -390,4 +398,63 @@ pub fn ensure_cli_tool_shim(
         shim_path,
         touched_files,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn tmp_file(name: &str) -> PathBuf {
+        let mut p = std::env::temp_dir();
+        p.push(format!(
+            "cliswitch-terminal-test-{}-{}",
+            uuid::Uuid::new_v4(),
+            name
+        ));
+        p
+    }
+
+    #[test]
+    fn upsert_marked_block_allows_missing_file() {
+        let path = tmp_file("rc");
+        let _ = std::fs::remove_file(&path);
+
+        let block_lines = vec![
+            BEGIN_MARKER.to_string(),
+            "export PATH=\"$HOME/.cliswitch/bin:$PATH\"".to_string(),
+            END_MARKER.to_string(),
+        ];
+
+        let changed = upsert_marked_block(&path, &block_lines).expect("upsert marked block");
+        assert!(changed, "expected file to be written");
+
+        let content = std::fs::read_to_string(&path).expect("read");
+        assert!(content.contains(BEGIN_MARKER));
+        assert!(content.contains(END_MARKER));
+    }
+
+    #[test]
+    fn upsert_marked_block_rejects_non_utf8_file() {
+        let path = tmp_file("rc-non-utf8");
+        std::fs::write(&path, [0xff, 0xfe, 0xfd]).expect("write");
+
+        let block_lines = vec![
+            BEGIN_MARKER.to_string(),
+            "export PATH=\"$HOME/.cliswitch/bin:$PATH\"".to_string(),
+            END_MARKER.to_string(),
+        ];
+
+        let err = upsert_marked_block(&path, &block_lines)
+            .expect_err("expected non-utf8 file to be rejected");
+        let msg = format!("{err:#}");
+        assert!(msg.contains("read failed:"), "unexpected error: {msg}");
+    }
+
+    #[test]
+    fn write_if_changed_rejects_non_utf8_file() {
+        let path = tmp_file("write-non-utf8");
+        std::fs::write(&path, [0xff, 0xfe, 0xfd]).expect("write");
+
+        write_if_changed(&path, "x").expect_err("expected non-utf8 file to be rejected");
+    }
 }
