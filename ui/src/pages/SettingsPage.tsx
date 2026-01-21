@@ -36,11 +36,12 @@ import { useTheme, type Theme } from "@/lib/theme";
 import { type Locale, useI18n } from "@/lib/i18n";
 import { humanizeApiError } from "@/lib/error";
 import { formatNpmEnvInstallProgressText } from "@/lib/npmEnvInstallProgress";
+import { installCliToolWithToast } from "@/lib/cliToolInstaller";
 import { useCurrency, type CurrencyMode } from "@/lib/currency";
 import { setLogLevel } from "@/lib/logger";
 import { UpdatePromptDialog } from "@/components/UpdatePromptDialog";
 import { formatBytes, formatDateTime } from "../lib";
-import { checkUpdate, clearLogs, clearRecords, downloadUpdate, getCliToolsStatus, getDbSize, getHealth, getLogsSize, getSettings, getUpdateChangelog, getUpdateStatus, ignoreUpdate, installCliTool, installNpmEnv, pickFolder, pricingStatus, pricingSync, updateSettings, validateProgram, type AppSettings, type AutoStartLaunchMode, type CloseBehavior, type DbSize, type Health, type LogsSize, type PricingStatus, type RecordsClearMode, type UpdateCheck, type UpdateStatus, type ChangelogSection, type CliToolId, type CliToolsStatus, type CliToolStatus } from "../api";
+import { checkUpdate, clearLogs, clearRecords, downloadUpdate, getCliToolsStatus, getDbSize, getHealth, getLogsSize, getSettings, getUpdateChangelog, getUpdateStatus, ignoreUpdate, installNpmEnv, pickFolder, pricingStatus, pricingSync, updateSettings, validateProgram, type AppSettings, type AutoStartLaunchMode, type CloseBehavior, type DbSize, type Health, type LogsSize, type PricingStatus, type RecordsClearMode, type UpdateCheck, type UpdateStatus, type ChangelogSection, type CliToolId, type CliToolsStatus, type CliToolStatus } from "../api";
 import type { CliswitchNpmEnvInstallProgressEvent, CliswitchUpdateStatusEvent, NpmEnvInstallProgress } from "@/lib/cliswitchEvents";
 import { clearUpdateReadyShown } from "@/lib/updateReadyPrompt";
 
@@ -1152,28 +1153,18 @@ export function SettingsPage() {
                           }
                           setCliToolBusy((prev) => ({ ...prev, [tool.id]: true }));
                           try {
-                            const res = await installCliTool(tool.id);
-                            setCliToolsStatus((prev) =>
-                              prev
-                                ? { ...prev, tools: prev.tools.map((t0) => (t0.id === tool.id ? res.tool : t0)) }
-                                : prev
-                            );
-                            if (res.ok) {
-                              toast.success(t("settings.cliTools.installOk", { name: tool.name }), {
-                                description: res.terminal_shim_ok
-                                  ? t("settings.cliTools.terminalReady")
-                                  : res.terminal_shim_error
-                                    ? t("settings.cliTools.terminalSetupFailed", { error: res.terminal_shim_error })
-                                    : undefined,
-                              });
-                            } else {
-                              toast.error(t("settings.cliTools.installFail", { name: tool.name }), {
-                                description: res.stderr?.trim() || res.stdout?.trim() || "-",
-                              });
-                            }
-                          } catch (e) {
-                            toast.error(t("settings.cliTools.installFail", { name: tool.name }), {
-                              description: humanizeApiError(e, t),
+                            await installCliToolWithToast({
+                              tool,
+                              t,
+                              onToolUpdated: (nextTool) =>
+                                setCliToolsStatus((prev) =>
+                                  prev
+                                    ? {
+                                        ...prev,
+                                        tools: prev.tools.map((t0) => (t0.id === nextTool.id ? nextTool : t0)),
+                                      }
+                                    : prev
+                                ),
                             });
                           } finally {
                             setCliToolBusy((prev) => ({ ...prev, [tool.id]: false }));
