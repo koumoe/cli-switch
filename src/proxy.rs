@@ -12,6 +12,7 @@ use uuid::Uuid;
 use crate::storage::{self, Channel, Protocol};
 
 mod stream;
+mod usage_writer;
 
 use stream::{InstrumentedStream, StreamRecordContext};
 
@@ -1049,11 +1050,9 @@ pub(super) fn spawn_usage_event(input: storage::CreateUsageEvent, db_path: std::
         tracing::warn!("skip insert usage event: tokio runtime not available");
         return;
     }
-    tokio::spawn(async move {
-        if let Err(e) = storage::insert_usage_event(db_path, input).await {
-            tracing::warn!(err = %e, "insert usage event failed");
-        }
-    });
+    if !usage_writer::try_enqueue(db_path, input) {
+        tracing::warn!("drop usage event: usage writer queue is full");
+    }
 }
 
 pub(super) struct UsageEventParams {
