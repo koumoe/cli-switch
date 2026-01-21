@@ -473,7 +473,15 @@ fn truncate_error_body(body: &str) -> &str {
     if body.len() <= MAX {
         return body;
     }
-    &body[..MAX]
+    if let Some(s) = body.get(..MAX) {
+        return s;
+    }
+    // Avoid panicking on non-UTF8 boundary indices.
+    let mut end = MAX;
+    while end > 0 && !body.is_char_boundary(end) {
+        end -= 1;
+    }
+    &body[..end]
 }
 
 fn pick_asset(release: &GitHubRelease) -> Option<(&GitHubAsset, Option<&GitHubAsset>)> {
