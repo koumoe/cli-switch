@@ -3,6 +3,8 @@ use rusqlite::{Connection, params};
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 
+const SQLITE_BUSY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+
 mod channel;
 mod checkin;
 mod pricing;
@@ -47,8 +49,16 @@ pub use usage::{
     insert_usage_event, list_usage_events, list_usage_events_recent,
 };
 
+fn open_conn(db_path: &Path) -> anyhow::Result<Connection> {
+    let conn = Connection::open(db_path)
+        .with_context(|| format!("打开 SQLite 文件失败：{}", db_path.display()))?;
+    conn.busy_timeout(SQLITE_BUSY_TIMEOUT)
+        .with_context(|| "设置 SQLite busy_timeout 失败")?;
+    Ok(conn)
+}
+
 pub fn init_db(db_path: &Path) -> anyhow::Result<()> {
-    let conn = Connection::open(db_path).with_context(|| "打开 SQLite 文件失败")?;
+    let conn = open_conn(db_path)?;
 
     let migration = include_str!("../../migrations/001_init.sql");
     conn.execute_batch(migration)
@@ -214,8 +224,6 @@ pub async fn clear_records(
     kind: RecordsClearKind,
 ) -> anyhow::Result<ClearRecordsResult> {
     with_conn(db_path, move |conn| {
-        conn.busy_timeout(std::time::Duration::from_secs(5))?;
-
         let usage_events_deleted: i64 = match kind {
             RecordsClearKind::DateRange { start_ms, end_ms } => conn
                 .execute(
@@ -261,8 +269,7 @@ where
     F: FnOnce(&Connection) -> anyhow::Result<T> + Send + 'static,
 {
     tokio::task::spawn_blocking(move || {
-        let conn = Connection::open(&db_path)
-            .with_context(|| format!("打开 SQLite 文件失败：{}", db_path.display()))?;
+        let conn = open_conn(&db_path)?;
         f(&conn)
     })
     .await
