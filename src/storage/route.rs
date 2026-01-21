@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use uuid::Uuid;
 
-use super::{Protocol, now_ms, with_conn};
+use super::{Protocol, StorageError, now_ms, with_conn};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Route {
@@ -122,7 +122,10 @@ pub async fn update_route(
             match row {
                 Ok(v) => v,
                 Err(rusqlite::Error::QueryReturnedNoRows) => {
-                    return Err(anyhow::anyhow!("route not found: {route_id}"));
+                    return Err(StorageError::RouteNotFound {
+                        route_id: route_id.clone(),
+                    }
+                    .into());
                 }
                 Err(e) => return Err(e.into()),
             }
@@ -196,7 +199,10 @@ pub async fn delete_route(db_path: PathBuf, route_id: String) -> anyhow::Result<
         let deleted = tx.execute(r#"DELETE FROM routes WHERE id = ?1"#, params![route_id])?;
         tx.commit()?;
         if deleted == 0 {
-            return Err(anyhow::anyhow!("route not found"));
+            return Err(StorageError::RouteNotFound {
+                route_id: route_id.clone(),
+            }
+            .into());
         }
         Ok(())
     })
@@ -252,7 +258,9 @@ pub async fn set_route_channels(
                 |row| row.get(0),
             )
             .optional()?
-            .ok_or_else(|| anyhow::anyhow!("route not found"))?;
+            .ok_or_else(|| StorageError::RouteNotFound {
+                route_id: route_id.clone(),
+            })?;
 
         let tx = conn.unchecked_transaction()?;
         tx.execute(
@@ -268,12 +276,16 @@ pub async fn set_route_channels(
                     |row| row.get(0),
                 )
                 .optional()?
-                .ok_or_else(|| anyhow::anyhow!("channel not found"))?;
+                .ok_or_else(|| StorageError::ChannelNotFound {
+                    channel_id: channel_id.clone(),
+                })?;
 
             if channel_protocol != route_protocol {
-                return Err(anyhow::anyhow!(
-                    "channel protocol mismatch: route={route_protocol} channel={channel_protocol}"
-                ));
+                return Err(StorageError::ChannelProtocolMismatch {
+                    route_protocol,
+                    channel_protocol,
+                }
+                .into());
             }
 
             tx.execute(

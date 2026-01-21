@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 
 mod channel;
 mod checkin;
+mod error;
 mod pricing;
 mod protocol;
 mod route;
@@ -12,6 +13,8 @@ mod settings;
 mod stats;
 mod update_ignore;
 mod usage;
+
+pub use error::StorageError;
 
 pub use channel::{
     Channel, CreateChannel, RechargeCurrency, UpdateChannel, channel_is_auto_disabled,

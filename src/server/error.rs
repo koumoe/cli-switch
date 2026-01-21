@@ -112,15 +112,14 @@ pub(crate) fn map_proxy_error(e: ProxyError) -> ApiError {
     }
 }
 
-pub(crate) fn map_storage_unit_no_content(
+pub(crate) fn map_storage_unit_no_content_err(
     res: anyhow::Result<()>,
-    classify: impl FnOnce(&str) -> Option<ApiError>,
+    classify: impl FnOnce(&anyhow::Error) -> Option<ApiError>,
 ) -> Result<StatusCode, ApiError> {
     match res {
         Ok(()) => Ok(StatusCode::NO_CONTENT),
         Err(e) => {
-            let msg = e.to_string();
-            if let Some(api_err) = classify(&msg) {
+            if let Some(api_err) = classify(&e) {
                 Err(api_err)
             } else {
                 Err(ApiError::Internal(e))

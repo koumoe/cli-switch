@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::proxy;
 use crate::server::AppState;
-use crate::server::error::{ApiError, map_storage_unit_no_content};
+use crate::server::error::{ApiError, map_storage_unit_no_content_err};
 use crate::storage;
 
 fn real_multiplier_is_valid(v: f64) -> bool {
@@ -36,9 +36,12 @@ pub(in crate::server) async fn complete_channel_checkin_today(
     axum::extract::Path(channel_id): axum::extract::Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
     let res = storage::complete_channel_checkin_today(state.db_path(), channel_id).await;
-    map_storage_unit_no_content(res, |msg| {
-        msg.starts_with("channel not found")
-            .then(|| ApiError::not_found("channel_not_found", "Channel not found"))
+    map_storage_unit_no_content_err(res, |e| {
+        matches!(
+            e.downcast_ref::<storage::StorageError>(),
+            Some(storage::StorageError::ChannelNotFound { .. })
+        )
+        .then(|| ApiError::not_found("channel_not_found", "Channel not found"))
     })
 }
 
@@ -63,20 +66,16 @@ pub(in crate::server) async fn reorder_channels(
     }
 
     let res = storage::reorder_channels(state.db_path(), input.protocol, input.channel_ids).await;
-    map_storage_unit_no_content(res, |msg| {
-        if msg.starts_with("channel not found") {
-            Some(ApiError::not_found(
-                "channel_not_found",
-                "Channel not found",
-            ))
-        } else if msg.starts_with("channel reorder mismatch") {
-            Some(ApiError::bad_request(
-                "channel_ids_mismatch",
-                "channel_ids must cover all channels under the given protocol",
-            ))
-        } else {
-            None
-        }
+    map_storage_unit_no_content_err(res, |e| match e.downcast_ref::<storage::StorageError>() {
+        Some(storage::StorageError::ChannelNotFound { .. }) => Some(ApiError::not_found(
+            "channel_not_found",
+            "Channel not found",
+        )),
+        Some(storage::StorageError::ChannelReorderMismatch { .. }) => Some(ApiError::bad_request(
+            "channel_ids_mismatch",
+            "channel_ids must cover all channels under the given protocol",
+        )),
+        _ => None,
     })
 }
 
@@ -123,9 +122,12 @@ pub(in crate::server) async fn update_channel(
         ));
     }
     let res = storage::update_channel(state.db_path(), channel_id, input).await;
-    map_storage_unit_no_content(res, |msg| {
-        msg.starts_with("channel not found")
-            .then(|| ApiError::not_found("channel_not_found", "Channel not found"))
+    map_storage_unit_no_content_err(res, |e| {
+        matches!(
+            e.downcast_ref::<storage::StorageError>(),
+            Some(storage::StorageError::ChannelNotFound { .. })
+        )
+        .then(|| ApiError::not_found("channel_not_found", "Channel not found"))
     })
 }
 
@@ -133,16 +135,28 @@ pub(in crate::server) async fn enable_channel(
     State(state): State<AppState>,
     axum::extract::Path(channel_id): axum::extract::Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
-    storage::set_channel_enabled(state.db_path(), channel_id, true).await?;
-    Ok(StatusCode::NO_CONTENT)
+    let res = storage::set_channel_enabled(state.db_path(), channel_id, true).await;
+    map_storage_unit_no_content_err(res, |e| {
+        matches!(
+            e.downcast_ref::<storage::StorageError>(),
+            Some(storage::StorageError::ChannelNotFound { .. })
+        )
+        .then(|| ApiError::not_found("channel_not_found", "Channel not found"))
+    })
 }
 
 pub(in crate::server) async fn disable_channel(
     State(state): State<AppState>,
     axum::extract::Path(channel_id): axum::extract::Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
-    storage::set_channel_enabled(state.db_path(), channel_id, false).await?;
-    Ok(StatusCode::NO_CONTENT)
+    let res = storage::set_channel_enabled(state.db_path(), channel_id, false).await;
+    map_storage_unit_no_content_err(res, |e| {
+        matches!(
+            e.downcast_ref::<storage::StorageError>(),
+            Some(storage::StorageError::ChannelNotFound { .. })
+        )
+        .then(|| ApiError::not_found("channel_not_found", "Channel not found"))
+    })
 }
 
 pub(in crate::server) async fn delete_channel(
@@ -150,9 +164,12 @@ pub(in crate::server) async fn delete_channel(
     axum::extract::Path(channel_id): axum::extract::Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
     let res = storage::delete_channel(state.db_path(), channel_id).await;
-    map_storage_unit_no_content(res, |msg| {
-        msg.starts_with("channel not found")
-            .then(|| ApiError::not_found("channel_not_found", "Channel not found"))
+    map_storage_unit_no_content_err(res, |e| {
+        matches!(
+            e.downcast_ref::<storage::StorageError>(),
+            Some(storage::StorageError::ChannelNotFound { .. })
+        )
+        .then(|| ApiError::not_found("channel_not_found", "Channel not found"))
     })
 }
 
