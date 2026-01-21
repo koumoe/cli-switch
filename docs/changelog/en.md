@@ -1,3 +1,8 @@
+## [0.25.8](https://github.com/koumoe/cli-switch/compare/v0.25.7...v0.25.8) (2026-01-21)
+
+### Bug Fixes
+
+* record usage on stream error/drop ([d7d53be](https://github.com/koumoe/cli-switch/commit/d7d53be586c1eda32b1049601e86af53980dbab7))
 ## [0.25.7](https://github.com/koumoe/cli-switch/compare/v0.25.6...v0.25.7) (2026-01-20)
 
 ### Bug Fixes
