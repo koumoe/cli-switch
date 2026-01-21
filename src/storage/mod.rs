@@ -3,7 +3,7 @@ use rusqlite::{Connection, params};
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 
-const SQLITE_BUSY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+const SQLITE_BUSY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(1);
 
 mod channel;
 mod checkin;
