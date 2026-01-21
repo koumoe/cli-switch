@@ -95,10 +95,18 @@ async fn async_main() -> anyhow::Result<()> {
         tracing::warn!(err = %e, "migrate ignored update versions failed");
     }
 
-    let settings = storage::get_app_settings(db_path.clone())
-        .await
-        .unwrap_or_default();
-    logging::init(&data_dir, settings.log_level)?;
+    // Initialize logging with a safe default level first, then load settings and adjust the
+    // runtime filter if possible. This avoids silently treating settings read failures as "use
+    // defaults" for the rest of the startup logic.
+    logging::init(&data_dir, logging::LogLevel::Warning)?;
+    match storage::get_app_settings(db_path.clone()).await {
+        Ok(settings) => {
+            let _ = logging::set_level(settings.log_level);
+        }
+        Err(e) => {
+            tracing::warn!(err = %e, "load app settings failed; keep default log level");
+        }
+    }
 
     match cmd {
         Command::Serve { port, open } => {

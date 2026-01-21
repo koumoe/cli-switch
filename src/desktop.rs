@@ -446,11 +446,20 @@ pub async fn run(
     db_path: std::path::PathBuf,
     launched_by_autostart: bool,
 ) -> anyhow::Result<()> {
-    let settings = storage::get_app_settings(db_path.clone())
-        .await
-        .unwrap_or_default();
-    let start_hidden = launched_by_autostart
-        && settings.auto_start_launch_mode == storage::AutoStartLaunchMode::MinimizeToTray;
+    let start_hidden = if !launched_by_autostart {
+        false
+    } else {
+        match storage::get_app_settings(db_path.clone()).await {
+            Ok(settings) => {
+                settings.auto_start_launch_mode == storage::AutoStartLaunchMode::MinimizeToTray
+            }
+            Err(e) => {
+                // Safe-mode: if settings can't be loaded, don't hide the window.
+                tracing::warn!(err = %e, "load app settings failed; start window visible");
+                false
+            }
+        }
+    };
     let initial_window_visible = !start_hidden;
 
     let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), port);
