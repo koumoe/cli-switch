@@ -2,7 +2,7 @@ use anyhow::Context as _;
 use serde::{Deserialize, Serialize};
 use sha2::Digest as _;
 use std::path::{Path, PathBuf};
-use std::time::SystemTime;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 #[cfg(not(target_os = "windows"))]
 use std::ffi::{OsStr, OsString};
@@ -381,13 +381,99 @@ async fn github_latest_release(client: &reqwest::Client) -> anyhow::Result<GitHu
 
     let status = res.status();
     if !status.is_success() {
+        let headers = res.headers().clone();
         let body = res.text().await.unwrap_or_default();
-        anyhow::bail!("github response not ok: {status} {body}");
+
+        if is_github_rate_limited(status, &headers, &body) {
+            anyhow::bail!("{}", github_rate_limit_message(status, &headers));
+        }
+
+        anyhow::bail!(
+            "github response not ok: {status} {}",
+            truncate_error_body(&body)
+        );
     }
 
     res.json::<GitHubRelease>()
         .await
         .with_context(|| "parse github release json failed")
+}
+
+fn is_github_rate_limited(
+    status: reqwest::StatusCode,
+    headers: &reqwest::header::HeaderMap,
+    body: &str,
+) -> bool {
+    if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
+        return true;
+    }
+    if status != reqwest::StatusCode::FORBIDDEN {
+        return false;
+    }
+
+    // GitHub often returns 403 for API rate limit. Prefer headers when present.
+    let remaining = header_u64(headers, "x-ratelimit-remaining");
+    let reset = header_u64(headers, "x-ratelimit-reset");
+    if remaining == Some(0) && reset.is_some() {
+        return true;
+    }
+
+    // Fallback: body contains the canonical message.
+    body.to_ascii_lowercase().contains("rate limit exceeded")
+}
+
+fn github_rate_limit_message(
+    status: reqwest::StatusCode,
+    headers: &reqwest::header::HeaderMap,
+) -> String {
+    let remaining = header_u64(headers, "x-ratelimit-remaining");
+    let reset = header_u64(headers, "x-ratelimit-reset");
+    let retry_after = header_u64(headers, "retry-after");
+
+    let mut msg = format!("GitHub API 触发 rate limit（{status}）。");
+
+    if let Some(wait) = retry_after {
+        msg.push_str(&format!("建议 {wait}s 后重试。"));
+        return msg;
+    }
+
+    if let Some(reset) = reset {
+        if let Ok(now) = SystemTime::now().duration_since(UNIX_EPOCH) {
+            let now = now.as_secs();
+            if reset > now {
+                msg.push_str(&format!("建议 {}s 后重试。", reset - now));
+            }
+        }
+        if let Some(rem) = remaining {
+            msg.push_str(&format!(
+                "x-ratelimit-remaining={rem}, x-ratelimit-reset={reset}。"
+            ));
+        } else {
+            msg.push_str(&format!("x-ratelimit-reset={reset}。"));
+        }
+        return msg;
+    }
+
+    if let Some(rem) = remaining {
+        msg.push_str(&format!("x-ratelimit-remaining={rem}。"));
+    }
+    msg.push_str("请稍后再试。");
+    msg
+}
+
+fn header_u64(headers: &reqwest::header::HeaderMap, name: &str) -> Option<u64> {
+    headers
+        .get(name)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.trim().parse::<u64>().ok())
+}
+
+fn truncate_error_body(body: &str) -> &str {
+    const MAX: usize = 1024;
+    if body.len() <= MAX {
+        return body;
+    }
+    &body[..MAX]
 }
 
 fn pick_asset(release: &GitHubRelease) -> Option<(&GitHubAsset, Option<&GitHubAsset>)> {
