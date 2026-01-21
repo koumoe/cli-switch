@@ -307,12 +307,60 @@ export type StatsTrend = {
   items: TrendPoint[];
 };
 
-async function http<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const res = await fetch(path, {
-    method,
-    headers: body ? { "content-type": "application/json" } : undefined,
-    body: body ? JSON.stringify(body) : undefined
-  });
+const DEFAULT_HTTP_TIMEOUT_MS = 30_000;
+const LONG_HTTP_TIMEOUT_MS = 10 * 60_000;
+
+type HttpOptions = {
+  // null means "no timeout"
+  timeoutMs?: number | null;
+};
+
+async function http<T>(
+  method: string,
+  path: string,
+  body?: unknown,
+  opts: HttpOptions = {}
+): Promise<T> {
+  const timeoutMs = opts.timeoutMs === undefined ? DEFAULT_HTTP_TIMEOUT_MS : opts.timeoutMs;
+  const controller = new AbortController();
+  const timeoutId: ReturnType<typeof setTimeout> | null =
+    timeoutMs === null ? null : setTimeout(() => controller.abort(), timeoutMs);
+
+  let res: Response;
+  try {
+    res = await fetch(path, {
+      method,
+      headers: body ? { "content-type": "application/json" } : undefined,
+      body: body ? JSON.stringify(body) : undefined,
+      signal: controller.signal
+    });
+  } catch (e) {
+    if ((e as any)?.name === "AbortError") {
+      if (path !== "/api/logs/ingest") {
+        logger.error(
+          "api request timed out",
+          {
+            method,
+            path,
+            status: 0,
+            code: "request_timeout",
+            error: null
+          },
+          "api_request_timeout"
+        );
+      }
+      throw new ApiRequestError({
+        code: "request_timeout",
+        message: null,
+        status: 0,
+        method,
+        path
+      });
+    }
+    throw e;
+  } finally {
+    if (timeoutId !== null) clearTimeout(timeoutId);
+  }
 
   if (res.ok) {
     if (res.status === 204) return undefined as T;
@@ -372,11 +420,13 @@ export function getCliToolsStatus(): Promise<CliToolsStatus> {
 }
 
 export function installCliTool(id: CliToolId): Promise<InstallCliToolResponse> {
-  return http<InstallCliToolResponse>("POST", "/api/tools/install", { id });
+  return http<InstallCliToolResponse>("POST", "/api/tools/install", { id }, { timeoutMs: LONG_HTTP_TIMEOUT_MS });
 }
 
 export function installNpmEnv(): Promise<InstallNpmEnvResponse> {
-  return http<InstallNpmEnvResponse>("POST", "/api/tools/npm/install");
+  return http<InstallNpmEnvResponse>("POST", "/api/tools/npm/install", undefined, {
+    timeoutMs: LONG_HTTP_TIMEOUT_MS
+  });
 }
 
 export function validateProgram(program: ValidateProgram, path: string): Promise<ValidateProgramResponse> {
@@ -488,7 +538,9 @@ export function getUpdateChangelog(version: string, locale?: string): Promise<Ch
 }
 
 export function downloadUpdate(): Promise<UpdateDownloadResponse> {
-  return http<UpdateDownloadResponse>("POST", "/api/update/download");
+  return http<UpdateDownloadResponse>("POST", "/api/update/download", undefined, {
+    timeoutMs: LONG_HTTP_TIMEOUT_MS
+  });
 }
 
 export function ignoreUpdate(version: string): Promise<UpdateStatus> {
@@ -576,7 +628,9 @@ export function clearRecords(input: {
   start_ms?: number;
   end_ms?: number;
 }): Promise<ClearRecordsResult> {
-  return http<ClearRecordsResult>("POST", "/api/maintenance/records/clear", input);
+  return http<ClearRecordsResult>("POST", "/api/maintenance/records/clear", input, {
+    timeoutMs: LONG_HTTP_TIMEOUT_MS
+  });
 }
 
 export type LogsClearMode = "date_range" | "all";
@@ -591,5 +645,7 @@ export function clearLogs(input: {
   start_date?: string;
   end_date?: string;
 }): Promise<ClearLogsResult> {
-  return http<ClearLogsResult>("POST", "/api/maintenance/logs/clear", input);
+  return http<ClearLogsResult>("POST", "/api/maintenance/logs/clear", input, {
+    timeoutMs: LONG_HTTP_TIMEOUT_MS
+  });
 }

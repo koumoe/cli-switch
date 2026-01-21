@@ -5,6 +5,7 @@
   },
   "errors": {
     "internal_error": "内部错误",
+    "request_timeout": "请求超时",
     "proxy_no_enabled_channel": "未配置启用渠道",
     "proxy_no_available_channel": "无可用渠道（可能被自动禁用）",
     "proxy_invalid_base_url": "渠道 base_url 无效",
