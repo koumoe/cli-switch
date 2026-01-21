@@ -79,6 +79,8 @@ pub struct AppSettings {
     pub auto_disable_disable_minutes: i64,
     pub log_level: LogLevel,
     pub log_retention_days: i64,
+    #[serde(default)]
+    pub has_invalid_values: bool,
 }
 
 impl Default for AppSettings {
@@ -101,6 +103,7 @@ impl Default for AppSettings {
             auto_disable_disable_minutes: 30,
             log_level: LogLevel::Warning,
             log_retention_days: 30,
+            has_invalid_values: false,
         }
     }
 }
@@ -173,7 +176,7 @@ fn warn_invalid_setting_once(key: &'static str, raw_value: &str, reason: impl Fn
     );
 }
 
-fn parse_bool_setting(key: &'static str, raw_value: &str) -> bool {
+fn parse_bool_setting(key: &'static str, raw_value: &str, invalid: &mut bool) -> bool {
     let v = raw_value.trim();
     if v == "1" || v.eq_ignore_ascii_case("true") {
         return true;
@@ -181,15 +184,17 @@ fn parse_bool_setting(key: &'static str, raw_value: &str) -> bool {
     if v == "0" || v.eq_ignore_ascii_case("false") {
         return false;
     }
+    *invalid = true;
     warn_invalid_setting_once(key, raw_value, || "invalid bool".to_string());
     false
 }
 
-fn parse_i64_setting(key: &'static str, raw_value: &str) -> Option<i64> {
+fn parse_i64_setting(key: &'static str, raw_value: &str, invalid: &mut bool) -> Option<i64> {
     let v = raw_value.trim();
     match v.parse::<i64>() {
         Ok(n) => Some(n),
         Err(e) => {
+            *invalid = true;
             warn_invalid_setting_once(key, raw_value, || format!("invalid i64: {e}"));
             None
         }
@@ -199,13 +204,18 @@ fn parse_i64_setting(key: &'static str, raw_value: &str) -> Option<i64> {
 pub async fn get_app_settings(db_path: PathBuf) -> anyhow::Result<AppSettings> {
     with_conn(db_path, move |conn| {
         let mut out = AppSettings::default();
+        let mut has_invalid_values = false;
 
         if let Some(v) = get_setting(conn, KEY_PRICING_AUTO_UPDATE_ENABLED)? {
             out.pricing_auto_update_enabled =
-                parse_bool_setting(KEY_PRICING_AUTO_UPDATE_ENABLED, &v);
+                parse_bool_setting(KEY_PRICING_AUTO_UPDATE_ENABLED, &v, &mut has_invalid_values);
         }
         if let Some(v) = get_setting(conn, KEY_PRICING_AUTO_UPDATE_INTERVAL_HOURS)?
-            && let Some(n) = parse_i64_setting(KEY_PRICING_AUTO_UPDATE_INTERVAL_HOURS, &v)
+            && let Some(n) = parse_i64_setting(
+                KEY_PRICING_AUTO_UPDATE_INTERVAL_HOURS,
+                &v,
+                &mut has_invalid_values,
+            )
         {
             out.pricing_auto_update_interval_hours = n;
         }
@@ -215,6 +225,7 @@ pub async fn get_app_settings(db_path: PathBuf) -> anyhow::Result<AppSettings> {
                 "minimize_to_tray" => out.close_behavior = CloseBehavior::MinimizeToTray,
                 "quit" => out.close_behavior = CloseBehavior::Quit,
                 _ => {
+                    has_invalid_values = true;
                     warn_invalid_setting_once(KEY_CLOSE_BEHAVIOR, &v, || {
                         "unknown close_behavior".to_string()
                     });
@@ -222,7 +233,8 @@ pub async fn get_app_settings(db_path: PathBuf) -> anyhow::Result<AppSettings> {
             }
         }
         if let Some(v) = get_setting(conn, KEY_AUTO_START_ENABLED)? {
-            out.auto_start_enabled = parse_bool_setting(KEY_AUTO_START_ENABLED, &v);
+            out.auto_start_enabled =
+                parse_bool_setting(KEY_AUTO_START_ENABLED, &v, &mut has_invalid_values);
         }
         if let Some(v) = get_setting(conn, KEY_AUTO_START_LAUNCH_MODE)? {
             match v.trim() {
@@ -231,6 +243,7 @@ pub async fn get_app_settings(db_path: PathBuf) -> anyhow::Result<AppSettings> {
                     out.auto_start_launch_mode = AutoStartLaunchMode::MinimizeToTray;
                 }
                 _ => {
+                    has_invalid_values = true;
                     warn_invalid_setting_once(KEY_AUTO_START_LAUNCH_MODE, &v, || {
                         "unknown auto_start_launch_mode".to_string()
                     });
@@ -238,18 +251,26 @@ pub async fn get_app_settings(db_path: PathBuf) -> anyhow::Result<AppSettings> {
             }
         }
         if let Some(v) = get_setting(conn, KEY_APP_AUTO_UPDATE_ENABLED)? {
-            out.app_auto_update_enabled = parse_bool_setting(KEY_APP_AUTO_UPDATE_ENABLED, &v);
+            out.app_auto_update_enabled =
+                parse_bool_setting(KEY_APP_AUTO_UPDATE_ENABLED, &v, &mut has_invalid_values);
         }
         if let Some(v) = get_setting(conn, KEY_GEMINI_CLI_AUTO_UPDATE_ENABLED)? {
-            out.gemini_cli_auto_update_enabled =
-                parse_bool_setting(KEY_GEMINI_CLI_AUTO_UPDATE_ENABLED, &v);
+            out.gemini_cli_auto_update_enabled = parse_bool_setting(
+                KEY_GEMINI_CLI_AUTO_UPDATE_ENABLED,
+                &v,
+                &mut has_invalid_values,
+            );
         }
         if let Some(v) = get_setting(conn, KEY_CLAUDE_CODE_AUTO_UPDATE_ENABLED)? {
-            out.claude_code_auto_update_enabled =
-                parse_bool_setting(KEY_CLAUDE_CODE_AUTO_UPDATE_ENABLED, &v);
+            out.claude_code_auto_update_enabled = parse_bool_setting(
+                KEY_CLAUDE_CODE_AUTO_UPDATE_ENABLED,
+                &v,
+                &mut has_invalid_values,
+            );
         }
         if let Some(v) = get_setting(conn, KEY_CODEX_AUTO_UPDATE_ENABLED)? {
-            out.codex_auto_update_enabled = parse_bool_setting(KEY_CODEX_AUTO_UPDATE_ENABLED, &v);
+            out.codex_auto_update_enabled =
+                parse_bool_setting(KEY_CODEX_AUTO_UPDATE_ENABLED, &v, &mut has_invalid_values);
         }
         if let Some(v) = get_setting(conn, KEY_CLI_TOOLS_NPM_PATH)? {
             let s = v.trim();
@@ -264,20 +285,27 @@ pub async fn get_app_settings(db_path: PathBuf) -> anyhow::Result<AppSettings> {
             }
         }
         if let Some(v) = get_setting(conn, KEY_AUTO_DISABLE_ENABLED)? {
-            out.auto_disable_enabled = parse_bool_setting(KEY_AUTO_DISABLE_ENABLED, &v);
+            out.auto_disable_enabled =
+                parse_bool_setting(KEY_AUTO_DISABLE_ENABLED, &v, &mut has_invalid_values);
         }
         if let Some(v) = get_setting(conn, KEY_AUTO_DISABLE_WINDOW_MINUTES)?
-            && let Some(n) = parse_i64_setting(KEY_AUTO_DISABLE_WINDOW_MINUTES, &v)
+            && let Some(n) =
+                parse_i64_setting(KEY_AUTO_DISABLE_WINDOW_MINUTES, &v, &mut has_invalid_values)
         {
             out.auto_disable_window_minutes = n;
         }
         if let Some(v) = get_setting(conn, KEY_AUTO_DISABLE_FAILURE_TIMES)?
-            && let Some(n) = parse_i64_setting(KEY_AUTO_DISABLE_FAILURE_TIMES, &v)
+            && let Some(n) =
+                parse_i64_setting(KEY_AUTO_DISABLE_FAILURE_TIMES, &v, &mut has_invalid_values)
         {
             out.auto_disable_failure_times = n;
         }
         if let Some(v) = get_setting(conn, KEY_AUTO_DISABLE_DISABLE_MINUTES)?
-            && let Some(n) = parse_i64_setting(KEY_AUTO_DISABLE_DISABLE_MINUTES, &v)
+            && let Some(n) = parse_i64_setting(
+                KEY_AUTO_DISABLE_DISABLE_MINUTES,
+                &v,
+                &mut has_invalid_values,
+            )
         {
             out.auto_disable_disable_minutes = n;
         }
@@ -289,6 +317,7 @@ pub async fn get_app_settings(db_path: PathBuf) -> anyhow::Result<AppSettings> {
                 "warn" | "warning" => out.log_level = LogLevel::Warning,
                 "error" => out.log_level = LogLevel::Error,
                 _ => {
+                    has_invalid_values = true;
                     warn_invalid_setting_once(KEY_LOG_LEVEL, &v, || {
                         "unknown log_level".to_string()
                     });
@@ -296,11 +325,12 @@ pub async fn get_app_settings(db_path: PathBuf) -> anyhow::Result<AppSettings> {
             }
         }
         if let Some(v) = get_setting(conn, KEY_LOG_RETENTION_DAYS)?
-            && let Some(n) = parse_i64_setting(KEY_LOG_RETENTION_DAYS, &v)
+            && let Some(n) = parse_i64_setting(KEY_LOG_RETENTION_DAYS, &v, &mut has_invalid_values)
         {
             out.log_retention_days = n;
         }
 
+        out.has_invalid_values = has_invalid_values;
         Ok(out)
     })
     .await
