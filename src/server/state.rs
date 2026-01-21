@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use tokio::sync::watch;
 
+use crate::storage;
 use crate::update;
 
 #[derive(Clone)]
@@ -12,6 +13,10 @@ pub struct AppState {
     pub db_path: Arc<PathBuf>,
     pub http_client: reqwest::Client,
     pub settings_notify: watch::Sender<u64>,
+    pub settings_cache: watch::Sender<Arc<storage::AppSettings>>,
+    pub settings_cache_rx: watch::Receiver<Arc<storage::AppSettings>>,
+    pub channels_cache: watch::Sender<Arc<Vec<storage::Channel>>>,
+    pub channels_cache_rx: watch::Receiver<Arc<Vec<storage::Channel>>>,
     pub update_runtime: Arc<tokio::sync::Mutex<update::UpdateRuntime>>,
 }
 
@@ -22,6 +27,14 @@ impl AppState {
 
     pub(crate) fn data_dir(&self) -> PathBuf {
         data_dir_from_db_path(self.db_path.as_path())
+    }
+
+    pub(crate) fn settings_snapshot(&self) -> Arc<storage::AppSettings> {
+        self.settings_cache_rx.borrow().clone()
+    }
+
+    pub(crate) fn channels_snapshot(&self) -> Arc<Vec<storage::Channel>> {
+        self.channels_cache_rx.borrow().clone()
     }
 }
 

@@ -7,6 +7,7 @@ use reqwest::Url;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Instant;
+use tokio::sync::watch;
 use uuid::Uuid;
 
 use crate::storage::{self, Channel, Protocol};
@@ -17,6 +18,14 @@ mod usage_writer;
 
 use stream::{InstrumentedStream, StreamRecordContext};
 
+#[derive(Clone)]
+pub struct ProxyConfigSnapshot {
+    pub settings: Arc<storage::AppSettings>,
+    pub channels: Arc<Vec<Channel>>,
+    /// Optional: allows proxy to best-effort update in-memory channel state (e.g. auto-disable).
+    pub channels_cache: Option<watch::Sender<Arc<Vec<Channel>>>>,
+}
+
 struct AttemptCtx<'a> {
     db_path: &'a Path,
     settings: &'a storage::AppSettings,
@@ -24,11 +33,17 @@ struct AttemptCtx<'a> {
     channel_id: &'a str,
     attempt: usize,
     total: usize,
+    channels_cache: Option<watch::Sender<Arc<Vec<Channel>>>>,
 }
 
 impl AttemptCtx<'_> {
     fn fail(&self, err: &ProxyError, msg: &'static str) {
-        maybe_record_failure(self.db_path, self.settings, self.channel_id);
+        maybe_record_failure(
+            self.db_path,
+            self.settings,
+            self.channel_id,
+            self.channels_cache.clone(),
+        );
         tracing::warn!(
             protocol = self.protocol.as_str(),
             channel_id = %self.channel_id,
@@ -63,11 +78,43 @@ pub async fn forward(
     protocol_root: &'static str,
     req: Request<Body>,
 ) -> Result<Response<Body>, ProxyError> {
+    let settings = Arc::new(storage::get_app_settings(db_path.clone()).await?);
+    let channels = Arc::new(storage::list_channels(db_path.clone()).await?);
+
+    forward_with_config(
+        client,
+        db_path,
+        protocol,
+        protocol_root,
+        req,
+        ProxyConfigSnapshot {
+            settings,
+            channels,
+            channels_cache: None,
+        },
+    )
+    .await
+}
+
+pub async fn forward_with_config(
+    client: &reqwest::Client,
+    db_path: std::path::PathBuf,
+    protocol: Protocol,
+    protocol_root: &'static str,
+    req: Request<Body>,
+    cfg: ProxyConfigSnapshot,
+) -> Result<Response<Body>, ProxyError> {
     let db_path_ref = db_path.as_path();
     let request_id: Arc<str> = Arc::from(Uuid::new_v4().to_string());
-    let settings = storage::get_app_settings(db_path.clone()).await?;
+
+    let ProxyConfigSnapshot {
+        settings,
+        channels: all_channels,
+        channels_cache,
+    } = cfg;
     let now_ms = storage::now_ms();
-    let channels = list_available_channels(db_path.clone(), protocol, now_ms, &settings).await?;
+    let channels =
+        list_available_channels(all_channels.as_ref(), protocol, now_ms, settings.as_ref())?;
     let total_channels = channels.len();
 
     let (parts, body) = req.into_parts();
@@ -90,11 +137,12 @@ pub async fn forward(
 
         let attempt_ctx = AttemptCtx {
             db_path: db_path_ref,
-            settings: &settings,
+            settings: settings.as_ref(),
             protocol,
             channel_id: channel.id.as_str(),
             attempt: idx + 1,
             total: total_channels,
+            channels_cache: channels_cache.clone(),
         };
 
         if !is_count_tokens {
@@ -143,7 +191,12 @@ pub async fn forward(
             Ok(r) => r,
             Err(e) => {
                 if !is_count_tokens {
-                    maybe_record_failure(db_path_ref, &settings, &channel.id);
+                    maybe_record_failure(
+                        db_path_ref,
+                        settings.as_ref(),
+                        &channel.id,
+                        channels_cache.clone(),
+                    );
                     tracing::warn!(
                         protocol = protocol.as_str(),
                         channel_id = %channel.id,
@@ -184,7 +237,12 @@ pub async fn forward(
 
         let status = upstream.status();
         if !is_count_tokens && !status.is_success() {
-            maybe_record_failure(db_path_ref, &settings, &channel.id);
+            maybe_record_failure(
+                db_path_ref,
+                settings.as_ref(),
+                &channel.id,
+                channels_cache.clone(),
+            );
         }
         if !is_count_tokens && !status.is_success() && !is_last {
             tracing::warn!(
@@ -240,16 +298,16 @@ pub async fn forward(
     Err(last_err.unwrap_or_else(|| ProxyError::Upstream("all channels failed".to_string())))
 }
 
-async fn list_available_channels(
-    db_path: std::path::PathBuf,
+fn list_available_channels(
+    all_channels: &[Channel],
     protocol: Protocol,
     now_ms: i64,
     settings: &storage::AppSettings,
 ) -> Result<Vec<Channel>, ProxyError> {
-    let channels = storage::list_channels(db_path).await?;
-    let enabled: Vec<Channel> = channels
-        .into_iter()
+    let enabled: Vec<Channel> = all_channels
+        .iter()
         .filter(|c| c.enabled && c.protocol == protocol)
+        .cloned()
         .collect();
     if enabled.is_empty() {
         return Err(ProxyError::NoEnabledChannel(protocol));
@@ -269,7 +327,12 @@ async fn list_available_channels(
     Ok(out)
 }
 
-fn maybe_record_failure(db_path: &Path, settings: &storage::AppSettings, channel_id: &str) {
+fn maybe_record_failure(
+    db_path: &Path,
+    settings: &storage::AppSettings,
+    channel_id: &str,
+    channels_cache: Option<watch::Sender<Arc<Vec<Channel>>>>,
+) {
     if !settings.auto_disable_enabled {
         return;
     }
@@ -300,6 +363,9 @@ fn maybe_record_failure(db_path: &Path, settings: &storage::AppSettings, channel
                     disabled_until_ms = until_ms,
                     "channel auto disabled"
                 );
+                if let Some(channels_cache) = channels_cache.as_ref() {
+                    mark_channel_auto_disabled(channels_cache, &channel_id, until_ms, now_ms);
+                }
             }
             Ok(None) => {}
             Err(e) => {
@@ -310,6 +376,23 @@ fn maybe_record_failure(db_path: &Path, settings: &storage::AppSettings, channel
                 );
             }
         }
+    });
+}
+
+fn mark_channel_auto_disabled(
+    channels_cache: &watch::Sender<Arc<Vec<Channel>>>,
+    channel_id: &str,
+    disabled_until_ms: i64,
+    updated_at_ms: i64,
+) {
+    channels_cache.send_modify(|cur| {
+        let mut next = (**cur).clone();
+        let Some(channel) = next.iter_mut().find(|c| c.id == channel_id) else {
+            return;
+        };
+        channel.auto_disabled_until_ms = disabled_until_ms;
+        channel.updated_at_ms = updated_at_ms;
+        *cur = Arc::new(next);
     });
 }
 

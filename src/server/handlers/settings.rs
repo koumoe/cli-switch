@@ -3,6 +3,7 @@ use axum::extract::State;
 use axum::response::IntoResponse;
 use directories::BaseDirs;
 use serde::Deserialize;
+use std::sync::Arc;
 
 use crate::server::AppState;
 use crate::server::error::ApiError;
@@ -23,6 +24,7 @@ pub(in crate::server) async fn get_settings(
     State(state): State<AppState>,
 ) -> Result<impl IntoResponse, ApiError> {
     let settings = storage::get_app_settings(state.db_path()).await?;
+    let _ = state.settings_cache.send(Arc::new(settings.clone()));
     Ok(Json(settings))
 }
 
@@ -241,6 +243,8 @@ pub(in crate::server) async fn update_settings(
     if !changed.is_empty() {
         tracing::info!(changed = ?changed, "settings updated");
     }
+
+    let _ = state.settings_cache.send(Arc::new(settings.clone()));
 
     let next = *state.settings_notify.borrow() + 1;
     let _ = state.settings_notify.send(next);

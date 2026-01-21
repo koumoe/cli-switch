@@ -32,6 +32,7 @@ pub use pricing::{
     upsert_pricing_models,
 };
 pub use protocol::Protocol;
+pub(crate) use protocol::normalize_base_url;
 pub use route::{
     CreateRoute, Route, RouteChannel, UpdateRoute, create_route, delete_route, get_route,
     list_route_channels, list_routes, set_route_channels, update_route,

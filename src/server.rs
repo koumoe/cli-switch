@@ -290,12 +290,22 @@ pub async fn serve_with_listener(
     let (settings_notify, settings_rx) = watch::channel(0u64);
     let http_client = reqwest::Client::builder().build()?;
     let db_path = Arc::new(db_path);
+
+    let settings0 = storage::get_app_settings((*db_path).clone()).await?;
+    let channels0 = storage::list_channels((*db_path).clone()).await?;
+    let (settings_cache, settings_cache_rx) = watch::channel(Arc::new(settings0));
+    let (channels_cache, channels_cache_rx) = watch::channel(Arc::new(channels0));
+
     let update_runtime = Arc::new(tokio::sync::Mutex::new(update::UpdateRuntime::default()));
     let state = AppState {
         listen_addr: addr,
         db_path: db_path.clone(),
         http_client: http_client.clone(),
         settings_notify,
+        settings_cache,
+        settings_cache_rx,
+        channels_cache,
+        channels_cache_rx,
         update_runtime: update_runtime.clone(),
     };
 
