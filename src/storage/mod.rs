@@ -86,6 +86,22 @@ fn ensure_channels_schema(conn: &Connection) -> anyhow::Result<()> {
         "INTEGER NOT NULL DEFAULT 0",
     )?;
     ensure_column(conn, "channels", "checkin_url", "TEXT NULL")?;
+
+    // Backfill older DBs that had NULL-able columns (or corrupted values) so we can treat these
+    // fields as required at read time.
+    conn.execute(
+        r#"UPDATE channels SET recharge_currency = 'CNY' WHERE recharge_currency IS NULL"#,
+        [],
+    )?;
+    conn.execute(
+        r#"UPDATE channels SET real_multiplier = 1.0 WHERE real_multiplier IS NULL"#,
+        [],
+    )?;
+    conn.execute(
+        r#"UPDATE channels SET auto_disabled_until_ms = 0 WHERE auto_disabled_until_ms IS NULL"#,
+        [],
+    )?;
+
     Ok(())
 }
 
