@@ -1043,6 +1043,12 @@ fn extract_gemini_usage(v: &serde_json::Value) -> TokenUsage {
 }
 
 pub(super) fn spawn_usage_event(input: storage::CreateUsageEvent, db_path: std::path::PathBuf) {
+    // Best-effort: `tokio::spawn` will panic if called when no runtime is available.
+    // This can happen if a streaming body is dropped during shutdown.
+    if tokio::runtime::Handle::try_current().is_err() {
+        tracing::warn!("skip insert usage event: tokio runtime not available");
+        return;
+    }
     tokio::spawn(async move {
         if let Err(e) = storage::insert_usage_event(db_path, input).await {
             tracing::warn!(err = %e, "insert usage event failed");

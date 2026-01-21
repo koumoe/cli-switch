@@ -214,6 +214,7 @@ impl futures_util::Stream for InstrumentedStream {
             }
             Poll::Ready(Some(Err(e))) => {
                 self.stream_error = Some(e.to_string());
+                self.finalize();
                 Poll::Ready(Some(Err(std::io::Error::other(e))))
             }
             Poll::Ready(None) => {
@@ -222,5 +223,19 @@ impl futures_util::Stream for InstrumentedStream {
             }
             Poll::Pending => Poll::Pending,
         }
+    }
+}
+
+impl Drop for InstrumentedStream {
+    fn drop(&mut self) {
+        if self.finalized || !self.ctx.record_usage {
+            return;
+        }
+        // If the stream is dropped before completion (e.g. client disconnect), record it as a
+        // stream error so it doesn't get counted as a successful request.
+        if self.stream_error.is_none() {
+            self.stream_error = Some("stream_dropped".to_string());
+        }
+        self.finalize();
     }
 }

@@ -4,12 +4,15 @@ use axum::{
     http::{Request, StatusCode},
     routing::any,
 };
+use bytes::Bytes;
 use cliswitch::{proxy, storage};
+use futures_util::stream;
 use std::sync::{
     Arc,
     atomic::{AtomicUsize, Ordering},
 };
 use std::time::{SystemTime, UNIX_EPOCH};
+use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
 use tokio::time::{Duration, sleep};
 
 async fn spawn_upstream(status: StatusCode, body: &'static str) -> String {
@@ -65,6 +68,95 @@ async fn spawn_upstream_counted(
     });
 
     (format!("http://127.0.0.1:{}", addr.port()), calls)
+}
+
+async fn spawn_upstream_stream_error() -> String {
+    // Use a raw TCP server that sends a truncated chunked response so reqwest can
+    // successfully receive response headers, but fail while reading the body stream.
+    let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+        .await
+        .expect("bind");
+    let addr = listener.local_addr().expect("local_addr");
+
+    tokio::spawn(async move {
+        loop {
+            let Ok((mut sock, _)) = listener.accept().await else {
+                break;
+            };
+            tokio::spawn(async move {
+                // Best-effort read request headers to avoid closing too early.
+                let mut buf = [0u8; 4096];
+                let mut seen = Vec::<u8>::new();
+                for _ in 0..8 {
+                    let Ok(n) = sock.read(&mut buf).await else {
+                        break;
+                    };
+                    if n == 0 {
+                        break;
+                    }
+                    seen.extend_from_slice(&buf[..n]);
+                    if seen.windows(4).any(|w| w == b"\r\n\r\n") {
+                        break;
+                    }
+                    if seen.len() > 16 * 1024 {
+                        break;
+                    }
+                }
+
+                let body =
+                    br#"data: {"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}
+
+"#;
+                let hdr = concat!(
+                    "HTTP/1.1 200 OK\r\n",
+                    "Content-Type: text/event-stream\r\n",
+                    "Transfer-Encoding: chunked\r\n",
+                    "\r\n"
+                );
+
+                if sock.write_all(hdr.as_bytes()).await.is_ok() {
+                    let _ = sock
+                        .write_all(format!("{:x}\r\n", body.len()).as_bytes())
+                        .await;
+                    let _ = sock.write_all(body).await;
+                    let _ = sock.write_all(b"\r\n").await;
+                    let _ = sock.flush().await;
+                }
+
+                // Drop the socket without sending the terminating `0\r\n\r\n`.
+            });
+        }
+    });
+
+    format!("http://127.0.0.1:{}", addr.port())
+}
+
+async fn spawn_upstream_stream_ok() -> String {
+    let app = Router::new().route(
+        "/{*path}",
+        any(|| async {
+            let s = stream::iter(vec![Ok::<Bytes, std::io::Error>(Bytes::from_static(
+                br#"data: {"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}
+
+"#,
+            ))]);
+            (
+                StatusCode::OK,
+                [(axum::http::header::CONTENT_TYPE, "text/event-stream")],
+                Body::from_stream(s),
+            )
+        }),
+    );
+
+    let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+        .await
+        .expect("bind");
+    let addr = listener.local_addr().expect("local_addr");
+    tokio::spawn(async move {
+        let _ = axum::serve(listener, app).await;
+    });
+
+    format!("http://127.0.0.1:{}", addr.port())
 }
 
 fn temp_db_path() -> std::path::PathBuf {
@@ -311,6 +403,127 @@ async fn gemini_logs_include_model_and_cost() {
     assert_eq!(event.protocol, storage::Protocol::Gemini);
     assert_eq!(event.model.as_deref(), Some("gemini-1.5-pro"));
     assert_eq!(event.estimated_cost_usd.as_deref(), Some("3"));
+}
+
+#[tokio::test]
+async fn stream_error_still_records_usage_event() {
+    let base = spawn_upstream_stream_error().await;
+
+    let db_path = temp_db_path();
+    storage::init_db(&db_path).expect("init_db");
+
+    storage::create_channel(
+        db_path.clone(),
+        storage::CreateChannel {
+            name: "c1".to_string(),
+            protocol: storage::Protocol::Openai,
+            base_url: format!("{base}/v1"),
+            auth_type: None,
+            auth_ref: "t1".to_string(),
+            checkin_url: None,
+            priority: 10,
+            recharge_currency: None,
+            real_multiplier: None,
+            enabled: true,
+        },
+    )
+    .await
+    .expect("create channel");
+
+    let client = reqwest::Client::builder().build().expect("client");
+    let req = Request::builder()
+        .method("POST")
+        .uri("/v1/chat/completions")
+        .header(axum::http::header::CONTENT_TYPE, "application/json")
+        .body(Body::from(r#"{"model":"gpt-test","stream":true}"#))
+        .expect("req");
+
+    let resp = proxy::forward(
+        &client,
+        db_path.clone(),
+        storage::Protocol::Openai,
+        "/v1",
+        req,
+    )
+    .await
+    .expect("forward");
+
+    assert_eq!(resp.status(), StatusCode::OK);
+    assert!(
+        to_bytes(resp.into_body(), 1024 * 1024).await.is_err(),
+        "expected body read error"
+    );
+
+    let event = wait_for_usage_event(db_path.clone()).await;
+    assert!(!event.success, "expected usage event success=false");
+    assert!(
+        event
+            .error_kind
+            .as_deref()
+            .unwrap_or("")
+            .starts_with("stream_error:"),
+        "expected error_kind to start with stream_error:, got: {:?}",
+        event.error_kind
+    );
+}
+
+#[tokio::test]
+async fn stream_drop_still_records_usage_event() {
+    let base = spawn_upstream_stream_ok().await;
+
+    let db_path = temp_db_path();
+    storage::init_db(&db_path).expect("init_db");
+
+    storage::create_channel(
+        db_path.clone(),
+        storage::CreateChannel {
+            name: "c1".to_string(),
+            protocol: storage::Protocol::Openai,
+            base_url: format!("{base}/v1"),
+            auth_type: None,
+            auth_ref: "t1".to_string(),
+            checkin_url: None,
+            priority: 10,
+            recharge_currency: None,
+            real_multiplier: None,
+            enabled: true,
+        },
+    )
+    .await
+    .expect("create channel");
+
+    let client = reqwest::Client::builder().build().expect("client");
+    let req = Request::builder()
+        .method("POST")
+        .uri("/v1/chat/completions")
+        .header(axum::http::header::CONTENT_TYPE, "application/json")
+        .body(Body::from(r#"{"model":"gpt-test","stream":true}"#))
+        .expect("req");
+
+    let resp = proxy::forward(
+        &client,
+        db_path.clone(),
+        storage::Protocol::Openai,
+        "/v1",
+        req,
+    )
+    .await
+    .expect("forward");
+
+    assert_eq!(resp.status(), StatusCode::OK);
+    drop(resp); // simulate client disconnect / early drop
+
+    let event = wait_for_usage_event(db_path.clone()).await;
+    assert!(!event.success, "expected usage event success=false");
+    assert!(
+        event
+            .error_kind
+            .as_deref()
+            .unwrap_or("")
+            .contains("stream_dropped"),
+        "expected error_kind to include stream_dropped, got: {:?}",
+        event.error_kind
+    );
 }
 
 #[tokio::test]
