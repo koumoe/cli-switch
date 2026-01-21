@@ -29,8 +29,8 @@ struct AttemptCtx<'a> {
 }
 
 impl AttemptCtx<'_> {
-    async fn fail(&self, err: &ProxyError, msg: &'static str) {
-        maybe_record_failure(self.db_path, self.settings, self.channel_id).await;
+    fn fail(&self, err: &ProxyError, msg: &'static str) {
+        maybe_record_failure(self.db_path, self.settings, self.channel_id);
         tracing::warn!(
             protocol = self.protocol.as_str(),
             channel_id = %self.channel_id,
@@ -113,9 +113,7 @@ pub async fn forward(
             Ok(v) => v,
             Err(e) => {
                 if !is_count_tokens {
-                    attempt_ctx
-                        .fail(&e, "proxy attempt failed (build url)")
-                        .await;
+                    attempt_ctx.fail(&e, "proxy attempt failed (build url)");
                 }
                 last_err = Some(e);
                 if is_count_tokens || is_last {
@@ -128,9 +126,7 @@ pub async fn forward(
         let mut out_headers = filtered_headers(&parts.headers);
         if let Err(e) = apply_auth(&channel, protocol, &mut url, &mut out_headers) {
             if !is_count_tokens {
-                attempt_ctx
-                    .fail(&e, "proxy attempt failed (apply auth)")
-                    .await;
+                attempt_ctx.fail(&e, "proxy attempt failed (apply auth)");
             }
             last_err = Some(e);
             if is_count_tokens || is_last {
@@ -149,7 +145,7 @@ pub async fn forward(
             Ok(r) => r,
             Err(e) => {
                 if !is_count_tokens {
-                    maybe_record_failure(db_path_ref, &settings, &channel.id).await;
+                    maybe_record_failure(db_path_ref, &settings, &channel.id);
                     tracing::warn!(
                         protocol = protocol.as_str(),
                         channel_id = %channel.id,
@@ -190,7 +186,7 @@ pub async fn forward(
 
         let status = upstream.status();
         if !is_count_tokens && !status.is_success() {
-            maybe_record_failure(db_path_ref, &settings, &channel.id).await;
+            maybe_record_failure(db_path_ref, &settings, &channel.id);
         }
         if !is_count_tokens && !status.is_success() && !is_last {
             tracing::warn!(
@@ -221,16 +217,8 @@ pub async fn forward(
             continue;
         }
 
-        if !is_count_tokens
-            && status.is_success()
-            && let Err(e) =
-                storage::clear_channel_failures(db_path.clone(), channel.id.clone()).await
-        {
-            tracing::warn!(
-                channel_id = %channel.id,
-                err = %e,
-                "clear channel failures failed"
-            );
+        if !is_count_tokens && status.is_success() && settings.auto_disable_enabled {
+            spawn_clear_channel_failures(db_path.clone(), channel.id.clone());
         }
 
         return proxy_upstream_response(
@@ -283,37 +271,60 @@ async fn list_available_channels(
     Ok(out)
 }
 
-async fn maybe_record_failure(db_path: &Path, settings: &storage::AppSettings, channel_id: &str) {
+fn maybe_record_failure(db_path: &Path, settings: &storage::AppSettings, channel_id: &str) {
     if !settings.auto_disable_enabled {
         return;
     }
-    let now_ms = storage::now_ms();
-    match storage::record_channel_failure_and_maybe_disable(
-        db_path.to_path_buf(),
-        channel_id.to_string(),
-        now_ms,
-        settings.auto_disable_window_minutes,
-        settings.auto_disable_failure_times,
-        settings.auto_disable_disable_minutes,
-    )
-    .await
-    {
-        Ok(Some(until_ms)) => {
-            tracing::warn!(
-                channel_id = channel_id,
-                disabled_until_ms = until_ms,
-                "channel auto disabled"
-            );
-        }
-        Ok(None) => {}
-        Err(e) => {
-            tracing::warn!(
-                channel_id = channel_id,
-                err = %e,
-                "record channel failure failed"
-            );
-        }
+    // Best-effort: never block proxy latency on auto-disable bookkeeping.
+    if tokio::runtime::Handle::try_current().is_err() {
+        return;
     }
+    let db_path = db_path.to_path_buf();
+    let channel_id = channel_id.to_string();
+    let window_minutes = settings.auto_disable_window_minutes;
+    let failure_times = settings.auto_disable_failure_times;
+    let disable_minutes = settings.auto_disable_disable_minutes;
+    tokio::spawn(async move {
+        let now_ms = storage::now_ms();
+        match storage::record_channel_failure_and_maybe_disable(
+            db_path,
+            channel_id.clone(),
+            now_ms,
+            window_minutes,
+            failure_times,
+            disable_minutes,
+        )
+        .await
+        {
+            Ok(Some(until_ms)) => {
+                tracing::warn!(
+                    channel_id = channel_id,
+                    disabled_until_ms = until_ms,
+                    "channel auto disabled"
+                );
+            }
+            Ok(None) => {}
+            Err(e) => {
+                tracing::warn!(
+                    channel_id = channel_id,
+                    err = %e,
+                    "record channel failure failed"
+                );
+            }
+        }
+    });
+}
+
+fn spawn_clear_channel_failures(db_path: std::path::PathBuf, channel_id: String) {
+    // Best-effort: don't block proxy latency; skip if runtime is shutting down.
+    if tokio::runtime::Handle::try_current().is_err() {
+        return;
+    }
+    tokio::spawn(async move {
+        if let Err(e) = storage::clear_channel_failures(db_path, channel_id.clone()).await {
+            tracing::debug!(channel_id = channel_id, err = %e, "clear channel failures failed");
+        }
+    });
 }
 
 async fn proxy_upstream_response(
