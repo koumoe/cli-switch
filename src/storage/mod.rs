@@ -126,7 +126,7 @@ fn ensure_channel_checkins_schema(conn: &Connection) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub(crate) fn ensure_app_settings_schema(conn: &Connection) -> anyhow::Result<()> {
+pub fn ensure_app_settings_schema(conn: &Connection) -> anyhow::Result<()> {
     conn.execute(
         r#"
         CREATE TABLE IF NOT EXISTS app_settings (
