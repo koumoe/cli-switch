@@ -126,7 +126,7 @@ fn ensure_channel_checkins_schema(conn: &Connection) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn ensure_app_settings_schema(conn: &Connection) -> anyhow::Result<()> {
+pub(crate) fn ensure_app_settings_schema(conn: &Connection) -> anyhow::Result<()> {
     conn.execute(
         r#"
         CREATE TABLE IF NOT EXISTS app_settings (
@@ -189,10 +189,16 @@ fn ensure_column(
 
 pub fn now_ms() -> i64 {
     use std::time::{SystemTime, UNIX_EPOCH};
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis() as i64)
-        .unwrap_or(0)
+    match SystemTime::now().duration_since(UNIX_EPOCH) {
+        Ok(d) => i64::try_from(d.as_millis()).unwrap_or_else(|_| {
+            tracing::error!("system time is too far in the future (ms overflow)");
+            i64::MAX
+        }),
+        Err(e) => {
+            tracing::error!(err = %e, "system time is before unix epoch");
+            0
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -223,22 +229,22 @@ pub async fn clear_records(
                     params![start_ms, end_ms],
                 )?
                 .try_into()
-                .unwrap_or(i64::MAX),
+                .context("转换删除行数失败")?,
             RecordsClearKind::ErrorsDateRange { start_ms, end_ms } => conn
                 .execute(
                     r#"DELETE FROM usage_events WHERE success = 0 AND ts_ms >= ?1 AND ts_ms <= ?2"#,
                     params![start_ms, end_ms],
                 )?
                 .try_into()
-                .unwrap_or(i64::MAX),
+                .context("转换删除行数失败")?,
             RecordsClearKind::Errors => conn
                 .execute(r#"DELETE FROM usage_events WHERE success = 0"#, [])?
                 .try_into()
-                .unwrap_or(i64::MAX),
+                .context("转换删除行数失败")?,
             RecordsClearKind::All => conn
                 .execute(r#"DELETE FROM usage_events"#, [])?
                 .try_into()
-                .unwrap_or(i64::MAX),
+                .context("转换删除行数失败")?,
         };
 
         let vacuumed = matches!(kind, RecordsClearKind::Errors | RecordsClearKind::All);

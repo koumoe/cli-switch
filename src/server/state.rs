@@ -26,8 +26,11 @@ impl AppState {
 }
 
 pub(crate) fn data_dir_from_db_path(db_path: &Path) -> PathBuf {
-    db_path
-        .parent()
-        .map(|p| p.to_path_buf())
-        .unwrap_or_default()
+    match db_path.parent() {
+        Some(p) => p.to_path_buf(),
+        None => {
+            tracing::error!(db_path = %db_path.display(), "db_path has no parent; fallback to current dir");
+            PathBuf::from(".")
+        }
+    }
 }
