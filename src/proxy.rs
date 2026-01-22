@@ -11,13 +11,10 @@ use uuid::Uuid;
 
 use crate::storage::{self, Channel, Protocol};
 
+mod limits;
 mod stream;
 
 use stream::{InstrumentedStream, StreamRecordContext};
-
-const MAX_INBOUND_BODY_BYTES: usize = 64 * 1024 * 1024;
-const MAX_JSON_CAPTURE_BYTES: usize = 8 * 1024 * 1024;
-const MAX_ERROR_DETAIL_BYTES: usize = 256 * 1024;
 
 struct AttemptCtx<'a> {
     db_path: &'a Path,
@@ -75,7 +72,7 @@ pub async fn forward(
     let (parts, body) = req.into_parts();
     let is_count_tokens = protocol == Protocol::Anthropic
         && parts.uri.path().trim_end_matches('/') == "/v1/messages/count_tokens";
-    let body_bytes = to_bytes(body, MAX_INBOUND_BODY_BYTES)
+    let body_bytes = to_bytes(body, limits::MAX_INBOUND_BODY_BYTES)
         .await
         .map_err(|e| ProxyError::ReadBody(e.to_string()))?;
 
@@ -354,14 +351,16 @@ async fn proxy_upstream_response(
     }
 
     let can_capture_json = match upstream.content_length() {
-        Some(n) => (n as usize) <= MAX_JSON_CAPTURE_BYTES,
+        Some(n) => (n as usize) <= limits::MAX_JSON_CAPTURE_BYTES,
         None => true,
     };
     if !is_sse && is_json && can_capture_json {
-        let (captured, remainder) =
-            read_stream_prefix_or_all(upstream.bytes_stream().boxed(), MAX_JSON_CAPTURE_BYTES)
-                .await
-                .map_err(|e| ProxyError::Upstream(e.to_string()))?;
+        let (captured, remainder) = read_stream_prefix_or_all(
+            upstream.bytes_stream().boxed(),
+            limits::MAX_JSON_CAPTURE_BYTES,
+        )
+        .await
+        .map_err(|e| ProxyError::Upstream(e.to_string()))?;
 
         let Some(remainder) = remainder else {
             let bytes = captured;
@@ -535,7 +534,7 @@ fn filtered_headers(src: &HeaderMap) -> HeaderMap {
 }
 
 async fn read_error_detail(protocol: Protocol, upstream: reqwest::Response) -> Option<String> {
-    let bytes = read_response_prefix_bytes(upstream, MAX_ERROR_DETAIL_BYTES).await?;
+    let bytes = read_response_prefix_bytes(upstream, limits::MAX_ERROR_DETAIL_BYTES).await?;
     let msg = parse_error_message(protocol, &bytes)
         .unwrap_or_else(|| String::from_utf8_lossy(&bytes).to_string());
     Some(truncate(&msg, 2000))
