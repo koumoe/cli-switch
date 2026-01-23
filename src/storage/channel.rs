@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use uuid::Uuid;
 
 use super::protocol::normalize_base_url;
-use super::{Protocol, now_ms, with_conn};
+use super::{Protocol, StorageError, now_ms, with_conn};
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub enum RechargeCurrency {
@@ -310,7 +310,10 @@ pub async fn update_channel(
             match row {
                 Ok(v) => v,
                 Err(rusqlite::Error::QueryReturnedNoRows) => {
-                    return Err(anyhow::anyhow!("channel not found: {channel_id}"));
+                    return Err(StorageError::ChannelNotFound {
+                        channel_id: channel_id.clone(),
+                    }
+                    .into());
                 }
                 Err(e) => return Err(e.into()),
             }
@@ -419,7 +422,10 @@ pub async fn set_channel_enabled(
         tx.commit()?;
 
         if updated == 0 {
-            return Err(anyhow::anyhow!("channel not found"));
+            return Err(StorageError::ChannelNotFound {
+                channel_id: channel_id.clone(),
+            }
+            .into());
         }
         Ok(())
     })
@@ -484,7 +490,7 @@ pub async fn reorder_channels(
         }
 
         if all_ids.len() != channel_ids_in_priority_order.len() {
-            return Err(anyhow::anyhow!("channel reorder mismatch: length"));
+            return Err(StorageError::ChannelReorderMismatch { reason: "length" }.into());
         }
 
         let all_set = all_ids
@@ -496,9 +502,17 @@ pub async fn reorder_channels(
             .collect::<std::collections::HashSet<String>>();
         if incoming_set != all_set {
             if incoming_set.is_subset(&all_set) {
-                return Err(anyhow::anyhow!("channel reorder mismatch: coverage"));
+                return Err(StorageError::ChannelReorderMismatch { reason: "coverage" }.into());
             }
-            return Err(anyhow::anyhow!("channel not found"));
+            let unknown_id = incoming_set
+                .difference(&all_set)
+                .next()
+                .cloned()
+                .unwrap_or_else(|| "<unknown>".to_string());
+            return Err(StorageError::ChannelNotFound {
+                channel_id: unknown_id,
+            }
+            .into());
         }
 
         let ts = now_ms();
@@ -532,7 +546,10 @@ pub async fn delete_channel(db_path: PathBuf, channel_id: String) -> anyhow::Res
         tx.commit()?;
 
         if deleted == 0 {
-            return Err(anyhow::anyhow!("channel not found"));
+            return Err(StorageError::ChannelNotFound {
+                channel_id: channel_id.clone(),
+            }
+            .into());
         }
         Ok(())
     })

@@ -3,7 +3,7 @@ use rusqlite::params;
 use serde::Serialize;
 use std::path::PathBuf;
 
-use super::{now_ms, with_conn};
+use super::{StorageError, now_ms, with_conn};
 
 #[derive(Debug, Clone, Serialize)]
 pub struct ChannelCheckinsToday {
@@ -62,7 +62,10 @@ pub async fn complete_channel_checkin_today(
             )
             .optional()?;
         if exists.is_none() {
-            return Err(anyhow::anyhow!("channel not found"));
+            return Err(StorageError::ChannelNotFound {
+                channel_id: channel_id.clone(),
+            }
+            .into());
         }
 
         conn.execute(

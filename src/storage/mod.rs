@@ -7,6 +7,7 @@ const SQLITE_BUSY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(
 
 mod channel;
 mod checkin;
+mod error;
 mod pricing;
 mod protocol;
 mod route;
@@ -14,6 +15,8 @@ mod settings;
 mod stats;
 mod update_ignore;
 mod usage;
+
+pub use error::StorageError;
 
 pub use channel::{
     Channel, CreateChannel, RechargeCurrency, UpdateChannel, channel_is_auto_disabled,

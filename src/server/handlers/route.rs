@@ -5,7 +5,7 @@ use axum::response::IntoResponse;
 use serde::Deserialize;
 
 use crate::server::AppState;
-use crate::server::error::{ApiError, map_storage_unit_no_content};
+use crate::server::error::{ApiError, map_storage_unit_no_content_err};
 use crate::storage;
 
 pub(in crate::server) async fn list_routes(
@@ -35,9 +35,12 @@ pub(in crate::server) async fn update_route(
     Json(input): Json<storage::UpdateRoute>,
 ) -> Result<impl IntoResponse, ApiError> {
     let res = storage::update_route(state.db_path(), route_id, input).await;
-    map_storage_unit_no_content(res, |msg| {
-        msg.starts_with("route not found")
-            .then(|| ApiError::not_found("route_not_found", "Route not found"))
+    map_storage_unit_no_content_err(res, |e| {
+        matches!(
+            e.downcast_ref::<storage::StorageError>(),
+            Some(storage::StorageError::RouteNotFound { .. })
+        )
+        .then(|| ApiError::not_found("route_not_found", "Route not found"))
     })
 }
 
@@ -46,9 +49,12 @@ pub(in crate::server) async fn delete_route(
     axum::extract::Path(route_id): axum::extract::Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
     let res = storage::delete_route(state.db_path(), route_id).await;
-    map_storage_unit_no_content(res, |msg| {
-        msg.starts_with("route not found")
-            .then(|| ApiError::not_found("route_not_found", "Route not found"))
+    map_storage_unit_no_content_err(res, |e| {
+        matches!(
+            e.downcast_ref::<storage::StorageError>(),
+            Some(storage::StorageError::RouteNotFound { .. })
+        )
+        .then(|| ApiError::not_found("route_not_found", "Route not found"))
     })
 }
 
@@ -85,21 +91,18 @@ pub(in crate::server) async fn reorder_route_channels(
     }
 
     let res = storage::set_route_channels(state.db_path(), route_id, input.channel_ids).await;
-    map_storage_unit_no_content(res, |msg| {
-        if msg.starts_with("route not found") {
+    map_storage_unit_no_content_err(res, |e| match e.downcast_ref::<storage::StorageError>() {
+        Some(storage::StorageError::RouteNotFound { .. }) => {
             Some(ApiError::not_found("route_not_found", "Route not found"))
-        } else if msg.starts_with("channel not found") {
-            Some(ApiError::not_found(
-                "channel_not_found",
-                "Channel not found",
-            ))
-        } else if msg.starts_with("channel protocol mismatch") {
-            Some(ApiError::bad_request(
-                "route_channel_protocol_mismatch",
-                "Channel protocol does not match route protocol",
-            ))
-        } else {
-            None
         }
+        Some(storage::StorageError::ChannelNotFound { .. }) => Some(ApiError::not_found(
+            "channel_not_found",
+            "Channel not found",
+        )),
+        Some(storage::StorageError::ChannelProtocolMismatch { .. }) => Some(ApiError::bad_request(
+            "route_channel_protocol_mismatch",
+            "Channel protocol does not match route protocol",
+        )),
+        _ => None,
     })
 }
