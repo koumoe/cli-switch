@@ -168,12 +168,10 @@ pub async fn list_channels(db_path: PathBuf) -> anyhow::Result<Vec<Channel>> {
                 auth_ref: row.get(5)?,
                 checkin_url: row.get(6)?,
                 priority: row.get(7)?,
-                recharge_currency: row
-                    .get::<_, Option<RechargeCurrency>>(8)?
-                    .unwrap_or(RechargeCurrency::Cny),
-                real_multiplier: row.get::<_, Option<f64>>(9)?.unwrap_or(1.0),
+                recharge_currency: row.get(8)?,
+                real_multiplier: row.get(9)?,
                 enabled: row.get::<_, i64>(10)? != 0,
-                auto_disabled_until_ms: row.get::<_, Option<i64>>(11)?.unwrap_or(0),
+                auto_disabled_until_ms: row.get(11)?,
                 created_at_ms: row.get(12)?,
                 updated_at_ms: row.get(13)?,
             })
@@ -300,12 +298,10 @@ pub async fn update_channel(
                     auth_ref: row.get(5)?,
                     checkin_url: row.get(6)?,
                     priority: row.get(7)?,
-                    recharge_currency: row
-                        .get::<_, Option<RechargeCurrency>>(8)?
-                        .unwrap_or(RechargeCurrency::Cny),
-                    real_multiplier: row.get::<_, Option<f64>>(9)?.unwrap_or(1.0),
+                    recharge_currency: row.get(8)?,
+                    real_multiplier: row.get(9)?,
                     enabled: row.get::<_, i64>(10)? != 0,
-                    auto_disabled_until_ms: row.get::<_, Option<i64>>(11)?.unwrap_or(0),
+                    auto_disabled_until_ms: row.get(11)?,
                     created_at_ms: row.get(12)?,
                     updated_at_ms: row.get(13)?,
                 })
@@ -452,12 +448,10 @@ pub async fn get_channel(db_path: PathBuf, channel_id: String) -> anyhow::Result
                 auth_ref: row.get(5)?,
                 checkin_url: row.get(6)?,
                 priority: row.get(7)?,
-                recharge_currency: row
-                    .get::<_, Option<RechargeCurrency>>(8)?
-                    .unwrap_or(RechargeCurrency::Cny),
-                real_multiplier: row.get::<_, Option<f64>>(9)?.unwrap_or(1.0),
+                recharge_currency: row.get(8)?,
+                real_multiplier: row.get(9)?,
                 enabled: row.get::<_, i64>(10)? != 0,
-                auto_disabled_until_ms: row.get::<_, Option<i64>>(11)?.unwrap_or(0),
+                auto_disabled_until_ms: row.get(11)?,
                 created_at_ms: row.get(12)?,
                 updated_at_ms: row.get(13)?,
             })
