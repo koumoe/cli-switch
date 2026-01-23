@@ -2,6 +2,7 @@ use axum::Json;
 use axum::extract::State;
 use axum::response::IntoResponse;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
 use crate::cli_tools::{CLI_TOOLS, CliToolId};
 use crate::nodejs;
@@ -154,7 +155,7 @@ pub(in crate::server) async fn install_npm_env(
     let node_path = paths.node_path.to_string_lossy().to_string();
 
     // Persist as the manual paths so all existing code paths (status/install/auto-update) work.
-    let _ = storage::update_app_settings(
+    let updated_settings = storage::update_app_settings(
         state.db_path(),
         storage::AppSettingsPatch {
             cli_tools_npm_path: Some(npm_path.clone()),
@@ -163,6 +164,8 @@ pub(in crate::server) async fn install_npm_env(
         },
     )
     .await?;
+
+    let _ = state.settings_cache.send(Arc::new(updated_settings));
 
     let next = *state.settings_notify.borrow() + 1;
     let _ = state.settings_notify.send(next);
