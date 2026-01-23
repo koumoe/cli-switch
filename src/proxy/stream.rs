@@ -53,25 +53,27 @@ impl InstrumentedStream {
     }
 
     fn on_chunk(&mut self, bytes: &Bytes) {
-        const MAX_ERR_BODY_BUF: usize = 256 * 1024;
-        const MAX_SSE_LOG_BUF: usize = 1024 * 1024;
         if self.ttft_ms.is_none() {
             self.ttft_ms = Some(self.ctx.started.elapsed().as_millis() as i64);
         }
-        if !self.ctx.status_is_success && self.err_body_buf.len() < MAX_ERR_BODY_BUF {
-            let remain = MAX_ERR_BODY_BUF - self.err_body_buf.len();
+        if !self.ctx.status_is_success
+            && self.err_body_buf.len() < super::limits::MAX_ERROR_DETAIL_BYTES
+        {
+            let remain = super::limits::MAX_ERROR_DETAIL_BYTES - self.err_body_buf.len();
             self.err_body_buf
                 .extend_from_slice(&bytes[..bytes.len().min(remain)]);
         }
         if self.ctx.parse_sse {
-            if !self.sse_log_truncated && self.sse_log_buf.len() < MAX_SSE_LOG_BUF {
-                let remain = MAX_SSE_LOG_BUF - self.sse_log_buf.len();
+            if !self.sse_log_truncated
+                && self.sse_log_buf.len() < super::limits::MAX_SSE_LOG_BUF_BYTES
+            {
+                let remain = super::limits::MAX_SSE_LOG_BUF_BYTES - self.sse_log_buf.len();
                 self.sse_log_buf
                     .extend_from_slice(&bytes[..bytes.len().min(remain)]);
                 if bytes.len() > remain {
                     self.sse_log_truncated = true;
                 }
-            } else if self.sse_log_buf.len() >= MAX_SSE_LOG_BUF {
+            } else if self.sse_log_buf.len() >= super::limits::MAX_SSE_LOG_BUF_BYTES {
                 self.sse_log_truncated = true;
             }
             self.consume_sse(bytes);
@@ -79,9 +81,8 @@ impl InstrumentedStream {
     }
 
     fn consume_sse(&mut self, bytes: &Bytes) {
-        const MAX_SSE_BUF: usize = 256 * 1024;
-        if self.sse_buf.len() < MAX_SSE_BUF {
-            let remain = MAX_SSE_BUF - self.sse_buf.len();
+        if self.sse_buf.len() < super::limits::MAX_SSE_BUF_BYTES {
+            let remain = super::limits::MAX_SSE_BUF_BYTES - self.sse_buf.len();
             self.sse_buf
                 .extend_from_slice(&bytes[..bytes.len().min(remain)]);
         }

@@ -233,16 +233,7 @@ fn persist_close_behavior_sync(db_path: &std::path::Path, behavior: storage::Clo
 
     let res: anyhow::Result<()> = (|| {
         let conn = rusqlite::Connection::open(db_path)?;
-        conn.execute(
-            r#"
-            CREATE TABLE IF NOT EXISTS app_settings (
-              key TEXT PRIMARY KEY,
-              value TEXT NOT NULL,
-              updated_at_ms INTEGER NOT NULL
-            )
-            "#,
-            [],
-        )?;
+        storage::ensure_app_settings_schema(&conn)?;
 
         let updated_at_ms = storage::now_ms();
         conn.execute(
