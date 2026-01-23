@@ -318,7 +318,7 @@ pub async fn serve_with_listener(
     {
         let db_path = (*db_path).clone();
         let http_runtime = update_runtime.clone();
-bg.spawn(async move {
+        bg.spawn(async move {
             let settings = match storage::get_app_settings(db_path.clone()).await {
                 Ok(s) => s,
                 Err(e) => {
