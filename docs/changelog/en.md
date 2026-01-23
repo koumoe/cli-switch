@@ -1,3 +1,31 @@
+## [0.25.10](https://github.com/koumoe/cli-switch/compare/v0.25.8...v0.25.10) (2026-01-23)
+
+### Bug Fixes
+
+* avoid clobbering shell rc on read errors ([c20bccb](https://github.com/koumoe/cli-switch/commit/c20bccbcc0319a7e70fe5df0a9be38140d4c5270))
+* avoid defaulting settings during startup ([803afd8](https://github.com/koumoe/cli-switch/commit/803afd8a5ff680b531eee86ed8b7a21e0720af46))
+* avoid panic when truncating GitHub error body ([51b577c](https://github.com/koumoe/cli-switch/commit/51b577c77789ab676c1d3f1df8f5ac1aa5af753f))
+* bound usage event writes with a queue ([07c7062](https://github.com/koumoe/cli-switch/commit/07c70626a2447a15f5687b63a577fe73c1a606d1))
+* download ui-dist into ui/dist ([70d2ace](https://github.com/koumoe/cli-switch/commit/70d2ace0db5eab58de73dc54c0df8e8d62beb224))
+* enforce required channel fields ([5f635ed](https://github.com/koumoe/cli-switch/commit/5f635ed8eb7c80140f694a53dbb8047faa1925a2))
+* expose app_settings schema helper ([58410e4](https://github.com/koumoe/cli-switch/commit/58410e401989ae3a4fee269b62ce4f91bd1f6e98))
+* expose invalid settings flag ([c527551](https://github.com/koumoe/cli-switch/commit/c527551a3f2e8bba3387959f8369b854cca5b4f5))
+* improve GitHub rate limit errors ([85bb09c](https://github.com/koumoe/cli-switch/commit/85bb09c1ad939845ccd17c6bc9c03cde3e682e97))
+* make db fallbacks explicit ([e32747e](https://github.com/koumoe/cli-switch/commit/e32747e763e1fd5bb0c15c0ead5aec17a5fc35b8))
+* reduce sqlite busy_timeout to 1s ([a6d10d3](https://github.com/koumoe/cli-switch/commit/a6d10d3060f66c1bda6a853273579f19ef25c243))
+* set sqlite busy_timeout for all connections ([d432d74](https://github.com/koumoe/cli-switch/commit/d432d740f1b907033dbff0fdb352ed7f1b348e33))
+* stop defaulting settings on load errors ([e88e324](https://github.com/koumoe/cli-switch/commit/e88e324cff2f463854c6199969da489298662f1f))
+* use typed storage errors for handlers ([cdbf369](https://github.com/koumoe/cli-switch/commit/cdbf3693321a871b6e4071a9f4dbba75660f453d))
+* validate sqlite identifiers in ensure_column ([9d4b822](https://github.com/koumoe/cli-switch/commit/9d4b82265b4b918b10faefac22df5b30a1239262))
+* warn on invalid app settings values ([695c084](https://github.com/koumoe/cli-switch/commit/695c084a8b6f926adb0e9326ef7eb4563031b37a))
+
+### Performance Improvements
+
+* make auto-disable db writes non-blocking ([d1ace25](https://github.com/koumoe/cli-switch/commit/d1ace25a649d40e37ca08604ae69fd878b2c165e))
+* optimize usage cost backfill ([5392d10](https://github.com/koumoe/cli-switch/commit/5392d101027e3ef1b1840a848853538c31c68102))
+* prefer gemini model from uri ([f3b272b](https://github.com/koumoe/cli-switch/commit/f3b272b71cb75629e93ae459356013077f5eb28a))
+* reuse parsed JSON for preview/usage ([e9dd1d0](https://github.com/koumoe/cli-switch/commit/e9dd1d03be5b9d167efbef683afd1c02065e52e0))
+* reuse UI build in release workflow ([b647012](https://github.com/koumoe/cli-switch/commit/b6470120959006461f8fef174178cb5bae7ef974))
 ## [0.25.9](https://github.com/koumoe/cli-switch/compare/v0.25.8...v0.25.9) (2026-01-23)
 
 ### Bug Fixes

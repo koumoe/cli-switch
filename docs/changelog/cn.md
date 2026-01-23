@@ -1,3 +1,29 @@
+## [0.25.10](https://github.com/koumoe/cli-switch/compare/v0.25.8...v0.25.10) (2026-01-23)
+
+### 修复
+* 读取 shell rc 失败时避免覆盖 ([c20bccb](https://github.com/koumoe/cli-switch/commit/c20bccbcc0319a7e70fe5df0a9be38140d4c5270))
+* 启动时 settings 读取失败不再默认兜底 ([803afd8](https://github.com/koumoe/cli-switch/commit/803afd8a5ff680b531eee86ed8b7a21e0720af46))
+* 截断 GitHub 错误正文时避免 panic ([51b577c](https://github.com/koumoe/cli-switch/commit/51b577c77789ab676c1d3f1df8f5ac1aa5af753f))
+* usage_events 写入改为有界队列并增加重试 ([07c7062](https://github.com/koumoe/cli-switch/commit/07c70626a2447a15f5687b63a577fe73c1a606d1))
+* 修复 ui-dist 下载到 ui/dist ([70d2ace](https://github.com/koumoe/cli-switch/commit/70d2ace0db5eab58de73dc54c0df8e8d62beb224))
+* 渠道必填字段不再 Option+默认兜底 ([5f635ed](https://github.com/koumoe/cli-switch/commit/5f635ed8eb7c80140f694a53dbb8047faa1925a2))
+* 暴露 app_settings schema helper ([58410e4](https://github.com/koumoe/cli-switch/commit/58410e401989ae3a4fee269b62ce4f91bd1f6e98))
+* 暴露 settings 无效值标记 ([c527551](https://github.com/koumoe/cli-switch/commit/c527551a3f2e8bba3387959f8369b854cca5b4f5))
+* 优化 GitHub rate limit 错误提示 ([85bb09c](https://github.com/koumoe/cli-switch/commit/85bb09c1ad939845ccd17c6bc9c03cde3e682e97))
+* 明确 db 相关兜底并复用 schema ([e32747e](https://github.com/koumoe/cli-switch/commit/e32747e763e1fd5bb0c15c0ead5aec17a5fc35b8))
+* 将 sqlite busy_timeout 下调至 1 秒 ([a6d10d3](https://github.com/koumoe/cli-switch/commit/a6d10d3060f66c1bda6a853273579f19ef25c243))
+* 为所有 sqlite 连接设置 busy_timeout ([d432d74](https://github.com/koumoe/cli-switch/commit/d432d740f1b907033dbff0fdb352ed7f1b348e33))
+* settings 读取失败不再默认兜底 ([e88e324](https://github.com/koumoe/cli-switch/commit/e88e324cff2f463854c6199969da489298662f1f))
+* 使用结构化 storage 错误避免 handler 字符串匹配 ([cdbf369](https://github.com/koumoe/cli-switch/commit/cdbf3693321a871b6e4071a9f4dbba75660f453d))
+* 校验 ensure_column 的 sqlite 标识符 ([9d4b822](https://github.com/koumoe/cli-switch/commit/9d4b82265b4b918b10faefac22df5b30a1239262))
+* settings 值解析异常时告警 ([695c084](https://github.com/koumoe/cli-switch/commit/695c084a8b6f926adb0e9326ef7eb4563031b37a))
+
+### 性能优化
+* 自动禁用相关写库改为异步不阻塞转发 ([d1ace25](https://github.com/koumoe/cli-switch/commit/d1ace25a649d40e37ca08604ae69fd878b2c165e))
+* 优化 usage 成本回填（去除 N+1 + 后台执行） ([5392d10](https://github.com/koumoe/cli-switch/commit/5392d101027e3ef1b1840a848853538c31c68102))
+* Gemini 优先从 URI 提取 model ([f3b272b](https://github.com/koumoe/cli-switch/commit/f3b272b71cb75629e93ae459356013077f5eb28a))
+* 复用已解析 JSON 用于预览与 usage ([e9dd1d0](https://github.com/koumoe/cli-switch/commit/e9dd1d03be5b9d167efbef683afd1c02065e52e0))
+* Release workflow 复用 UI 构建产物 ([b647012](https://github.com/koumoe/cli-switch/commit/b6470120959006461f8fef174178cb5bae7ef974))
 ## [0.25.9](https://github.com/koumoe/cli-switch/compare/v0.25.8...v0.25.9) (2026-01-23)
 
 ### 修复
