@@ -14,6 +14,7 @@ import { useTheme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 import { humanizeApiError } from "@/lib/error";
 import { formatNpmEnvInstallProgressText } from "@/lib/npmEnvInstallProgress";
+import { installCliToolWithToast } from "@/lib/cliToolInstaller";
 import {
   Button,
   Dialog,
@@ -29,7 +30,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui";
 import { toast } from "sonner";
-import { downloadUpdate, getCliToolsStatus, getHealth, getSettings, getUpdateChangelog, ignoreUpdate, installCliTool, installNpmEnv, pricingStatus, pricingSync, updateSettings, type ChangelogSection, type CliToolId, type CliToolsStatus } from "./api";
+import { downloadUpdate, getCliToolsStatus, getHealth, getSettings, getUpdateChangelog, ignoreUpdate, installNpmEnv, pricingStatus, pricingSync, updateSettings, type ChangelogSection, type CliToolId, type CliToolsStatus } from "./api";
 import { logger, setLogLevel } from "@/lib/logger";
 import type { CliswitchNpmEnvInstallProgressEvent, CliswitchUpdateStatusEvent, NpmEnvInstallProgress } from "@/lib/cliswitchEvents";
 import { isUpdateReadyShown, markUpdateReadyShown } from "@/lib/updateReadyPrompt";
@@ -635,25 +636,19 @@ export default function App() {
                         }
                         setCliToolOnboardingBusy((prev) => ({ ...prev, [tool.id]: true }));
                         try {
-                          const res = await installCliTool(tool.id);
-                          setCliToolsOnboardingStatus((prev) =>
-                            prev ? { ...prev, tools: prev.tools.map((t0) => (t0.id === tool.id ? res.tool : t0)) } : prev
-                          );
-                          if (res.ok) {
-                            toast.success(t("settings.cliTools.installOk", { name: tool.name }), {
-                              description: res.terminal_shim_ok
-                                ? t("settings.cliTools.terminalReady")
-                                : res.terminal_shim_error
-                                  ? t("settings.cliTools.terminalSetupFailed", { error: res.terminal_shim_error })
-                                  : undefined,
-                            });
-                          } else {
-                            toast.error(t("settings.cliTools.installFail", { name: tool.name }), {
-                              description: res.stderr?.trim() || res.stdout?.trim() || "-",
-                            });
-                          }
-                        } catch (e) {
-                          toast.error(t("settings.cliTools.installFail", { name: tool.name }), { description: humanizeApiError(e, t) });
+                          await installCliToolWithToast({
+                            tool,
+                            t,
+                            onToolUpdated: (nextTool) =>
+                              setCliToolsOnboardingStatus((prev) =>
+                                prev
+                                  ? {
+                                      ...prev,
+                                      tools: prev.tools.map((t0) => (t0.id === nextTool.id ? nextTool : t0)),
+                                    }
+                                  : prev
+                              ),
+                          });
                         } finally {
                           setCliToolOnboardingBusy((prev) => ({ ...prev, [tool.id]: false }));
                         }
@@ -687,24 +682,19 @@ export default function App() {
                   for (const tool of missing) {
                     setCliToolOnboardingBusy((prev) => ({ ...prev, [tool.id]: true }));
                     try {
-                      const res = await installCliTool(tool.id);
-                      setCliToolsOnboardingStatus((prev) =>
-                        prev ? { ...prev, tools: prev.tools.map((t0) => (t0.id === tool.id ? res.tool : t0)) } : prev
-                      );
-                      if (res.ok) {
-                        toast.success(t("settings.cliTools.installOk", { name: tool.name }), {
-                          description: res.terminal_shim_ok
-                            ? t("settings.cliTools.terminalReady")
-                            : res.terminal_shim_error
-                              ? t("settings.cliTools.terminalSetupFailed", { error: res.terminal_shim_error })
-                              : undefined,
-                        });
-                      }
-                      else {
-                        toast.error(t("settings.cliTools.installFail", { name: tool.name }), {
-                          description: res.stderr?.trim() || res.stdout?.trim() || "-",
-                        });
-                      }
+                      await installCliToolWithToast({
+                        tool,
+                        t,
+                        onToolUpdated: (nextTool) =>
+                          setCliToolsOnboardingStatus((prev) =>
+                            prev
+                              ? {
+                                  ...prev,
+                                  tools: prev.tools.map((t0) => (t0.id === nextTool.id ? nextTool : t0)),
+                                }
+                              : prev
+                          ),
+                      });
                     } finally {
                       setCliToolOnboardingBusy((prev) => ({ ...prev, [tool.id]: false }));
                     }
