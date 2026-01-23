@@ -303,10 +303,12 @@ pub async fn serve_with_listener(
 
     let app = build_app(state);
 
+    let mut bg = tokio::task::JoinSet::<()>::new();
+
     {
         let db_path = (*db_path).clone();
         let http_runtime = update_runtime.clone();
-        tokio::spawn(async move {
+bg.spawn(async move {
             let settings = match storage::get_app_settings(db_path.clone()).await {
                 Ok(s) => s,
                 Err(e) => {
@@ -333,30 +335,30 @@ pub async fn serve_with_listener(
     let settings_rx2 = settings_rx.clone();
     let settings_rx3 = settings_rx.clone();
     let settings_rx4 = settings_rx.clone();
-    tokio::spawn(tasks::pricing_auto_update_loop(
+    bg.spawn(tasks::pricing_auto_update_loop(
         (*db_path).clone(),
         http_client.clone(),
         settings_rx,
     ));
 
-    tokio::spawn(tasks::app_update_auto_loop(
+    bg.spawn(tasks::app_update_auto_loop(
         (*db_path).clone(),
         http_client.clone(),
         settings_rx2,
         update_runtime,
     ));
 
-    tokio::spawn(tasks::cli_tools_auto_update_loop(
+    bg.spawn(tasks::cli_tools_auto_update_loop(
         (*db_path).clone(),
         settings_rx4,
     ));
 
-    tokio::spawn(tasks::logs_retention_cleanup_loop(
+    bg.spawn(tasks::logs_retention_cleanup_loop(
         (*db_path).clone(),
         settings_rx3,
     ));
 
-    tokio::spawn(tasks::apply_autostart_setting((*db_path).clone()));
+    bg.spawn(tasks::apply_autostart_setting((*db_path).clone()));
 
     if open_browser {
         let url = format!("http://{addr}");
@@ -365,7 +367,17 @@ pub async fn serve_with_listener(
         }
     }
 
-    axum::serve(listener, app).await?;
+    let res = axum::serve(listener, app).await;
+
+    // Best-effort stop background tasks when the server ends.
+    bg.abort_all();
+    while let Some(joined) = bg.join_next().await {
+        if let Err(e) = joined {
+            tracing::debug!(err = %e, "background task ended");
+        }
+    }
+
+    res?;
     Ok(())
 }
 
