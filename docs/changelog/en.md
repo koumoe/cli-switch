@@ -1,3 +1,12 @@
+## [0.25.11](https://github.com/koumoe/cli-switch/compare/v0.25.10...v0.25.11) (2026-01-23)
+
+### Bug Fixes
+
+* correct indentation in server.rs ([f93c6aa](https://github.com/koumoe/cli-switch/commit/f93c6aabf6c39988028f4c23601faf16f474c6d1))
+
+### Performance Improvements
+
+* cache settings/channels for proxy ([730211c](https://github.com/koumoe/cli-switch/commit/730211c83a045e304aa7bcf622819a913251749b))
 ## [0.25.10](https://github.com/koumoe/cli-switch/compare/v0.25.8...v0.25.10) (2026-01-23)
 
 ### Bug Fixes
