@@ -365,16 +365,25 @@ async fn proxy_upstream_response(
         let Some(remainder) = remainder else {
             let bytes = captured;
 
-            let response_text = match serde_json::from_slice::<serde_json::Value>(&bytes) {
-                Ok(v) => serde_json::to_string(&v)
+            // For small JSON responses we capture fully, parse once and reuse the Value for:
+            // - pretty/normalized response preview logging
+            // - token usage extraction
+            // - error message extraction
+            let parsed_json = serde_json::from_slice::<serde_json::Value>(&bytes).ok();
+
+            let response_text = match &parsed_json {
+                Some(v) => serde_json::to_string(v)
                     .unwrap_or_else(|_| String::from_utf8_lossy(&bytes).to_string()),
-                Err(_) => String::from_utf8_lossy(&bytes).to_string(),
+                None => String::from_utf8_lossy(&bytes).to_string(),
             };
             let response_one_line = to_single_line(&response_text);
             let response_preview = truncate(&response_one_line, 4096);
 
             let duration_ms = ctx.started.elapsed().as_millis() as i64;
-            let usage = parse_usage_from_json(ctx.protocol, &bytes);
+            let usage = parsed_json
+                .as_ref()
+                .map(|v| parse_usage_from_value(ctx.protocol, v))
+                .unwrap_or_default();
             let (
                 prompt_tokens,
                 completion_tokens,
@@ -387,7 +396,9 @@ async fn proxy_upstream_response(
             let success = status.is_success();
             let error_kind = (!success).then(|| format!("upstream_http:{}", status.as_u16()));
             let error_detail = (!success).then(|| {
-                let msg = parse_error_message(ctx.protocol, &bytes)
+                let msg = parsed_json
+                    .as_ref()
+                    .and_then(|v| parse_error_message_from_value(ctx.protocol, v))
                     .unwrap_or_else(|| String::from_utf8_lossy(&bytes).to_string());
                 truncate(&msg, 2000)
             });
@@ -868,26 +879,27 @@ impl TokenUsage {
     }
 }
 
-fn parse_usage_from_json(protocol: Protocol, bytes: &[u8]) -> TokenUsage {
-    let Ok(v) = serde_json::from_slice::<serde_json::Value>(bytes) else {
-        return TokenUsage::default();
-    };
-    extract_usage_from_value(protocol, &v)
+fn parse_usage_from_value(protocol: Protocol, v: &serde_json::Value) -> TokenUsage {
+    extract_usage_from_value(protocol, v)
 }
 
 fn parse_error_message(_protocol: Protocol, bytes: &[u8]) -> Option<String> {
     let v: serde_json::Value = serde_json::from_slice(bytes).ok()?;
-    let message = get_error_message(&v)?;
+    parse_error_message_from_value(_protocol, &v)
+}
+
+fn parse_error_message_from_value(_protocol: Protocol, v: &serde_json::Value) -> Option<String> {
+    let message = get_error_message(v)?;
 
     let mut extras: Vec<String> = Vec::new();
 
-    if let Some(t) = get_str_path(&v, &["error", "type"]) {
+    if let Some(t) = get_str_path(v, &["error", "type"]) {
         extras.push(format!("type={t}"));
     }
-    if let Some(code) = get_any_path(&v, &["error", "code"]) {
+    if let Some(code) = get_any_path(v, &["error", "code"]) {
         extras.push(format!("code={code}"));
     }
-    if let Some(status) = get_any_path(&v, &["error", "status"]) {
+    if let Some(status) = get_any_path(v, &["error", "status"]) {
         extras.push(format!("status={status}"));
     }
 
