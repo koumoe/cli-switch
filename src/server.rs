@@ -307,9 +307,17 @@ pub async fn serve_with_listener(
         let db_path = (*db_path).clone();
         let http_runtime = update_runtime.clone();
         tokio::spawn(async move {
-            let settings = storage::get_app_settings(db_path.clone())
-                .await
-                .unwrap_or_default();
+            let settings = match storage::get_app_settings(db_path.clone()).await {
+                Ok(s) => s,
+                Err(e) => {
+                    // Avoid guessing the update status when settings are unavailable.
+                    tracing::warn!(
+                        err = %e,
+                        "load app settings failed; skip initial update status publish"
+                    );
+                    return;
+                }
+            };
             let data_dir = crate::server::state::data_dir_from_db_path(&db_path);
             let status = update::get_status(
                 http_runtime,
