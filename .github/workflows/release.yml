@@ -222,7 +222,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: ui-dist
-          path: .
+          path: ui/dist
 
       - name: Install dependencies
         run: |
@@ -272,7 +272,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: ui-dist
-          path: .
+          path: ui/dist
 
       - name: Install dependencies
         run: |
@@ -322,7 +322,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: ui-dist
-          path: .
+          path: ui/dist
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -364,7 +364,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: ui-dist
-          path: .
+          path: ui/dist
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -406,7 +406,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: ui-dist
-          path: .
+          path: ui/dist
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -453,7 +453,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: ui-dist
-          path: .
+          path: ui/dist
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
