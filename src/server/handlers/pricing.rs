@@ -3,10 +3,31 @@ use axum::extract::{Query, State};
 use axum::response::IntoResponse;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use std::sync::{Arc, OnceLock};
 
 use crate::server::AppState;
 use crate::server::error::ApiError;
 use crate::storage;
+
+static BACKFILL_USAGE_COSTS_INFLIGHT: OnceLock<Arc<tokio::sync::Semaphore>> = OnceLock::new();
+
+fn spawn_backfill_usage_event_costs(db_path: PathBuf) {
+    let sem = BACKFILL_USAGE_COSTS_INFLIGHT
+        .get_or_init(|| Arc::new(tokio::sync::Semaphore::new(1)))
+        .clone();
+
+    let Ok(permit) = sem.try_acquire_owned() else {
+        tracing::debug!("skip backfill usage event costs: already running");
+        return;
+    };
+
+    tokio::spawn(async move {
+        let _permit = permit;
+        if let Err(e) = storage::backfill_usage_event_costs(db_path).await {
+            tracing::warn!(err = %e, "backfill usage event costs failed");
+        }
+    });
+}
 
 #[derive(Debug, Deserialize)]
 pub(in crate::server) struct PricingModelsQuery {
@@ -217,9 +238,7 @@ pub(crate) async fn run_pricing_sync(
         .await
         .map_err(ApiError::Internal)?;
 
-    if let Err(e) = storage::backfill_usage_event_costs(db_path).await {
-        tracing::warn!(err = %e, "backfill usage event costs failed");
-    }
+    spawn_backfill_usage_event_costs(db_path);
 
     Ok((updated, updated_at_ms))
 }

@@ -1,5 +1,6 @@
 use rusqlite::{Connection, OptionalExtension as _, params};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -226,17 +227,27 @@ fn estimate_cost_usd(
     cache_read_tokens: Option<i64>,
     cache_write_tokens: Option<i64>,
 ) -> Option<String> {
-    let Ok(Some((
-        prompt_price,
-        completion_price,
-        request_price,
-        cache_read_price,
-        cache_write_price,
-    ))) = find_pricing_for_model(conn, model)
-    else {
+    let Ok(Some(prices)) = find_pricing_for_model(conn, model) else {
         return None;
     };
+    estimate_cost_usd_from_prices(
+        prices,
+        success,
+        prompt_tokens,
+        completion_tokens,
+        cache_read_tokens,
+        cache_write_tokens,
+    )
+}
 
+fn estimate_cost_usd_from_prices(
+    (prompt_price, completion_price, request_price, cache_read_price, cache_write_price): PricingModelPrices,
+    success: bool,
+    prompt_tokens: Option<i64>,
+    completion_tokens: Option<i64>,
+    cache_read_tokens: Option<i64>,
+    cache_write_tokens: Option<i64>,
+) -> Option<String> {
     let prompt_unit = prompt_price
         .as_deref()
         .and_then(parse_price_usd)
@@ -311,13 +322,25 @@ pub async fn backfill_usage_event_costs(db_path: PathBuf) -> anyhow::Result<i64>
             ))
         })?;
 
+        let mut pricing_cache = HashMap::<String, Option<PricingModelPrices>>::new();
         let mut updated = 0i64;
         for row in rows {
             let (id, model, success, prompt_tokens, completion_tokens, cache_read_tokens, cache_write_tokens) =
                 row?;
-            let Some(cost) = estimate_cost_usd(
-                conn,
-                &model,
+
+            let prices = if let Some(prices) = pricing_cache.get(&model) {
+                prices.clone()
+            } else {
+                let prices = find_pricing_for_model(conn, &model)?;
+                pricing_cache.insert(model.clone(), prices.clone());
+                prices
+            };
+
+            let Some(prices) = prices else {
+                continue;
+            };
+            let Some(cost) = estimate_cost_usd_from_prices(
+                prices,
                 success,
                 prompt_tokens,
                 completion_tokens,
