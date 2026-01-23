@@ -788,10 +788,13 @@ fn extract_model(
     uri: &axum::http::Uri,
     body: &[u8],
 ) -> Option<String> {
-    extract_model_from_body(headers, body).or_else(|| match protocol {
-        Protocol::Gemini => extract_gemini_model_from_uri(uri),
-        _ => None,
-    })
+    match protocol {
+        // Gemini model is part of the URL in common requests, so prefer URI to avoid parsing body JSON.
+        Protocol::Gemini => {
+            extract_gemini_model_from_uri(uri).or_else(|| extract_model_from_body(headers, body))
+        }
+        _ => extract_model_from_body(headers, body),
+    }
 }
 
 fn extract_gemini_model_from_uri(uri: &axum::http::Uri) -> Option<String> {
