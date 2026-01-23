@@ -1,3 +1,18 @@
+## [0.25.9](https://github.com/koumoe/cli-switch/compare/v0.25.8...v0.25.9) (2026-01-23)
+
+### Bug Fixes
+
+* avoid defaulting settings during startup ([803afd8](https://github.com/koumoe/cli-switch/commit/803afd8a5ff680b531eee86ed8b7a21e0720af46))
+* avoid panic when truncating GitHub error body ([51b577c](https://github.com/koumoe/cli-switch/commit/51b577c77789ab676c1d3f1df8f5ac1aa5af753f))
+* expose app_settings schema helper ([58410e4](https://github.com/koumoe/cli-switch/commit/58410e401989ae3a4fee269b62ce4f91bd1f6e98))
+* expose invalid settings flag ([c527551](https://github.com/koumoe/cli-switch/commit/c527551a3f2e8bba3387959f8369b854cca5b4f5))
+* improve GitHub rate limit errors ([85bb09c](https://github.com/koumoe/cli-switch/commit/85bb09c1ad939845ccd17c6bc9c03cde3e682e97))
+* make db fallbacks explicit ([e32747e](https://github.com/koumoe/cli-switch/commit/e32747e763e1fd5bb0c15c0ead5aec17a5fc35b8))
+* reduce sqlite busy_timeout to 1s ([a6d10d3](https://github.com/koumoe/cli-switch/commit/a6d10d3060f66c1bda6a853273579f19ef25c243))
+* set sqlite busy_timeout for all connections ([d432d74](https://github.com/koumoe/cli-switch/commit/d432d740f1b907033dbff0fdb352ed7f1b348e33))
+* stop defaulting settings on load errors ([e88e324](https://github.com/koumoe/cli-switch/commit/e88e324cff2f463854c6199969da489298662f1f))
+* validate sqlite identifiers in ensure_column ([9d4b822](https://github.com/koumoe/cli-switch/commit/9d4b82265b4b918b10faefac22df5b30a1239262))
+* warn on invalid app settings values ([695c084](https://github.com/koumoe/cli-switch/commit/695c084a8b6f926adb0e9326ef7eb4563031b37a))
 ## [0.25.8](https://github.com/koumoe/cli-switch/compare/v0.25.7...v0.25.8) (2026-01-21)
 
 ### Bug Fixes

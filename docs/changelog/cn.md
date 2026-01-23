@@ -1,3 +1,17 @@
+## [0.25.9](https://github.com/koumoe/cli-switch/compare/v0.25.8...v0.25.9) (2026-01-23)
+
+### 修复
+* 启动时 settings 读取失败不再默认兜底 ([803afd8](https://github.com/koumoe/cli-switch/commit/803afd8a5ff680b531eee86ed8b7a21e0720af46))
+* 截断 GitHub 错误正文时避免 panic ([51b577c](https://github.com/koumoe/cli-switch/commit/51b577c77789ab676c1d3f1df8f5ac1aa5af753f))
+* 暴露 app_settings schema helper ([58410e4](https://github.com/koumoe/cli-switch/commit/58410e401989ae3a4fee269b62ce4f91bd1f6e98))
+* 暴露 settings 无效值标记 ([c527551](https://github.com/koumoe/cli-switch/commit/c527551a3f2e8bba3387959f8369b854cca5b4f5))
+* 优化 GitHub rate limit 错误提示 ([85bb09c](https://github.com/koumoe/cli-switch/commit/85bb09c1ad939845ccd17c6bc9c03cde3e682e97))
+* 明确 db 相关兜底并复用 schema ([e32747e](https://github.com/koumoe/cli-switch/commit/e32747e763e1fd5bb0c15c0ead5aec17a5fc35b8))
+* 将 sqlite busy_timeout 下调至 1 秒 ([a6d10d3](https://github.com/koumoe/cli-switch/commit/a6d10d3060f66c1bda6a853273579f19ef25c243))
+* 为所有 sqlite 连接设置 busy_timeout ([d432d74](https://github.com/koumoe/cli-switch/commit/d432d740f1b907033dbff0fdb352ed7f1b348e33))
+* settings 读取失败不再默认兜底 ([e88e324](https://github.com/koumoe/cli-switch/commit/e88e324cff2f463854c6199969da489298662f1f))
+* 校验 ensure_column 的 sqlite 标识符 ([9d4b822](https://github.com/koumoe/cli-switch/commit/9d4b82265b4b918b10faefac22df5b30a1239262))
+* settings 值解析异常时告警 ([695c084](https://github.com/koumoe/cli-switch/commit/695c084a8b6f926adb0e9326ef7eb4563031b37a))
 ## [0.25.8](https://github.com/koumoe/cli-switch/compare/v0.25.7...v0.25.8) (2026-01-21)
 
 ### 修复
