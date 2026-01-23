@@ -163,12 +163,33 @@ fn ensure_usage_events_schema(conn: &Connection) -> anyhow::Result<()> {
     Ok(())
 }
 
+fn is_sqlite_ident(s: &str) -> bool {
+    let mut it = s.bytes();
+    let Some(first) = it.next() else {
+        return false;
+    };
+    let first_ok = first == b'_' || first.is_ascii_alphabetic();
+    if !first_ok {
+        return false;
+    }
+    it.all(|b| b == b'_' || b.is_ascii_alphanumeric())
+}
+
 fn ensure_column(
     conn: &Connection,
     table: &str,
     column: &str,
     column_def: &str,
 ) -> anyhow::Result<()> {
+    // Defense-in-depth: today these identifiers are internal constants, but validating them
+    // prevents accidental SQL injection if future code passes user-controlled input.
+    if !is_sqlite_ident(table) {
+        anyhow::bail!("invalid sqlite identifier (table): {table}");
+    }
+    if !is_sqlite_ident(column) {
+        anyhow::bail!("invalid sqlite identifier (column): {column}");
+    }
+
     let mut stmt = conn.prepare(&format!("PRAGMA table_info({table})"))?;
     let mut rows = stmt.query([])?;
     while let Some(row) = rows.next()? {
