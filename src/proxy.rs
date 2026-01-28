@@ -162,7 +162,7 @@ pub async fn forward_with_config(
                     attempt_ctx.fail(&e, "proxy attempt failed (build url)");
                 }
                 last_err = Some(e);
-                if is_count_tokens || is_last {
+                if is_last {
                     break;
                 }
                 continue;
@@ -175,7 +175,7 @@ pub async fn forward_with_config(
                 attempt_ctx.fail(&e, "proxy attempt failed (apply auth)");
             }
             last_err = Some(e);
-            if is_count_tokens || is_last {
+            if is_last {
                 break;
             }
             continue;
@@ -228,7 +228,7 @@ pub async fn forward_with_config(
 
                 let err = ProxyError::Upstream(e.to_string());
                 last_err = Some(err);
-                if is_count_tokens || is_last {
+                if is_last {
                     break;
                 }
                 continue;
@@ -236,6 +236,11 @@ pub async fn forward_with_config(
         };
 
         let status = upstream.status();
+        if is_count_tokens && !status.is_success() && !is_last {
+            // Claude Code relies heavily on this endpoint; some 3P providers don't support it
+            // (404/403). Retry on next channel but don't auto-disable or emit usage events.
+            continue;
+        }
         if !is_count_tokens && !status.is_success() {
             maybe_record_failure(
                 db_path_ref,
