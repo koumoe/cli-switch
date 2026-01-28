@@ -1,3 +1,7 @@
+## [0.25.12](https://github.com/koumoe/cli-switch/compare/v0.25.11...v0.25.12) (2026-01-28)
+
+### 修复
+* count_tokens 跨渠道回退 ([c978bd7](https://github.com/koumoe/cli-switch/commit/c978bd7e06859eed6e0dc0a3cd987a3deea91833))
 ## [0.25.11](https://github.com/koumoe/cli-switch/compare/v0.25.10...v0.25.11) (2026-01-23)
 
 ### 修复
