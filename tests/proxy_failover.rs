@@ -527,7 +527,7 @@ async fn stream_drop_still_records_usage_event() {
 }
 
 #[tokio::test]
-async fn anthropic_count_tokens_no_failover_and_no_usage_log() {
+async fn anthropic_count_tokens_failover_and_no_usage_log() {
     let (base1, c1_calls) = spawn_upstream_counted(
         StatusCode::FORBIDDEN,
         r#"{"error":{"message":"count_tokens endpoint is not enabled","type":"permission_error"},"type":"error"}"#,
@@ -593,17 +593,19 @@ async fn anthropic_count_tokens_no_failover_and_no_usage_log() {
     .await
     .expect("forward");
 
-    assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+    // Some upstreams don't support this endpoint (403/404). We should try the next channel
+    // instead of letting Claude Code fall back to haiku.
+    assert_eq!(resp.status(), StatusCode::OK);
     let bytes = to_bytes(resp.into_body(), 1024 * 1024)
         .await
         .expect("read body");
     assert_eq!(
         std::str::from_utf8(&bytes).unwrap(),
-        r#"{"error":{"message":"count_tokens endpoint is not enabled","type":"permission_error"},"type":"error"}"#
+        r#"{"input_tokens":123}"#
     );
 
     assert_eq!(c1_calls.load(Ordering::Relaxed), 1);
-    assert_eq!(c2_calls.load(Ordering::Relaxed), 0);
+    assert_eq!(c2_calls.load(Ordering::Relaxed), 1);
     assert_no_usage_events(db_path.clone()).await;
 }
 
