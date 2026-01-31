@@ -1,3 +1,7 @@
+## [0.27.0](https://github.com/koumoe/cli-switch/compare/v0.26.0...v0.27.0) (2026-01-31)
+
+### 功能
+* 局域网开关触发后端热重启 (#103) ([#103](https://github.com/koumoe/cli-switch/issues/103)) ([adc1471](https://github.com/koumoe/cli-switch/commit/adc1471530f698d754fc2fb7b0d07f26d825f1c9))
 ## [0.26.0](https://github.com/koumoe/cli-switch/compare/v0.25.12...v0.26.0) (2026-01-31)
 
 ### 功能
