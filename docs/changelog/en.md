@@ -1,3 +1,8 @@
+## [0.26.0](https://github.com/koumoe/cli-switch/compare/v0.25.12...v0.26.0) (2026-01-31)
+
+### Features
+
+* add LAN accessible toggle (#102) ([#102](https://github.com/koumoe/cli-switch/issues/102)) ([f5e934b](https://github.com/koumoe/cli-switch/commit/f5e934b9cf8a151426f6452ee270c38d6e26e0ce))
 ## [0.25.12](https://github.com/koumoe/cli-switch/compare/v0.25.11...v0.25.12) (2026-01-28)
 
 ### Bug Fixes
