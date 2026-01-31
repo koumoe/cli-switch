@@ -91,6 +91,7 @@ export function SettingsPage() {
   const [closeSaving, setCloseSaving] = useState(false);
   const [autoStartSaving, setAutoStartSaving] = useState(false);
   const [autoStartLaunchSaving, setAutoStartLaunchSaving] = useState(false);
+  const [serverLanSaving, setServerLanSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [logSaving, setLogSaving] = useState(false);
   const [logRetentionDraft, setLogRetentionDraft] = useState<string>("");
@@ -1849,16 +1850,33 @@ export function SettingsPage() {
                   </p>
                 </div>
               </div>
-              <div className="p-3 rounded-lg bg-muted/50 text-sm text-muted-foreground">
-                {t("settings.serviceInfo.endpoint")}<code className="font-mono">{apiEndpoint}</code>
-                <br />
-                {t("settings.serviceInfo.endpointHint")}
-              </div>
-              {health?.listen_addr && (
-                <div className="text-xs text-muted-foreground">
-                  {t("settings.serviceInfo.backendListen")}<code className="font-mono">{health.listen_addr}</code>
+
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <div className="font-medium text-sm">{t("settings.serviceInfo.lanAccessible")}</div>
+                  <div className="text-xs text-muted-foreground">{t("settings.serviceInfo.lanAccessibleHint")}</div>
                 </div>
-              )}
+                <Switch
+                  checked={appSettings?.server_lan_accessible ?? false}
+                  onCheckedChange={async (v) => {
+                    if (!appSettings) return;
+                    const prev = appSettings.server_lan_accessible;
+                    setAppSettings({ ...appSettings, server_lan_accessible: v });
+                    setServerLanSaving(true);
+                    try {
+                      const next = await updateSettings({ server_lan_accessible: v });
+                      setAppSettings(next);
+                      toast.success(t("settings.serviceInfo.saved"));
+                    } catch (e) {
+                      setAppSettings({ ...appSettings, server_lan_accessible: prev });
+                      toast.error(t("settings.serviceInfo.saveFail"), { description: humanizeApiError(e, t) });
+                    } finally {
+                      setServerLanSaving(false);
+                    }
+                  }}
+                  disabled={!appSettings || serverLanSaving}
+                />
+              </div>
             </CardContent>
           </Card>
 

@@ -704,9 +704,10 @@
       "hostHint": "CLI 连接的主机名 / IP 地址",
       "port": "端口",
       "portHint": "CLI 连接的端口号",
-      "endpoint": "API 端点：",
-      "endpointHint": "将此地址配置为你的 AI 工具的 API 端点即可使用。",
-      "backendListen": "后端监听："
+      "lanAccessible": "局域网内可用",
+      "lanAccessibleHint": "允许局域网设备访问此服务（重启应用后生效）",
+      "saved": "已保存",
+      "saveFail": "保存失败"
     },
     "about": {
       "title": "关于",

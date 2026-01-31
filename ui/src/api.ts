@@ -21,6 +21,7 @@ export type AppSettings = {
   close_behavior: CloseBehavior;
   auto_start_enabled: boolean;
   auto_start_launch_mode: AutoStartLaunchMode;
+  server_lan_accessible: boolean;
   app_auto_update_enabled: boolean;
   gemini_cli_auto_update_enabled: boolean;
   claude_code_auto_update_enabled: boolean;
