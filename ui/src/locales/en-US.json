@@ -704,9 +704,10 @@
       "hostHint": "Hostname / IP address for CLI connection",
       "port": "Port",
       "portHint": "Port number for CLI connection",
-      "endpoint": "API Endpoint:",
-      "endpointHint": "Use this as the API endpoint in your AI tools.",
-      "backendListen": "Backend listen:"
+      "lanAccessible": "LAN accessible",
+      "lanAccessibleHint": "Allow devices in your LAN to access this service (requires restart).",
+      "saved": "Saved",
+      "saveFail": "Save failed"
     },
     "about": {
       "title": "About",

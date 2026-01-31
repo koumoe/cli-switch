@@ -13,6 +13,7 @@ const KEY_PRICING_AUTO_UPDATE_INTERVAL_HOURS: &str = "pricing_auto_update_interv
 const KEY_CLOSE_BEHAVIOR: &str = "close_behavior";
 const KEY_AUTO_START_ENABLED: &str = "auto_start_enabled";
 const KEY_AUTO_START_LAUNCH_MODE: &str = "auto_start_launch_mode";
+const KEY_SERVER_LAN_ACCESSIBLE: &str = "server_lan_accessible";
 const KEY_APP_AUTO_UPDATE_ENABLED: &str = "app_auto_update_enabled";
 const KEY_GEMINI_CLI_AUTO_UPDATE_ENABLED: &str = "gemini_cli_auto_update_enabled";
 const KEY_CLAUDE_CODE_AUTO_UPDATE_ENABLED: &str = "claude_code_auto_update_enabled";
@@ -67,6 +68,7 @@ pub struct AppSettings {
     pub close_behavior: CloseBehavior,
     pub auto_start_enabled: bool,
     pub auto_start_launch_mode: AutoStartLaunchMode,
+    pub server_lan_accessible: bool,
     pub app_auto_update_enabled: bool,
     pub gemini_cli_auto_update_enabled: bool,
     pub claude_code_auto_update_enabled: bool,
@@ -91,6 +93,7 @@ impl Default for AppSettings {
             close_behavior: CloseBehavior::Ask,
             auto_start_enabled: false,
             auto_start_launch_mode: AutoStartLaunchMode::ShowWindow,
+            server_lan_accessible: false,
             app_auto_update_enabled: false,
             gemini_cli_auto_update_enabled: false,
             claude_code_auto_update_enabled: false,
@@ -115,6 +118,7 @@ pub struct AppSettingsPatch {
     pub close_behavior: Option<CloseBehavior>,
     pub auto_start_enabled: Option<bool>,
     pub auto_start_launch_mode: Option<AutoStartLaunchMode>,
+    pub server_lan_accessible: Option<bool>,
     pub app_auto_update_enabled: Option<bool>,
     pub gemini_cli_auto_update_enabled: Option<bool>,
     pub claude_code_auto_update_enabled: Option<bool>,
@@ -250,6 +254,10 @@ pub async fn get_app_settings(db_path: PathBuf) -> anyhow::Result<AppSettings> {
                 }
             }
         }
+        if let Some(v) = get_setting(conn, KEY_SERVER_LAN_ACCESSIBLE)? {
+            out.server_lan_accessible =
+                parse_bool_setting(KEY_SERVER_LAN_ACCESSIBLE, &v, &mut has_invalid_values);
+        }
         if let Some(v) = get_setting(conn, KEY_APP_AUTO_UPDATE_ENABLED)? {
             out.app_auto_update_enabled =
                 parse_bool_setting(KEY_APP_AUTO_UPDATE_ENABLED, &v, &mut has_invalid_values);
@@ -372,6 +380,14 @@ pub async fn update_app_settings(
         }
         if let Some(v) = patch.auto_start_launch_mode {
             set_setting(conn, KEY_AUTO_START_LAUNCH_MODE, v.as_str(), updated_at_ms)?;
+        }
+        if let Some(v) = patch.server_lan_accessible {
+            set_setting(
+                conn,
+                KEY_SERVER_LAN_ACCESSIBLE,
+                if v { "true" } else { "false" },
+                updated_at_ms,
+            )?;
         }
         if let Some(v) = patch.app_auto_update_enabled {
             set_setting(

@@ -437,28 +437,43 @@ pub async fn run(
     db_path: std::path::PathBuf,
     launched_by_autostart: bool,
 ) -> anyhow::Result<()> {
+    let settings = match storage::get_app_settings(db_path.clone()).await {
+        Ok(s) => Some(s),
+        Err(e) => {
+            // Safe-mode: if settings can't be loaded, use defaults.
+            tracing::warn!(err = %e, "load app settings failed; using defaults");
+            None
+        }
+    };
+
     let start_hidden = if !launched_by_autostart {
         false
     } else {
-        match storage::get_app_settings(db_path.clone()).await {
-            Ok(settings) => {
+        match settings.as_ref() {
+            Some(settings) => {
                 settings.auto_start_launch_mode == storage::AutoStartLaunchMode::MinimizeToTray
             }
-            Err(e) => {
+            None => {
                 // Safe-mode: if settings can't be loaded, don't hide the window.
-                tracing::warn!(err = %e, "load app settings failed; start window visible");
                 false
             }
         }
     };
     let initial_window_visible = !start_hidden;
 
-    let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), port);
+    let bind_ip = if settings.as_ref().is_some_and(|s| s.server_lan_accessible) {
+        IpAddr::V4(Ipv4Addr::UNSPECIFIED)
+    } else {
+        IpAddr::V4(Ipv4Addr::LOCALHOST)
+    };
+
+    let addr = SocketAddr::new(bind_ip, port);
     let listener = tokio::net::TcpListener::bind(addr)
         .await
         .with_context(|| format!("绑定监听地址失败：{addr}"))?;
     let actual_addr = listener.local_addr().context("读取监听地址失败")?;
-    let base_url = format!("http://{actual_addr}");
+    // Even if the server binds to 0.0.0.0, the desktop WebView should still connect via localhost.
+    let base_url = format!("http://127.0.0.1:{}", actual_addr.port());
     tracing::info!(addr = %actual_addr, base_url = %base_url, "desktop backend ready");
 
     let server_db_path = db_path.clone();
