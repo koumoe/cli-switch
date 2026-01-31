@@ -705,7 +705,7 @@
       "port": "端口",
       "portHint": "CLI 连接的端口号",
       "lanAccessible": "局域网内可用",
-      "lanAccessibleHint": "允许局域网设备访问此服务（重启应用后生效）",
+      "lanAccessibleHint": "允许局域网设备访问此服务",
       "saved": "已保存",
       "saveFail": "保存失败"
     },

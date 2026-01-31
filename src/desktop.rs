@@ -47,6 +47,8 @@ enum IpcMessage {
     SetLocale { locale: String },
     #[serde(rename = "request-quit")]
     RequestQuit,
+    #[serde(rename = "request-restart-backend")]
+    RequestRestartBackend,
     #[serde(rename = "ui-ready")]
     UiReady,
 }
@@ -224,6 +226,54 @@ fn quit_app(
     *control_flow = ControlFlow::Exit;
 }
 
+fn restart_backend(
+    server_handle: &mut tokio::task::JoinHandle<()>,
+    backend_port: u16,
+    db_path: &std::path::Path,
+) {
+    server_handle.abort();
+
+    let db_path = db_path.to_path_buf();
+    *server_handle = tokio::spawn(async move {
+        let settings = match storage::get_app_settings(db_path.clone()).await {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::warn!(err = %e, "load app settings failed; using defaults");
+                storage::AppSettings::default()
+            }
+        };
+
+        let bind_ip = if settings.server_lan_accessible {
+            IpAddr::V4(Ipv4Addr::UNSPECIFIED)
+        } else {
+            IpAddr::V4(Ipv4Addr::LOCALHOST)
+        };
+        let addr = SocketAddr::new(bind_ip, backend_port);
+
+        let mut last_err: Option<anyhow::Error> = None;
+        for _ in 0..50 {
+            match tokio::net::TcpListener::bind(addr).await {
+                Ok(listener) => {
+                    if let Err(err) = server::serve_with_listener(listener, db_path, false).await {
+                        tracing::error!(err = %err, "backend serve failed");
+                    }
+                    return;
+                }
+                Err(e) => {
+                    last_err = Some(anyhow::anyhow!(e));
+                    tokio::time::sleep(Duration::from_millis(100)).await;
+                }
+            }
+        }
+
+        if let Some(e) = last_err {
+            tracing::error!(addr = %addr, err = %e, "restart backend failed: bind timeout");
+        } else {
+            tracing::error!(addr = %addr, "restart backend failed: bind timeout");
+        }
+    });
+}
+
 fn persist_close_behavior_sync(db_path: &std::path::Path, behavior: storage::CloseBehavior) {
     let value = match behavior {
         storage::CloseBehavior::Ask => "ask",
@@ -282,10 +332,11 @@ fn handle_user_event(
     state: &mut DesktopState,
     control_flow: &mut ControlFlow,
     proxy: &tao::event_loop::EventLoopProxy<UserEvent>,
-    server_handle: &tokio::task::JoinHandle<()>,
+    server_handle: &mut tokio::task::JoinHandle<()>,
     data_dir: &std::path::Path,
     window: &tao::window::Window,
     webview: &wry::WebView,
+    backend_port: u16,
     tray_id: &tray_icon::TrayIconId,
     edit_menu: &Submenu,
     tray_show: &MenuItem,
@@ -399,6 +450,9 @@ fn handle_user_event(
                 IpcMessage::RequestQuit => {
                     quit_app(data_dir, server_handle, control_flow, true);
                 }
+                IpcMessage::RequestRestartBackend => {
+                    restart_backend(server_handle, backend_port, db_path);
+                }
                 IpcMessage::UiReady => {
                     state.ui_ready = true;
                     if let Some(status) = events::last_update_status() {
@@ -477,7 +531,7 @@ pub async fn run(
     tracing::info!(addr = %actual_addr, base_url = %base_url, "desktop backend ready");
 
     let server_db_path = db_path.clone();
-    let server_handle = tokio::spawn(async move {
+    let mut server_handle = tokio::spawn(async move {
         if let Err(err) = server::serve_with_listener(listener, server_db_path, false).await {
             tracing::error!(err = %err, "backend serve failed");
         }
@@ -631,10 +685,11 @@ pub async fn run(
                 &mut state,
                 control_flow,
                 &proxy,
-                &server_handle,
+                &mut server_handle,
                 &data_dir,
                 &window,
                 &webview,
+                actual_addr.port(),
                 &tray_id,
                 &edit_menu,
                 &tray_show,
