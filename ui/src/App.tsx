@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 import { humanizeApiError } from "@/lib/error";
 import { formatNpmEnvInstallProgressText } from "@/lib/npmEnvInstallProgress";
 import { installCliToolWithToast } from "@/lib/cliToolInstaller";
+import { postIpc } from "@/lib/ipc";
 import {
   Button,
   Dialog,
@@ -74,12 +75,6 @@ function navigate(to: string) {
   if (window.location.pathname === to) return;
   window.history.pushState({}, "", to);
   window.dispatchEvent(new PopStateEvent("popstate"));
-}
-
-function postIpc(payload: unknown) {
-  const anyWindow = window as any;
-  const fn = anyWindow?.ipc?.postMessage as ((msg: string) => void) | undefined;
-  if (fn) fn(JSON.stringify(payload));
 }
 
 function NavTab({

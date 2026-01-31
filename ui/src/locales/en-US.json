@@ -705,7 +705,7 @@
       "port": "Port",
       "portHint": "Port number for CLI connection",
       "lanAccessible": "LAN accessible",
-      "lanAccessibleHint": "Allow devices in your LAN to access this service (requires restart).",
+      "lanAccessibleHint": "Allow devices in your LAN to access this service",
       "saved": "Saved",
       "saveFail": "Save failed"
     },

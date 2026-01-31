@@ -40,6 +40,7 @@ import { installCliToolWithToast } from "@/lib/cliToolInstaller";
 import { useCurrency, type CurrencyMode } from "@/lib/currency";
 import { setLogLevel } from "@/lib/logger";
 import { UpdatePromptDialog } from "@/components/UpdatePromptDialog";
+import { postIpc } from "@/lib/ipc";
 import { formatBytes, formatDateTime } from "../lib";
 import { checkUpdate, clearLogs, clearRecords, downloadUpdate, getCliToolsStatus, getDbSize, getHealth, getLogsSize, getSettings, getUpdateChangelog, getUpdateStatus, ignoreUpdate, installNpmEnv, pickFolder, pricingStatus, pricingSync, updateSettings, validateProgram, type AppSettings, type AutoStartLaunchMode, type CloseBehavior, type DbSize, type Health, type LogsSize, type PricingStatus, type RecordsClearMode, type UpdateCheck, type UpdateStatus, type ChangelogSection, type CliToolId, type CliToolsStatus, type CliToolStatus } from "../api";
 import type { CliswitchNpmEnvInstallProgressEvent, CliswitchUpdateStatusEvent, NpmEnvInstallProgress } from "@/lib/cliswitchEvents";
@@ -1854,7 +1855,9 @@ export function SettingsPage() {
               <div className="flex items-center justify-between gap-4">
                 <div>
                   <div className="font-medium text-sm">{t("settings.serviceInfo.lanAccessible")}</div>
-                  <div className="text-xs text-muted-foreground">{t("settings.serviceInfo.lanAccessibleHint")}</div>
+                  <div className="text-xs text-muted-foreground">
+                    {t("settings.serviceInfo.lanAccessibleHint")}
+                  </div>
                 </div>
                 <Switch
                   checked={appSettings?.server_lan_accessible ?? false}
@@ -1867,6 +1870,10 @@ export function SettingsPage() {
                       const next = await updateSettings({ server_lan_accessible: v });
                       setAppSettings(next);
                       toast.success(t("settings.serviceInfo.saved"));
+                      // Restart backend in-place so the setting takes effect without restarting the window/UI.
+                      if (prev !== v) {
+                        postIpc({ type: "request-restart-backend" });
+                      }
                     } catch (e) {
                       setAppSettings({ ...appSettings, server_lan_accessible: prev });
                       toast.error(t("settings.serviceInfo.saveFail"), { description: humanizeApiError(e, t) });
