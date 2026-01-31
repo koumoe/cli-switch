@@ -35,6 +35,7 @@ pub(in crate::server) struct UpdateSettingsInput {
     close_behavior: Option<storage::CloseBehavior>,
     auto_start_enabled: Option<bool>,
     auto_start_launch_mode: Option<storage::AutoStartLaunchMode>,
+    server_lan_accessible: Option<bool>,
     app_auto_update_enabled: Option<bool>,
     gemini_cli_auto_update_enabled: Option<bool>,
     claude_code_auto_update_enabled: Option<bool>,
@@ -70,6 +71,10 @@ pub(in crate::server) async fn update_settings(
         (
             "auto_start_launch_mode",
             input.auto_start_launch_mode.is_some(),
+        ),
+        (
+            "server_lan_accessible",
+            input.server_lan_accessible.is_some(),
         ),
         (
             "app_auto_update_enabled",
@@ -199,6 +204,7 @@ pub(in crate::server) async fn update_settings(
             close_behavior: input.close_behavior,
             auto_start_enabled,
             auto_start_launch_mode: input.auto_start_launch_mode,
+            server_lan_accessible: input.server_lan_accessible,
             app_auto_update_enabled: input.app_auto_update_enabled,
             gemini_cli_auto_update_enabled: input.gemini_cli_auto_update_enabled,
             claude_code_auto_update_enabled: input.claude_code_auto_update_enabled,

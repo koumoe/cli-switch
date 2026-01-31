@@ -37,6 +37,7 @@ async fn get_app_settings_keeps_defaults_on_invalid_values() {
     upsert_setting(&conn, "pricing_auto_update_interval_hours", "not-a-number");
     upsert_setting(&conn, "close_behavior", "???");
     upsert_setting(&conn, "auto_start_enabled", "maybe");
+    upsert_setting(&conn, "server_lan_accessible", "maybe");
     upsert_setting(&conn, "log_level", "verbose");
     upsert_setting(&conn, "log_retention_days", "NaN");
 
@@ -46,6 +47,7 @@ async fn get_app_settings_keeps_defaults_on_invalid_values() {
     assert_eq!(settings.pricing_auto_update_interval_hours, 24);
     assert_eq!(settings.close_behavior, storage::CloseBehavior::Ask);
     assert!(!settings.auto_start_enabled);
+    assert!(!settings.server_lan_accessible);
     assert_eq!(settings.log_level, logging::LogLevel::Warning);
     assert_eq!(settings.log_retention_days, 30);
 
