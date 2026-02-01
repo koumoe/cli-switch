@@ -38,6 +38,8 @@ export type AppSettings = {
 
 export type CliToolId = "gemini" | "claude" | "codex";
 
+export type CliToolInstallMethod = "managed_npm_prefix" | "brew" | "npm" | "other";
+
 export type CliToolStatus = {
   id: CliToolId;
   name: string;
@@ -45,6 +47,9 @@ export type CliToolStatus = {
   npm_package: string;
   installed: boolean;
   version: string | null;
+  install_method: CliToolInstallMethod;
+  install_path: string | null;
+  installer_path: string | null;
 };
 
 export type CliToolsStatus = {

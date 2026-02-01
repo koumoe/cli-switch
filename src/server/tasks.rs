@@ -159,31 +159,83 @@ pub(crate) async fn cli_tools_auto_update_loop(db_path: PathBuf, mut notify: wat
 
         let res = tokio::task::spawn_blocking(move || {
             let env = crate::cli_tools::CliExecEnv::new(npm_path.as_deref(), node_path.as_deref());
-            if !env.npm_available() {
-                return;
-            }
             for d in to_update {
-                match env.npm_install_global_to_prefix(
-                    d.npm_package,
-                    &tools_prefix_dir,
-                    Some(npm_registry.as_str()),
-                ) {
-                    Ok(out) => {
-                        if !out.status.success() {
-                            let code = out.status.code();
-                            tracing::warn!(
-                                tool = d.name,
-                                pkg = d.npm_package,
-                                exit_code = ?code,
-                                stderr = %out.stderr.trim(),
-                                "cli tool auto update failed"
-                            );
+                let detected = crate::cli_tools::detect_cli_tool(&env, &data_dir, &d);
+                match detected.install_method {
+                    crate::cli_tools::CliToolInstallMethod::Brew => {
+                        let Some(brew) = detected.installer_path.as_ref() else {
+                            continue;
+                        };
+                        match crate::cli_tools::brew_upgrade_cli_tool(brew, d.id) {
+                            Ok(out) => {
+                                if !out.status.success() {
+                                    let code = out.status.code();
+                                    tracing::warn!(
+                                        tool = d.name,
+                                        exit_code = ?code,
+                                        stderr = %out.stderr.trim(),
+                                        "cli tool auto update (brew) failed"
+                                    );
+                                }
+                            }
+                            Err(e) => {
+                                tracing::warn!(tool = d.name, err = %e, "cli tool auto update (brew) failed");
+                            }
                         }
                     }
-                    Err(e) => {
-                        tracing::warn!(tool = d.name, pkg = d.npm_package, err = %e, "cli tool auto update failed");
+                    crate::cli_tools::CliToolInstallMethod::Npm => {
+                        if !env.npm_available() {
+                            continue;
+                        }
+                        match env.npm_install_global_with_registry(
+                            d.npm_package,
+                            Some(npm_registry.as_str()),
+                        ) {
+                            Ok(out) => {
+                                if !out.status.success() {
+                                    let code = out.status.code();
+                                    tracing::warn!(
+                                        tool = d.name,
+                                        pkg = d.npm_package,
+                                        exit_code = ?code,
+                                        stderr = %out.stderr.trim(),
+                                        "cli tool auto update (npm) failed"
+                                    );
+                                }
+                            }
+                            Err(e) => {
+                                tracing::warn!(tool = d.name, pkg = d.npm_package, err = %e, "cli tool auto update (npm) failed");
+                            }
+                        }
                     }
-                }
+                    crate::cli_tools::CliToolInstallMethod::ManagedNpmPrefix
+                    | crate::cli_tools::CliToolInstallMethod::Other => {
+                        if !env.npm_available() {
+                            continue;
+                        }
+                        match env.npm_install_global_to_prefix(
+                            d.npm_package,
+                            &tools_prefix_dir,
+                            Some(npm_registry.as_str()),
+                        ) {
+                            Ok(out) => {
+                                if !out.status.success() {
+                                    let code = out.status.code();
+                                    tracing::warn!(
+                                        tool = d.name,
+                                        pkg = d.npm_package,
+                                        exit_code = ?code,
+                                        stderr = %out.stderr.trim(),
+                                        "cli tool auto update failed"
+                                    );
+                                }
+                            }
+                            Err(e) => {
+                                tracing::warn!(tool = d.name, pkg = d.npm_package, err = %e, "cli tool auto update failed");
+                            }
+                        }
+                    }
+                };
             }
         })
         .await;
