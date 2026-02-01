@@ -1067,19 +1067,24 @@ export function SettingsPage() {
                     </Button>
                   </div>
 
-                  <div className="flex items-end gap-2">
-                    <div className="flex-1 space-y-1">
-                      <div className="text-sm font-medium">{t("settings.baseDeps.npmRegistry")}</div>
-                      <Input
-                        value={cliNpmRegistryDraft}
-                        onChange={(e) => {
-                          setCliNpmRegistryDraft(e.target.value);
-                          setCliToolsPathsDirty(true);
-                        }}
-                        placeholder={t("settings.baseDeps.npmRegistryPlaceholder")}
-                      />
+                  <details className="rounded-md border p-3">
+                    <summary className="cursor-pointer text-sm font-medium select-none">
+                      {t("settings.baseDeps.advanced")}
+                    </summary>
+                    <div className="mt-3 flex items-end gap-2">
+                      <div className="flex-1 space-y-1">
+                        <div className="text-sm font-medium">{t("settings.baseDeps.npmRegistry")}</div>
+                        <Input
+                          value={cliNpmRegistryDraft}
+                          onChange={(e) => {
+                            setCliNpmRegistryDraft(e.target.value);
+                            setCliToolsPathsDirty(true);
+                          }}
+                          placeholder={t("settings.baseDeps.npmRegistryPlaceholder")}
+                        />
+                      </div>
                     </div>
-                  </div>
+                  </details>
                 </div>
 
                 <div className="flex items-center justify-end gap-2">
