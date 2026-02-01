@@ -74,23 +74,31 @@ pub(in crate::server) async fn cli_tools_status(
         let tools = CLI_TOOLS
             .iter()
             .map(|d| {
-                // If user uninstalls the underlying npm global package, our terminal shim may
-                // remain in ~/.cliswitch/bin and shadow real resolution. Best-effort: if the
-                // shim can't execute anymore, remove it.
+                // Prefer reporting the terminal shim if it is executable. The GUI process may not
+                // inherit user's shell PATH, so relying on PATH-only detection is often flaky.
+                let mut shim_version: Option<String> = None;
                 if let Ok(shim_path) = crate::terminal::cli_tool_shim_path(d.bin)
                     && shim_path.is_file()
-                    && crate::cli_tools::try_get_cmd_version_at(&shim_path).is_none()
                 {
-                    let _ = crate::terminal::remove_cli_tool_shim(d.bin);
+                    shim_version = crate::cli_tools::try_get_cmd_version_at(&shim_path);
+
+                    // Best-effort cleanup: if the shim can't execute anymore, remove it so it
+                    // doesn't shadow real resolution in user shells.
+                    if shim_version.is_none() {
+                        let _ = crate::terminal::remove_cli_tool_shim(d.bin);
+                    }
                 }
 
-                let installed = env.find_executable(d.bin).is_some();
-                let version = if installed {
-                    env.try_get_cmd_version(d.bin)
-                        .map(|v| crate::cli_tools::normalize_version_string(&v))
-                } else {
-                    None
-                };
+                let resolved = env.find_executable(d.bin);
+                let installed = shim_version.is_some() || resolved.is_some();
+
+                let version = shim_version
+                    .or_else(|| {
+                        resolved
+                            .as_ref()
+                            .and_then(|p| env.try_get_cmd_version_by_path(p))
+                    })
+                    .map(|v| crate::cli_tools::normalize_version_string(&v));
                 CliToolStatus {
                     id: d.id,
                     name: d.name,
@@ -207,6 +215,8 @@ pub(in crate::server) async fn install_cli_tool(
     let settings = storage::get_app_settings(state.db_path()).await?;
     let npm_path = settings.cli_tools_npm_path.clone();
     let node_path = settings.cli_tools_node_path.clone();
+    let data_dir = state.data_dir();
+    let tools_prefix_dir = crate::cli_tools::cli_tools_npm_prefix_dir(&data_dir);
 
     let res = tokio::task::spawn_blocking(move || {
         let env = crate::cli_tools::CliExecEnv::new(npm_path.as_deref(), node_path.as_deref());
@@ -217,32 +227,41 @@ pub(in crate::server) async fn install_cli_tool(
             ));
         }
 
+        // Install/update into our managed npm prefix to avoid touching user's system/global npm.
         let out = env
-            .npm_install_global(def.npm_package)
+            .npm_install_global_to_prefix(def.npm_package, &tools_prefix_dir)
             .map_err(ApiError::Internal)?;
 
-        let env = crate::cli_tools::CliExecEnv::new(npm_path.as_deref(), node_path.as_deref());
+        let prefix_bin_dir = env
+            .npm_global_bin_dir_for_prefix(&tools_prefix_dir)
+            .or_else(|| {
+                #[cfg(windows)]
+                {
+                    Some(tools_prefix_dir.clone())
+                }
+                #[cfg(not(windows))]
+                {
+                    Some(tools_prefix_dir.join("bin"))
+                }
+            });
 
-        // Prefer the npm global bin dir so we don't accidentally pick up a shim from user's PATH.
-        let npm_global_bin_dir = env.npm_global_bin_dir();
-        let tool_path = npm_global_bin_dir
+        // Prefer the managed prefix bin dir so we don't accidentally pick up a shim from user's PATH.
+        let tool_path = prefix_bin_dir
             .as_ref()
             .and_then(|d| {
                 crate::cli_tools::resolve_program_from_user_path(def.bin, &d.to_string_lossy())
             })
             .or_else(|| env.find_executable(def.bin));
         let installed = tool_path.is_some();
-        let version = if installed {
-            env.try_get_cmd_version(def.bin)
-                .map(|v| crate::cli_tools::normalize_version_string(&v))
-        } else {
-            None
-        };
+        let version = tool_path
+            .as_ref()
+            .and_then(|p| env.try_get_cmd_version_by_path(p))
+            .map(|v| crate::cli_tools::normalize_version_string(&v));
 
         let (terminal_shim_ok, terminal_shim_dir, terminal_shim_error) =
             if let Some(tool_path) = tool_path.as_ref() {
                 let node_bin_dir = env.node_bin_dir();
-                let npm_global_bin_dir = npm_global_bin_dir.as_deref();
+                let npm_global_bin_dir = prefix_bin_dir.as_deref();
                 match crate::terminal::ensure_cli_tool_shim(
                     def.bin,
                     tool_path,

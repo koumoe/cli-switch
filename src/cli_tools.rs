@@ -52,6 +52,14 @@ pub fn os_name() -> &'static str {
     std::env::consts::OS
 }
 
+/// CliSwitch-managed npm global prefix for installing CLI tools.
+///
+/// We intentionally do NOT install into the user's system/global npm prefix to avoid
+/// permission issues and platform differences (brew/choco/apt/winget, etc.).
+pub fn cli_tools_npm_prefix_dir(data_dir: &Path) -> PathBuf {
+    data_dir.join("cli_tools").join("npm")
+}
+
 pub fn find_executable_in_path(name: &str) -> Option<PathBuf> {
     if name.is_empty() {
         return None;
@@ -420,6 +428,25 @@ impl CliExecEnv {
         self.npm_global_bin.clone()
     }
 
+    pub fn npm_global_bin_dir_for_prefix(&self, prefix: &Path) -> Option<PathBuf> {
+        let npm = self.npm.as_ref()?;
+        let out = self
+            .cmd(npm.clone())
+            .env("npm_config_prefix", prefix.as_os_str())
+            .args(["bin", "-g"])
+            .output()
+            .ok()?;
+        if !out.status.success() {
+            return None;
+        }
+        let stdout = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        if stdout.is_empty() {
+            return None;
+        }
+        let p = PathBuf::from(stdout);
+        p.is_dir().then_some(p)
+    }
+
     pub fn try_get_npm_version(&self) -> Option<String> {
         self.try_get_cmd_version("npm")
     }
@@ -479,6 +506,29 @@ impl CliExecEnv {
         None
     }
 
+    pub fn try_get_cmd_version_by_path(&self, program_path: &Path) -> Option<String> {
+        if !program_path.is_file() {
+            return None;
+        }
+        let out = self
+            .cmd(program_path.to_path_buf())
+            .arg("--version")
+            .output()
+            .ok()?;
+        if !out.status.success() {
+            return None;
+        }
+        let stdout = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
+        if !stdout.is_empty() {
+            return Some(stdout);
+        }
+        if !stderr.is_empty() {
+            return Some(stderr);
+        }
+        None
+    }
+
     fn compute_npm_global_bin_dir(&self) -> Option<PathBuf> {
         let npm = self.npm.as_ref()?;
         let out = self.cmd(npm.clone()).args(["bin", "-g"]).output().ok()?;
@@ -502,6 +552,31 @@ impl CliExecEnv {
 
         let out = self
             .cmd(npm)
+            .args(["install", "-g", pkg, "--no-fund", "--no-audit"])
+            .output()
+            .with_context(|| format!("run npm install -g {pkg} failed"))?;
+
+        Ok(CmdOutput {
+            status: out.status,
+            stdout: String::from_utf8_lossy(&out.stdout).to_string(),
+            stderr: String::from_utf8_lossy(&out.stderr).to_string(),
+        })
+    }
+
+    pub fn npm_install_global_to_prefix(
+        &self,
+        pkg: &str,
+        prefix: &Path,
+    ) -> anyhow::Result<CmdOutput> {
+        let npm = self
+            .npm
+            .as_ref()
+            .cloned()
+            .ok_or_else(|| anyhow::anyhow!("npm not found"))?;
+
+        let out = self
+            .cmd(npm)
+            .env("npm_config_prefix", prefix.as_os_str())
             .args(["install", "-g", pkg, "--no-fund", "--no-audit"])
             .output()
             .with_context(|| format!("run npm install -g {pkg} failed"))?;
