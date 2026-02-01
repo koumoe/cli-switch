@@ -8,6 +8,8 @@ use std::time::{Duration, Instant};
 const CMD_VERSION_TIMEOUT: Duration = Duration::from_secs(5);
 const NPM_BIN_TIMEOUT: Duration = Duration::from_secs(5);
 const NPM_INSTALL_TIMEOUT: Duration = Duration::from_secs(20 * 60);
+const NPM_LIST_TIMEOUT: Duration = Duration::from_secs(8);
+const BREW_TIMEOUT: Duration = Duration::from_secs(20 * 60);
 const NPM_REGISTRY_PROBE_TIMEOUT: Duration = Duration::from_millis(1500);
 const GEO_IPINFO_TIMEOUT: Duration = Duration::from_millis(1200);
 
@@ -51,6 +53,19 @@ pub const CLI_TOOLS: &[CliToolDef] = &[
     },
 ];
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum CliToolInstallMethod {
+    /// Installed/updated by CliSwitch into our managed npm prefix.
+    ManagedNpmPrefix,
+    /// Installed/updated by Homebrew (macOS).
+    Brew,
+    /// Installed/updated by the user's global npm prefix.
+    Npm,
+    /// Unknown/unsupported installer.
+    Other,
+}
+
 #[derive(Debug, Clone)]
 pub struct CmdOutput {
     pub status: std::process::ExitStatus,
@@ -68,6 +83,17 @@ pub fn os_name() -> &'static str {
 /// permission issues and platform differences (brew/choco/apt/winget, etc.).
 pub fn cli_tools_npm_prefix_dir(data_dir: &Path) -> PathBuf {
     data_dir.join("cli_tools").join("npm")
+}
+
+pub fn cli_tools_npm_prefix_bin_dir(prefix_dir: &Path) -> PathBuf {
+    #[cfg(windows)]
+    {
+        prefix_dir.to_path_buf()
+    }
+    #[cfg(not(windows))]
+    {
+        prefix_dir.join("bin")
+    }
 }
 
 async fn probe_registry_latency(client: &reqwest::Client, base: &str) -> Option<Duration> {
@@ -429,6 +455,15 @@ pub fn npm_install_global(pkg: &str) -> anyhow::Result<CmdOutput> {
         stdout: String::from_utf8_lossy(&out.stdout).to_string(),
         stderr: String::from_utf8_lossy(&out.stderr).to_string(),
     })
+}
+
+#[derive(Debug, Clone)]
+pub struct DetectedCliTool {
+    pub installed: bool,
+    pub version: Option<String>,
+    pub install_method: CliToolInstallMethod,
+    pub install_path: Option<PathBuf>,
+    pub installer_path: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -819,6 +854,45 @@ impl CliExecEnv {
         })
     }
 
+    pub fn npm_install_global_with_registry(
+        &self,
+        pkg: &str,
+        registry: Option<&str>,
+    ) -> anyhow::Result<CmdOutput> {
+        let npm = self
+            .npm
+            .as_ref()
+            .cloned()
+            .ok_or_else(|| anyhow::anyhow!("npm not found"))?;
+
+        let mut cmd = self.cmd(npm);
+        if let Some(registry) = registry.map(|s| s.trim())
+            && !registry.is_empty()
+        {
+            cmd.env("npm_config_registry", registry);
+        }
+        cmd.args(["install", "-g", pkg, "--no-fund", "--no-audit"]);
+        let out = crate::process::command_output_with_timeout(&mut cmd, NPM_INSTALL_TIMEOUT)
+            .with_context(|| format!("run npm install -g {pkg} failed"))?;
+
+        Ok(CmdOutput {
+            status: out.status,
+            stdout: String::from_utf8_lossy(&out.stdout).to_string(),
+            stderr: String::from_utf8_lossy(&out.stderr).to_string(),
+        })
+    }
+
+    pub fn npm_global_has_package(&self, pkg: &str) -> bool {
+        let Some(npm) = self.npm.as_ref() else {
+            return false;
+        };
+
+        let mut cmd = self.cmd(npm.clone());
+        cmd.args(["list", "-g", pkg]);
+        let out = crate::process::command_output_with_timeout(&mut cmd, NPM_LIST_TIMEOUT);
+        out.is_ok_and(|o| o.status.success())
+    }
+
     pub fn npm_install_global_to_prefix(
         &self,
         pkg: &str,
@@ -848,5 +922,208 @@ impl CliExecEnv {
             stdout: String::from_utf8_lossy(&out.stdout).to_string(),
             stderr: String::from_utf8_lossy(&out.stderr).to_string(),
         })
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn brew_list_contains(brew: &Path, args: &[&str], needle: &str) -> bool {
+    let mut cmd = std::process::Command::new(brew);
+    cmd.args(args);
+    crate::process::command_silent(&mut cmd);
+    let out = crate::process::command_output_with_timeout(&mut cmd, CMD_VERSION_TIMEOUT);
+    let Ok(out) = out else {
+        return false;
+    };
+    if !out.status.success() {
+        return false;
+    }
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    stdout.lines().any(|l| l.trim() == needle)
+}
+
+#[cfg(target_os = "macos")]
+fn brew_detect_cli_tool_install_method(
+    brew: &Path,
+    tool: CliToolId,
+) -> Option<CliToolInstallMethod> {
+    match tool {
+        CliToolId::Gemini => brew_list_contains(brew, &["list", "--formula"], "gemini-cli")
+            .then_some(CliToolInstallMethod::Brew),
+        CliToolId::Codex => brew_list_contains(brew, &["list", "--cask"], "codex")
+            .then_some(CliToolInstallMethod::Brew),
+        CliToolId::Claude => None,
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn brew_detect_cli_tool_install_method(
+    _brew: &Path,
+    _tool: CliToolId,
+) -> Option<CliToolInstallMethod> {
+    None
+}
+
+pub fn detect_cli_tool(env: &CliExecEnv, data_dir: &Path, def: &CliToolDef) -> DetectedCliTool {
+    let tools_prefix_dir = cli_tools_npm_prefix_dir(data_dir);
+    let managed_bin_dir = cli_tools_npm_prefix_bin_dir(&tools_prefix_dir);
+
+    let managed_tool_path =
+        resolve_program_from_user_path(def.bin, &managed_bin_dir.to_string_lossy());
+    let managed_present = managed_tool_path.is_some();
+    let mut resolved_path = env.find_executable(def.bin);
+
+    // If we resolve to our own terminal shim, treat it as "no system path" and rely on
+    // managed-prefix detection.
+    if let Ok(shim_path) = crate::terminal::cli_tool_shim_path(def.bin) {
+        if resolved_path.as_ref() == Some(&shim_path) {
+            resolved_path = None;
+        }
+    }
+
+    let install_path = managed_tool_path.clone().or(resolved_path);
+
+    // Install method & installer path.
+    let mut method = CliToolInstallMethod::Other;
+    let mut installer_path: Option<PathBuf> = None;
+
+    if install_path.is_some() && managed_present {
+        method = CliToolInstallMethod::ManagedNpmPrefix;
+        installer_path = env.resolved_npm_path().map(|p| p.to_path_buf());
+    } else if install_path.is_some()
+        && let Some(brew) = find_executable_in_path("brew")
+    {
+        if let Some(m) = brew_detect_cli_tool_install_method(&brew, def.id) {
+            method = m;
+            installer_path = Some(brew);
+        }
+    }
+
+    if method == CliToolInstallMethod::Other
+        && install_path.is_some()
+        && env.npm_global_has_package(def.npm_package)
+    {
+        method = CliToolInstallMethod::Npm;
+        installer_path = env.resolved_npm_path().map(|p| p.to_path_buf());
+    }
+
+    let version = install_path
+        .as_ref()
+        .and_then(|p| env.try_get_cmd_version_by_path(p))
+        .map(|v| normalize_version_string(&v));
+
+    let installed = install_path.is_some();
+    DetectedCliTool {
+        installed,
+        version,
+        install_method: method,
+        install_path,
+        installer_path,
+    }
+}
+
+pub fn brew_upgrade_cli_tool(brew: &Path, tool: CliToolId) -> anyhow::Result<CmdOutput> {
+    let mut cmd = std::process::Command::new(brew);
+    match tool {
+        CliToolId::Gemini => cmd.args(["upgrade", "gemini-cli"]),
+        CliToolId::Codex => cmd.args(["upgrade", "--cask", "codex"]),
+        CliToolId::Claude => {
+            anyhow::bail!("Claude Code does not support brew upgrade")
+        }
+    };
+
+    crate::process::command_silent(&mut cmd);
+    let out = crate::process::command_output_with_timeout(&mut cmd, BREW_TIMEOUT)
+        .with_context(|| format!("run brew upgrade for {tool:?} failed"))?;
+
+    Ok(CmdOutput {
+        status: out.status,
+        stdout: String::from_utf8_lossy(&out.stdout).to_string(),
+        stderr: String::from_utf8_lossy(&out.stderr).to_string(),
+    })
+}
+
+#[cfg(test)]
+mod path_tests {
+    use super::*;
+
+    fn tmp_dir(name: &str) -> PathBuf {
+        std::env::temp_dir().join(format!(
+            "cliswitch-cli-tools-test-{}-{}",
+            uuid::Uuid::new_v4(),
+            name
+        ))
+    }
+
+    #[test]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    fn fallback_executable_dirs_includes_common_user_dirs_and_nvm_bins() {
+        let home = tmp_dir("home");
+        std::fs::create_dir_all(&home).expect("create tmp home dir");
+
+        // Simulate an nvm installation.
+        let nvm_bin = home
+            .join(".nvm")
+            .join("versions")
+            .join("node")
+            .join("v1.2.3")
+            .join("bin");
+        std::fs::create_dir_all(&nvm_bin).expect("create nvm bin dir");
+
+        let dirs = fallback_executable_dirs_with_home(Some(&home));
+        assert!(dirs.contains(&home.join(".local").join("bin")));
+        assert!(dirs.contains(&home.join(".asdf").join("shims")));
+        assert!(dirs.contains(&nvm_bin));
+
+        let _ = std::fs::remove_dir_all(&home);
+    }
+}
+
+#[cfg(test)]
+mod detect_tests {
+    use super::*;
+
+    fn tmp_dir(name: &str) -> PathBuf {
+        std::env::temp_dir().join(format!(
+            "cliswitch-cli-tools-test-{}-{}",
+            uuid::Uuid::new_v4(),
+            name
+        ))
+    }
+
+    #[test]
+    fn detect_cli_tool_prefers_managed_prefix_over_system() {
+        let data_dir = tmp_dir("data");
+        let prefix_dir = cli_tools_npm_prefix_dir(&data_dir);
+        let bin_dir = cli_tools_npm_prefix_bin_dir(&prefix_dir);
+        std::fs::create_dir_all(&bin_dir).expect("create managed bin dir");
+
+        // Use a unique bin name to avoid interacting with user's environment.
+        let bin = "cliswitch-test-tool-bin";
+
+        #[cfg(windows)]
+        let tool_file = format!("{bin}.cmd");
+        #[cfg(not(windows))]
+        let tool_file = bin.to_string();
+
+        let tool_path = bin_dir.join(&tool_file);
+        std::fs::write(&tool_path, b"").expect("write dummy tool file");
+
+        let env = CliExecEnv::new(None, None);
+        let def = CliToolDef {
+            id: CliToolId::Codex,
+            name: "Test Tool",
+            bin,
+            npm_package: "cliswitch-test-tool-pkg",
+        };
+
+        let detected = detect_cli_tool(&env, &data_dir, &def);
+        assert!(detected.installed);
+        assert_eq!(
+            detected.install_method,
+            CliToolInstallMethod::ManagedNpmPrefix
+        );
+        assert_eq!(detected.install_path.as_deref(), Some(tool_path.as_path()));
+
+        let _ = std::fs::remove_dir_all(&data_dir);
     }
 }

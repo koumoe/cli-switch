@@ -1127,6 +1127,8 @@ export function SettingsPage() {
                 const version = tool.version ?? "-";
                 const busy = cliToolBusy[tool.id];
                 const npmOk = cliToolsStatus?.npm_available ?? true;
+                const needsNpmForInstallOrUpdate = !installed || tool.install_method !== "brew";
+                const needsNpmForAutoUpdate = tool.install_method !== "brew";
                 const autoEnabled =
                   tool.id === "gemini"
                     ? (appSettings?.gemini_cli_auto_update_enabled ?? false)
@@ -1150,7 +1152,7 @@ export function SettingsPage() {
                         variant="outline"
                         disabled={busy}
                         onClick={async () => {
-                          if (!npmOk) {
+                          if (needsNpmForInstallOrUpdate && !npmOk) {
                             setCliToolsNpmSetupOpen(true);
                             return;
                           }
@@ -1185,7 +1187,7 @@ export function SettingsPage() {
                           checked={autoEnabled}
                           onCheckedChange={async (v) => {
                             if (!appSettings) return;
-                            if (v && !(cliToolsStatus?.npm_available ?? true)) {
+                            if (v && needsNpmForAutoUpdate && !(cliToolsStatus?.npm_available ?? true)) {
                               setCliToolsNpmSetupOpen(true);
                               return;
                             }
