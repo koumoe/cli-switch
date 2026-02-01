@@ -18,6 +18,9 @@ pub(super) struct StreamRecordContext {
     pub(super) started: Instant,
     pub(super) parse_sse: bool,
     pub(super) record_usage: bool,
+    /// Captured from the request handler so stream logs emitted from `Drop` can still be
+    /// correlated with the request span (method/uri/endpoint/etc).
+    pub(super) span: tracing::Span,
 }
 
 pub(super) struct InstrumentedStream {
@@ -26,11 +29,17 @@ pub(super) struct InstrumentedStream {
     finalized: bool,
     ttft_ms: Option<i64>,
     usage: super::TokenUsage,
+    stream_bytes: usize,
+    stream_chunks: u64,
+    end_reason: Option<&'static str>,
     sse_buf: Vec<u8>,
     sse_log_buf: Vec<u8>,
     sse_log_truncated: bool,
     err_body_buf: Vec<u8>,
     stream_error: Option<String>,
+    sse_last_event: Option<String>,
+    sse_last_type: Option<String>,
+    sse_seen_terminal: bool,
 }
 
 impl InstrumentedStream {
@@ -44,15 +53,23 @@ impl InstrumentedStream {
             finalized: false,
             ttft_ms: None,
             usage: super::TokenUsage::default(),
+            stream_bytes: 0,
+            stream_chunks: 0,
+            end_reason: None,
             sse_buf: Vec::new(),
             sse_log_buf: Vec::new(),
             sse_log_truncated: false,
             err_body_buf: Vec::new(),
             stream_error: None,
+            sse_last_event: None,
+            sse_last_type: None,
+            sse_seen_terminal: false,
         }
     }
 
     fn on_chunk(&mut self, bytes: &Bytes) {
+        self.stream_chunks = self.stream_chunks.saturating_add(1);
+        self.stream_bytes = self.stream_bytes.saturating_add(bytes.len());
         if self.ttft_ms.is_none() {
             self.ttft_ms = Some(self.ctx.started.elapsed().as_millis() as i64);
         }
@@ -80,6 +97,33 @@ impl InstrumentedStream {
         }
     }
 
+    fn maybe_mark_terminal(&mut self, marker: &str) {
+        if marker.is_empty() {
+            return;
+        }
+        // Best-effort terminal markers for common upstreams.
+        // Note: this is only for diagnosis; it doesn't change control flow.
+        match self.ctx.protocol {
+            Protocol::Openai => {
+                if matches!(
+                    marker,
+                    "response.completed"
+                        | "response.failed"
+                        | "response.cancelled"
+                        | "response.incomplete"
+                ) {
+                    self.sse_seen_terminal = true;
+                }
+            }
+            Protocol::Anthropic => {
+                if marker == "message_stop" {
+                    self.sse_seen_terminal = true;
+                }
+            }
+            Protocol::Gemini => {}
+        }
+    }
+
     fn consume_sse(&mut self, bytes: &Bytes) {
         if self.sse_buf.len() < super::limits::MAX_SSE_BUF_BYTES {
             let remain = super::limits::MAX_SSE_BUF_BYTES - self.sse_buf.len();
@@ -93,16 +137,33 @@ impl InstrumentedStream {
                 continue;
             };
             s = s.trim();
+            if let Some(rest) = s.strip_prefix("event:") {
+                let ev = rest.trim();
+                if !ev.is_empty() {
+                    self.sse_last_event = Some(super::truncate(ev, 120));
+                    self.maybe_mark_terminal(ev);
+                }
+                continue;
+            }
             if !s.starts_with("data:") {
                 continue;
             }
             let data = s["data:".len()..].trim();
-            if data.is_empty() || data == "[DONE]" {
+            if data.is_empty() {
+                continue;
+            }
+            if data == "[DONE]" {
+                self.sse_seen_terminal = true;
                 continue;
             }
             let Ok(v) = serde_json::from_str::<serde_json::Value>(data) else {
                 continue;
             };
+
+            if let Some(t) = v.get("type").and_then(|v| v.as_str()) {
+                self.sse_last_type = Some(super::truncate(t, 120));
+                self.maybe_mark_terminal(t);
+            }
             self.usage
                 .merge(super::extract_usage_from_value(self.ctx.protocol, &v));
         }
@@ -116,6 +177,8 @@ impl InstrumentedStream {
         if !self.ctx.record_usage {
             return;
         }
+
+        let _guard = self.ctx.span.enter();
 
         let duration_ms = self.ctx.started.elapsed().as_millis() as i64;
         let (prompt_tokens, completion_tokens, total_tokens, cache_read_tokens, cache_write_tokens) =
@@ -154,6 +217,12 @@ impl InstrumentedStream {
             http_status = self.ctx.http_status,
             ttft_ms = self.ttft_ms.unwrap_or(-1),
             duration_ms,
+            stream_bytes = self.stream_bytes,
+            stream_chunks = self.stream_chunks,
+            stream_end = self.end_reason.unwrap_or("-"),
+            sse_terminal = self.sse_seen_terminal,
+            sse_last_event = self.sse_last_event.as_deref().unwrap_or("-"),
+            sse_last_type = self.sse_last_type.as_deref().unwrap_or("-"),
             prompt_tokens = prompt_tokens.unwrap_or(-1),
             completion_tokens = completion_tokens.unwrap_or(-1),
             total_tokens = total_tokens.unwrap_or(-1),
@@ -173,6 +242,10 @@ impl InstrumentedStream {
                 http_status = self.ctx.http_status,
                 ttft_ms = self.ttft_ms.unwrap_or(-1),
                 duration_ms,
+                stream_end = self.end_reason.unwrap_or("-"),
+                sse_terminal = self.sse_seen_terminal,
+                sse_last_event = self.sse_last_event.as_deref().unwrap_or("-"),
+                sse_last_type = self.sse_last_type.as_deref().unwrap_or("-"),
                 response_sse = %response_sse,
                 response_sse_truncated = self.sse_log_truncated,
                 body = true,
@@ -214,11 +287,13 @@ impl futures_util::Stream for InstrumentedStream {
                 Poll::Ready(Some(Ok(bytes)))
             }
             Poll::Ready(Some(Err(e))) => {
+                self.end_reason = Some("upstream_error");
                 self.stream_error = Some(e.to_string());
                 self.finalize();
                 Poll::Ready(Some(Err(std::io::Error::other(e))))
             }
             Poll::Ready(None) => {
+                self.end_reason = Some("upstream_eos");
                 self.finalize();
                 Poll::Ready(None)
             }
@@ -231,6 +306,9 @@ impl Drop for InstrumentedStream {
     fn drop(&mut self) {
         if self.finalized || !self.ctx.record_usage {
             return;
+        }
+        if self.end_reason.is_none() {
+            self.end_reason = Some("dropped");
         }
         // If the stream is dropped before completion (e.g. client disconnect), record it as a
         // stream error so it doesn't get counted as a successful request.

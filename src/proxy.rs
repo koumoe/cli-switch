@@ -148,6 +148,7 @@ pub async fn forward_with_config(
         if !is_count_tokens {
             tracing::debug!(
                 protocol = protocol.as_str(),
+                request_id = %request_id,
                 channel_id = %channel.id,
                 attempt = idx + 1,
                 total = total_channels,
@@ -295,6 +296,7 @@ pub async fn forward_with_config(
                 started,
                 parse_sse: false, // 将在内部按 Content-Type 决定
                 record_usage: !is_count_tokens,
+                span: tracing::Span::current(),
             },
         )
         .await;
