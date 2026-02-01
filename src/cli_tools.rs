@@ -161,29 +161,102 @@ pub async fn pick_cli_tools_npm_registry(client: &reqwest::Client) -> String {
 }
 
 fn fallback_executable_dirs() -> Vec<PathBuf> {
+    fallback_executable_dirs_with_home(std::env::var_os("HOME").as_deref().map(Path::new))
+}
+
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+fn push_nvm_bins(out: &mut Vec<PathBuf>, home: &Path) {
+    let nvm_dir = std::env::var_os("NVM_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| home.join(".nvm"));
+
+    let versions_dir = nvm_dir.join("versions").join("node");
+    let Ok(read_dir) = std::fs::read_dir(&versions_dir) else {
+        return;
+    };
+
+    let mut bins: Vec<PathBuf> = Vec::new();
+    for e in read_dir.flatten() {
+        let p = e.path();
+        if !p.is_dir() {
+            continue;
+        }
+        let bin = p.join("bin");
+        if bin.is_dir() {
+            bins.push(bin);
+        }
+    }
+
+    // Keep deterministic ordering; don't blow up PATH for users with many versions installed.
+    bins.sort();
+    out.extend(bins.into_iter().take(20));
+}
+
+fn fallback_executable_dirs_with_home(home: Option<&Path>) -> Vec<PathBuf> {
     let mut out: Vec<PathBuf> = Vec::new();
 
     #[cfg(target_os = "macos")]
     {
         // Common install locations that are often missing from GUI-app PATH.
         out.push(PathBuf::from("/opt/homebrew/bin"));
+        out.push(PathBuf::from("/opt/homebrew/sbin"));
         out.push(PathBuf::from("/usr/local/bin"));
+        out.push(PathBuf::from("/usr/local/sbin"));
         out.push(PathBuf::from("/usr/bin"));
         out.push(PathBuf::from("/bin"));
+        out.push(PathBuf::from("/usr/sbin"));
+        out.push(PathBuf::from("/sbin"));
 
-        if let Some(home) = std::env::var_os("HOME") {
-            out.push(PathBuf::from(home).join(".volta").join("bin"));
+        if let Some(home) = home {
+            out.push(home.join(".local").join("bin"));
+            out.push(home.join(".cargo").join("bin"));
+            out.push(home.join(".volta").join("bin"));
+            out.push(home.join(".asdf").join("bin"));
+            out.push(home.join(".asdf").join("shims"));
+            out.push(home.join(".npm-global").join("bin"));
+            out.push(home.join(".yarn").join("bin"));
+            out.push(
+                home.join(".fnm")
+                    .join("aliases")
+                    .join("default")
+                    .join("bin"),
+            );
+            out.push(home.join(".local").join("share").join("mise").join("shims"));
+            push_nvm_bins(&mut out, home);
         }
     }
 
     #[cfg(target_os = "linux")]
     {
         out.push(PathBuf::from("/usr/local/bin"));
+        out.push(PathBuf::from("/usr/local/sbin"));
         out.push(PathBuf::from("/usr/bin"));
         out.push(PathBuf::from("/bin"));
+        out.push(PathBuf::from("/usr/sbin"));
+        out.push(PathBuf::from("/sbin"));
 
-        if let Some(home) = std::env::var_os("HOME") {
-            out.push(PathBuf::from(home).join(".volta").join("bin"));
+        // linuxbrew
+        out.push(PathBuf::from("/home/linuxbrew/.linuxbrew/bin"));
+        out.push(PathBuf::from("/home/linuxbrew/.linuxbrew/sbin"));
+
+        if let Some(home) = home {
+            out.push(home.join(".local").join("bin"));
+            out.push(home.join(".cargo").join("bin"));
+            out.push(home.join(".volta").join("bin"));
+            out.push(home.join(".asdf").join("bin"));
+            out.push(home.join(".asdf").join("shims"));
+            out.push(home.join(".linuxbrew").join("bin"));
+            out.push(home.join(".linuxbrew").join("sbin"));
+            out.push(home.join(".npm-global").join("bin"));
+            out.push(home.join(".yarn").join("bin"));
+            out.push(
+                home.join(".fnm")
+                    .join("aliases")
+                    .join("default")
+                    .join("bin"),
+            );
+            out.push(home.join(".local").join("share").join("mise").join("shims"));
+            push_nvm_bins(&mut out, home);
         }
     }
 
@@ -207,6 +280,19 @@ fn fallback_executable_dirs() -> Vec<PathBuf> {
         if let Some(userprofile) = std::env::var_os("USERPROFILE") {
             out.push(PathBuf::from(&userprofile).join("scoop").join("shims"));
             out.push(PathBuf::from(userprofile).join(".volta").join("bin"));
+        }
+
+        // nvm-windows
+        if let Some(nvm_home) = std::env::var_os("NVM_HOME") {
+            out.push(PathBuf::from(nvm_home));
+        }
+        if let Some(nvm_symlink) = std::env::var_os("NVM_SYMLINK") {
+            out.push(PathBuf::from(nvm_symlink));
+        }
+
+        // User-level Node installs
+        if let Some(localappdata) = std::env::var_os("LOCALAPPDATA") {
+            out.push(PathBuf::from(&localappdata).join("Programs").join("nodejs"));
         }
         if let Some(localappdata) = std::env::var_os("LOCALAPPDATA") {
             out.push(
@@ -517,14 +603,17 @@ fn program_dir(p: Option<&PathBuf>) -> Option<PathBuf> {
 }
 
 fn join_child_path(extra_dirs: &[PathBuf]) -> Option<OsString> {
-    if extra_dirs.is_empty() {
-        return None;
-    }
     let mut out: Vec<PathBuf> = Vec::new();
     out.extend_from_slice(extra_dirs);
     if let Some(env_path) = std::env::var_os("PATH") {
         out.extend(std::env::split_paths(&env_path));
     }
+    out.extend(fallback_executable_dirs());
+
+    // Dedup, keep order.
+    let mut seen = std::collections::HashSet::<PathBuf>::new();
+    out.retain(|p| seen.insert(p.clone()));
+
     std::env::join_paths(out).ok()
 }
 
