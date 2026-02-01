@@ -81,6 +81,7 @@ export function SettingsPage() {
   const [cliToolsPathsDirty, setCliToolsPathsDirty] = useState(false);
   const [cliNpmPathDraft, setCliNpmPathDraft] = useState("");
   const [cliNodePathDraft, setCliNodePathDraft] = useState("");
+  const [cliNpmRegistryDraft, setCliNpmRegistryDraft] = useState("");
   const [cliToolsPathSaving, setCliToolsPathSaving] = useState(false);
   const [cliToolBusy, setCliToolBusy] = useState<Record<CliToolId, boolean>>({
     gemini: false,
@@ -146,6 +147,7 @@ export function SettingsPage() {
       setAppSettings(s);
       setCliNpmPathDraft((s.cli_tools_npm_path ?? "").trim());
       setCliNodePathDraft((s.cli_tools_node_path ?? "").trim());
+      setCliNpmRegistryDraft((s.cli_tools_npm_registry ?? "").trim());
       setCliToolsPathsDirty(false);
       await refreshCliToolsStatus();
       setCliToolsNpmSetupOpen(false);
@@ -184,6 +186,7 @@ export function SettingsPage() {
     if (!appSettings) return;
     const nodePath = cliNodePathDraft.trim();
     const npmPath = cliNpmPathDraft.trim();
+    const npmRegistry = cliNpmRegistryDraft.trim();
 
     try {
       if (nodePath) await validateProgram("node", nodePath);
@@ -204,6 +207,7 @@ export function SettingsPage() {
       const next = await updateSettings({
         cli_tools_npm_path: npmPath,
         cli_tools_node_path: nodePath,
+        cli_tools_npm_registry: npmRegistry,
       } as Partial<AppSettings>);
       setAppSettings(next);
       toast.success(t("settings.cliTools.saved"));
@@ -219,6 +223,7 @@ export function SettingsPage() {
   function resetCliToolsPathsDraft() {
     setCliNpmPathDraft((appSettings?.cli_tools_npm_path ?? "").trim());
     setCliNodePathDraft((appSettings?.cli_tools_node_path ?? "").trim());
+    setCliNpmRegistryDraft((appSettings?.cli_tools_npm_registry ?? "").trim());
     setCliToolsPathsDirty(false);
   }
 
@@ -287,6 +292,7 @@ export function SettingsPage() {
         setAppSettings(s);
         setCliNpmPathDraft((s.cli_tools_npm_path ?? "").trim());
         setCliNodePathDraft((s.cli_tools_node_path ?? "").trim());
+        setCliNpmRegistryDraft((s.cli_tools_npm_registry ?? "").trim());
         setCliToolsPathsDirty(false);
         setLogRetentionDraft(String(s.log_retention_days ?? ""));
         setLogLevel(s.log_level);
@@ -308,6 +314,7 @@ export function SettingsPage() {
     if (!appSettings || cliToolsPathsDirty) return;
     setCliNpmPathDraft((appSettings.cli_tools_npm_path ?? "").trim());
     setCliNodePathDraft((appSettings.cli_tools_node_path ?? "").trim());
+    setCliNpmRegistryDraft((appSettings.cli_tools_npm_registry ?? "").trim());
   }, [appSettings, cliToolsPathsDirty]);
 
   useEffect(() => {
@@ -1058,6 +1065,20 @@ export function SettingsPage() {
                       <FolderOpen className="h-4 w-4" />
                       {t("settings.baseDeps.browse")}
                     </Button>
+                  </div>
+
+                  <div className="flex items-end gap-2">
+                    <div className="flex-1 space-y-1">
+                      <div className="text-sm font-medium">{t("settings.baseDeps.npmRegistry")}</div>
+                      <Input
+                        value={cliNpmRegistryDraft}
+                        onChange={(e) => {
+                          setCliNpmRegistryDraft(e.target.value);
+                          setCliToolsPathsDirty(true);
+                        }}
+                        placeholder={t("settings.baseDeps.npmRegistryPlaceholder")}
+                      />
+                    </div>
                   </div>
                 </div>
 

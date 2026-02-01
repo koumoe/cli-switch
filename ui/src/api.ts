@@ -28,6 +28,7 @@ export type AppSettings = {
   codex_auto_update_enabled: boolean;
   cli_tools_npm_path: string | null;
   cli_tools_node_path: string | null;
+  cli_tools_npm_registry: string | null;
   auto_disable_enabled: boolean;
   auto_disable_window_minutes: number;
   auto_disable_failure_times: number;

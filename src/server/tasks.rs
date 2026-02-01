@@ -145,6 +145,7 @@ pub(crate) async fn cli_tools_auto_update_loop(db_path: PathBuf, mut notify: wat
 
         let npm_path = settings.cli_tools_npm_path.clone();
         let node_path = settings.cli_tools_node_path.clone();
+        let npm_registry = settings.cli_tools_npm_registry.clone();
         let data_dir = data_dir_from_db_path(db_path.as_path());
         let tools_prefix_dir = crate::cli_tools::cli_tools_npm_prefix_dir(&data_dir);
 
@@ -154,7 +155,11 @@ pub(crate) async fn cli_tools_auto_update_loop(db_path: PathBuf, mut notify: wat
                 return;
             }
             for d in to_update {
-                match env.npm_install_global_to_prefix(d.npm_package, &tools_prefix_dir) {
+                match env.npm_install_global_to_prefix(
+                    d.npm_package,
+                    &tools_prefix_dir,
+                    npm_registry.as_deref(),
+                ) {
                     Ok(out) => {
                         if !out.status.success() {
                             let code = out.status.code();

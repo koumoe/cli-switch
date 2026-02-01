@@ -215,6 +215,7 @@ pub(in crate::server) async fn install_cli_tool(
     let settings = storage::get_app_settings(state.db_path()).await?;
     let npm_path = settings.cli_tools_npm_path.clone();
     let node_path = settings.cli_tools_node_path.clone();
+    let npm_registry = settings.cli_tools_npm_registry.clone();
     let data_dir = state.data_dir();
     let tools_prefix_dir = crate::cli_tools::cli_tools_npm_prefix_dir(&data_dir);
 
@@ -229,7 +230,11 @@ pub(in crate::server) async fn install_cli_tool(
 
         // Install/update into our managed npm prefix to avoid touching user's system/global npm.
         let out = env
-            .npm_install_global_to_prefix(def.npm_package, &tools_prefix_dir)
+            .npm_install_global_to_prefix(
+                def.npm_package,
+                &tools_prefix_dir,
+                npm_registry.as_deref(),
+            )
             .map_err(ApiError::Internal)?;
 
         let prefix_bin_dir = env

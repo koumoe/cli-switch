@@ -20,6 +20,7 @@ const KEY_CLAUDE_CODE_AUTO_UPDATE_ENABLED: &str = "claude_code_auto_update_enabl
 const KEY_CODEX_AUTO_UPDATE_ENABLED: &str = "codex_auto_update_enabled";
 const KEY_CLI_TOOLS_NPM_PATH: &str = "cli_tools_npm_path";
 const KEY_CLI_TOOLS_NODE_PATH: &str = "cli_tools_node_path";
+const KEY_CLI_TOOLS_NPM_REGISTRY: &str = "cli_tools_npm_registry";
 const KEY_AUTO_DISABLE_ENABLED: &str = "auto_disable_enabled";
 const KEY_AUTO_DISABLE_WINDOW_MINUTES: &str = "auto_disable_window_minutes";
 const KEY_AUTO_DISABLE_FAILURE_TIMES: &str = "auto_disable_failure_times";
@@ -75,6 +76,7 @@ pub struct AppSettings {
     pub codex_auto_update_enabled: bool,
     pub cli_tools_npm_path: Option<String>,
     pub cli_tools_node_path: Option<String>,
+    pub cli_tools_npm_registry: Option<String>,
     pub auto_disable_enabled: bool,
     pub auto_disable_window_minutes: i64,
     pub auto_disable_failure_times: i64,
@@ -100,6 +102,7 @@ impl Default for AppSettings {
             codex_auto_update_enabled: false,
             cli_tools_npm_path: None,
             cli_tools_node_path: None,
+            cli_tools_npm_registry: None,
             auto_disable_enabled: false,
             auto_disable_window_minutes: 3,
             auto_disable_failure_times: 5,
@@ -125,6 +128,7 @@ pub struct AppSettingsPatch {
     pub codex_auto_update_enabled: Option<bool>,
     pub cli_tools_npm_path: Option<String>,
     pub cli_tools_node_path: Option<String>,
+    pub cli_tools_npm_registry: Option<String>,
     pub auto_disable_enabled: Option<bool>,
     pub auto_disable_window_minutes: Option<i64>,
     pub auto_disable_failure_times: Option<i64>,
@@ -292,6 +296,12 @@ pub async fn get_app_settings(db_path: PathBuf) -> anyhow::Result<AppSettings> {
                 out.cli_tools_node_path = Some(s.to_string());
             }
         }
+        if let Some(v) = get_setting(conn, KEY_CLI_TOOLS_NPM_REGISTRY)? {
+            let s = v.trim();
+            if !s.is_empty() {
+                out.cli_tools_npm_registry = Some(s.to_string());
+            }
+        }
         if let Some(v) = get_setting(conn, KEY_AUTO_DISABLE_ENABLED)? {
             out.auto_disable_enabled =
                 parse_bool_setting(KEY_AUTO_DISABLE_ENABLED, &v, &mut has_invalid_values);
@@ -426,6 +436,9 @@ pub async fn update_app_settings(
         }
         if let Some(v) = patch.cli_tools_node_path {
             set_setting(conn, KEY_CLI_TOOLS_NODE_PATH, v.trim(), updated_at_ms)?;
+        }
+        if let Some(v) = patch.cli_tools_npm_registry {
+            set_setting(conn, KEY_CLI_TOOLS_NPM_REGISTRY, v.trim(), updated_at_ms)?;
         }
         if let Some(v) = patch.auto_disable_enabled {
             set_setting(

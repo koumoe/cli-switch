@@ -567,6 +567,7 @@ impl CliExecEnv {
         &self,
         pkg: &str,
         prefix: &Path,
+        registry: Option<&str>,
     ) -> anyhow::Result<CmdOutput> {
         let npm = self
             .npm
@@ -574,9 +575,15 @@ impl CliExecEnv {
             .cloned()
             .ok_or_else(|| anyhow::anyhow!("npm not found"))?;
 
-        let out = self
-            .cmd(npm)
-            .env("npm_config_prefix", prefix.as_os_str())
+        let mut cmd = self.cmd(npm);
+        cmd.env("npm_config_prefix", prefix.as_os_str());
+        if let Some(registry) = registry.map(|s| s.trim())
+            && !registry.is_empty()
+        {
+            cmd.env("npm_config_registry", registry);
+        }
+
+        let out = cmd
             .args(["install", "-g", pkg, "--no-fund", "--no-audit"])
             .output()
             .with_context(|| format!("run npm install -g {pkg} failed"))?;
