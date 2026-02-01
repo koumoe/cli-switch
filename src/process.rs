@@ -1,4 +1,7 @@
-use std::process::Command;
+use anyhow::Context as _;
+use std::io::Read as _;
+use std::process::{Command, Output, Stdio};
+use std::time::{Duration, Instant};
 
 /// Best-effort: prevent console windows from flashing when a GUI app spawns a console process.
 pub(crate) fn command_silent(cmd: &mut Command) {
@@ -14,6 +17,73 @@ pub(crate) fn command_silent(cmd: &mut Command) {
     {
         let _ = cmd;
     }
+}
+
+pub(crate) fn command_output_with_timeout(
+    cmd: &mut Command,
+    timeout: Duration,
+) -> anyhow::Result<Output> {
+    // Ensure we don't accidentally block on stdin.
+    cmd.stdin(Stdio::null());
+    cmd.stdout(Stdio::piped());
+    cmd.stderr(Stdio::piped());
+
+    let program = cmd.get_program().to_os_string();
+    let args: Vec<_> = cmd.get_args().map(|a| a.to_os_string()).collect();
+
+    let mut child = cmd
+        .spawn()
+        .with_context(|| format!("spawn command failed: {:?} {:?}", program, args))?;
+
+    let mut stdout = child.stdout.take();
+    let mut stderr = child.stderr.take();
+
+    let stdout_handle = std::thread::spawn(move || {
+        let mut out = Vec::new();
+        if let Some(ref mut r) = stdout {
+            let _ = r.read_to_end(&mut out);
+        }
+        out
+    });
+    let stderr_handle = std::thread::spawn(move || {
+        let mut out = Vec::new();
+        if let Some(ref mut r) = stderr {
+            let _ = r.read_to_end(&mut out);
+        }
+        out
+    });
+
+    let started = Instant::now();
+    let mut timed_out = false;
+    let status = loop {
+        if let Some(status) = child.try_wait()? {
+            break status;
+        }
+        if started.elapsed() >= timeout {
+            timed_out = true;
+            let _ = child.kill();
+            break child.wait()?;
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    };
+
+    let stdout = stdout_handle.join().unwrap_or_default();
+    let stderr = stderr_handle.join().unwrap_or_default();
+
+    if timed_out {
+        anyhow::bail!(
+            "command timed out after {:?}: {:?} {:?}",
+            timeout,
+            program,
+            args
+        );
+    }
+
+    Ok(Output {
+        status,
+        stdout,
+        stderr,
+    })
 }
 
 /// Best-effort: notify Windows that user environment variables changed (e.g. PATH).

@@ -215,7 +215,11 @@ pub(in crate::server) async fn install_cli_tool(
     let settings = storage::get_app_settings(state.db_path()).await?;
     let npm_path = settings.cli_tools_npm_path.clone();
     let node_path = settings.cli_tools_node_path.clone();
-    let npm_registry = settings.cli_tools_npm_registry.clone();
+    let npm_registry = crate::cli_tools::pick_cli_tools_npm_registry(
+        &state.http_client,
+        settings.cli_tools_npm_registry.as_deref(),
+    )
+    .await;
     let data_dir = state.data_dir();
     let tools_prefix_dir = crate::cli_tools::cli_tools_npm_prefix_dir(&data_dir);
 
