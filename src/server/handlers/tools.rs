@@ -147,7 +147,7 @@ pub(in crate::server) async fn install_npm_env(
     }
 
     let data_dir = state.data_dir();
-    let paths = nodejs::ensure_managed_node_installed(&state.http_client, &data_dir)
+    let paths = nodejs::ensure_npm_env_installed(&state.http_client, &data_dir)
         .await
         .map_err(|e| ApiError::bad_request("tools_npm_env_install_failed", e.to_string()))?;
 
