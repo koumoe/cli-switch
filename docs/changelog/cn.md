@@ -1,3 +1,7 @@
+## [0.30.0](https://github.com/koumoe/cli-switch/compare/v0.29.1...v0.30.0) (2026-02-01)
+
+### 功能
+* 识别 CLI 工具安装方式 (#107) ([#107](https://github.com/koumoe/cli-switch/issues/107)) ([6f9cefb](https://github.com/koumoe/cli-switch/commit/6f9cefbc92fedcc5946c4f50bfe76612154746e3))
 ## [0.29.1](https://github.com/koumoe/cli-switch/compare/v0.29.0...v0.29.1) (2026-02-01)
 
 ### 修复
