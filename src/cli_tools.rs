@@ -187,13 +187,16 @@ pub async fn pick_cli_tools_npm_registry(client: &reqwest::Client) -> String {
 }
 
 fn fallback_executable_dirs() -> Vec<PathBuf> {
-    fallback_executable_dirs_with_home(std::env::var_os("HOME").as_deref().map(Path::new))
+    fallback_executable_dirs_with_home(
+        std::env::var_os("HOME").as_deref().map(Path::new),
+        std::env::var_os("NVM_DIR").as_deref().map(Path::new),
+    )
 }
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
-fn push_nvm_bins(out: &mut Vec<PathBuf>, home: &Path) {
-    let nvm_dir = std::env::var_os("NVM_DIR")
-        .map(PathBuf::from)
+fn push_nvm_bins(out: &mut Vec<PathBuf>, home: &Path, nvm_dir: Option<&Path>) {
+    let nvm_dir = nvm_dir
+        .map(|p| p.to_path_buf())
         .unwrap_or_else(|| home.join(".nvm"));
 
     let versions_dir = nvm_dir.join("versions").join("node");
@@ -218,7 +221,7 @@ fn push_nvm_bins(out: &mut Vec<PathBuf>, home: &Path) {
     out.extend(bins.into_iter().take(20));
 }
 
-fn fallback_executable_dirs_with_home(home: Option<&Path>) -> Vec<PathBuf> {
+fn fallback_executable_dirs_with_home(home: Option<&Path>, nvm_dir: Option<&Path>) -> Vec<PathBuf> {
     let mut out: Vec<PathBuf> = Vec::new();
 
     #[cfg(target_os = "macos")]
@@ -248,7 +251,7 @@ fn fallback_executable_dirs_with_home(home: Option<&Path>) -> Vec<PathBuf> {
                     .join("bin"),
             );
             out.push(home.join(".local").join("share").join("mise").join("shims"));
-            push_nvm_bins(&mut out, home);
+            push_nvm_bins(&mut out, home, nvm_dir);
         }
     }
 
@@ -282,7 +285,7 @@ fn fallback_executable_dirs_with_home(home: Option<&Path>) -> Vec<PathBuf> {
                     .join("bin"),
             );
             out.push(home.join(".local").join("share").join("mise").join("shims"));
-            push_nvm_bins(&mut out, home);
+            push_nvm_bins(&mut out, home, nvm_dir);
         }
     }
 
@@ -1068,7 +1071,8 @@ mod path_tests {
             .join("bin");
         std::fs::create_dir_all(&nvm_bin).expect("create nvm bin dir");
 
-        let dirs = fallback_executable_dirs_with_home(Some(&home));
+        // Do NOT rely on environment NVM_DIR (CI may set it). Use our temp home instead.
+        let dirs = fallback_executable_dirs_with_home(Some(&home), None);
         assert!(dirs.contains(&home.join(".local").join("bin")));
         assert!(dirs.contains(&home.join(".asdf").join("shims")));
         assert!(dirs.contains(&nvm_bin));
