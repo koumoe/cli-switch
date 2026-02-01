@@ -1,3 +1,8 @@
+## [0.30.1](https://github.com/koumoe/cli-switch/compare/v0.30.0...v0.30.1) (2026-02-01)
+
+### Bug Fixes
+
+* improve stream_dropped diagnostics (#108) ([#108](https://github.com/koumoe/cli-switch/issues/108)) ([dd346f8](https://github.com/koumoe/cli-switch/commit/dd346f8d3f53f1eb1318fa27649dcf1f3f7c9a87))
 ## [0.30.0](https://github.com/koumoe/cli-switch/compare/v0.29.1...v0.30.0) (2026-02-01)
 
 ### Features
