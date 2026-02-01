@@ -1,3 +1,8 @@
+## [0.29.1](https://github.com/koumoe/cli-switch/compare/v0.29.0...v0.29.1) (2026-02-01)
+
+### Bug Fixes
+
+* auto npm registry selection and avoid hangs (#106) ([#106](https://github.com/koumoe/cli-switch/issues/106)) ([41f95aa](https://github.com/koumoe/cli-switch/commit/41f95aa67ae9b9c972a357c418c16abfc4458771))
 ## [0.29.0](https://github.com/koumoe/cli-switch/compare/v0.28.0...v0.29.0) (2026-02-01)
 
 ### Features
