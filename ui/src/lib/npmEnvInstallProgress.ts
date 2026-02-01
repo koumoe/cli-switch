@@ -11,8 +11,15 @@ export function formatNpmEnvInstallProgressText(
   if (!progress) return null;
 
   const msg = (progress.message ?? "").trim();
-  // Allow backend to provide extra context for system package manager installs or errors.
-  if (msg) return msg;
+  // Prefer stage-based i18n. Only fall back to backend-provided message when we don't know the stage.
+  // This avoids showing hard-coded English strings in localized UIs.
+  if (progress.stage === "checking_system") return t("settings.cliTools.npmEnvProgressCheckingSystem");
+  if (progress.stage === "system_install_winget") return t("settings.cliTools.npmEnvProgressSystemInstallWinget");
+  if (progress.stage === "system_install_brew") return t("settings.cliTools.npmEnvProgressSystemInstallBrew");
+  if (progress.stage === "system_install_apt_get") return t("settings.cliTools.npmEnvProgressSystemInstallAptGet");
+  if (progress.stage === "system_install_dnf") return t("settings.cliTools.npmEnvProgressSystemInstallDnf");
+  if (progress.stage === "system_install_yum") return t("settings.cliTools.npmEnvProgressSystemInstallYum");
+  if (progress.stage === "system_install_failed") return t("settings.cliTools.npmEnvProgressSystemInstallFailed");
 
   if (progress.stage === "resolving_version") return t("settings.cliTools.npmEnvProgressResolving");
   if (progress.stage === "downloading_shasums") return t("settings.cliTools.npmEnvProgressDownloadingShasums");
@@ -26,5 +33,5 @@ export function formatNpmEnvInstallProgressText(
   if (progress.stage === "done") return t("settings.cliTools.npmEnvProgressDone");
   if (progress.stage === "error") return t("settings.cliTools.npmEnvProgressError");
 
-  return null;
+  return msg || null;
 }
