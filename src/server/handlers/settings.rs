@@ -42,7 +42,6 @@ pub(in crate::server) struct UpdateSettingsInput {
     codex_auto_update_enabled: Option<bool>,
     cli_tools_npm_path: Option<String>,
     cli_tools_node_path: Option<String>,
-    cli_tools_npm_registry: Option<String>,
     auto_disable_enabled: Option<bool>,
     auto_disable_window_minutes: Option<i64>,
     auto_disable_failure_times: Option<i64>,
@@ -95,10 +94,6 @@ pub(in crate::server) async fn update_settings(
         ),
         ("cli_tools_npm_path", input.cli_tools_npm_path.is_some()),
         ("cli_tools_node_path", input.cli_tools_node_path.is_some()),
-        (
-            "cli_tools_npm_registry",
-            input.cli_tools_npm_registry.is_some(),
-        ),
         ("auto_disable_enabled", input.auto_disable_enabled.is_some()),
         (
             "auto_disable_window_minutes",
@@ -200,7 +195,6 @@ pub(in crate::server) async fn update_settings(
 
     let cli_tools_npm_path = input.cli_tools_npm_path.map(|v| expand_tilde(&v));
     let cli_tools_node_path = input.cli_tools_node_path.map(|v| expand_tilde(&v));
-    let cli_tools_npm_registry = input.cli_tools_npm_registry.map(|v| v.trim().to_string());
 
     let settings = storage::update_app_settings(
         state.db_path(),
@@ -217,7 +211,6 @@ pub(in crate::server) async fn update_settings(
             codex_auto_update_enabled: input.codex_auto_update_enabled,
             cli_tools_npm_path,
             cli_tools_node_path,
-            cli_tools_npm_registry,
             auto_disable_enabled: input.auto_disable_enabled,
             auto_disable_window_minutes: input.auto_disable_window_minutes,
             auto_disable_failure_times: input.auto_disable_failure_times,

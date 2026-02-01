@@ -3,6 +3,16 @@ use serde::{Deserialize, Serialize};
 use std::ffi::OsString;
 use std::path::Path;
 use std::path::PathBuf;
+use std::time::{Duration, Instant};
+
+const CMD_VERSION_TIMEOUT: Duration = Duration::from_secs(5);
+const NPM_BIN_TIMEOUT: Duration = Duration::from_secs(5);
+const NPM_INSTALL_TIMEOUT: Duration = Duration::from_secs(20 * 60);
+const NPM_REGISTRY_PROBE_TIMEOUT: Duration = Duration::from_millis(1500);
+const GEO_IPINFO_TIMEOUT: Duration = Duration::from_millis(1200);
+
+pub const NPM_REGISTRY_OFFICIAL: &str = "https://registry.npmjs.org";
+pub const NPM_REGISTRY_NPMMIRROR: &str = "https://registry.npmmirror.com";
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -60,13 +70,169 @@ pub fn cli_tools_npm_prefix_dir(data_dir: &Path) -> PathBuf {
     data_dir.join("cli_tools").join("npm")
 }
 
+async fn probe_registry_latency(client: &reqwest::Client, base: &str) -> Option<Duration> {
+    let url = format!("{base}/-/ping");
+    let started = Instant::now();
+    let res = client
+        .get(url)
+        .timeout(NPM_REGISTRY_PROBE_TIMEOUT)
+        .send()
+        .await
+        .ok()?;
+    res.status().is_success().then_some(started.elapsed())
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+struct IpInfoResponse {
+    #[serde(default)]
+    country: Option<String>,
+}
+
+async fn detect_country_code(client: &reqwest::Client) -> Option<String> {
+    let res = client
+        .get("https://ipinfo.io/json")
+        .timeout(GEO_IPINFO_TIMEOUT)
+        .send()
+        .await
+        .ok()?;
+
+    if !res.status().is_success() {
+        return None;
+    }
+
+    let ipinfo: IpInfoResponse = res.json().await.ok()?;
+    let c = ipinfo.country?.trim().to_uppercase();
+    (!c.is_empty()).then_some(c)
+}
+
+/// Pick the npm registry for CLI tools installation/update.
+///
+/// Policy:
+/// - No user manual override.
+/// - Prefer CN-friendly registry when the current public IP is in CN.
+/// - If geo-detection fails, fall back to quick reachability/latency probes.
+pub async fn pick_cli_tools_npm_registry(client: &reqwest::Client) -> String {
+    let preferred = match detect_country_code(client).await.as_deref() {
+        Some("CN") => NPM_REGISTRY_NPMMIRROR,
+        Some(_) => NPM_REGISTRY_OFFICIAL,
+        None => "",
+    };
+
+    let other = if preferred == NPM_REGISTRY_NPMMIRROR {
+        NPM_REGISTRY_OFFICIAL
+    } else {
+        NPM_REGISTRY_NPMMIRROR
+    };
+
+    if !preferred.is_empty() {
+        // Verify reachability quickly; if preferred is down but the other is up, switch.
+        let (p_ok, o_ok) = tokio::join!(
+            probe_registry_latency(client, preferred),
+            probe_registry_latency(client, other),
+        );
+        if p_ok.is_some() {
+            return preferred.to_string();
+        }
+        if o_ok.is_some() {
+            return other.to_string();
+        }
+        return preferred.to_string();
+    }
+
+    // Geo-detection failed; pick the better reachable registry.
+    let (npmjs, mirror) = tokio::join!(
+        probe_registry_latency(client, NPM_REGISTRY_OFFICIAL),
+        probe_registry_latency(client, NPM_REGISTRY_NPMMIRROR),
+    );
+
+    match (npmjs, mirror) {
+        (None, Some(_)) => NPM_REGISTRY_NPMMIRROR.to_string(),
+        (Some(_), None) => NPM_REGISTRY_OFFICIAL.to_string(),
+        (Some(a), Some(b)) => {
+            // Keep npmjs unless it is noticeably slower.
+            if b + Duration::from_millis(100) < a {
+                NPM_REGISTRY_NPMMIRROR.to_string()
+            } else {
+                NPM_REGISTRY_OFFICIAL.to_string()
+            }
+        }
+        _ => NPM_REGISTRY_OFFICIAL.to_string(),
+    }
+}
+
+fn fallback_executable_dirs() -> Vec<PathBuf> {
+    let mut out: Vec<PathBuf> = Vec::new();
+
+    #[cfg(target_os = "macos")]
+    {
+        // Common install locations that are often missing from GUI-app PATH.
+        out.push(PathBuf::from("/opt/homebrew/bin"));
+        out.push(PathBuf::from("/usr/local/bin"));
+        out.push(PathBuf::from("/usr/bin"));
+        out.push(PathBuf::from("/bin"));
+
+        if let Some(home) = std::env::var_os("HOME") {
+            out.push(PathBuf::from(home).join(".volta").join("bin"));
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        out.push(PathBuf::from("/usr/local/bin"));
+        out.push(PathBuf::from("/usr/bin"));
+        out.push(PathBuf::from("/bin"));
+
+        if let Some(home) = std::env::var_os("HOME") {
+            out.push(PathBuf::from(home).join(".volta").join("bin"));
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        // Node installer
+        if let Some(p) = std::env::var_os("ProgramFiles") {
+            out.push(PathBuf::from(p).join("nodejs"));
+        }
+        if let Some(p) = std::env::var_os("ProgramFiles(x86)") {
+            out.push(PathBuf::from(p).join("nodejs"));
+        }
+
+        // Global npm bin dir
+        if let Some(appdata) = std::env::var_os("APPDATA") {
+            out.push(PathBuf::from(appdata).join("npm"));
+        }
+
+        // Package managers
+        out.push(PathBuf::from(r"C:\ProgramData\chocolatey\bin"));
+        if let Some(userprofile) = std::env::var_os("USERPROFILE") {
+            out.push(PathBuf::from(&userprofile).join("scoop").join("shims"));
+            out.push(PathBuf::from(userprofile).join(".volta").join("bin"));
+        }
+        if let Some(localappdata) = std::env::var_os("LOCALAPPDATA") {
+            out.push(
+                PathBuf::from(localappdata)
+                    .join("Microsoft")
+                    .join("WindowsApps"),
+            );
+        }
+    }
+
+    // Dedup, keep order.
+    let mut seen = std::collections::HashSet::<PathBuf>::new();
+    out.retain(|p| seen.insert(p.clone()));
+    out
+}
+
 pub fn find_executable_in_path(name: &str) -> Option<PathBuf> {
     if name.is_empty() {
         return None;
     }
 
-    let path_var = std::env::var_os("PATH")?;
-    let paths = std::env::split_paths(&path_var);
+    let mut dirs: Vec<PathBuf> = Vec::new();
+    if let Some(path_var) = std::env::var_os("PATH") {
+        dirs.extend(std::env::split_paths(&path_var));
+    }
+    dirs.extend(fallback_executable_dirs());
 
     #[cfg(target_os = "windows")]
     let candidate_names: Vec<OsString> = {
@@ -102,7 +268,7 @@ pub fn find_executable_in_path(name: &str) -> Option<PathBuf> {
     #[cfg(not(target_os = "windows"))]
     let candidate_names: Vec<OsString> = vec![OsString::from(name)];
 
-    for dir in paths {
+    for dir in dirs {
         for cand in &candidate_names {
             let p = dir.join(cand);
             if p.is_file() {
@@ -118,7 +284,7 @@ pub fn try_get_cmd_version(program: &str) -> Option<String> {
     let mut cmd = std::process::Command::new(program_path);
     cmd.arg("--version");
     crate::process::command_silent(&mut cmd);
-    let out = cmd.output().ok()?;
+    let out = crate::process::command_output_with_timeout(&mut cmd, CMD_VERSION_TIMEOUT).ok()?;
     if !out.status.success() {
         return None;
     }
@@ -169,8 +335,7 @@ pub fn npm_install_global(pkg: &str) -> anyhow::Result<CmdOutput> {
     let mut cmd = std::process::Command::new(npm);
     cmd.args(["install", "-g", pkg, "--no-fund", "--no-audit"]);
     crate::process::command_silent(&mut cmd);
-    let out = cmd
-        .output()
+    let out = crate::process::command_output_with_timeout(&mut cmd, NPM_INSTALL_TIMEOUT)
         .with_context(|| format!("run npm install -g {pkg} failed"))?;
 
     Ok(CmdOutput {
@@ -283,7 +448,8 @@ pub(crate) fn try_get_cmd_version_at(program_path: &Path) -> Option<String> {
                 cmd.env("PATH", p);
             }
             crate::process::command_silent(&mut cmd);
-            let out = cmd.output().ok()?;
+            let out =
+                crate::process::command_output_with_timeout(&mut cmd, CMD_VERSION_TIMEOUT).ok()?;
             if !out.status.success() {
                 return None;
             }
@@ -305,7 +471,7 @@ pub(crate) fn try_get_cmd_version_at(program_path: &Path) -> Option<String> {
         cmd.env("PATH", p);
     }
     crate::process::command_silent(&mut cmd);
-    let out = cmd.output().ok()?;
+    let out = crate::process::command_output_with_timeout(&mut cmd, CMD_VERSION_TIMEOUT).ok()?;
     if !out.status.success() {
         return None;
     }
@@ -430,12 +596,10 @@ impl CliExecEnv {
 
     pub fn npm_global_bin_dir_for_prefix(&self, prefix: &Path) -> Option<PathBuf> {
         let npm = self.npm.as_ref()?;
-        let out = self
-            .cmd(npm.clone())
-            .env("npm_config_prefix", prefix.as_os_str())
-            .args(["bin", "-g"])
-            .output()
-            .ok()?;
+        let mut cmd = self.cmd(npm.clone());
+        cmd.env("npm_config_prefix", prefix.as_os_str());
+        cmd.args(["bin", "-g"]);
+        let out = crate::process::command_output_with_timeout(&mut cmd, NPM_BIN_TIMEOUT).ok()?;
         if !out.status.success() {
             return None;
         }
@@ -491,7 +655,10 @@ impl CliExecEnv {
 
     pub fn try_get_cmd_version(&self, program: &str) -> Option<String> {
         let program_path = self.find_executable(program)?;
-        let out = self.cmd(program_path).arg("--version").output().ok()?;
+        let mut cmd = self.cmd(program_path);
+        cmd.arg("--version");
+        let out =
+            crate::process::command_output_with_timeout(&mut cmd, CMD_VERSION_TIMEOUT).ok()?;
         if !out.status.success() {
             return None;
         }
@@ -510,11 +677,10 @@ impl CliExecEnv {
         if !program_path.is_file() {
             return None;
         }
-        let out = self
-            .cmd(program_path.to_path_buf())
-            .arg("--version")
-            .output()
-            .ok()?;
+        let mut cmd = self.cmd(program_path.to_path_buf());
+        cmd.arg("--version");
+        let out =
+            crate::process::command_output_with_timeout(&mut cmd, CMD_VERSION_TIMEOUT).ok()?;
         if !out.status.success() {
             return None;
         }
@@ -531,7 +697,9 @@ impl CliExecEnv {
 
     fn compute_npm_global_bin_dir(&self) -> Option<PathBuf> {
         let npm = self.npm.as_ref()?;
-        let out = self.cmd(npm.clone()).args(["bin", "-g"]).output().ok()?;
+        let mut cmd = self.cmd(npm.clone());
+        cmd.args(["bin", "-g"]);
+        let out = crate::process::command_output_with_timeout(&mut cmd, NPM_BIN_TIMEOUT).ok()?;
         if !out.status.success() {
             return None;
         }
@@ -550,10 +718,9 @@ impl CliExecEnv {
             .cloned()
             .ok_or_else(|| anyhow::anyhow!("npm not found"))?;
 
-        let out = self
-            .cmd(npm)
-            .args(["install", "-g", pkg, "--no-fund", "--no-audit"])
-            .output()
+        let mut cmd = self.cmd(npm);
+        cmd.args(["install", "-g", pkg, "--no-fund", "--no-audit"]);
+        let out = crate::process::command_output_with_timeout(&mut cmd, NPM_INSTALL_TIMEOUT)
             .with_context(|| format!("run npm install -g {pkg} failed"))?;
 
         Ok(CmdOutput {
@@ -583,9 +750,8 @@ impl CliExecEnv {
             cmd.env("npm_config_registry", registry);
         }
 
-        let out = cmd
-            .args(["install", "-g", pkg, "--no-fund", "--no-audit"])
-            .output()
+        cmd.args(["install", "-g", pkg, "--no-fund", "--no-audit"]);
+        let out = crate::process::command_output_with_timeout(&mut cmd, NPM_INSTALL_TIMEOUT)
             .with_context(|| format!("run npm install -g {pkg} failed"))?;
 
         Ok(CmdOutput {
