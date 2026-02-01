@@ -974,10 +974,10 @@ pub fn detect_cli_tool(env: &CliExecEnv, data_dir: &Path, def: &CliToolDef) -> D
 
     // If we resolve to our own terminal shim, treat it as "no system path" and rely on
     // managed-prefix detection.
-    if let Ok(shim_path) = crate::terminal::cli_tool_shim_path(def.bin) {
-        if resolved_path.as_ref() == Some(&shim_path) {
-            resolved_path = None;
-        }
+    if let Ok(shim_path) = crate::terminal::cli_tool_shim_path(def.bin)
+        && resolved_path.as_ref() == Some(&shim_path)
+    {
+        resolved_path = None;
     }
 
     let install_path = managed_tool_path.clone().or(resolved_path);
@@ -991,11 +991,10 @@ pub fn detect_cli_tool(env: &CliExecEnv, data_dir: &Path, def: &CliToolDef) -> D
         installer_path = env.resolved_npm_path().map(|p| p.to_path_buf());
     } else if install_path.is_some()
         && let Some(brew) = find_executable_in_path("brew")
+        && let Some(m) = brew_detect_cli_tool_install_method(&brew, def.id)
     {
-        if let Some(m) = brew_detect_cli_tool_install_method(&brew, def.id) {
-            method = m;
-            installer_path = Some(brew);
-        }
+        method = m;
+        installer_path = Some(brew);
     }
 
     if method == CliToolInstallMethod::Other
