@@ -547,12 +547,8 @@ fn try_install_node_with_linux_pkg_manager() -> anyhow::Result<()> {
         Some(format!("Installing Node.js via {name}...")),
     );
 
-    let out = if name == "apt-get" {
-        // Don't use sudo here (desktop app, no TTY). If permissions are missing, fall back.
-        run_command(&pm, &["install", "-y", "nodejs", "npm"])?
-    } else {
-        run_command(&pm, &["install", "-y", "nodejs", "npm"])?
-    };
+    // Don't use sudo here (desktop app, no TTY). If permissions are missing, fall back.
+    let out = run_command(&pm, &["install", "-y", "nodejs", "npm"])?;
 
     if !out.status.success() {
         let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
