@@ -1,8 +1,11 @@
 use anyhow::Context as _;
 use serde::Deserialize;
 use sha2::Digest as _;
+use std::io::Read as _;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::process::Stdio;
+use std::time::Duration;
 use std::time::Instant;
 
 use crate::cli_tools;
@@ -25,6 +28,26 @@ fn publish_progress(
         downloaded_bytes,
         message,
     }));
+}
+
+fn publish_stage(stage: &str) {
+    publish_progress(stage, None, None, None, None, None);
+}
+
+fn publish_stage_with_version(stage: &str, version: Option<&str>) {
+    publish_progress(stage, version, None, None, None, None);
+}
+
+fn publish_stage_with_message(stage: &str, message: impl Into<String>) {
+    publish_progress(stage, None, None, None, None, Some(message.into()));
+}
+
+fn publish_stage_with_version_and_message(
+    stage: &str,
+    version: Option<&str>,
+    message: impl Into<String>,
+) {
+    publish_progress(stage, version, None, None, None, Some(message.into()));
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -408,12 +431,69 @@ fn detect_system_node_npm() -> Option<ManagedNodePaths> {
     detect_node_npm_in_dirs(&candidate_system_node_dirs())
 }
 
+const SYSTEM_INSTALL_TIMEOUT: Duration = Duration::from_secs(30 * 60);
+
 fn run_command(program: &Path, args: &[&str]) -> anyhow::Result<std::process::Output> {
     let mut cmd = Command::new(program);
     cmd.args(args);
+    cmd.stdin(Stdio::null());
+    cmd.stdout(Stdio::piped());
+    cmd.stderr(Stdio::piped());
     process::command_silent(&mut cmd);
-    cmd.output()
-        .with_context(|| format!("run command failed: {} {:?}", program.display(), args))
+
+    let mut child = cmd
+        .spawn()
+        .with_context(|| format!("spawn command failed: {} {:?}", program.display(), args))?;
+
+    let mut stdout = child.stdout.take();
+    let mut stderr = child.stderr.take();
+
+    let stdout_handle = std::thread::spawn(move || {
+        let mut out = Vec::new();
+        if let Some(ref mut r) = stdout {
+            let _ = r.read_to_end(&mut out);
+        }
+        out
+    });
+    let stderr_handle = std::thread::spawn(move || {
+        let mut out = Vec::new();
+        if let Some(ref mut r) = stderr {
+            let _ = r.read_to_end(&mut out);
+        }
+        out
+    });
+
+    let started = std::time::Instant::now();
+    let mut timed_out = false;
+    let status = loop {
+        if let Some(status) = child.try_wait()? {
+            break status;
+        }
+        if started.elapsed() >= SYSTEM_INSTALL_TIMEOUT {
+            timed_out = true;
+            let _ = child.kill();
+            break child.wait()?;
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    };
+
+    let stdout = stdout_handle.join().unwrap_or_default();
+    let stderr = stderr_handle.join().unwrap_or_default();
+
+    if timed_out {
+        anyhow::bail!(
+            "command timed out after {:?}: {} {:?}",
+            SYSTEM_INSTALL_TIMEOUT,
+            program.display(),
+            args
+        );
+    }
+
+    Ok(std::process::Output {
+        status,
+        stdout,
+        stderr,
+    })
 }
 
 #[cfg(target_os = "windows")]
@@ -432,14 +512,7 @@ fn find_winget() -> Option<PathBuf> {
 fn try_install_node_with_winget() -> anyhow::Result<()> {
     let winget = find_winget().ok_or_else(|| anyhow::anyhow!("winget not found"))?;
 
-    publish_progress(
-        "system_install",
-        None,
-        None,
-        None,
-        None,
-        Some("Installing Node.js via winget...".to_string()),
-    );
+    publish_stage("system_install_winget");
 
     // Keep it non-interactive for a desktop app.
     let out = run_command(
@@ -485,14 +558,7 @@ fn find_brew() -> Option<PathBuf> {
 fn try_install_node_with_brew() -> anyhow::Result<()> {
     let brew = find_brew().ok_or_else(|| anyhow::anyhow!("brew not found"))?;
 
-    publish_progress(
-        "system_install",
-        None,
-        None,
-        None,
-        None,
-        Some("Installing Node.js via Homebrew...".to_string()),
-    );
+    publish_stage("system_install_brew");
 
     let out = run_command(&brew, &["install", "node"])?;
     if !out.status.success() {
@@ -538,14 +604,13 @@ fn try_install_node_with_linux_pkg_manager() -> anyhow::Result<()> {
     let (pm, name) =
         find_linux_pkg_manager().ok_or_else(|| anyhow::anyhow!("no apt/dnf/yum found"))?;
 
-    publish_progress(
-        "system_install",
-        None,
-        None,
-        None,
-        None,
-        Some(format!("Installing Node.js via {name}...")),
-    );
+    let stage = match name {
+        "apt-get" => "system_install_apt_get",
+        "dnf" => "system_install_dnf",
+        "yum" => "system_install_yum",
+        _ => "system_install",
+    };
+    publish_stage(stage);
 
     // Don't use sudo here (desktop app, no TTY). If permissions are missing, fall back.
     let out = run_command(&pm, &["install", "-y", "nodejs", "npm"])?;
@@ -594,18 +659,11 @@ pub async fn ensure_npm_env_installed(
     client: &reqwest::Client,
     data_dir: &Path,
 ) -> anyhow::Result<ManagedNodePaths> {
-    publish_progress("start", None, None, None, None, None);
+    publish_stage("start");
 
     // 1) If the system already has node/npm (but our GUI process can't see PATH), detect
     //    well-known installation locations and pin to absolute paths.
-    publish_progress(
-        "checking_system",
-        None,
-        None,
-        None,
-        None,
-        Some("Checking system Node.js/npm locations...".to_string()),
-    );
+    publish_stage("checking_system");
     if let Some(paths) = detect_system_node_npm() {
         publish_progress("done", None, Some(100), None, None, None);
         return Ok(paths);
@@ -613,16 +671,7 @@ pub async fn ensure_npm_env_installed(
 
     // 2) Try system package manager (winget/brew/apt/yum...) if available.
     if let Err(e) = try_install_node_with_system_package_manager().await {
-        publish_progress(
-            "system_install_failed",
-            None,
-            None,
-            None,
-            None,
-            Some(format!(
-                "System install failed, fallback to bundled Node.js: {e}"
-            )),
-        );
+        publish_stage_with_message("system_install_failed", e.to_string());
     }
 
     // Re-detect after installation.
@@ -639,13 +688,13 @@ pub async fn ensure_managed_node_installed(
     client: &reqwest::Client,
     data_dir: &Path,
 ) -> anyhow::Result<ManagedNodePaths> {
-    publish_progress("start", None, None, None, None, None);
-    publish_progress("resolving_version", None, None, None, None, None);
+    publish_stage("start");
+    publish_stage("resolving_version");
 
     let version = match resolve_latest_lts_version(client).await {
         Ok(v) => v,
         Err(e) => {
-            publish_progress("error", None, None, None, None, Some(e.to_string()));
+            publish_stage_with_message("error", e.to_string());
             return Err(e);
         }
     };
@@ -653,14 +702,7 @@ pub async fn ensure_managed_node_installed(
     let dist = match node_dist_for_current_platform(&version) {
         Ok(v) => v,
         Err(e) => {
-            publish_progress(
-                "error",
-                Some(&version),
-                None,
-                None,
-                None,
-                Some(e.to_string()),
-            );
+            publish_stage_with_version_and_message("error", Some(&version), e.to_string());
             return Err(e);
         }
     };
@@ -678,25 +720,11 @@ pub async fn ensure_managed_node_installed(
     let archive_path = downloads.join(&dist.filename);
 
     // Verify checksum against official SHASUMS256.
-    publish_progress(
-        "downloading_shasums",
-        Some(&version),
-        None,
-        None,
-        None,
-        None,
-    );
+    publish_stage_with_version("downloading_shasums", Some(&version));
     let shasums = match download_text(client, &dist.shasums_url).await {
         Ok(v) => v,
         Err(e) => {
-            publish_progress(
-                "error",
-                Some(&version),
-                None,
-                None,
-                None,
-                Some(e.to_string()),
-            );
+            publish_stage_with_version_and_message("error", Some(&version), e.to_string());
             return Err(e);
         }
     };
@@ -704,7 +732,7 @@ pub async fn ensure_managed_node_installed(
         Some(v) => v,
         None => {
             let msg = format!("sha256 not found in SHASUMS256.txt: {}", dist.filename);
-            publish_progress("error", Some(&version), None, None, None, Some(msg.clone()));
+            publish_stage_with_version_and_message("error", Some(&version), msg.clone());
             anyhow::bail!("{msg}");
         }
     };
