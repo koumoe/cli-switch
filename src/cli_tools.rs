@@ -1071,8 +1071,8 @@ mod path_tests {
             .join("bin");
         std::fs::create_dir_all(&nvm_bin).expect("create nvm bin dir");
 
-        // Do NOT rely on environment NVM_DIR (CI may set it). Use our temp home instead.
-        let dirs = fallback_executable_dirs_with_home(Some(&home), None);
+    // Do NOT rely on environment NVM_DIR (CI may set it). Use our temp home instead.
+    let dirs = fallback_executable_dirs_with_home(Some(&home), None);
         assert!(dirs.contains(&home.join(".local").join("bin")));
         assert!(dirs.contains(&home.join(".asdf").join("shims")));
         assert!(dirs.contains(&nvm_bin));
