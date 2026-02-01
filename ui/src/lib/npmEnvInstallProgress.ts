@@ -10,6 +10,10 @@ export function formatNpmEnvInstallProgressText(
   if (!installing) return null;
   if (!progress) return null;
 
+  const msg = (progress.message ?? "").trim();
+  // Allow backend to provide extra context for system package manager installs or errors.
+  if (msg) return msg;
+
   if (progress.stage === "resolving_version") return t("settings.cliTools.npmEnvProgressResolving");
   if (progress.stage === "downloading_shasums") return t("settings.cliTools.npmEnvProgressDownloadingShasums");
   if (progress.stage === "downloading_archive") {
@@ -24,4 +28,3 @@ export function formatNpmEnvInstallProgressText(
 
   return null;
 }
-

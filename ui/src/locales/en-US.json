@@ -546,7 +546,7 @@
       "npmHintWindows": "Windows: install from nodejs.org.",
       "npmHintLinux": "Linux: install nodejs/npm via your distro package manager.",
       "npmSetupTitle": "npm not found",
-      "npmSetupDesc": "npm was not found and CLI install/update cannot proceed. Install an npm environment automatically?",
+      "npmSetupDesc": "npm was not found and CLI install/update cannot proceed. CliSwitch will try installing Node.js via the system package manager first (Windows: winget; macOS: brew; Linux: apt/yum, etc.), and fall back to downloading the official Node.js binary if unavailable or failed. Continue?",
       "autoInstall": "Auto install",
       "autoInstalling": "Installing...",
       "npmEnvProgressResolving": "Resolving Node.js version...",
