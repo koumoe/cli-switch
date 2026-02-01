@@ -9,6 +9,7 @@ const CMD_VERSION_TIMEOUT: Duration = Duration::from_secs(5);
 const NPM_BIN_TIMEOUT: Duration = Duration::from_secs(5);
 const NPM_INSTALL_TIMEOUT: Duration = Duration::from_secs(20 * 60);
 const NPM_REGISTRY_PROBE_TIMEOUT: Duration = Duration::from_millis(1500);
+const GEO_IPINFO_TIMEOUT: Duration = Duration::from_millis(1200);
 
 pub const NPM_REGISTRY_OFFICIAL: &str = "https://registry.npmjs.org";
 pub const NPM_REGISTRY_NPMMIRROR: &str = "https://registry.npmmirror.com";
@@ -81,35 +82,145 @@ async fn probe_registry_latency(client: &reqwest::Client, base: &str) -> Option<
     res.status().is_success().then_some(started.elapsed())
 }
 
-/// Pick a registry override for CLI tools installation/update.
-///
-/// - If `user_override` is set, always use it.
-/// - Otherwise, best-effort probe and prefer a faster reachable registry (CN networks commonly
-///   benefit from npmmirror). If we can't decide, return `None` to let npm use its own defaults.
-pub async fn pick_cli_tools_npm_registry(
-    client: &reqwest::Client,
-    user_override: Option<&str>,
-) -> Option<String> {
-    let override_clean = user_override.map(|s| s.trim()).filter(|s| !s.is_empty());
-    if let Some(v) = override_clean {
-        return Some(v.to_string());
+#[derive(Debug, Clone, serde::Deserialize)]
+struct IpInfoResponse {
+    #[serde(default)]
+    country: Option<String>,
+}
+
+async fn detect_country_code(client: &reqwest::Client) -> Option<String> {
+    let res = client
+        .get("https://ipinfo.io/json")
+        .timeout(GEO_IPINFO_TIMEOUT)
+        .send()
+        .await
+        .ok()?;
+
+    if !res.status().is_success() {
+        return None;
     }
 
-    let npmjs = probe_registry_latency(client, NPM_REGISTRY_OFFICIAL).await;
-    let mirror = probe_registry_latency(client, NPM_REGISTRY_NPMMIRROR).await;
+    let ipinfo: IpInfoResponse = res.json().await.ok()?;
+    let c = ipinfo.country?.trim().to_uppercase();
+    (!c.is_empty()).then_some(c)
+}
+
+/// Pick the npm registry for CLI tools installation/update.
+///
+/// Policy:
+/// - No user manual override.
+/// - Prefer CN-friendly registry when the current public IP is in CN.
+/// - If geo-detection fails, fall back to quick reachability/latency probes.
+pub async fn pick_cli_tools_npm_registry(client: &reqwest::Client) -> String {
+    let preferred = match detect_country_code(client).await.as_deref() {
+        Some("CN") => NPM_REGISTRY_NPMMIRROR,
+        Some(_) => NPM_REGISTRY_OFFICIAL,
+        None => "",
+    };
+
+    let other = if preferred == NPM_REGISTRY_NPMMIRROR {
+        NPM_REGISTRY_OFFICIAL
+    } else {
+        NPM_REGISTRY_NPMMIRROR
+    };
+
+    if !preferred.is_empty() {
+        // Verify reachability quickly; if preferred is down but the other is up, switch.
+        let (p_ok, o_ok) = tokio::join!(
+            probe_registry_latency(client, preferred),
+            probe_registry_latency(client, other),
+        );
+        if p_ok.is_some() {
+            return preferred.to_string();
+        }
+        if o_ok.is_some() {
+            return other.to_string();
+        }
+        return preferred.to_string();
+    }
+
+    // Geo-detection failed; pick the better reachable registry.
+    let (npmjs, mirror) = tokio::join!(
+        probe_registry_latency(client, NPM_REGISTRY_OFFICIAL),
+        probe_registry_latency(client, NPM_REGISTRY_NPMMIRROR),
+    );
 
     match (npmjs, mirror) {
-        (None, Some(_)) => Some(NPM_REGISTRY_NPMMIRROR.to_string()),
+        (None, Some(_)) => NPM_REGISTRY_NPMMIRROR.to_string(),
+        (Some(_), None) => NPM_REGISTRY_OFFICIAL.to_string(),
         (Some(a), Some(b)) => {
-            // Keep the default if npmjs is not noticeably slower.
+            // Keep npmjs unless it is noticeably slower.
             if b + Duration::from_millis(100) < a {
-                Some(NPM_REGISTRY_NPMMIRROR.to_string())
+                NPM_REGISTRY_NPMMIRROR.to_string()
             } else {
-                None
+                NPM_REGISTRY_OFFICIAL.to_string()
             }
         }
-        _ => None,
+        _ => NPM_REGISTRY_OFFICIAL.to_string(),
     }
+}
+
+fn fallback_executable_dirs() -> Vec<PathBuf> {
+    let mut out: Vec<PathBuf> = Vec::new();
+
+    #[cfg(target_os = "macos")]
+    {
+        // Common install locations that are often missing from GUI-app PATH.
+        out.push(PathBuf::from("/opt/homebrew/bin"));
+        out.push(PathBuf::from("/usr/local/bin"));
+        out.push(PathBuf::from("/usr/bin"));
+        out.push(PathBuf::from("/bin"));
+
+        if let Some(home) = std::env::var_os("HOME") {
+            out.push(PathBuf::from(home).join(".volta").join("bin"));
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        out.push(PathBuf::from("/usr/local/bin"));
+        out.push(PathBuf::from("/usr/bin"));
+        out.push(PathBuf::from("/bin"));
+
+        if let Some(home) = std::env::var_os("HOME") {
+            out.push(PathBuf::from(home).join(".volta").join("bin"));
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        // Node installer
+        if let Some(p) = std::env::var_os("ProgramFiles") {
+            out.push(PathBuf::from(p).join("nodejs"));
+        }
+        if let Some(p) = std::env::var_os("ProgramFiles(x86)") {
+            out.push(PathBuf::from(p).join("nodejs"));
+        }
+
+        // Global npm bin dir
+        if let Some(appdata) = std::env::var_os("APPDATA") {
+            out.push(PathBuf::from(appdata).join("npm"));
+        }
+
+        // Package managers
+        out.push(PathBuf::from(r"C:\ProgramData\chocolatey\bin"));
+        if let Some(userprofile) = std::env::var_os("USERPROFILE") {
+            out.push(PathBuf::from(&userprofile).join("scoop").join("shims"));
+            out.push(PathBuf::from(userprofile).join(".volta").join("bin"));
+        }
+        if let Some(localappdata) = std::env::var_os("LOCALAPPDATA") {
+            out.push(
+                PathBuf::from(localappdata)
+                    .join("Microsoft")
+                    .join("WindowsApps"),
+            );
+        }
+    }
+
+    // Dedup, keep order.
+    let mut seen = std::collections::HashSet::<PathBuf>::new();
+    out.retain(|p| seen.insert(p.clone()));
+    out
 }
 
 pub fn find_executable_in_path(name: &str) -> Option<PathBuf> {
@@ -117,8 +228,11 @@ pub fn find_executable_in_path(name: &str) -> Option<PathBuf> {
         return None;
     }
 
-    let path_var = std::env::var_os("PATH")?;
-    let paths = std::env::split_paths(&path_var);
+    let mut dirs: Vec<PathBuf> = Vec::new();
+    if let Some(path_var) = std::env::var_os("PATH") {
+        dirs.extend(std::env::split_paths(&path_var));
+    }
+    dirs.extend(fallback_executable_dirs());
 
     #[cfg(target_os = "windows")]
     let candidate_names: Vec<OsString> = {
@@ -154,7 +268,7 @@ pub fn find_executable_in_path(name: &str) -> Option<PathBuf> {
     #[cfg(not(target_os = "windows"))]
     let candidate_names: Vec<OsString> = vec![OsString::from(name)];
 
-    for dir in paths {
+    for dir in dirs {
         for cand in &candidate_names {
             let p = dir.join(cand);
             if p.is_file() {

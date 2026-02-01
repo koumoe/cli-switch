@@ -215,11 +215,7 @@ pub(in crate::server) async fn install_cli_tool(
     let settings = storage::get_app_settings(state.db_path()).await?;
     let npm_path = settings.cli_tools_npm_path.clone();
     let node_path = settings.cli_tools_node_path.clone();
-    let npm_registry = crate::cli_tools::pick_cli_tools_npm_registry(
-        &state.http_client,
-        settings.cli_tools_npm_registry.as_deref(),
-    )
-    .await;
+    let npm_registry = crate::cli_tools::pick_cli_tools_npm_registry(&state.http_client).await;
     let data_dir = state.data_dir();
     let tools_prefix_dir = crate::cli_tools::cli_tools_npm_prefix_dir(&data_dir);
 
@@ -237,7 +233,7 @@ pub(in crate::server) async fn install_cli_tool(
             .npm_install_global_to_prefix(
                 def.npm_package,
                 &tools_prefix_dir,
-                npm_registry.as_deref(),
+                Some(npm_registry.as_str()),
             )
             .map_err(ApiError::Internal)?;
 

@@ -150,13 +150,9 @@ pub(crate) async fn cli_tools_auto_update_loop(db_path: PathBuf, mut notify: wat
         let npm_path = settings.cli_tools_npm_path.clone();
         let node_path = settings.cli_tools_node_path.clone();
         let npm_registry = if let Some(client) = http_client.as_ref() {
-            crate::cli_tools::pick_cli_tools_npm_registry(
-                client,
-                settings.cli_tools_npm_registry.as_deref(),
-            )
-            .await
+            crate::cli_tools::pick_cli_tools_npm_registry(client).await
         } else {
-            settings.cli_tools_npm_registry.clone()
+            crate::cli_tools::NPM_REGISTRY_OFFICIAL.to_string()
         };
         let data_dir = data_dir_from_db_path(db_path.as_path());
         let tools_prefix_dir = crate::cli_tools::cli_tools_npm_prefix_dir(&data_dir);
@@ -170,7 +166,7 @@ pub(crate) async fn cli_tools_auto_update_loop(db_path: PathBuf, mut notify: wat
                 match env.npm_install_global_to_prefix(
                     d.npm_package,
                     &tools_prefix_dir,
-                    npm_registry.as_deref(),
+                    Some(npm_registry.as_str()),
                 ) {
                     Ok(out) => {
                         if !out.status.success() {
