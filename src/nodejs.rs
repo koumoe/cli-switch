@@ -571,15 +571,15 @@ async fn try_install_node_with_system_package_manager() -> anyhow::Result<()> {
     let join = tokio::task::spawn_blocking(|| -> anyhow::Result<()> {
         #[cfg(target_os = "windows")]
         {
-            return try_install_node_with_winget();
+            try_install_node_with_winget()
         }
         #[cfg(target_os = "macos")]
         {
-            return try_install_node_with_brew();
+            try_install_node_with_brew()
         }
         #[cfg(target_os = "linux")]
         {
-            return try_install_node_with_linux_pkg_manager();
+            try_install_node_with_linux_pkg_manager()
         }
         #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
         {
@@ -822,7 +822,8 @@ mod tests {
         std::fs::set_permissions(&node, std::fs::Permissions::from_mode(0o755)).unwrap();
         std::fs::set_permissions(&npm, std::fs::Permissions::from_mode(0o755)).unwrap();
 
-        let found = detect_node_npm_in_dirs(&[dir.clone()]).expect("should detect node/npm");
+        let found =
+            detect_node_npm_in_dirs(std::slice::from_ref(&dir)).expect("should detect node/npm");
         assert_eq!(found.node_path, node);
         assert_eq!(found.npm_path, npm);
 
