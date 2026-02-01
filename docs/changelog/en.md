@@ -1,3 +1,9 @@
+## [0.29.0](https://github.com/koumoe/cli-switch/compare/v0.28.0...v0.29.0) (2026-02-01)
+
+### Features
+
+* allow configuring npm registry for cli tools ([2a8c2ff](https://github.com/koumoe/cli-switch/commit/2a8c2ff5359e3aef1a08786b50aee5929f0033d8))
+* install cli tools into managed npm prefix ([37d4120](https://github.com/koumoe/cli-switch/commit/37d41205111c1bdc7e6558f44e2a5e0a720d6c37))
 ## [0.28.0](https://github.com/koumoe/cli-switch/compare/v0.27.0...v0.28.0) (2026-02-01)
 
 ### Features
