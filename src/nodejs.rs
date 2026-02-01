@@ -1,10 +1,16 @@
 use anyhow::Context as _;
 use serde::Deserialize;
 use sha2::Digest as _;
+use std::io::Read as _;
 use std::path::{Path, PathBuf};
+use std::process::Command;
+use std::process::Stdio;
+use std::time::Duration;
 use std::time::Instant;
 
+use crate::cli_tools;
 use crate::events::{self, AppEvent, NpmEnvInstallProgress};
+use crate::process;
 
 fn publish_progress(
     stage: &str,
@@ -22,6 +28,26 @@ fn publish_progress(
         downloaded_bytes,
         message,
     }));
+}
+
+fn publish_stage(stage: &str) {
+    publish_progress(stage, None, None, None, None, None);
+}
+
+fn publish_stage_with_version(stage: &str, version: Option<&str>) {
+    publish_progress(stage, version, None, None, None, None);
+}
+
+fn publish_stage_with_message(stage: &str, message: impl Into<String>) {
+    publish_progress(stage, None, None, None, None, Some(message.into()));
+}
+
+fn publish_stage_with_version_and_message(
+    stage: &str,
+    version: Option<&str>,
+    message: impl Into<String>,
+) {
+    publish_progress(stage, version, None, None, None, Some(message.into()));
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -327,17 +353,348 @@ fn managed_node_paths_from_root(root: &Path) -> anyhow::Result<ManagedNodePaths>
     }
 }
 
+#[cfg(target_os = "windows")]
+const SYSTEM_NODE_BASENAME: &str = "node.exe";
+#[cfg(target_os = "windows")]
+const SYSTEM_NPM_BASENAME: &str = "npm.cmd";
+
+#[cfg(not(target_os = "windows"))]
+const SYSTEM_NODE_BASENAME: &str = "node";
+#[cfg(not(target_os = "windows"))]
+const SYSTEM_NPM_BASENAME: &str = "npm";
+
+fn detect_node_npm_in_dirs(dirs: &[PathBuf]) -> Option<ManagedNodePaths> {
+    for dir in dirs {
+        let node = dir.join(SYSTEM_NODE_BASENAME);
+        let npm = dir.join(SYSTEM_NPM_BASENAME);
+        if !node.is_file() || !npm.is_file() {
+            continue;
+        }
+
+        // Verify the binaries are actually executable.
+        if cli_tools::try_get_cmd_version_at(&node).is_none()
+            || cli_tools::try_get_cmd_version_at(&npm).is_none()
+        {
+            continue;
+        }
+
+        return Some(ManagedNodePaths {
+            node_path: node,
+            npm_path: npm,
+        });
+    }
+    None
+}
+
+fn candidate_system_node_dirs() -> Vec<PathBuf> {
+    let mut dirs: Vec<PathBuf> = Vec::new();
+
+    #[cfg(target_os = "windows")]
+    {
+        if let Ok(v) = std::env::var("ProgramFiles") {
+            dirs.push(PathBuf::from(v).join("nodejs"));
+        }
+        if let Ok(v) = std::env::var("ProgramFiles(x86)") {
+            dirs.push(PathBuf::from(v).join("nodejs"));
+        }
+        if let Ok(v) = std::env::var("LOCALAPPDATA") {
+            let base = PathBuf::from(v);
+            dirs.push(base.join("Programs").join("nodejs"));
+            dirs.push(base.join("nodejs"));
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        // Common Homebrew prefixes (GUI apps often don't inherit shell PATH).
+        dirs.push(PathBuf::from("/opt/homebrew/bin"));
+        dirs.push(PathBuf::from("/usr/local/bin"));
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        // Distro packages and common manual installs.
+        dirs.push(PathBuf::from("/usr/local/bin"));
+    }
+
+    // Common fallback.
+    dirs.push(PathBuf::from("/usr/bin"));
+    dirs.push(PathBuf::from("/bin"));
+
+    // Dedup, keep order.
+    let mut seen = std::collections::HashSet::<PathBuf>::new();
+    dirs.retain(|p| seen.insert(p.clone()));
+    dirs
+}
+
+fn detect_system_node_npm() -> Option<ManagedNodePaths> {
+    detect_node_npm_in_dirs(&candidate_system_node_dirs())
+}
+
+const SYSTEM_INSTALL_TIMEOUT: Duration = Duration::from_secs(30 * 60);
+
+fn run_command(program: &Path, args: &[&str]) -> anyhow::Result<std::process::Output> {
+    let mut cmd = Command::new(program);
+    cmd.args(args);
+    cmd.stdin(Stdio::null());
+    cmd.stdout(Stdio::piped());
+    cmd.stderr(Stdio::piped());
+    process::command_silent(&mut cmd);
+
+    let mut child = cmd
+        .spawn()
+        .with_context(|| format!("spawn command failed: {} {:?}", program.display(), args))?;
+
+    let mut stdout = child.stdout.take();
+    let mut stderr = child.stderr.take();
+
+    let stdout_handle = std::thread::spawn(move || {
+        let mut out = Vec::new();
+        if let Some(ref mut r) = stdout {
+            let _ = r.read_to_end(&mut out);
+        }
+        out
+    });
+    let stderr_handle = std::thread::spawn(move || {
+        let mut out = Vec::new();
+        if let Some(ref mut r) = stderr {
+            let _ = r.read_to_end(&mut out);
+        }
+        out
+    });
+
+    let started = std::time::Instant::now();
+    let mut timed_out = false;
+    let status = loop {
+        if let Some(status) = child.try_wait()? {
+            break status;
+        }
+        if started.elapsed() >= SYSTEM_INSTALL_TIMEOUT {
+            timed_out = true;
+            let _ = child.kill();
+            break child.wait()?;
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    };
+
+    let stdout = stdout_handle.join().unwrap_or_default();
+    let stderr = stderr_handle.join().unwrap_or_default();
+
+    if timed_out {
+        anyhow::bail!(
+            "command timed out after {:?}: {} {:?}",
+            SYSTEM_INSTALL_TIMEOUT,
+            program.display(),
+            args
+        );
+    }
+
+    Ok(std::process::Output {
+        status,
+        stdout,
+        stderr,
+    })
+}
+
+#[cfg(target_os = "windows")]
+fn find_winget() -> Option<PathBuf> {
+    cli_tools::find_executable_in_path("winget").or_else(|| {
+        let local = std::env::var_os("LOCALAPPDATA")?;
+        let p = PathBuf::from(local)
+            .join("Microsoft")
+            .join("WindowsApps")
+            .join("winget.exe");
+        p.is_file().then_some(p)
+    })
+}
+
+#[cfg(target_os = "windows")]
+fn try_install_node_with_winget() -> anyhow::Result<()> {
+    let winget = find_winget().ok_or_else(|| anyhow::anyhow!("winget not found"))?;
+
+    publish_stage("system_install_winget");
+
+    // Keep it non-interactive for a desktop app.
+    let out = run_command(
+        &winget,
+        &[
+            "install",
+            "-e",
+            "--id",
+            "OpenJS.NodeJS",
+            "--accept-package-agreements",
+            "--accept-source-agreements",
+            "--disable-interactivity",
+            "--silent",
+        ],
+    )?;
+    if !out.status.success() {
+        let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
+        let stdout = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        anyhow::bail!(
+            "winget install failed: exit={:?} stdout={} stderr={}",
+            out.status.code(),
+            stdout,
+            stderr
+        );
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn find_brew() -> Option<PathBuf> {
+    cli_tools::find_executable_in_path("brew").or_else(|| {
+        for p in ["/opt/homebrew/bin/brew", "/usr/local/bin/brew"] {
+            let pb = PathBuf::from(p);
+            if pb.is_file() {
+                return Some(pb);
+            }
+        }
+        None
+    })
+}
+
+#[cfg(target_os = "macos")]
+fn try_install_node_with_brew() -> anyhow::Result<()> {
+    let brew = find_brew().ok_or_else(|| anyhow::anyhow!("brew not found"))?;
+
+    publish_stage("system_install_brew");
+
+    let out = run_command(&brew, &["install", "node"])?;
+    if !out.status.success() {
+        let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
+        let stdout = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        anyhow::bail!(
+            "brew install node failed: exit={:?} stdout={} stderr={}",
+            out.status.code(),
+            stdout,
+            stderr
+        );
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn find_linux_pkg_manager() -> Option<(PathBuf, &'static str)> {
+    // Prefer apt-get for scripting; otherwise try dnf/yum.
+    const APT_GET_PATHS: [&str; 2] = ["/usr/bin/apt-get", "/bin/apt-get"];
+    const DNF_PATHS: [&str; 2] = ["/usr/bin/dnf", "/bin/dnf"];
+    const YUM_PATHS: [&str; 2] = ["/usr/bin/yum", "/bin/yum"];
+
+    for (name, paths) in [
+        ("apt-get", &APT_GET_PATHS[..]),
+        ("dnf", &DNF_PATHS[..]),
+        ("yum", &YUM_PATHS[..]),
+    ] {
+        if let Some(p) = cli_tools::find_executable_in_path(name) {
+            return Some((p, name));
+        }
+        for raw in paths {
+            let p = PathBuf::from(raw);
+            if p.is_file() {
+                return Some((p, name));
+            }
+        }
+    }
+    None
+}
+
+#[cfg(target_os = "linux")]
+fn try_install_node_with_linux_pkg_manager() -> anyhow::Result<()> {
+    let (pm, name) =
+        find_linux_pkg_manager().ok_or_else(|| anyhow::anyhow!("no apt/dnf/yum found"))?;
+
+    let stage = match name {
+        "apt-get" => "system_install_apt_get",
+        "dnf" => "system_install_dnf",
+        "yum" => "system_install_yum",
+        _ => "system_install",
+    };
+    publish_stage(stage);
+
+    // Don't use sudo here (desktop app, no TTY). If permissions are missing, fall back.
+    let out = run_command(&pm, &["install", "-y", "nodejs", "npm"])?;
+
+    if !out.status.success() {
+        let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
+        let stdout = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        anyhow::bail!(
+            "{name} install failed: exit={:?} stdout={} stderr={}",
+            out.status.code(),
+            stdout,
+            stderr
+        );
+    }
+    Ok(())
+}
+
+async fn try_install_node_with_system_package_manager() -> anyhow::Result<()> {
+    let join = tokio::task::spawn_blocking(|| -> anyhow::Result<()> {
+        #[cfg(target_os = "windows")]
+        {
+            try_install_node_with_winget()
+        }
+        #[cfg(target_os = "macos")]
+        {
+            try_install_node_with_brew()
+        }
+        #[cfg(target_os = "linux")]
+        {
+            try_install_node_with_linux_pkg_manager()
+        }
+        #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+        {
+            anyhow::bail!("unsupported os for system package install");
+        }
+    })
+    .await;
+
+    match join {
+        Ok(v) => v,
+        Err(e) => Err(anyhow::anyhow!("system install task join failed: {e}")),
+    }
+}
+
+pub async fn ensure_npm_env_installed(
+    client: &reqwest::Client,
+    data_dir: &Path,
+) -> anyhow::Result<ManagedNodePaths> {
+    publish_stage("start");
+
+    // 1) If the system already has node/npm (but our GUI process can't see PATH), detect
+    //    well-known installation locations and pin to absolute paths.
+    publish_stage("checking_system");
+    if let Some(paths) = detect_system_node_npm() {
+        publish_progress("done", None, Some(100), None, None, None);
+        return Ok(paths);
+    }
+
+    // 2) Try system package manager (winget/brew/apt/yum...) if available.
+    if let Err(e) = try_install_node_with_system_package_manager().await {
+        publish_stage_with_message("system_install_failed", e.to_string());
+    }
+
+    // Re-detect after installation.
+    if let Some(paths) = detect_system_node_npm() {
+        publish_progress("done", None, Some(100), None, None, None);
+        return Ok(paths);
+    }
+
+    // 3) Fallback: download official Node.js dist into app data dir (no admin required).
+    ensure_managed_node_installed(client, data_dir).await
+}
+
 pub async fn ensure_managed_node_installed(
     client: &reqwest::Client,
     data_dir: &Path,
 ) -> anyhow::Result<ManagedNodePaths> {
-    publish_progress("start", None, None, None, None, None);
-    publish_progress("resolving_version", None, None, None, None, None);
+    publish_stage("start");
+    publish_stage("resolving_version");
 
     let version = match resolve_latest_lts_version(client).await {
         Ok(v) => v,
         Err(e) => {
-            publish_progress("error", None, None, None, None, Some(e.to_string()));
+            publish_stage_with_message("error", e.to_string());
             return Err(e);
         }
     };
@@ -345,14 +702,7 @@ pub async fn ensure_managed_node_installed(
     let dist = match node_dist_for_current_platform(&version) {
         Ok(v) => v,
         Err(e) => {
-            publish_progress(
-                "error",
-                Some(&version),
-                None,
-                None,
-                None,
-                Some(e.to_string()),
-            );
+            publish_stage_with_version_and_message("error", Some(&version), e.to_string());
             return Err(e);
         }
     };
@@ -370,25 +720,11 @@ pub async fn ensure_managed_node_installed(
     let archive_path = downloads.join(&dist.filename);
 
     // Verify checksum against official SHASUMS256.
-    publish_progress(
-        "downloading_shasums",
-        Some(&version),
-        None,
-        None,
-        None,
-        None,
-    );
+    publish_stage_with_version("downloading_shasums", Some(&version));
     let shasums = match download_text(client, &dist.shasums_url).await {
         Ok(v) => v,
         Err(e) => {
-            publish_progress(
-                "error",
-                Some(&version),
-                None,
-                None,
-                None,
-                Some(e.to_string()),
-            );
+            publish_stage_with_version_and_message("error", Some(&version), e.to_string());
             return Err(e);
         }
     };
@@ -396,7 +732,7 @@ pub async fn ensure_managed_node_installed(
         Some(v) => v,
         None => {
             let msg = format!("sha256 not found in SHASUMS256.txt: {}", dist.filename);
-            publish_progress("error", Some(&version), None, None, None, Some(msg.clone()));
+            publish_stage_with_version_and_message("error", Some(&version), msg.clone());
             anyhow::bail!("{msg}");
         }
     };
@@ -478,4 +814,43 @@ pub async fn ensure_managed_node_installed(
 
     publish_progress("done", Some(&version), Some(100), None, None, None);
     Ok(paths)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn detect_node_npm_in_dirs_finds_executables() {
+        use std::os::unix::fs::PermissionsExt as _;
+
+        let dir =
+            std::env::temp_dir().join(format!("cliswitch-nodejs-test-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let node = dir.join("node");
+        let npm = dir.join("npm");
+
+        std::fs::write(
+            &node,
+            "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo \"v25.0.0\"; else echo \"ok\"; fi\n",
+        )
+        .unwrap();
+        std::fs::write(
+            &npm,
+            "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo \"10.0.0\"; else echo \"ok\"; fi\n",
+        )
+        .unwrap();
+
+        std::fs::set_permissions(&node, std::fs::Permissions::from_mode(0o755)).unwrap();
+        std::fs::set_permissions(&npm, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+        let found =
+            detect_node_npm_in_dirs(std::slice::from_ref(&dir)).expect("should detect node/npm");
+        assert_eq!(found.node_path, node);
+        assert_eq!(found.npm_path, npm);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }
