@@ -1,3 +1,15 @@
+## [0.28.0](https://github.com/koumoe/cli-switch/compare/v0.27.0...v0.28.0) (2026-02-01)
+
+### Features
+
+* prefer system package manager for Node.js env ([9970a55](https://github.com/koumoe/cli-switch/commit/9970a55b87ae56722be10dd26c311ebdf4535bf4))
+* show npm env install progress messages ([6a6c508](https://github.com/koumoe/cli-switch/commit/6a6c5085a81c44c610f9dea8eda076a43d802c9b))
+
+### Bug Fixes
+
+* avoid npm env install hang ([63c0235](https://github.com/koumoe/cli-switch/commit/63c0235bd45a34fb739c72d8a84d70bfd995e1de))
+* localize npm env progress ([9745387](https://github.com/koumoe/cli-switch/commit/9745387e116abd9f874ca2a2cd6c33a1204c8ea3))
+* resolve clippy warnings ([1d9fbcb](https://github.com/koumoe/cli-switch/commit/1d9fbcb603e72b76f80a7c72f80b61f6ed1820a7))
 ## [0.27.0](https://github.com/koumoe/cli-switch/compare/v0.26.0...v0.27.0) (2026-01-31)
 
 ### Features
