@@ -1,3 +1,8 @@
+## [0.32.1](https://github.com/koumoe/cli-switch/compare/v0.32.0...v0.32.1) (2026-02-02)
+
+### Bug Fixes
+
+* treat drop after terminal SSE as success (#111) ([#111](https://github.com/koumoe/cli-switch/issues/111)) ([6713a44](https://github.com/koumoe/cli-switch/commit/6713a44ec4f7d1c0da807e9967d6ccdbc5ae5159))
 ## [0.32.0](https://github.com/koumoe/cli-switch/compare/v0.31.0...v0.32.0) (2026-02-02)
 
 ### Features
