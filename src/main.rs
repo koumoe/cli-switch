@@ -5,7 +5,7 @@
 
 use anyhow::Context as _;
 use clap::{Parser, Subcommand};
-use cliswitch::{app, logging, server, storage, update};
+use cliswitch::{app, logging, server, storage};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use tracing::Level;
 
@@ -90,10 +90,6 @@ async fn async_main() -> anyhow::Result<()> {
         .with_context(|| format!("创建数据目录失败：{}", data_dir.display()))?;
     let db_path = app::db_path(&data_dir);
     storage::init_db(&db_path).with_context(|| "初始化 SQLite 失败")?;
-    if let Err(e) = update::migrate_ignored_json_to_db_if_present(db_path.clone(), &data_dir).await
-    {
-        tracing::warn!(err = %e, "migrate ignored update versions failed");
-    }
 
     // Initialize logging with a safe default level first, then load settings and adjust the
     // runtime filter if possible. This avoids silently treating settings read failures as "use

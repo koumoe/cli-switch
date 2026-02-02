@@ -283,7 +283,6 @@ fn persist_close_behavior_sync(db_path: &std::path::Path, behavior: storage::Clo
 
     let res: anyhow::Result<()> = (|| {
         let conn = rusqlite::Connection::open(db_path)?;
-        storage::ensure_app_settings_schema(&conn)?;
 
         let updated_at_ms = storage::now_ms();
         conn.execute(
