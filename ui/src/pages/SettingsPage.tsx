@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Sun, Moon, Monitor, FolderOpen, Info, Database, Languages, DollarSign, RefreshCw, Shield, Power, ScrollText, Palette, Settings2, Cpu } from "lucide-react";
+import { Sun, Moon, Monitor, FolderOpen, Info, Database, Languages, DollarSign, RefreshCw, Shield, Power, ScrollText, Palette, Settings2 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import type { DateRange } from "react-day-picker";
@@ -35,15 +35,14 @@ import {
 import { useTheme, type Theme } from "@/lib/theme";
 import { type Locale, useI18n } from "@/lib/i18n";
 import { humanizeApiError } from "@/lib/error";
-import { formatNpmEnvInstallProgressText } from "@/lib/npmEnvInstallProgress";
 import { installCliToolWithToast } from "@/lib/cliToolInstaller";
 import { useCurrency, type CurrencyMode } from "@/lib/currency";
 import { setLogLevel } from "@/lib/logger";
 import { UpdatePromptDialog } from "@/components/UpdatePromptDialog";
 import { postIpc } from "@/lib/ipc";
 import { formatBytes, formatDateTime } from "../lib";
-import { checkUpdate, clearLogs, clearRecords, downloadUpdate, getCliToolsStatus, getDbSize, getHealth, getLogsSize, getSettings, getUpdateChangelog, getUpdateStatus, ignoreUpdate, installNpmEnv, pricingStatus, pricingSync, updateSettings, type AppSettings, type AutoStartLaunchMode, type CloseBehavior, type DbSize, type Health, type LogsSize, type PricingStatus, type RecordsClearMode, type UpdateCheck, type UpdateStatus, type ChangelogSection, type CliToolId, type CliToolsStatus, type CliToolStatus } from "../api";
-import type { CliswitchNpmEnvInstallProgressEvent, CliswitchUpdateStatusEvent, NpmEnvInstallProgress } from "@/lib/cliswitchEvents";
+import { checkUpdate, clearLogs, clearRecords, downloadUpdate, getCliToolsStatus, getDbSize, getHealth, getLogsSize, getSettings, getUpdateChangelog, getUpdateStatus, ignoreUpdate, pricingStatus, pricingSync, updateSettings, type AppSettings, type AutoStartLaunchMode, type CloseBehavior, type DbSize, type Health, type LogsSize, type PricingStatus, type RecordsClearMode, type UpdateCheck, type UpdateStatus, type ChangelogSection, type CliToolId, type CliToolsStatus, type CliToolStatus } from "../api";
+import type { CliswitchUpdateStatusEvent } from "@/lib/cliswitchEvents";
 import { clearUpdateReadyShown } from "@/lib/updateReadyPrompt";
 
 function joinPath(base: string, sub: string): string {
@@ -71,9 +70,6 @@ export function SettingsPage() {
   const [updateIgnoring, setUpdateIgnoring] = useState(false);
   const [cliToolsStatus, setCliToolsStatus] = useState<CliToolsStatus | null>(null);
   const [cliToolsLoading, setCliToolsLoading] = useState(false);
-  const [cliToolsNpmSetupOpen, setCliToolsNpmSetupOpen] = useState(false);
-  const [cliToolsNpmInstalling, setCliToolsNpmInstalling] = useState(false);
-  const [npmEnvInstallProgress, setNpmEnvInstallProgress] = useState<NpmEnvInstallProgress | null>(null);
   const [cliToolBusy, setCliToolBusy] = useState<Record<CliToolId, boolean>>({
     gemini: false,
     claude: false,
@@ -130,22 +126,6 @@ export function SettingsPage() {
     }
   }
 
-  async function autoInstallNpmEnv() {
-    setCliToolsNpmInstalling(true);
-    try {
-      await installNpmEnv();
-      const s = await getSettings();
-      setAppSettings(s);
-      await refreshCliToolsStatus();
-      setCliToolsNpmSetupOpen(false);
-      toast.success(t("settings.cliTools.saved"));
-    } catch (e) {
-      toast.error(t("settings.cliTools.installFail", { name: "npm" }), { description: humanizeApiError(e, t) });
-    } finally {
-      setCliToolsNpmInstalling(false);
-    }
-  }
-
   async function refreshCliToolsStatus() {
     setCliToolsLoading(true);
     try {
@@ -196,22 +176,6 @@ export function SettingsPage() {
       window.removeEventListener("cliswitch-update-status", onUpdateStatus as EventListener);
     };
   }, []);
-
-  useEffect(() => {
-    const onProgress = (e: Event) => {
-      const p = (e as CliswitchNpmEnvInstallProgressEvent).detail;
-      if (!p) return;
-      setNpmEnvInstallProgress(p);
-    };
-    window.addEventListener("cliswitch-npm-env-install-progress", onProgress as EventListener);
-    return () => {
-      window.removeEventListener("cliswitch-npm-env-install-progress", onProgress as EventListener);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!cliToolsNpmInstalling) setNpmEnvInstallProgress(null);
-  }, [cliToolsNpmInstalling]);
 
   const apiEndpoint = (() => {
     const env = (import.meta.env.VITE_BACKEND_URL as string | undefined)?.trim();
@@ -265,8 +229,6 @@ export function SettingsPage() {
             : t("settings.update.available", { version: updateServerVersion })
           : t("settings.update.latest")
         : "-";
-
-  const npmEnvInstallProgressText = formatNpmEnvInstallProgressText(t, cliToolsNpmInstalling, npmEnvInstallProgress);
 
   const recordsDateStr = recordsDateRange?.from
     ? `${format(recordsDateRange.from, "yyyy-MM-dd")}${recordsDateRange.to ? ` ~ ${format(recordsDateRange.to, "yyyy-MM-dd")}` : ""}`
@@ -856,39 +818,6 @@ export function SettingsPage() {
 
         {/* 更新标签页 */}
         <TabsContent value="update" className="space-y-4 mt-4">
-          {/* 基础依赖 */}
-          <div id="base-deps">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Cpu className="h-4 w-4" />
-                  {t("settings.baseDeps.title")}
-                </CardTitle>
-                <CardDescription>{t("settings.baseDeps.subtitle")}</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="text-xs text-muted-foreground">
-                  {t("settings.baseDeps.detected", {
-                    node: cliToolsStatus?.node_version?.trim() || "-",
-                    npm: cliToolsStatus?.npm_version?.trim() || "-",
-                  })}
-                </div>
-
-                {cliToolsStatus && !cliToolsStatus.npm_available ? (
-                  <div className="flex items-start justify-between gap-3 rounded-md border p-3">
-                    <div className="space-y-1 text-xs text-muted-foreground">
-                      <div>{t("settings.cliTools.npmMissing")}</div>
-                      {npmEnvInstallProgressText ? <div>{npmEnvInstallProgressText}</div> : null}
-                    </div>
-                    <Button size="sm" onClick={autoInstallNpmEnv} disabled={cliToolsNpmInstalling}>
-                      {cliToolsNpmInstalling ? t("settings.cliTools.autoInstalling") : t("settings.cliTools.autoInstall")}
-                    </Button>
-                  </div>
-                ) : null}
-              </CardContent>
-            </Card>
-          </div>
-
           {/* CLI 更新 */}
           <Card>
             <CardHeader>
@@ -923,9 +852,6 @@ export function SettingsPage() {
                 const installed = tool.installed;
                 const version = tool.version ?? "-";
                 const busy = cliToolBusy[tool.id];
-                const npmOk = cliToolsStatus?.npm_available ?? true;
-                const needsNpmForInstallOrUpdate = !installed || tool.install_method !== "brew";
-                const needsNpmForAutoUpdate = tool.install_method !== "brew";
                 const autoEnabled =
                   tool.id === "gemini"
                     ? (appSettings?.gemini_cli_auto_update_enabled ?? false)
@@ -949,10 +875,6 @@ export function SettingsPage() {
                         variant="outline"
                         disabled={busy}
                         onClick={async () => {
-                          if (needsNpmForInstallOrUpdate && !npmOk) {
-                            setCliToolsNpmSetupOpen(true);
-                            return;
-                          }
                           setCliToolBusy((prev) => ({ ...prev, [tool.id]: true }));
                           try {
                             await installCliToolWithToast({
@@ -984,10 +906,6 @@ export function SettingsPage() {
                           checked={autoEnabled}
                           onCheckedChange={async (v) => {
                             if (!appSettings) return;
-                            if (v && needsNpmForAutoUpdate && !(cliToolsStatus?.npm_available ?? true)) {
-                              setCliToolsNpmSetupOpen(true);
-                              return;
-                            }
                             const prev = autoEnabled;
                             const patch =
                               tool.id === "gemini"
@@ -1020,32 +938,6 @@ export function SettingsPage() {
               })}
             </CardContent>
           </Card>
-
-          <Dialog open={cliToolsNpmSetupOpen} onOpenChange={setCliToolsNpmSetupOpen}>
-            <DialogContent className="sm:max-w-[520px]">
-              <DialogHeader>
-                <DialogTitle>{t("settings.cliTools.npmSetupTitle")}</DialogTitle>
-                <DialogDescription>
-                  {t("settings.cliTools.npmSetupDesc")}
-                  {npmEnvInstallProgressText ? (
-                    <div className="mt-2 text-xs text-muted-foreground">{npmEnvInstallProgressText}</div>
-                  ) : null}
-                </DialogDescription>
-              </DialogHeader>
-              <DialogFooter>
-                <Button
-                  variant="outline"
-                  onClick={() => setCliToolsNpmSetupOpen(false)}
-                  disabled={cliToolsNpmInstalling}
-                >
-                  {t("common.cancel")}
-                </Button>
-                <Button onClick={autoInstallNpmEnv} disabled={cliToolsNpmInstalling}>
-                  {cliToolsNpmInstalling ? t("settings.cliTools.autoInstalling") : t("settings.cliTools.autoInstall")}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
 
           {/* CliSwitch 更新 */}
           <Card>

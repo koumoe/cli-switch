@@ -13,7 +13,6 @@ import { useI18n } from "@/lib/i18n";
 import { useTheme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 import { humanizeApiError } from "@/lib/error";
-import { formatNpmEnvInstallProgressText } from "@/lib/npmEnvInstallProgress";
 import { installCliToolWithToast } from "@/lib/cliToolInstaller";
 import { postIpc } from "@/lib/ipc";
 import {
@@ -31,9 +30,9 @@ import {
   TooltipTrigger,
 } from "@/components/ui";
 import { toast } from "sonner";
-import { downloadUpdate, getCliToolsStatus, getHealth, getSettings, getUpdateChangelog, ignoreUpdate, installNpmEnv, pricingStatus, pricingSync, updateSettings, type ChangelogSection, type CliToolId, type CliToolsStatus } from "./api";
+import { downloadUpdate, getCliToolsStatus, getHealth, getSettings, getUpdateChangelog, ignoreUpdate, pricingStatus, pricingSync, updateSettings, type ChangelogSection, type CliToolId, type CliToolsStatus } from "./api";
 import { logger, setLogLevel } from "@/lib/logger";
-import type { CliswitchNpmEnvInstallProgressEvent, CliswitchUpdateStatusEvent, NpmEnvInstallProgress } from "@/lib/cliswitchEvents";
+import type { CliswitchUpdateStatusEvent } from "@/lib/cliswitchEvents";
 import { isUpdateReadyShown, markUpdateReadyShown } from "@/lib/updateReadyPrompt";
 import { UpdatePromptDialog } from "@/components/UpdatePromptDialog";
 
@@ -192,8 +191,6 @@ export default function App() {
   const [cliToolsOnboardingOpen, setCliToolsOnboardingOpen] = useState(false);
   const [cliToolsOnboardingStatus, setCliToolsOnboardingStatus] = useState<CliToolsStatus | null>(null);
   const [cliToolsOnboardingBusy, setCliToolsOnboardingBusy] = useState(false);
-  const [cliToolsNpmInstalling, setCliToolsNpmInstalling] = useState(false);
-  const [npmEnvInstallProgress, setNpmEnvInstallProgress] = useState<NpmEnvInstallProgress | null>(null);
   const [cliToolOnboardingBusy, setCliToolOnboardingBusy] = useState<Record<CliToolId, boolean>>({
     gemini: false,
     claude: false,
@@ -242,22 +239,6 @@ export default function App() {
       window.removeEventListener("cliswitch-update-status", onUpdateStatus as EventListener);
     };
   }, []);
-
-  useEffect(() => {
-    const onProgress = (e: Event) => {
-      const p = (e as CliswitchNpmEnvInstallProgressEvent).detail;
-      if (!p) return;
-      setNpmEnvInstallProgress(p);
-    };
-    window.addEventListener("cliswitch-npm-env-install-progress", onProgress as EventListener);
-    return () => {
-      window.removeEventListener("cliswitch-npm-env-install-progress", onProgress as EventListener);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!cliToolsNpmInstalling) setNpmEnvInstallProgress(null);
-  }, [cliToolsNpmInstalling]);
 
   useEffect(() => {
     if (!updatePromptOpen || !updatePromptVersion) return;
@@ -355,20 +336,6 @@ export default function App() {
     };
   }, []);
 
-  async function autoInstallNpmEnv() {
-    setCliToolsNpmInstalling(true);
-    try {
-      await installNpmEnv();
-      const st = await getCliToolsStatus().catch(() => null);
-      if (st) setCliToolsOnboardingStatus(st);
-      toast.success(t("settings.cliTools.saved"));
-    } catch (e) {
-      toast.error(t("settings.cliTools.installFail", { name: "npm" }), { description: humanizeApiError(e, t) });
-    } finally {
-      setCliToolsNpmInstalling(false);
-    }
-  }
-
   useEffect(() => {
     const shown = localStorage.getItem(PRICING_ONBOARDING_SHOWN_KEY) === "true";
     if (shown) return;
@@ -419,8 +386,6 @@ export default function App() {
     postIpc({ type: "close-decision", action, remember });
     setClosePromptOpen(false);
   };
-
-  const npmEnvInstallProgressText = formatNpmEnvInstallProgressText(t, cliToolsNpmInstalling, npmEnvInstallProgress);
 
   return (
     <div className="flex h-full bg-background text-foreground">
@@ -584,36 +549,10 @@ export default function App() {
           </DialogHeader>
 
           <div className="space-y-3">
-            {cliToolsOnboardingStatus && !cliToolsOnboardingStatus.npm_available ? (
-              <div className="space-y-2">
-                <div className="space-y-1 text-sm text-muted-foreground">
-                  <div>{t("settings.cliTools.npmMissing")}</div>
-                  {npmEnvInstallProgressText ? <div className="text-xs">{npmEnvInstallProgressText}</div> : null}
-                </div>
-                <div className="flex gap-2">
-                  <Button size="sm" onClick={autoInstallNpmEnv} disabled={cliToolsNpmInstalling}>
-                    {cliToolsNpmInstalling ? t("settings.cliTools.autoInstalling") : t("settings.cliTools.autoInstall")}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      setCliToolsOnboardingOpen(false);
-                      navigate("/settings");
-                    }}
-                    disabled={cliToolsNpmInstalling}
-                  >
-                    {t("settings.cliTools.openSettings")}
-                  </Button>
-                </div>
-              </div>
-            ) : null}
-
             {(cliToolsOnboardingStatus?.tools ?? [])
               .filter((tool) => !tool.installed)
               .map((tool) => {
                 const busy = cliToolOnboardingBusy[tool.id];
-                const npmOk = cliToolsOnboardingStatus?.npm_available ?? true;
                 return (
                   <div key={tool.id} className="flex items-center justify-between gap-4">
                     <div className="min-w-0">
@@ -624,11 +563,6 @@ export default function App() {
                       size="sm"
                       disabled={busy}
                       onClick={async () => {
-                        if (!npmOk) {
-                          // 用户也可能从这里触发安装，因此直接提示安装/手动指定。
-                          setCliToolsOnboardingOpen(true);
-                          return;
-                        }
                         setCliToolOnboardingBusy((prev) => ({ ...prev, [tool.id]: true }));
                         try {
                           await installCliToolWithToast({
@@ -663,10 +597,6 @@ export default function App() {
             <Button
               onClick={async () => {
                 if (!cliToolsOnboardingStatus) return;
-                if (!cliToolsOnboardingStatus.npm_available) {
-                  // npm 缺失时不直接继续安装，用户可在上面的提示中选择自动安装或手动指定。
-                  return;
-                }
                 const missing = cliToolsOnboardingStatus.tools.filter((t0) => !t0.installed);
                 if (missing.length === 0) {
                   setCliToolsOnboardingOpen(false);
@@ -707,7 +637,6 @@ export default function App() {
               disabled={
                 cliToolsOnboardingBusy ||
                 !cliToolsOnboardingStatus ||
-                !cliToolsOnboardingStatus.npm_available ||
                 !(cliToolsOnboardingStatus.tools ?? []).some((t0) => !t0.installed)
               }
             >
