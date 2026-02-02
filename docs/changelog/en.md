@@ -1,3 +1,8 @@
+## [0.31.0](https://github.com/koumoe/cli-switch/compare/v0.30.1...v0.31.0) (2026-02-02)
+
+### Features
+
+* improve cli tools detection and lock env paths (#109) ([#109](https://github.com/koumoe/cli-switch/issues/109)) ([8a7036d](https://github.com/koumoe/cli-switch/commit/8a7036db48ee370912169a77d59aacaaf6a91cda))
 ## [0.30.1](https://github.com/koumoe/cli-switch/compare/v0.30.0...v0.30.1) (2026-02-01)
 
 ### Bug Fixes
