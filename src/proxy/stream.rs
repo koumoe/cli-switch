@@ -40,6 +40,7 @@ pub(super) struct InstrumentedStream {
     sse_last_event: Option<String>,
     sse_last_type: Option<String>,
     sse_seen_terminal: bool,
+    sse_seen_success_terminal: bool,
 }
 
 impl InstrumentedStream {
@@ -64,6 +65,7 @@ impl InstrumentedStream {
             sse_last_event: None,
             sse_last_type: None,
             sse_seen_terminal: false,
+            sse_seen_success_terminal: false,
         }
     }
 
@@ -105,12 +107,12 @@ impl InstrumentedStream {
         // Note: this is only for diagnosis; it doesn't change control flow.
         match self.ctx.protocol {
             Protocol::Openai => {
-                if matches!(
+                if matches!(marker, "response.completed") {
+                    self.sse_seen_terminal = true;
+                    self.sse_seen_success_terminal = true;
+                } else if matches!(
                     marker,
-                    "response.completed"
-                        | "response.failed"
-                        | "response.cancelled"
-                        | "response.incomplete"
+                    "response.failed" | "response.cancelled" | "response.incomplete"
                 ) {
                     self.sse_seen_terminal = true;
                 }
@@ -118,6 +120,7 @@ impl InstrumentedStream {
             Protocol::Anthropic => {
                 if marker == "message_stop" {
                     self.sse_seen_terminal = true;
+                    self.sse_seen_success_terminal = true;
                 }
             }
             Protocol::Gemini => {}
@@ -154,6 +157,7 @@ impl InstrumentedStream {
             }
             if data == "[DONE]" {
                 self.sse_seen_terminal = true;
+                self.sse_seen_success_terminal = true;
                 continue;
             }
             let Ok(v) = serde_json::from_str::<serde_json::Value>(data) else {
@@ -221,6 +225,7 @@ impl InstrumentedStream {
             stream_chunks = self.stream_chunks,
             stream_end = self.end_reason.unwrap_or("-"),
             sse_terminal = self.sse_seen_terminal,
+            sse_success_terminal = self.sse_seen_success_terminal,
             sse_last_event = self.sse_last_event.as_deref().unwrap_or("-"),
             sse_last_type = self.sse_last_type.as_deref().unwrap_or("-"),
             prompt_tokens = prompt_tokens.unwrap_or(-1),
@@ -244,6 +249,7 @@ impl InstrumentedStream {
                 duration_ms,
                 stream_end = self.end_reason.unwrap_or("-"),
                 sse_terminal = self.sse_seen_terminal,
+                sse_success_terminal = self.sse_seen_success_terminal,
                 sse_last_event = self.sse_last_event.as_deref().unwrap_or("-"),
                 sse_last_type = self.sse_last_type.as_deref().unwrap_or("-"),
                 response_sse = %response_sse,
@@ -308,12 +314,20 @@ impl Drop for InstrumentedStream {
             return;
         }
         if self.end_reason.is_none() {
-            self.end_reason = Some("dropped");
+            self.end_reason = Some(if self.sse_seen_success_terminal {
+                "dropped_after_terminal"
+            } else {
+                "dropped"
+            });
         }
         // If the stream is dropped before completion (e.g. client disconnect), record it as a
         // stream error so it doesn't get counted as a successful request.
         if self.stream_error.is_none() {
-            self.stream_error = Some("stream_dropped".to_string());
+            // If the client stops reading immediately after receiving a terminal marker
+            // (e.g. OpenAI `response.completed` or Anthropic `message_stop`), treat it as success.
+            if !(self.ctx.status_is_success && self.sse_seen_success_terminal) {
+                self.stream_error = Some("stream_dropped".to_string());
+            }
         }
         self.finalize();
     }
