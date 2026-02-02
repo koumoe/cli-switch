@@ -1,3 +1,4 @@
+## [0.32.2](https://github.com/koumoe/cli-switch/compare/v0.32.1...v0.32.2) (2026-02-02)
 ## [0.32.1](https://github.com/koumoe/cli-switch/compare/v0.32.0...v0.32.1) (2026-02-02)
 
 ### 修复
