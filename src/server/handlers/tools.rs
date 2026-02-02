@@ -225,11 +225,54 @@ pub(in crate::server) async fn install_cli_tool(
         .ok_or_else(|| ApiError::bad_request("tools_unknown_id", "unknown tool id"))?;
 
     let settings = storage::get_app_settings(state.db_path()).await?;
-    let npm_path = settings.cli_tools_npm_path.clone();
-    let node_path = settings.cli_tools_node_path.clone();
+    let mut npm_path = settings.cli_tools_npm_path.clone();
+    let mut node_path = settings.cli_tools_node_path.clone();
     let npm_registry = crate::cli_tools::pick_cli_tools_npm_registry(&state.http_client).await;
     let data_dir = state.data_dir();
     let tools_prefix_dir = crate::cli_tools::cli_tools_npm_prefix_dir(&data_dir);
+
+    // If the tool isn't managed by brew, we need a working npm. Keep it fully automatic and
+    // invisible to users: install our bundled npm env on demand and persist it internally.
+    let (method0, npm_available0) = tokio::task::spawn_blocking({
+        let npm_path = npm_path.clone();
+        let node_path = node_path.clone();
+        let data_dir = data_dir.clone();
+        move || {
+            let env = crate::cli_tools::CliExecEnv::new(npm_path.as_deref(), node_path.as_deref());
+            let detected0 = crate::cli_tools::detect_cli_tool(&env, &data_dir, def);
+            (detected0.install_method, env.npm_available())
+        }
+    })
+    .await
+    .map_err(|e| {
+        ApiError::Internal(anyhow::anyhow!("cli tool install preflight task join failed: {e}"))
+    })?;
+
+    if method0 != CliToolInstallMethod::Brew && !npm_available0 {
+        let paths = nodejs::ensure_npm_env_installed(&state.http_client, &data_dir)
+            .await
+            .map_err(|e| ApiError::bad_request("tools_npm_env_install_failed", e.to_string()))?;
+
+        let npm_path1 = paths.npm_path.to_string_lossy().to_string();
+        let node_path1 = paths.node_path.to_string_lossy().to_string();
+
+        let updated_settings = storage::update_app_settings(
+            state.db_path(),
+            storage::AppSettingsPatch {
+                cli_tools_npm_path: Some(npm_path1.clone()),
+                cli_tools_node_path: Some(node_path1.clone()),
+                ..Default::default()
+            },
+        )
+        .await?;
+
+        let _ = state.settings_cache.send(Arc::new(updated_settings));
+        let next = *state.settings_notify.borrow() + 1;
+        let _ = state.settings_notify.send(next);
+
+        npm_path = Some(npm_path1);
+        node_path = Some(node_path1);
+    }
 
     let res = tokio::task::spawn_blocking(move || {
         let env = crate::cli_tools::CliExecEnv::new(npm_path.as_deref(), node_path.as_deref());
