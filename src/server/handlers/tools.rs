@@ -149,7 +149,9 @@ pub(in crate::server) async fn install_cli_tool(
     })
     .await
     .map_err(|e| {
-        ApiError::Internal(anyhow::anyhow!("cli tool install preflight task join failed: {e}"))
+        ApiError::Internal(anyhow::anyhow!(
+            "cli tool install preflight task join failed: {e}"
+        ))
     })?;
 
     if method0 != CliToolInstallMethod::Brew && !npm_available0 {

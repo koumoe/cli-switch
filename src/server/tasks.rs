@@ -165,7 +165,8 @@ pub(crate) async fn cli_tools_auto_update_loop(db_path: PathBuf, mut notify: wat
             let data_dir = data_dir.clone();
             let to_update = to_update.clone();
             move || {
-                let env = crate::cli_tools::CliExecEnv::new(npm_path.as_deref(), node_path.as_deref());
+                let env =
+                    crate::cli_tools::CliExecEnv::new(npm_path.as_deref(), node_path.as_deref());
                 let needs_npm = to_update.iter().any(|d| {
                     let detected = crate::cli_tools::detect_cli_tool(&env, &data_dir, d);
                     detected.install_method != crate::cli_tools::CliToolInstallMethod::Brew
