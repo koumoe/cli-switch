@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Sun, Moon, Monitor, FolderOpen, Info, Database, Languages, DollarSign, RefreshCw, Shield, Power, ScrollText, Palette, Settings2 } from "lucide-react";
+import { Sun, Moon, Monitor, FolderOpen, Info, Database, Languages, DollarSign, RefreshCw, Shield, Power, ScrollText, Palette, Settings2, Cpu } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import type { DateRange } from "react-day-picker";
