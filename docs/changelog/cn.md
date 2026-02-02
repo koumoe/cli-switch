@@ -1,3 +1,7 @@
+## [0.32.3](https://github.com/koumoe/cli-switch/compare/v0.32.2...v0.32.3) (2026-02-02)
+
+### 修复
+* 修复设置页 Cpu 图标未导入导致崩溃 (#113) ([#113](https://github.com/koumoe/cli-switch/issues/113)) ([ee40642](https://github.com/koumoe/cli-switch/commit/ee40642918a7e3ccb3aba3e8ca9119e26d44ee1e))
 ## [0.32.2](https://github.com/koumoe/cli-switch/compare/v0.32.1...v0.32.2) (2026-02-02)
 ## [0.32.1](https://github.com/koumoe/cli-switch/compare/v0.32.0...v0.32.1) (2026-02-02)
 
