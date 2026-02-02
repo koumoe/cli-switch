@@ -128,60 +128,6 @@ fn normalize_version_tag(tag: &str) -> &str {
     tag.strip_prefix('v').unwrap_or(tag)
 }
 
-fn normalize_version_str(version: &str) -> String {
-    normalize_version_tag(version.trim()).to_string()
-}
-
-fn ignored_json_path(data_dir: &Path) -> PathBuf {
-    updates_dir(data_dir).join("ignored.json")
-}
-
-fn load_ignored_versions_from_json(data_dir: &Path) -> Vec<String> {
-    let path = ignored_json_path(data_dir);
-    let text = match std::fs::read_to_string(&path) {
-        Ok(t) => t,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Vec::new(),
-        Err(e) => {
-            tracing::warn!(err = %e, path = %path.display(), "read ignored versions json failed");
-            return Vec::new();
-        }
-    };
-
-    let list: Vec<String> = match serde_json::from_str(&text) {
-        Ok(v) => v,
-        Err(e) => {
-            tracing::warn!(err = %e, path = %path.display(), "parse ignored versions json failed");
-            return Vec::new();
-        }
-    };
-
-    list.into_iter()
-        .map(|v| normalize_version_str(&v))
-        .filter(|v| !v.is_empty())
-        .collect()
-}
-
-pub async fn migrate_ignored_json_to_db_if_present(
-    db_path: PathBuf,
-    data_dir: &Path,
-) -> anyhow::Result<bool> {
-    let path = ignored_json_path(data_dir);
-    if !path.exists() {
-        return Ok(false);
-    }
-
-    let versions = load_ignored_versions_from_json(data_dir);
-    if versions.is_empty() {
-        let _ = std::fs::remove_file(&path);
-        return Ok(false);
-    }
-
-    let inserted = storage::upsert_ignored_update_versions(db_path, versions).await?;
-    let _ = std::fs::remove_file(&path);
-    tracing::info!(count = inserted, path = %path.display(), "migrated ignored update versions from json");
-    Ok(true)
-}
-
 async fn is_version_ignored(db_path: PathBuf, version: &str) -> bool {
     match storage::is_update_version_ignored(db_path, version).await {
         Ok(v) => v,
