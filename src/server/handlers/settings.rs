@@ -1,24 +1,12 @@
 use axum::Json;
 use axum::extract::State;
 use axum::response::IntoResponse;
-use directories::BaseDirs;
 use serde::Deserialize;
 use std::sync::Arc;
 
 use crate::server::AppState;
 use crate::server::error::ApiError;
 use crate::{autostart, logging, storage};
-
-fn expand_tilde(path: &str) -> String {
-    let trimmed = path.trim();
-    let Some(rest) = trimmed.strip_prefix("~/") else {
-        return trimmed.to_string();
-    };
-    let Some(base) = BaseDirs::new() else {
-        return trimmed.to_string();
-    };
-    base.home_dir().join(rest).to_string_lossy().to_string()
-}
 
 pub(in crate::server) async fn get_settings(
     State(state): State<AppState>,
@@ -40,8 +28,6 @@ pub(in crate::server) struct UpdateSettingsInput {
     gemini_cli_auto_update_enabled: Option<bool>,
     claude_code_auto_update_enabled: Option<bool>,
     codex_auto_update_enabled: Option<bool>,
-    cli_tools_npm_path: Option<String>,
-    cli_tools_node_path: Option<String>,
     auto_disable_enabled: Option<bool>,
     auto_disable_window_minutes: Option<i64>,
     auto_disable_failure_times: Option<i64>,
@@ -92,8 +78,6 @@ pub(in crate::server) async fn update_settings(
             "codex_auto_update_enabled",
             input.codex_auto_update_enabled.is_some(),
         ),
-        ("cli_tools_npm_path", input.cli_tools_npm_path.is_some()),
-        ("cli_tools_node_path", input.cli_tools_node_path.is_some()),
         ("auto_disable_enabled", input.auto_disable_enabled.is_some()),
         (
             "auto_disable_window_minutes",
@@ -155,22 +139,6 @@ pub(in crate::server) async fn update_settings(
         ));
     }
 
-    for (key, v) in [
-        ("cli_tools_npm_path", input.cli_tools_npm_path.as_deref()),
-        ("cli_tools_node_path", input.cli_tools_node_path.as_deref()),
-    ] {
-        if let Some(v) = v {
-            let expanded = expand_tilde(v);
-            let trimmed = expanded.trim();
-            if !trimmed.is_empty() && !std::path::Path::new(trimmed).exists() {
-                return Err(ApiError::bad_request(
-                    "settings_cli_tools_path_not_found",
-                    format!("{key} not found: {trimmed}"),
-                ));
-            }
-        }
-    }
-
     let auto_start_enabled = input.auto_start_enabled;
     if let Some(enabled) = auto_start_enabled {
         let res = tokio::task::spawn_blocking(move || autostart::set_enabled(enabled)).await;
@@ -193,9 +161,6 @@ pub(in crate::server) async fn update_settings(
         }
     }
 
-    let cli_tools_npm_path = input.cli_tools_npm_path.map(|v| expand_tilde(&v));
-    let cli_tools_node_path = input.cli_tools_node_path.map(|v| expand_tilde(&v));
-
     let settings = storage::update_app_settings(
         state.db_path(),
         storage::AppSettingsPatch {
@@ -209,14 +174,13 @@ pub(in crate::server) async fn update_settings(
             gemini_cli_auto_update_enabled: input.gemini_cli_auto_update_enabled,
             claude_code_auto_update_enabled: input.claude_code_auto_update_enabled,
             codex_auto_update_enabled: input.codex_auto_update_enabled,
-            cli_tools_npm_path,
-            cli_tools_node_path,
             auto_disable_enabled: input.auto_disable_enabled,
             auto_disable_window_minutes: input.auto_disable_window_minutes,
             auto_disable_failure_times: input.auto_disable_failure_times,
             auto_disable_disable_minutes: input.auto_disable_disable_minutes,
             log_level: input.log_level,
             log_retention_days: input.log_retention_days,
+            ..Default::default()
         },
     )
     .await?;
