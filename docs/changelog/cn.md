@@ -1,3 +1,7 @@
+## [0.32.0](https://github.com/koumoe/cli-switch/compare/v0.31.0...v0.32.0) (2026-02-02)
+
+### 功能
+* 移除基础依赖界面并保持 npm 环境全自动 (#110) ([#110](https://github.com/koumoe/cli-switch/issues/110)) ([682ccf1](https://github.com/koumoe/cli-switch/commit/682ccf176b41578f4b8957a007477f13dbbe418e))
 ## [0.31.0](https://github.com/koumoe/cli-switch/compare/v0.30.1...v0.31.0) (2026-02-02)
 
 ### 功能
