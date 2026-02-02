@@ -10,26 +10,6 @@ use crate::server::AppState;
 use crate::server::error::ApiError;
 use crate::storage;
 
-#[derive(Debug, Clone, Copy, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub(crate) enum ValidateProgram {
-    Node,
-    Npm,
-}
-
-#[derive(Debug, Deserialize)]
-pub(crate) struct ValidateProgramRequest {
-    pub(crate) program: ValidateProgram,
-    pub(crate) path: String,
-}
-
-#[derive(Debug, Serialize)]
-pub(crate) struct ValidateProgramResponse {
-    pub(crate) ok: bool,
-    pub(crate) version: String,
-    pub(crate) resolved_path: String,
-}
-
 #[derive(Debug, Clone, Serialize)]
 pub(crate) struct CliToolStatus {
     pub(crate) id: CliToolId,
@@ -46,18 +26,7 @@ pub(crate) struct CliToolStatus {
 #[derive(Debug, Clone, Serialize)]
 pub(crate) struct CliToolsStatusResponse {
     pub(crate) os: &'static str,
-    pub(crate) npm_available: bool,
-    pub(crate) npm_version: Option<String>,
-    pub(crate) node_version: Option<String>,
     pub(crate) tools: Vec<CliToolStatus>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub(crate) struct InstallNpmEnvResponse {
-    pub(crate) ok: bool,
-    pub(crate) installed: bool,
-    pub(crate) npm_path: Option<String>,
-    pub(crate) node_path: Option<String>,
 }
 
 pub(in crate::server) async fn cli_tools_status(
@@ -70,10 +39,6 @@ pub(in crate::server) async fn cli_tools_status(
 
     let res = tokio::task::spawn_blocking(move || {
         let env = crate::cli_tools::CliExecEnv::new(npm_path.as_deref(), node_path.as_deref());
-
-        let npm_available = env.npm_available();
-        let npm_version = env.try_get_npm_version();
-        let node_version = env.try_get_node_version();
 
         let tools = CLI_TOOLS
             .iter()
@@ -124,9 +89,6 @@ pub(in crate::server) async fn cli_tools_status(
 
         CliToolsStatusResponse {
             os: crate::cli_tools::os_name(),
-            npm_available,
-            npm_version,
-            node_version,
             tools,
         }
     })
@@ -138,64 +100,6 @@ pub(in crate::server) async fn cli_tools_status(
             "cli tools status task join failed: {e}"
         ))),
     }
-}
-
-pub(in crate::server) async fn install_npm_env(
-    State(state): State<AppState>,
-) -> Result<impl IntoResponse, ApiError> {
-    // First, check current env (PATH + user settings).
-    let settings = storage::get_app_settings(state.db_path()).await?;
-    let npm_path0 = settings.cli_tools_npm_path.clone();
-    let node_path0 = settings.cli_tools_node_path.clone();
-
-    let already = tokio::task::spawn_blocking(move || {
-        let env = crate::cli_tools::CliExecEnv::new(npm_path0.as_deref(), node_path0.as_deref());
-        env.npm_available()
-    })
-    .await
-    .map_err(|e| {
-        ApiError::bad_request("tools_env_check_failed", format!("env check failed: {e}"))
-    })?;
-
-    if already {
-        return Ok(Json(InstallNpmEnvResponse {
-            ok: true,
-            installed: false,
-            npm_path: settings.cli_tools_npm_path,
-            node_path: settings.cli_tools_node_path,
-        }));
-    }
-
-    let data_dir = state.data_dir();
-    let paths = nodejs::ensure_npm_env_installed(&state.http_client, &data_dir)
-        .await
-        .map_err(|e| ApiError::bad_request("tools_npm_env_install_failed", e.to_string()))?;
-
-    let npm_path = paths.npm_path.to_string_lossy().to_string();
-    let node_path = paths.node_path.to_string_lossy().to_string();
-
-    // Persist as the manual paths so all existing code paths (status/install/auto-update) work.
-    let updated_settings = storage::update_app_settings(
-        state.db_path(),
-        storage::AppSettingsPatch {
-            cli_tools_npm_path: Some(npm_path.clone()),
-            cli_tools_node_path: Some(node_path.clone()),
-            ..Default::default()
-        },
-    )
-    .await?;
-
-    let _ = state.settings_cache.send(Arc::new(updated_settings));
-
-    let next = *state.settings_notify.borrow() + 1;
-    let _ = state.settings_notify.send(next);
-
-    Ok(Json(InstallNpmEnvResponse {
-        ok: true,
-        installed: true,
-        npm_path: Some(npm_path),
-        node_path: Some(node_path),
-    }))
 }
 
 #[derive(Debug, Deserialize)]
@@ -391,64 +295,6 @@ pub(in crate::server) async fn install_cli_tool(
         Ok(Err(e)) => Err(e),
         Err(e) => Err(ApiError::Internal(anyhow::anyhow!(
             "cli tool install task join failed: {e}"
-        ))),
-    }
-}
-
-pub(in crate::server) async fn validate_program(
-    Json(input): Json<ValidateProgramRequest>,
-) -> Result<impl IntoResponse, ApiError> {
-    let raw = input.path.trim();
-    if raw.is_empty() {
-        return Err(ApiError::bad_request(
-            "tools_path_required",
-            "path is required",
-        ));
-    }
-
-    let program = match input.program {
-        ValidateProgram::Node => "node",
-        ValidateProgram::Npm => "npm",
-    };
-
-    let raw = raw.to_string();
-    let res = tokio::task::spawn_blocking(move || {
-        let resolved =
-            crate::cli_tools::resolve_program_from_user_path(program, &raw).ok_or_else(|| {
-                ApiError::bad_request(
-                    if program == "node" {
-                        "tools_node_path_invalid"
-                    } else {
-                        "tools_npm_path_invalid"
-                    },
-                    format!("invalid {program} path"),
-                )
-            })?;
-
-        let v = crate::cli_tools::try_get_cmd_version_at(&resolved).ok_or_else(|| {
-            ApiError::bad_request(
-                if program == "node" {
-                    "tools_node_not_executable"
-                } else {
-                    "tools_npm_not_executable"
-                },
-                format!("{program} is not executable"),
-            )
-        })?;
-
-        Ok::<_, ApiError>(ValidateProgramResponse {
-            ok: true,
-            version: crate::cli_tools::normalize_version_string(&v),
-            resolved_path: resolved.to_string_lossy().to_string(),
-        })
-    })
-    .await;
-
-    match res {
-        Ok(Ok(v)) => Ok(Json(v)),
-        Ok(Err(e)) => Err(e),
-        Err(e) => Err(ApiError::Internal(anyhow::anyhow!(
-            "validate program task join failed: {e}"
         ))),
     }
 }
