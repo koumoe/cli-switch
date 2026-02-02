@@ -52,9 +52,6 @@ export type CliToolStatus = {
 
 export type CliToolsStatus = {
   os: string;
-  npm_available: boolean;
-  npm_version: string | null;
-  node_version: string | null;
   tools: CliToolStatus[];
 };
 
@@ -69,13 +66,6 @@ export type InstallCliToolResponse = {
   terminal_shim_error: string | null;
 };
 
-export type InstallNpmEnvResponse = {
-  ok: boolean;
-  installed: boolean;
-  npm_path: string | null;
-  node_path: string | null;
-};
-
 export type PickFolderInput = {
   title?: string;
   directory?: string;
@@ -83,14 +73,6 @@ export type PickFolderInput = {
 
 export type PickFolderResponse = {
   path: string | null;
-};
-
-export type ValidateProgram = "node" | "npm";
-
-export type ValidateProgramResponse = {
-  ok: boolean;
-  version: string;
-  resolved_path: string;
 };
 
 export type Channel = {
@@ -377,14 +359,6 @@ export function getCliToolsStatus(): Promise<CliToolsStatus> {
 
 export function installCliTool(id: CliToolId): Promise<InstallCliToolResponse> {
   return http<InstallCliToolResponse>("POST", "/api/tools/install", { id });
-}
-
-export function installNpmEnv(): Promise<InstallNpmEnvResponse> {
-  return http<InstallNpmEnvResponse>("POST", "/api/tools/npm/install");
-}
-
-export function validateProgram(program: ValidateProgram, path: string): Promise<ValidateProgramResponse> {
-  return http<ValidateProgramResponse>("POST", "/api/tools/env/validate_program", { program, path });
 }
 
 export function pickFolder(input: PickFolderInput = {}): Promise<PickFolderResponse> {

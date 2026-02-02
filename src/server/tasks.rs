@@ -5,7 +5,7 @@ use tokio::sync::watch;
 use tokio::time::Duration;
 
 use crate::cli_tools::CLI_TOOLS;
-use crate::{autostart, log_files, storage, update};
+use crate::{autostart, log_files, nodejs, storage, update};
 
 use super::handlers::pricing::run_pricing_sync;
 use super::state::data_dir_from_db_path;
@@ -147,8 +147,8 @@ pub(crate) async fn cli_tools_auto_update_loop(db_path: PathBuf, mut notify: wat
             .copied()
             .collect();
 
-        let npm_path = settings.cli_tools_npm_path.clone();
-        let node_path = settings.cli_tools_node_path.clone();
+        let mut npm_path = settings.cli_tools_npm_path.clone();
+        let mut node_path = settings.cli_tools_node_path.clone();
         let npm_registry = if let Some(client) = http_client.as_ref() {
             crate::cli_tools::pick_cli_tools_npm_registry(client).await
         } else {
@@ -156,6 +156,57 @@ pub(crate) async fn cli_tools_auto_update_loop(db_path: PathBuf, mut notify: wat
         };
         let data_dir = data_dir_from_db_path(db_path.as_path());
         let tools_prefix_dir = crate::cli_tools::cli_tools_npm_prefix_dir(&data_dir);
+
+        // Keep it fully automatic: if we need npm for enabled tools but it's not available,
+        // install our bundled npm env and persist it internally.
+        let (needs_npm, npm_available) = tokio::task::spawn_blocking({
+            let npm_path = npm_path.clone();
+            let node_path = node_path.clone();
+            let data_dir = data_dir.clone();
+            let to_update = to_update.clone();
+            move || {
+                let env =
+                    crate::cli_tools::CliExecEnv::new(npm_path.as_deref(), node_path.as_deref());
+                let needs_npm = to_update.iter().any(|d| {
+                    let detected = crate::cli_tools::detect_cli_tool(&env, &data_dir, d);
+                    detected.install_method != crate::cli_tools::CliToolInstallMethod::Brew
+                });
+                (needs_npm, env.npm_available())
+            }
+        })
+        .await
+        .unwrap_or((false, false));
+
+        if needs_npm
+            && !npm_available
+            && let Some(client) = http_client.as_ref()
+        {
+            match nodejs::ensure_npm_env_installed(client, &data_dir).await {
+                Ok(paths) => {
+                    let npm_path1 = paths.npm_path.to_string_lossy().to_string();
+                    let node_path1 = paths.node_path.to_string_lossy().to_string();
+
+                    if let Err(e) = storage::update_app_settings(
+                        db_path.clone(),
+                        storage::AppSettingsPatch {
+                            cli_tools_npm_path: Some(npm_path1.clone()),
+                            cli_tools_node_path: Some(node_path1.clone()),
+                            ..Default::default()
+                        },
+                    )
+                    .await
+                    {
+                        tracing::warn!(err = %e, "persist npm env install paths failed");
+                    } else {
+                        npm_path = Some(npm_path1);
+                        node_path = Some(node_path1);
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!(err = %e, "ensure npm env installed for cli tool auto update failed");
+                }
+            }
+        }
 
         let res = tokio::task::spawn_blocking(move || {
             let env = crate::cli_tools::CliExecEnv::new(npm_path.as_deref(), node_path.as_deref());
