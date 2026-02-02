@@ -6,6 +6,7 @@ use axum::{
 };
 use bytes::Bytes;
 use cliswitch::{proxy, storage};
+use futures_util::StreamExt as _;
 use futures_util::stream;
 use std::sync::{
     Arc,
@@ -140,6 +141,66 @@ async fn spawn_upstream_stream_ok() -> String {
 
 "#,
             ))]);
+            (
+                StatusCode::OK,
+                [(axum::http::header::CONTENT_TYPE, "text/event-stream")],
+                Body::from_stream(s),
+            )
+        }),
+    );
+
+    let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+        .await
+        .expect("bind");
+    let addr = listener.local_addr().expect("local_addr");
+    tokio::spawn(async move {
+        let _ = axum::serve(listener, app).await;
+    });
+
+    format!("http://127.0.0.1:{}", addr.port())
+}
+
+async fn spawn_upstream_stream_openai_terminal_then_hang() -> String {
+    let app = Router::new().route(
+        "/{*path}",
+        any(|| async {
+            let first = Bytes::from_static(
+                b"event: response.completed\n\
+data: {\"type\":\"response.completed\"}\n\
+\n",
+            );
+            let s = stream::once(async move { Ok::<Bytes, std::io::Error>(first) })
+                .chain(stream::pending::<Result<Bytes, std::io::Error>>());
+            (
+                StatusCode::OK,
+                [(axum::http::header::CONTENT_TYPE, "text/event-stream")],
+                Body::from_stream(s),
+            )
+        }),
+    );
+
+    let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+        .await
+        .expect("bind");
+    let addr = listener.local_addr().expect("local_addr");
+    tokio::spawn(async move {
+        let _ = axum::serve(listener, app).await;
+    });
+
+    format!("http://127.0.0.1:{}", addr.port())
+}
+
+async fn spawn_upstream_stream_anthropic_terminal_then_hang() -> String {
+    let app = Router::new().route(
+        "/{*path}",
+        any(|| async {
+            let first = Bytes::from_static(
+                b"event: message_stop\n\
+data: {\"type\":\"message_stop\"}\n\
+\n",
+            );
+            let s = stream::once(async move { Ok::<Bytes, std::io::Error>(first) })
+                .chain(stream::pending::<Result<Bytes, std::io::Error>>());
             (
                 StatusCode::OK,
                 [(axum::http::header::CONTENT_TYPE, "text/event-stream")],
@@ -522,6 +583,132 @@ async fn stream_drop_still_records_usage_event() {
             .unwrap_or("")
             .contains("stream_dropped"),
         "expected error_kind to include stream_dropped, got: {:?}",
+        event.error_kind
+    );
+}
+
+#[tokio::test]
+async fn stream_drop_after_openai_terminal_is_success() {
+    let base = spawn_upstream_stream_openai_terminal_then_hang().await;
+
+    let db_path = temp_db_path();
+    storage::init_db(&db_path).expect("init_db");
+
+    storage::create_channel(
+        db_path.clone(),
+        storage::CreateChannel {
+            name: "c1".to_string(),
+            protocol: storage::Protocol::Openai,
+            base_url: format!("{base}/v1"),
+            auth_type: None,
+            auth_ref: "t1".to_string(),
+            checkin_url: None,
+            priority: 10,
+            recharge_currency: None,
+            real_multiplier: None,
+            enabled: true,
+        },
+    )
+    .await
+    .expect("create channel");
+
+    let client = reqwest::Client::builder().build().expect("client");
+    let req = Request::builder()
+        .method("POST")
+        .uri("/v1/chat/completions")
+        .header(axum::http::header::CONTENT_TYPE, "application/json")
+        .body(Body::from(r#"{"model":"gpt-test","stream":true}"#))
+        .expect("req");
+
+    let resp = proxy::forward(
+        &client,
+        db_path.clone(),
+        storage::Protocol::Openai,
+        "/v1",
+        req,
+    )
+    .await
+    .expect("forward");
+
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    // Read enough data to observe the terminal marker, then drop the client stream.
+    let mut s = resp.into_body().into_data_stream();
+    let first = s.next().await.expect("first frame").expect("frame ok");
+    assert!(
+        String::from_utf8_lossy(&first).contains("response.completed"),
+        "expected response.completed in first chunk"
+    );
+    drop(s);
+
+    let event = wait_for_usage_event(db_path.clone()).await;
+    assert!(event.success, "expected usage event success=true");
+    assert!(
+        event.error_kind.is_none(),
+        "expected error_kind=None, got: {:?}",
+        event.error_kind
+    );
+}
+
+#[tokio::test]
+async fn stream_drop_after_anthropic_terminal_is_success() {
+    let base = spawn_upstream_stream_anthropic_terminal_then_hang().await;
+
+    let db_path = temp_db_path();
+    storage::init_db(&db_path).expect("init_db");
+
+    storage::create_channel(
+        db_path.clone(),
+        storage::CreateChannel {
+            name: "c1".to_string(),
+            protocol: storage::Protocol::Anthropic,
+            base_url: format!("{base}/v1"),
+            auth_type: None,
+            auth_ref: "t1".to_string(),
+            checkin_url: None,
+            priority: 10,
+            recharge_currency: None,
+            real_multiplier: None,
+            enabled: true,
+        },
+    )
+    .await
+    .expect("create channel");
+
+    let client = reqwest::Client::builder().build().expect("client");
+    let req = Request::builder()
+        .method("POST")
+        .uri("/v1/messages")
+        .header(axum::http::header::CONTENT_TYPE, "application/json")
+        .body(Body::from(r#"{"model":"claude-test","stream":true}"#))
+        .expect("req");
+
+    let resp = proxy::forward(
+        &client,
+        db_path.clone(),
+        storage::Protocol::Anthropic,
+        "/v1",
+        req,
+    )
+    .await
+    .expect("forward");
+
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    // Read enough data to observe the terminal marker, then drop the client stream.
+    let mut s = resp.into_body().into_data_stream();
+    let first = s.next().await.expect("first frame").expect("frame ok");
+    assert!(
+        String::from_utf8_lossy(&first).contains("message_stop"),
+        "expected message_stop in first chunk"
+    );
+    drop(s);
+
+    let event = wait_for_usage_event(db_path.clone()).await;
+    assert!(event.success, "expected usage event success=true");
+    assert!(
+        event.error_kind.is_none(),
+        "expected error_kind=None, got: {:?}",
         event.error_kind
     );
 }
