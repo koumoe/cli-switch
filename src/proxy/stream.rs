@@ -1,4 +1,5 @@
 use bytes::Bytes;
+use std::error::Error as _;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
@@ -37,6 +38,8 @@ pub(super) struct InstrumentedStream {
     sse_log_truncated: bool,
     err_body_buf: Vec<u8>,
     stream_error: Option<String>,
+    stream_error_detail: Option<String>,
+    ignored_stream_error: Option<String>,
     sse_last_event: Option<String>,
     sse_last_type: Option<String>,
     sse_seen_terminal: bool,
@@ -62,11 +65,75 @@ impl InstrumentedStream {
             sse_log_truncated: false,
             err_body_buf: Vec::new(),
             stream_error: None,
+            stream_error_detail: None,
+            ignored_stream_error: None,
             sse_last_event: None,
             sse_last_type: None,
             sse_seen_terminal: false,
             sse_seen_success_terminal: false,
         }
+    }
+
+    fn redact_key_query(mut s: String) -> String {
+        // Best-effort redact `key=` query param (Gemini) if it ever appears in upstream errors.
+        // Avoids leaking credentials into logs / usage events.
+        let mut start = 0usize;
+        while let Some(pos) = s[start..].find("key=") {
+            let key_pos = start + pos;
+            let val_start = key_pos + "key=".len();
+            let mut val_end = val_start;
+            while val_end < s.len() {
+                let b = s.as_bytes()[val_end];
+                if b == b'&' || b.is_ascii_whitespace() {
+                    break;
+                }
+                val_end += 1;
+            }
+            if val_end > val_start {
+                s.replace_range(val_start..val_end, "***");
+                start = val_start + "***".len();
+            } else {
+                start = val_end;
+            }
+        }
+        s
+    }
+
+    fn format_reqwest_error_detail(e: &reqwest::Error) -> String {
+        let mut flags = Vec::<&'static str>::new();
+        if e.is_timeout() {
+            flags.push("timeout");
+        }
+        if e.is_connect() {
+            flags.push("connect");
+        }
+        if e.is_decode() {
+            flags.push("decode");
+        }
+        if e.is_body() {
+            flags.push("body");
+        }
+
+        let mut out = String::new();
+        if !flags.is_empty() {
+            out.push_str("kind=");
+            out.push_str(&flags.join("|"));
+            out.push_str("; ");
+        }
+        out.push_str(&e.to_string());
+
+        let mut chain = Vec::<String>::new();
+        let mut cur = e.source();
+        while let Some(err) = cur {
+            chain.push(err.to_string());
+            cur = err.source();
+        }
+        if !chain.is_empty() {
+            out.push_str("; source=");
+            out.push_str(&chain.join(" -> "));
+        }
+
+        Self::redact_key_query(out)
     }
 
     fn on_chunk(&mut self, bytes: &Bytes) {
@@ -200,6 +267,8 @@ impl InstrumentedStream {
         };
         let error_detail = if success {
             None
+        } else if let Some(detail) = self.stream_error_detail.as_deref() {
+            Some(super::truncate(detail, 2000))
         } else if let Some(err) = self.stream_error.as_deref() {
             Some(super::truncate(err, 2000))
         } else if !self.ctx.status_is_success && !self.err_body_buf.is_empty() {
@@ -233,6 +302,7 @@ impl InstrumentedStream {
             total_tokens = total_tokens.unwrap_or(-1),
             success,
             error_kind = error_kind.as_deref().unwrap_or("-"),
+            ignored_error = self.ignored_stream_error.as_deref().unwrap_or("-"),
             response_preview = %response_sse_preview,
             "proxy request result"
         );
@@ -252,6 +322,7 @@ impl InstrumentedStream {
                 sse_success_terminal = self.sse_seen_success_terminal,
                 sse_last_event = self.sse_last_event.as_deref().unwrap_or("-"),
                 sse_last_type = self.sse_last_type.as_deref().unwrap_or("-"),
+                ignored_error = self.ignored_stream_error.as_deref().unwrap_or("-"),
                 response_sse = %response_sse,
                 response_sse_truncated = self.sse_log_truncated,
                 body = true,
@@ -293,10 +364,27 @@ impl futures_util::Stream for InstrumentedStream {
                 Poll::Ready(Some(Ok(bytes)))
             }
             Poll::Ready(Some(Err(e))) => {
-                self.end_reason = Some("upstream_error");
-                self.stream_error = Some(e.to_string());
-                self.finalize();
-                Poll::Ready(Some(Err(std::io::Error::other(e))))
+                // Some upstreams may close the connection abruptly right after sending the
+                // terminal marker. If we already observed a successful terminal marker, treat
+                // this as a clean end-of-stream to reduce noisy failures.
+                if self.ctx.status_is_success && self.sse_seen_success_terminal {
+                    self.end_reason = Some("upstream_error_after_terminal");
+                    self.ignored_stream_error = Some(super::truncate(
+                        &Self::format_reqwest_error_detail(&e),
+                        2000,
+                    ));
+                    self.finalize();
+                    Poll::Ready(None)
+                } else {
+                    self.end_reason = Some("upstream_error");
+                    self.stream_error = Some(e.to_string());
+                    self.stream_error_detail = Some(super::truncate(
+                        &Self::format_reqwest_error_detail(&e),
+                        2000,
+                    ));
+                    self.finalize();
+                    Poll::Ready(Some(Err(std::io::Error::other(e))))
+                }
             }
             Poll::Ready(None) => {
                 self.end_reason = Some("upstream_eos");
