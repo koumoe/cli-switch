@@ -55,6 +55,43 @@ export type CliToolsStatus = {
   tools: CliToolStatus[];
 };
 
+export type CliToolProxyConfigCheck = {
+  id: string;
+  ok: boolean;
+  file: string;
+  key: string;
+  expected: string;
+  current: string | null;
+  message?: string;
+};
+
+export type CliToolProxyConfigToolStatus = {
+  id: CliToolId;
+  name: string;
+  ok: boolean;
+  checks: CliToolProxyConfigCheck[];
+};
+
+export type CliToolProxyConfigStatus = {
+  tools: CliToolProxyConfigToolStatus[];
+};
+
+export type ApplyCliToolsProxyConfigRequest = {
+  tools?: CliToolId[];
+};
+
+export type CliToolProxyConfigApplyItem = {
+  id: CliToolId;
+  ok: boolean;
+  error?: string;
+};
+
+export type CliToolProxyConfigApplyResponse = {
+  ok: boolean;
+  applied: CliToolProxyConfigApplyItem[];
+  status: CliToolProxyConfigStatus;
+};
+
 export type InstallCliToolResponse = {
   ok: boolean;
   exit_code: number | null;
@@ -359,6 +396,16 @@ export function getCliToolsStatus(): Promise<CliToolsStatus> {
 
 export function installCliTool(id: CliToolId): Promise<InstallCliToolResponse> {
   return http<InstallCliToolResponse>("POST", "/api/tools/install", { id });
+}
+
+export function getCliToolsProxyConfigStatus(): Promise<CliToolProxyConfigStatus> {
+  return http<CliToolProxyConfigStatus>("GET", "/api/tools/config/status");
+}
+
+export function applyCliToolsProxyConfig(
+  input: ApplyCliToolsProxyConfigRequest = {}
+): Promise<CliToolProxyConfigApplyResponse> {
+  return http<CliToolProxyConfigApplyResponse>("POST", "/api/tools/config/apply", input);
 }
 
 export function pickFolder(input: PickFolderInput = {}): Promise<PickFolderResponse> {

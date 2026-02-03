@@ -10,6 +10,7 @@
     "proxy_invalid_base_url": "渠道 base_url 无效",
     "proxy_read_body_failed": "读取请求体失败",
     "proxy_upstream_failed": "上游请求失败",
+    "tools_proxy_config_apply_failed": "写入配置失败",
 
     "settings_pricing_auto_update_interval_hours_out_of_range": "自动同步间隔必须在 1~8760 小时之间",
     "settings_auto_disable_window_minutes_out_of_range": "自动禁用窗口分钟数必须 >= 1",
@@ -537,6 +538,21 @@
       "installAll": "一键安装",
       "installing": "安装中...",
       "later": "稍后"
+    },
+    "cliProxyConfig": {
+      "title": "CLI 代理配置",
+      "subtitle": "检查 Claude Code / Codex / Gemini CLI 是否已指向 CliSwitch，如未配置可一键写入",
+      "refresh": "刷新",
+      "loadFail": "获取配置状态失败",
+      "apply": "一键配置",
+      "applied": "配置已写入",
+      "appliedPartial": "部分配置写入失败",
+      "partialDesc": "失败工具：{{tools}}",
+      "applyFail": "写入配置失败",
+      "ok": "已配置",
+      "needsFix": "需配置",
+      "current": "当前",
+      "expected": "期望"
     },
     "update": {
       "title": "CliSwitch 更新",

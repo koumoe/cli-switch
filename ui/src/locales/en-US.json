@@ -10,6 +10,7 @@
     "proxy_invalid_base_url": "Invalid channel base_url",
     "proxy_read_body_failed": "Failed to read request body",
     "proxy_upstream_failed": "Upstream request failed",
+    "tools_proxy_config_apply_failed": "Failed to write config",
 
     "settings_pricing_auto_update_interval_hours_out_of_range": "Auto sync interval must be between 1 and 8760 hours",
     "settings_auto_disable_window_minutes_out_of_range": "Auto-disable window minutes must be >= 1",
@@ -537,6 +538,21 @@
       "installAll": "Install all",
       "installing": "Installing...",
       "later": "Later"
+    },
+    "cliProxyConfig": {
+      "title": "CLI Proxy Config",
+      "subtitle": "Check whether Claude Code / Codex / Gemini CLI are pointing to CliSwitch, and apply with one click if not",
+      "refresh": "Refresh",
+      "loadFail": "Failed to load config status",
+      "apply": "Apply",
+      "applied": "Config written",
+      "appliedPartial": "Some configs failed",
+      "partialDesc": "Failed tools: {{tools}}",
+      "applyFail": "Failed to write config",
+      "ok": "Configured",
+      "needsFix": "Needs config",
+      "current": "Current",
+      "expected": "Expected"
     },
     "update": {
       "title": "CliSwitch Update",
