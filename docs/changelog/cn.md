@@ -1,3 +1,7 @@
+## [0.33.2](https://github.com/koumoe/cli-switch/compare/v0.33.1...v0.33.2) (2026-02-03)
+
+### 修复
+* 简化 CLI 代理配置展示 ([51cd5b9](https://github.com/koumoe/cli-switch/commit/51cd5b91630f154f404df22dd1def3c54d5ef72c))
 ## [0.33.1](https://github.com/koumoe/cli-switch/compare/v0.33.0...v0.33.1) (2026-02-03)
 
 ### 修复
