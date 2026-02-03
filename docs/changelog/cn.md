@@ -1,3 +1,8 @@
+## [0.33.0](https://github.com/koumoe/cli-switch/compare/v0.32.3...v0.33.0) (2026-02-03)
+
+### 功能
+* 添加 CLI 代理配置接口 ([06d04cb](https://github.com/koumoe/cli-switch/commit/06d04cb0a2173ebc5d44735567b39ec9a345d55b))
+* 添加 CLI 代理配置提示条与设置面板 ([a286fad](https://github.com/koumoe/cli-switch/commit/a286fade351acf4877c0c392206302619d1448cb))
 ## [0.32.3](https://github.com/koumoe/cli-switch/compare/v0.32.2...v0.32.3) (2026-02-02)
 
 ### 修复
