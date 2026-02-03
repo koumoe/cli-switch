@@ -45,6 +45,7 @@ fn request_endpoint_template(method: &Method, path: &str) -> Option<&'static str
         ("POST", "/api/channels/reorder") => Some("/api/channels/reorder"),
         ("GET", "/api/channels/checkins/today") => Some("/api/channels/checkins/today"),
         ("POST", "/api/system/open") => Some("/api/system/open"),
+        ("POST", "/api/system/open_data_dir") => Some("/api/system/open_data_dir"),
         ("POST", "/api/system/pick_folder") => Some("/api/system/pick_folder"),
         ("GET", "/api/routes") => Some("/api/routes"),
         ("POST", "/api/routes") => Some("/api/routes"),
@@ -111,6 +112,7 @@ fn request_purpose(method: &Method, path: &str) -> &'static str {
         ("POST", "/api/channels/reorder") => "handlers::reorder_channels",
         ("GET", "/api/channels/checkins/today") => "handlers::channel_checkins_today",
         ("POST", "/api/system/open") => "handlers::open_in_browser",
+        ("POST", "/api/system/open_data_dir") => "handlers::open_data_dir",
         ("POST", "/api/system/pick_folder") => "handlers::pick_folder",
         ("GET", "/api/routes") => "handlers::list_routes",
         ("POST", "/api/routes") => "handlers::create_route",
@@ -232,6 +234,7 @@ fn build_app(state: AppState) -> Router {
             post(handlers::complete_channel_checkin_today),
         )
         .route("/api/system/open", post(handlers::open_in_browser))
+        .route("/api/system/open_data_dir", post(handlers::open_data_dir))
         .route("/api/system/pick_folder", post(handlers::pick_folder))
         .route(
             "/api/routes",
@@ -421,6 +424,40 @@ fn open_in_browser(url: &str) -> std::io::Result<()> {
     #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
     {
         let _ = url;
+        Err(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "unsupported platform",
+        ))
+    }
+}
+
+fn open_path(path: &std::path::Path) -> std::io::Result<()> {
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open").arg(path).spawn()?;
+        Ok(())
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let mut cmd = std::process::Command::new("cmd");
+        cmd.args([
+            "/C",
+            "start",
+            "",
+            &path.to_string_lossy().to_string(),
+        ]);
+        crate::process::command_silent(&mut cmd);
+        cmd.spawn()?;
+        Ok(())
+    }
+    #[cfg(target_os = "linux")]
+    {
+        std::process::Command::new("xdg-open").arg(path).spawn()?;
+        Ok(())
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+    {
+        let _ = path;
         Err(std::io::Error::new(
             std::io::ErrorKind::Unsupported,
             "unsupported platform",
