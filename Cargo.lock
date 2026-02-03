@@ -432,6 +432,7 @@ dependencies = [
  "thiserror 2.0.17",
  "time",
  "tokio",
+ "toml_edit 0.23.9",
  "tower-http",
  "tracing",
  "tracing-appender",
@@ -3583,6 +3584,7 @@ dependencies = [
  "indexmap",
  "toml_datetime 0.7.3",
  "toml_parser",
+ "toml_writer",
  "winnow 0.7.14",
 ]
 
@@ -3594,6 +3596,12 @@ checksum = "c0cbe268d35bdb4bb5a56a2de88d0ad0eb70af5384a99d648cd4b3d04039800e"
 dependencies = [
  "winnow 0.7.14",
 ]
+
+[[package]]
+name = "toml_writer"
+version = "1.0.6+spec-1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ab16f14aed21ee8bfd8ec22513f7287cd4a91aa92e44edfe2c17ddd004e92607"
 
 [[package]]
 name = "tower"
