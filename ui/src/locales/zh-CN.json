@@ -436,7 +436,7 @@
       "appearance": "界面",
       "channel": "渠道",
       "application": "应用",
-      "update": "更新",
+      "update": "CLI",
       "data": "数据",
       "system": "系统"
     },
@@ -541,7 +541,7 @@
     },
     "cliProxyConfig": {
       "title": "CLI 代理配置",
-      "subtitle": "检查 Claude Code / Codex / Gemini CLI 是否已指向 CliSwitch，如未配置可一键写入",
+      "subtitle": "检查 Claude Code / Codex / Gemini CLI 是否已指向 CliSwitch，未配置项可直接写入",
       "refresh": "刷新",
       "loadFail": "获取配置状态失败",
       "apply": "一键配置",
@@ -596,6 +596,7 @@
       "dbFile": "数据库文件",
       "dbSize": "数据库大小",
       "dbSizeFail": "获取数据库大小失败",
+      "openFail": "打开失败",
       "openInDevTitle": "功能开发中",
       "openInDevDesc": "打开文件夹功能将在后续版本中提供"
     },
