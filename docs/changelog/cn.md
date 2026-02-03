@@ -1,3 +1,7 @@
+## [0.33.1](https://github.com/koumoe/cli-switch/compare/v0.33.0...v0.33.1) (2026-02-03)
+
+### 修复
+* 优化 CLI 设置与配置 (#115) ([#115](https://github.com/koumoe/cli-switch/issues/115)) ([e4f6847](https://github.com/koumoe/cli-switch/commit/e4f68477f9cdb556b9886217df3a9d411ceec7eb))
 ## [0.33.0](https://github.com/koumoe/cli-switch/compare/v0.32.3...v0.33.0) (2026-02-03)
 
 ### 功能
