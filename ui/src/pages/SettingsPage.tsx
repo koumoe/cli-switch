@@ -41,7 +41,7 @@ import { setLogLevel } from "@/lib/logger";
 import { UpdatePromptDialog } from "@/components/UpdatePromptDialog";
 import { postIpc } from "@/lib/ipc";
 import { formatBytes, formatDateTime } from "../lib";
-import { applyCliToolsProxyConfig, checkUpdate, clearLogs, clearRecords, downloadUpdate, getCliToolsProxyConfigStatus, getCliToolsStatus, getDbSize, getHealth, getLogsSize, getSettings, getUpdateChangelog, getUpdateStatus, ignoreUpdate, pricingStatus, pricingSync, updateSettings, type AppSettings, type AutoStartLaunchMode, type CloseBehavior, type DbSize, type Health, type LogsSize, type PricingStatus, type RecordsClearMode, type UpdateCheck, type UpdateStatus, type ChangelogSection, type CliToolId, type CliToolsStatus, type CliToolStatus, type CliToolProxyConfigStatus, type CliToolProxyConfigToolStatus } from "../api";
+import { applyCliToolsProxyConfig, checkUpdate, clearLogs, clearRecords, downloadUpdate, getCliToolsProxyConfigStatus, getCliToolsStatus, getDbSize, getHealth, getLogsSize, getSettings, getUpdateChangelog, getUpdateStatus, ignoreUpdate, openDataDir, pricingStatus, pricingSync, updateSettings, type AppSettings, type AutoStartLaunchMode, type CloseBehavior, type DbSize, type Health, type LogsSize, type PricingStatus, type RecordsClearMode, type UpdateCheck, type UpdateStatus, type ChangelogSection, type CliToolId, type CliToolsStatus, type CliToolStatus, type CliToolProxyConfigStatus, type CliToolProxyConfigToolStatus } from "../api";
 import type { CliswitchUpdateStatusEvent } from "@/lib/cliswitchEvents";
 import { clearUpdateReadyShown } from "@/lib/updateReadyPrompt";
 
@@ -72,7 +72,11 @@ export function SettingsPage() {
   const [cliToolsLoading, setCliToolsLoading] = useState(false);
   const [cliToolsProxyConfig, setCliToolsProxyConfig] = useState<CliToolProxyConfigStatus | null>(null);
   const [cliToolsProxyConfigLoading, setCliToolsProxyConfigLoading] = useState(false);
-  const [cliToolsProxyConfigApplying, setCliToolsProxyConfigApplying] = useState(false);
+  const [cliProxyConfigBusy, setCliProxyConfigBusy] = useState<Record<CliToolId, boolean>>({
+    gemini: false,
+    claude: false,
+    codex: false,
+  });
   const [cliToolBusy, setCliToolBusy] = useState<Record<CliToolId, boolean>>({
     gemini: false,
     claude: false,
@@ -832,8 +836,104 @@ export function SettingsPage() {
           </Card>
         </TabsContent>
 
-        {/* 更新标签页 */}
+        {/* CLI 标签页 */}
         <TabsContent value="update" className="space-y-4 mt-4">
+          {/* CLI 代理配置（Claude / Codex / Gemini -> CliSwitch） */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-start justify-between gap-3">
+                <div className="space-y-1">
+                  <CardTitle className="flex items-center gap-2">
+                    <Power className="h-4 w-4" />
+                    {t("settings.cliProxyConfig.title")}
+                  </CardTitle>
+                  <CardDescription>{t("settings.cliProxyConfig.subtitle")}</CardDescription>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={refreshCliToolsProxyConfigStatus}
+                  disabled={cliToolsProxyConfigLoading}
+                  className="gap-2"
+                >
+                  <RefreshCw className={`h-4 w-4 ${cliToolsProxyConfigLoading ? "animate-spin" : ""}`} />
+                  {t("settings.cliProxyConfig.refresh")}
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {!cliToolsProxyConfig ? (
+                <div className="text-sm text-muted-foreground">
+                  {cliToolsProxyConfigLoading ? t("common.loading") : "-"}
+                </div>
+              ) : null}
+
+              {(cliToolsProxyConfig?.tools ?? []).map((tool: CliToolProxyConfigToolStatus) => {
+                const busy = cliProxyConfigBusy[tool.id];
+
+                return (
+                  <div key={tool.id} className="border rounded-lg p-3 space-y-2 bg-background">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="font-medium text-sm">{tool.name}</div>
+                      <Badge variant={tool.ok ? "success" : "warning"}>
+                        {tool.ok ? t("settings.cliProxyConfig.ok") : t("settings.cliProxyConfig.needsFix")}
+                      </Badge>
+                    </div>
+
+                    <div className="space-y-1">
+                      {tool.checks.map((c) => (
+                        <div key={c.id} className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="text-xs text-muted-foreground font-mono break-all">
+                              {c.key}
+                            </div>
+                            {c.message ? (
+                              <div className="text-[11px] text-destructive mt-1 whitespace-pre-wrap break-all">
+                                {c.message}
+                              </div>
+                            ) : null}
+                          </div>
+
+                          <Button
+                            size="sm"
+                            variant={c.ok ? "outline" : "default"}
+                            disabled={c.ok || busy}
+                            onClick={async () => {
+                              setCliProxyConfigBusy((prev) => ({ ...prev, [tool.id]: true }));
+                              try {
+                                const res = await applyCliToolsProxyConfig({ tools: [tool.id] });
+                                setCliToolsProxyConfig(res.status);
+                                const applied = res.applied.find((x) => x.id === tool.id);
+                                if (applied?.ok) {
+                                  toast.success(t("settings.cliProxyConfig.applied"));
+                                } else {
+                                  toast.error(t("settings.cliProxyConfig.applyFail"), {
+                                    description: applied?.error,
+                                  });
+                                }
+                              } catch (e) {
+                                toast.error(t("settings.cliProxyConfig.applyFail"), { description: humanizeApiError(e, t) });
+                              } finally {
+                                setCliProxyConfigBusy((prev) => ({ ...prev, [tool.id]: false }));
+                                void refreshCliToolsProxyConfigStatus();
+                              }
+                            }}
+                          >
+                            {busy
+                              ? t("common.loading")
+                              : c.ok
+                                ? t("settings.cliProxyConfig.ok")
+                                : t("settings.cliProxyConfig.needsFix")}
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </CardContent>
+          </Card>
+
           {/* CLI 更新 */}
           <Card>
             <CardHeader>
@@ -955,260 +1055,6 @@ export function SettingsPage() {
             </CardContent>
           </Card>
 
-          {/* CLI 代理配置（Claude / Codex / Gemini -> CliSwitch） */}
-          <Card>
-            <CardHeader>
-              <div className="flex items-start justify-between gap-3">
-                <div className="space-y-1">
-                  <CardTitle className="flex items-center gap-2">
-                    <Power className="h-4 w-4" />
-                    {t("settings.cliProxyConfig.title")}
-                  </CardTitle>
-                  <CardDescription>{t("settings.cliProxyConfig.subtitle")}</CardDescription>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={refreshCliToolsProxyConfigStatus}
-                    disabled={cliToolsProxyConfigLoading}
-                    className="gap-2"
-                  >
-                    <RefreshCw className={`h-4 w-4 ${cliToolsProxyConfigLoading ? "animate-spin" : ""}`} />
-                    {t("settings.cliProxyConfig.refresh")}
-                  </Button>
-                  <Button
-                    size="sm"
-                    onClick={async () => {
-                      setCliToolsProxyConfigApplying(true);
-                      try {
-                        const res = await applyCliToolsProxyConfig();
-                        setCliToolsProxyConfig(res.status);
-                        if (res.ok) {
-                          toast.success(t("settings.cliProxyConfig.applied"));
-                        } else {
-                          const failed = res.applied.filter((x) => !x.ok).map((x) => x.id).join(", ");
-                          toast.warning(t("settings.cliProxyConfig.appliedPartial"), {
-                            description: failed ? t("settings.cliProxyConfig.partialDesc", { tools: failed }) : undefined,
-                          });
-                        }
-                      } catch (e) {
-                        toast.error(t("settings.cliProxyConfig.applyFail"), { description: humanizeApiError(e, t) });
-                      } finally {
-                        setCliToolsProxyConfigApplying(false);
-                        void refreshCliToolsProxyConfigStatus();
-                      }
-                    }}
-                    disabled={cliToolsProxyConfigApplying}
-                    className="gap-2"
-                  >
-                    <Power className="h-4 w-4" />
-                    {cliToolsProxyConfigApplying ? t("common.loading") : t("settings.cliProxyConfig.apply")}
-                  </Button>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {!cliToolsProxyConfig ? (
-                <div className="text-sm text-muted-foreground">
-                  {cliToolsProxyConfigLoading ? t("common.loading") : "-"}
-                </div>
-              ) : null}
-
-              {(cliToolsProxyConfig?.tools ?? []).map((tool: CliToolProxyConfigToolStatus) => (
-                <div key={tool.id} className="border rounded-lg p-3 space-y-2 bg-background">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="font-medium text-sm">{tool.name}</div>
-                    <Badge variant={tool.ok ? "success" : "warning"}>
-                      {tool.ok ? t("settings.cliProxyConfig.ok") : t("settings.cliProxyConfig.needsFix")}
-                    </Badge>
-                  </div>
-
-                  <div className="space-y-1">
-                    {tool.checks.map((c) => (
-                      <div key={c.id} className="text-xs text-muted-foreground">
-                        <span className={c.ok ? "text-success" : "text-warning"}>
-                          {c.ok ? "✓" : "!"}
-                        </span>
-                        <span className="ml-2">
-                          <span className="font-mono">{c.key}</span>
-                          {" · "}
-                          {t("settings.cliProxyConfig.current")}{" "}
-                          <span className="font-mono">{c.current ?? "-"}</span>
-                          {" · "}
-                          {t("settings.cliProxyConfig.expected")}{" "}
-                          <span className="font-mono">{c.expected}</span>
-                        </span>
-                        {c.message ? (
-                          <div className="text-[11px] text-destructive mt-1 whitespace-pre-wrap break-all">
-                            {c.message}
-                          </div>
-                        ) : null}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-
-          {/* CliSwitch 更新 */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <RefreshCw className="h-4 w-4" />
-                {t("settings.update.title")}
-              </CardTitle>
-              <CardDescription>{t("settings.update.subtitle")}</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <UpdatePromptDialog
-                open={updatePromptOpen}
-                onOpenChange={setUpdatePromptOpen}
-                title={t("settings.update.promptTitle")}
-                description={t("settings.update.promptDesc", { version: updatePromptVersion ?? "-" })}
-                overviewTitle={t("settings.update.promptOverviewTitle")}
-                loadingText={t("settings.update.promptLoading")}
-                loadFailText={t("settings.update.promptLoadFail")}
-                sections={updateChangelogSections}
-                loading={updateChangelogLoading}
-                loadError={updateChangelogError}
-                updateText={t("settings.update.updateNow")}
-                laterText={t("settings.update.later")}
-                ignoreText={t("settings.update.ignore")}
-                busy={updateDownloading || updateIgnoring}
-                onLater={() => setUpdatePromptOpen(false)}
-                onUpdate={async () => {
-                  setUpdateDownloading(true);
-                  try {
-                    const dl = await downloadUpdate();
-                    setUpdateStatus(dl.status);
-                    toast.success(t("settings.update.downloading"));
-                    setUpdatePromptOpen(false);
-                  } catch (e) {
-                    toast.error(t("settings.update.downloadFail"), { description: humanizeApiError(e, t) });
-                  } finally {
-                    setUpdateDownloading(false);
-                  }
-                }}
-                onIgnore={async () => {
-                  const v = updatePromptVersion;
-                  if (!v) return;
-                  setUpdateIgnoring(true);
-                  try {
-                    const st = await ignoreUpdate(v);
-                    setUpdateStatus(st);
-                    toast.success(t("settings.update.ignoredToast", { version: v }));
-                    setUpdatePromptOpen(false);
-                  } catch (e) {
-                    toast.error(t("settings.update.ignoreFail"), { description: humanizeApiError(e, t) });
-                  } finally {
-                    setUpdateIgnoring(false);
-                  }
-                }}
-              />
-
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <div className="font-medium text-sm">{t("settings.update.autoEnable")}</div>
-                  <div className="text-xs text-muted-foreground">{t("settings.update.autoEnableHint")}</div>
-                </div>
-                <Switch
-                  checked={appSettings?.app_auto_update_enabled ?? false}
-                  onCheckedChange={async (v) => {
-                    if (!appSettings) return;
-                    const prev = appSettings.app_auto_update_enabled;
-                    setAppSettings({ ...appSettings, app_auto_update_enabled: v });
-                    try {
-                      const next = await updateSettings({ app_auto_update_enabled: v });
-                      setAppSettings(next);
-                      toast.success(t("settings.update.saved"));
-                      if (v) {
-                        const res = await checkUpdate();
-                        setUpdateCheckResult(res);
-                        if (res.update_available && res.latest_version) {
-                          if (res.latest_ignored) {
-                            toast.info(t("settings.update.ignoredToast", { version: res.latest_version }));
-                          } else {
-                            openUpdatePrompt(res.latest_version);
-                          }
-                        }
-                        const st = await getUpdateStatus().catch(() => null);
-                        if (st) setUpdateStatus(st);
-                      }
-                    } catch (e) {
-                      setAppSettings({ ...appSettings, app_auto_update_enabled: prev });
-                      toast.error(t("settings.update.saveFail"), { description: humanizeApiError(e, t) });
-                    }
-                  }}
-                  disabled={!appSettings}
-                />
-              </div>
-
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <div className="font-medium text-sm">{t("settings.update.status")}</div>
-                  <div className="text-xs text-muted-foreground space-y-0.5">
-                    <div>{updateStatusText}</div>
-                    {updateServerVersion ? (
-                      <div>{t("settings.update.serverVersion", { version: updateServerVersion })}</div>
-                    ) : null}
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={async () => {
-                      setUpdateChecking(true);
-                      try {
-                        const res = await checkUpdate();
-                        setUpdateCheckResult(res);
-                        const st = await getUpdateStatus().catch(() => null);
-                        if (st) setUpdateStatus(st);
-
-                        if (st?.pending_version) {
-                          const pending = st.pending_version;
-                          const latest = res.latest_version;
-                          if (res.update_available && latest && latest !== pending) {
-                            if (res.latest_ignored) {
-                              toast.info(t("settings.update.ignoredToast", { version: latest }));
-                              return;
-                            }
-                            toast.success(t("settings.update.found", { version: latest }));
-                            openUpdatePrompt(latest);
-                            return;
-                          }
-                          reopenUpdateReadyPrompt(st);
-                          return;
-                        }
-
-                        if (!res.update_available) {
-                          toast.success(t("settings.update.uptodate"));
-                          return;
-                        }
-
-                        const latest = res.latest_version ?? "-";
-                        if (res.latest_ignored) {
-                          toast.info(t("settings.update.ignoredToast", { version: latest }));
-                          return;
-                        }
-                        toast.success(t("settings.update.found", { version: latest }));
-                        if (res.latest_version) openUpdatePrompt(res.latest_version);
-                      } catch (e) {
-                        toast.error(t("settings.update.checkFail"), { description: humanizeApiError(e, t) });
-                      } finally {
-                        setUpdateChecking(false);
-                      }
-                    }}
-                    disabled={updateChecking}
-                  >
-                    {t("settings.update.check")}
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
         </TabsContent>
 
         {/* 数据标签页 */}
@@ -1233,11 +1079,14 @@ export function SettingsPage() {
                   />
                   <Button
                     variant="outline"
-                    onClick={() => {
-                      toast.info(t("settings.storage.openInDevTitle"), {
-                        description: t("settings.storage.openInDevDesc"),
-                      });
+                    onClick={async () => {
+                      try {
+                        await openDataDir();
+                      } catch (e) {
+                        toast.error(t("settings.storage.openFail"), { description: humanizeApiError(e, t) });
+                      }
                     }}
+                    disabled={!health?.data_dir || health.data_dir === "-"}
                   >
                     {t("common.open")}
                   </Button>
@@ -1682,6 +1531,164 @@ export function SettingsPage() {
                   }}
                   disabled={!appSettings || serverLanSaving}
                 />
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* CliSwitch 更新 */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <RefreshCw className="h-4 w-4" />
+                {t("settings.update.title")}
+              </CardTitle>
+              <CardDescription>{t("settings.update.subtitle")}</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <UpdatePromptDialog
+                open={updatePromptOpen}
+                onOpenChange={setUpdatePromptOpen}
+                title={t("settings.update.promptTitle")}
+                description={t("settings.update.promptDesc", { version: updatePromptVersion ?? "-" })}
+                overviewTitle={t("settings.update.promptOverviewTitle")}
+                loadingText={t("settings.update.promptLoading")}
+                loadFailText={t("settings.update.promptLoadFail")}
+                sections={updateChangelogSections}
+                loading={updateChangelogLoading}
+                loadError={updateChangelogError}
+                updateText={t("settings.update.updateNow")}
+                laterText={t("settings.update.later")}
+                ignoreText={t("settings.update.ignore")}
+                busy={updateDownloading || updateIgnoring}
+                onLater={() => setUpdatePromptOpen(false)}
+                onUpdate={async () => {
+                  setUpdateDownloading(true);
+                  try {
+                    const dl = await downloadUpdate();
+                    setUpdateStatus(dl.status);
+                    toast.success(t("settings.update.downloading"));
+                    setUpdatePromptOpen(false);
+                  } catch (e) {
+                    toast.error(t("settings.update.downloadFail"), { description: humanizeApiError(e, t) });
+                  } finally {
+                    setUpdateDownloading(false);
+                  }
+                }}
+                onIgnore={async () => {
+                  const v = updatePromptVersion;
+                  if (!v) return;
+                  setUpdateIgnoring(true);
+                  try {
+                    const st = await ignoreUpdate(v);
+                    setUpdateStatus(st);
+                    toast.success(t("settings.update.ignoredToast", { version: v }));
+                    setUpdatePromptOpen(false);
+                  } catch (e) {
+                    toast.error(t("settings.update.ignoreFail"), { description: humanizeApiError(e, t) });
+                  } finally {
+                    setUpdateIgnoring(false);
+                  }
+                }}
+              />
+
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <div className="font-medium text-sm">{t("settings.update.autoEnable")}</div>
+                  <div className="text-xs text-muted-foreground">{t("settings.update.autoEnableHint")}</div>
+                </div>
+                <Switch
+                  checked={appSettings?.app_auto_update_enabled ?? false}
+                  onCheckedChange={async (v) => {
+                    if (!appSettings) return;
+                    const prev = appSettings.app_auto_update_enabled;
+                    setAppSettings({ ...appSettings, app_auto_update_enabled: v });
+                    try {
+                      const next = await updateSettings({ app_auto_update_enabled: v });
+                      setAppSettings(next);
+                      toast.success(t("settings.update.saved"));
+                      if (v) {
+                        const res = await checkUpdate();
+                        setUpdateCheckResult(res);
+                        if (res.update_available && res.latest_version) {
+                          if (res.latest_ignored) {
+                            toast.info(t("settings.update.ignoredToast", { version: res.latest_version }));
+                          } else {
+                            openUpdatePrompt(res.latest_version);
+                          }
+                        }
+                        const st = await getUpdateStatus().catch(() => null);
+                        if (st) setUpdateStatus(st);
+                      }
+                    } catch (e) {
+                      setAppSettings({ ...appSettings, app_auto_update_enabled: prev });
+                      toast.error(t("settings.update.saveFail"), { description: humanizeApiError(e, t) });
+                    }
+                  }}
+                  disabled={!appSettings}
+                />
+              </div>
+
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <div className="font-medium text-sm">{t("settings.update.status")}</div>
+                  <div className="text-xs text-muted-foreground space-y-0.5">
+                    <div>{updateStatusText}</div>
+                    {updateServerVersion ? (
+                      <div>{t("settings.update.serverVersion", { version: updateServerVersion })}</div>
+                    ) : null}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={async () => {
+                      setUpdateChecking(true);
+                      try {
+                        const res = await checkUpdate();
+                        setUpdateCheckResult(res);
+                        const st = await getUpdateStatus().catch(() => null);
+                        if (st) setUpdateStatus(st);
+
+                        if (st?.pending_version) {
+                          const pending = st.pending_version;
+                          const latest = res.latest_version;
+                          if (res.update_available && latest && latest !== pending) {
+                            if (res.latest_ignored) {
+                              toast.info(t("settings.update.ignoredToast", { version: latest }));
+                              return;
+                            }
+                            toast.success(t("settings.update.found", { version: latest }));
+                            openUpdatePrompt(latest);
+                            return;
+                          }
+                          reopenUpdateReadyPrompt(st);
+                          return;
+                        }
+
+                        if (!res.update_available) {
+                          toast.success(t("settings.update.uptodate"));
+                          return;
+                        }
+
+                        const latest = res.latest_version ?? "-";
+                        if (res.latest_ignored) {
+                          toast.info(t("settings.update.ignoredToast", { version: latest }));
+                          return;
+                        }
+                        toast.success(t("settings.update.found", { version: latest }));
+                        if (res.latest_version) openUpdatePrompt(res.latest_version);
+                      } catch (e) {
+                        toast.error(t("settings.update.checkFail"), { description: humanizeApiError(e, t) });
+                      } finally {
+                        setUpdateChecking(false);
+                      }
+                    }}
+                    disabled={updateChecking}
+                  >
+                    {t("settings.update.check")}
+                  </Button>
+                </div>
               </div>
             </CardContent>
           </Card>

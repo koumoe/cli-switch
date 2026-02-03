@@ -1,8 +1,10 @@
 use axum::Json;
+use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use serde::{Deserialize, Serialize};
 
+use crate::server::AppState;
 use crate::server::error::ApiError;
 
 #[derive(Debug, Deserialize)]
@@ -34,6 +36,21 @@ pub(in crate::server) async fn open_in_browser(
 
     crate::server::open_in_browser(parsed.as_str())
         .map_err(|e| ApiError::Internal(anyhow::anyhow!(e)))?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+pub(in crate::server) async fn open_data_dir(
+    State(state): State<AppState>,
+) -> Result<impl IntoResponse, ApiError> {
+    let Some(data_dir) = state.db_path.parent() else {
+        return Err(ApiError::Internal(anyhow::anyhow!(
+            "db path has no parent dir"
+        )));
+    };
+
+    std::fs::create_dir_all(data_dir)
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("create data dir failed: {e}")))?;
+    crate::server::open_path(data_dir).map_err(|e| ApiError::Internal(anyhow::anyhow!(e)))?;
     Ok(StatusCode::NO_CONTENT)
 }
 

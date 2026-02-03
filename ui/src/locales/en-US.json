@@ -436,7 +436,7 @@
       "appearance": "Appearance",
       "channel": "Channel",
       "application": "App",
-      "update": "Updates",
+      "update": "CLI",
       "data": "Data",
       "system": "System"
     },
@@ -541,7 +541,7 @@
     },
     "cliProxyConfig": {
       "title": "CLI Proxy Config",
-      "subtitle": "Check whether Claude Code / Codex / Gemini CLI are pointing to CliSwitch, and apply with one click if not",
+      "subtitle": "Check whether Claude Code / Codex / Gemini CLI are pointing to CliSwitch, and apply missing items directly",
       "refresh": "Refresh",
       "loadFail": "Failed to load config status",
       "apply": "Apply",
@@ -596,6 +596,7 @@
       "dbFile": "Database file",
       "dbSize": "Database size",
       "dbSizeFail": "Failed to load database size",
+      "openFail": "Failed to open",
       "openInDevTitle": "In development",
       "openInDevDesc": "Open-folder support will be available in a future version"
     },

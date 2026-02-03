@@ -288,7 +288,6 @@ fn check_codex(urls: &ProxyUrls) -> anyhow::Result<CliToolProxyConfigToolStatus>
     let cfg_path = codex_config_path()?;
     let cfg_display = cfg_path.to_string_lossy().to_string();
 
-    let expected_provider = "cliswitch".to_string();
     let expected_base_url = urls.openai.clone();
 
     let mut checks: Vec<CliToolProxyConfigCheck> = Vec::new();
@@ -315,9 +314,26 @@ fn check_codex(urls: &ProxyUrls) -> anyhow::Result<CliToolProxyConfigToolStatus>
     };
 
     let doc = match content.as_deref() {
-        Some(s) => s
-            .parse::<toml_edit::DocumentMut>()
-            .with_context(|| format!("解析 TOML 失败：{}", cfg_path.display()))?,
+        Some(s) => match s.parse::<toml_edit::DocumentMut>() {
+            Ok(doc) => doc,
+            Err(e) => {
+                checks.push(CliToolProxyConfigCheck {
+                    id: "codex_config_parse".to_string(),
+                    ok: false,
+                    file: cfg_display.clone(),
+                    key: "(file)".to_string(),
+                    expected: "(valid TOML)".to_string(),
+                    current: None,
+                    message: Some(format!("解析 TOML 失败：{e}")),
+                });
+                return Ok(CliToolProxyConfigToolStatus {
+                    id: CliToolId::Codex,
+                    name: "Codex",
+                    ok: false,
+                    checks,
+                });
+            }
+        },
         None => toml_edit::DocumentMut::new(),
     };
 
@@ -325,32 +341,41 @@ fn check_codex(urls: &ProxyUrls) -> anyhow::Result<CliToolProxyConfigToolStatus>
         .get("model_provider")
         .and_then(|v| v.as_str())
         .map(|s| s.to_string());
-    let provider_ok = current_provider.as_deref() == Some(expected_provider.as_str());
+    let provider_ok = current_provider
+        .as_deref()
+        .is_some_and(|v| !v.trim().is_empty());
     checks.push(CliToolProxyConfigCheck {
         id: "codex_model_provider".to_string(),
         ok: provider_ok,
         file: cfg_display.clone(),
         key: "model_provider".to_string(),
-        expected: expected_provider.clone(),
-        current: current_provider,
+        expected: "(non-empty)".to_string(),
+        current: current_provider.clone(),
         message: None,
     });
 
-    let current_base_url = doc
-        .get("model_providers")
-        .and_then(|v| v.get("cliswitch"))
-        .and_then(|v| v.get("base_url"))
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string());
+    let provider_id = current_provider
+        .as_deref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty());
+    let current_base_url = provider_id.and_then(|pid| {
+        doc.get("model_providers")
+            .and_then(|v| v.get(pid))
+            .and_then(|v| v.get("base_url"))
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+    });
     let base_ok = current_base_url
         .as_deref()
         .map(normalize_url)
         .is_some_and(|v| v == normalize_url(&expected_base_url));
     checks.push(CliToolProxyConfigCheck {
-        id: "codex_provider_base_url".to_string(),
+        id: "codex_selected_provider_base_url".to_string(),
         ok: base_ok,
         file: cfg_display,
-        key: "model_providers.cliswitch.base_url".to_string(),
+        key: provider_id
+            .map(|pid| format!("model_providers.{pid}.base_url"))
+            .unwrap_or_else(|| "model_providers.<model_provider>.base_url".to_string()),
         expected: expected_base_url,
         current: current_base_url,
         message: None,
@@ -518,13 +543,18 @@ fn apply_codex(urls: &ProxyUrls) -> anyhow::Result<()> {
         None => toml_edit::DocumentMut::new(),
     };
 
-    doc["model_provider"] = toml_edit::value("cliswitch");
-    doc["model_providers"]["cliswitch"]["name"] = toml_edit::value("CliSwitch");
-    doc["model_providers"]["cliswitch"]["base_url"] = toml_edit::value(urls.openai.clone());
-    doc["model_providers"]["cliswitch"]["wire_api"] = toml_edit::value("chat");
-    doc["model_providers"]["cliswitch"]["requires_openai_auth"] = toml_edit::value(false);
-    doc["model_providers"]["cliswitch"]["experimental_bearer_token"] =
-        toml_edit::value("cliswitch");
+    // Prefer updating the currently selected provider to avoid overriding user setups.
+    // If unset, create a default provider id.
+    let provider_id = doc
+        .get("model_provider")
+        .and_then(|v| v.as_str())
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "cliswitch".to_string());
+
+    doc["model_provider"] = toml_edit::value(provider_id.as_str());
+    doc["model_providers"][provider_id.as_str()]["base_url"] =
+        toml_edit::value(urls.openai.clone());
 
     let mut out = doc.to_string();
     if !out.ends_with('\n') {

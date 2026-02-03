@@ -456,6 +456,10 @@ export function openInBrowser(url: string): Promise<void> {
   return http<void>("POST", "/api/system/open", { url });
 }
 
+export function openDataDir(): Promise<void> {
+  return http<void>("POST", "/api/system/open_data_dir");
+}
+
 export function listRoutes(): Promise<Route[]> {
   return http<Route[]>("GET", "/api/routes");
 }
