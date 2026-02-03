@@ -38,6 +38,8 @@ fn request_endpoint_template(method: &Method, path: &str) -> Option<&'static str
         ("POST", "/api/update/download") => Some("/api/update/download"),
         ("GET", "/api/tools/status") => Some("/api/tools/status"),
         ("POST", "/api/tools/install") => Some("/api/tools/install"),
+        ("GET", "/api/tools/config/status") => Some("/api/tools/config/status"),
+        ("POST", "/api/tools/config/apply") => Some("/api/tools/config/apply"),
         ("GET", "/api/channels") => Some("/api/channels"),
         ("POST", "/api/channels") => Some("/api/channels"),
         ("POST", "/api/channels/reorder") => Some("/api/channels/reorder"),
@@ -102,6 +104,8 @@ fn request_purpose(method: &Method, path: &str) -> &'static str {
         ("POST", "/api/update/download") => "handlers::update_download",
         ("GET", "/api/tools/status") => "handlers::cli_tools_status",
         ("POST", "/api/tools/install") => "handlers::install_cli_tool",
+        ("GET", "/api/tools/config/status") => "handlers::cli_tools_proxy_config_status",
+        ("POST", "/api/tools/config/apply") => "handlers::cli_tools_proxy_config_apply",
         ("GET", "/api/channels") => "handlers::list_channels",
         ("POST", "/api/channels") => "handlers::create_channel",
         ("POST", "/api/channels/reorder") => "handlers::reorder_channels",
@@ -196,6 +200,14 @@ fn build_app(state: AppState) -> Router {
         .route("/api/update/ignore", post(handlers::update_ignore))
         .route("/api/tools/status", get(handlers::cli_tools_status))
         .route("/api/tools/install", post(handlers::install_cli_tool))
+        .route(
+            "/api/tools/config/status",
+            get(handlers::cli_tools_proxy_config_status),
+        )
+        .route(
+            "/api/tools/config/apply",
+            post(handlers::cli_tools_proxy_config_apply),
+        )
         .route(
             "/api/channels",
             get(handlers::list_channels).post(handlers::create_channel),

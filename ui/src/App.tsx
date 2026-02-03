@@ -17,6 +17,12 @@ import { installCliToolWithToast } from "@/lib/cliToolInstaller";
 import { postIpc } from "@/lib/ipc";
 import {
   Button,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  Badge,
   Dialog,
   DialogContent,
   DialogDescription,
@@ -30,7 +36,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui";
 import { toast } from "sonner";
-import { downloadUpdate, getCliToolsStatus, getHealth, getSettings, getUpdateChangelog, ignoreUpdate, pricingStatus, pricingSync, updateSettings, type ChangelogSection, type CliToolId, type CliToolsStatus } from "./api";
+import { applyCliToolsProxyConfig, downloadUpdate, getCliToolsProxyConfigStatus, getCliToolsStatus, getHealth, getSettings, getUpdateChangelog, ignoreUpdate, pricingStatus, pricingSync, updateSettings, type ChangelogSection, type CliToolId, type CliToolProxyConfigStatus, type CliToolsStatus } from "./api";
 import { logger, setLogLevel } from "@/lib/logger";
 import type { CliswitchUpdateStatusEvent } from "@/lib/cliswitchEvents";
 import { isUpdateReadyShown, markUpdateReadyShown } from "@/lib/updateReadyPrompt";
@@ -191,6 +197,8 @@ export default function App() {
   const [cliToolsOnboardingOpen, setCliToolsOnboardingOpen] = useState(false);
   const [cliToolsOnboardingStatus, setCliToolsOnboardingStatus] = useState<CliToolsStatus | null>(null);
   const [cliToolsOnboardingBusy, setCliToolsOnboardingBusy] = useState(false);
+  const [cliToolsProxyConfigStatus, setCliToolsProxyConfigStatus] = useState<CliToolProxyConfigStatus | null>(null);
+  const [cliToolsProxyConfigApplying, setCliToolsProxyConfigApplying] = useState(false);
   const [cliToolOnboardingBusy, setCliToolOnboardingBusy] = useState<Record<CliToolId, boolean>>({
     gemini: false,
     claude: false,
@@ -367,6 +375,21 @@ export default function App() {
       .catch(() => {
         // ignore
       });
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    getCliToolsProxyConfigStatus()
+      .then((st) => {
+        if (cancelled) return;
+        setCliToolsProxyConfigStatus(st);
+      })
+      .catch(() => {
+        // ignore
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -707,6 +730,59 @@ export default function App() {
       <div className="flex-1 min-w-0 flex flex-col">
         <main className="flex-1 overflow-auto bg-muted/30">
           <div className="mx-auto w-full max-w-7xl p-5 h-full min-h-0 flex flex-col">
+            {cliToolsProxyConfigStatus?.tools?.some((t0) => !t0.ok) ? (
+              <Card className="mb-4">
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center gap-2">
+                    <Zap className="h-4 w-4" />
+                    {t("settings.cliProxyConfig.title")}
+                  </CardTitle>
+                  <CardDescription>
+                    {t("settings.cliProxyConfig.subtitle")}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="flex items-center justify-between gap-3">
+                  <div className="text-sm text-muted-foreground">
+                    {cliToolsProxyConfigStatus.tools
+                      .filter((x) => !x.ok)
+                      .map((x) => (
+                        <Badge key={x.id} variant="warning" className="mr-2">
+                          {x.name}
+                        </Badge>
+                      ))}
+                  </div>
+                  <Button
+                    onClick={async () => {
+                      setCliToolsProxyConfigApplying(true);
+                      try {
+                        const res = await applyCliToolsProxyConfig();
+                        setCliToolsProxyConfigStatus(res.status);
+                        if (res.ok) {
+                          toast.success(t("settings.cliProxyConfig.applied"));
+                        } else {
+                          const failed = res.applied.filter((x) => !x.ok).map((x) => x.id).join(", ");
+                          toast.warning(t("settings.cliProxyConfig.appliedPartial"), {
+                            description: failed ? t("settings.cliProxyConfig.partialDesc", { tools: failed }) : undefined,
+                          });
+                        }
+                      } catch (e) {
+                        toast.error(t("settings.cliProxyConfig.applyFail"), { description: humanizeApiError(e, t) });
+                      } finally {
+                        setCliToolsProxyConfigApplying(false);
+                        // Best-effort refresh
+                        getCliToolsProxyConfigStatus().then(setCliToolsProxyConfigStatus).catch(() => {});
+                      }
+                    }}
+                    disabled={cliToolsProxyConfigApplying}
+                    className="gap-2"
+                  >
+                    <Zap className="h-4 w-4" />
+                    {cliToolsProxyConfigApplying ? t("common.loading") : t("settings.cliProxyConfig.apply")}
+                  </Button>
+                </CardContent>
+              </Card>
+            ) : null}
+
             {route === "overview" ? (
               <OverviewPage />
             ) : route === "channels" ? (

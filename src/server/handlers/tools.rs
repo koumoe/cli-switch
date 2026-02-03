@@ -300,3 +300,54 @@ pub(in crate::server) async fn install_cli_tool(
         ))),
     }
 }
+
+pub(in crate::server) async fn cli_tools_proxy_config_status(
+    State(state): State<AppState>,
+) -> Result<impl IntoResponse, ApiError> {
+    let listen_addr = state.listen_addr;
+    let res =
+        tokio::task::spawn_blocking(move || crate::cli_tool_proxy_config::get_status(listen_addr))
+            .await;
+
+    match res {
+        Ok(Ok(v)) => Ok(Json(v)),
+        Ok(Err(e)) => Err(ApiError::Internal(e)),
+        Err(e) => Err(ApiError::Internal(anyhow::anyhow!(
+            "cli tools proxy config status task join failed: {e}"
+        ))),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct ApplyCliToolsProxyConfigRequest {
+    /// Optional: apply only selected tools. Defaults to all supported CLI tools.
+    pub(crate) tools: Option<Vec<CliToolId>>,
+}
+
+pub(in crate::server) async fn cli_tools_proxy_config_apply(
+    State(state): State<AppState>,
+    Json(input): Json<ApplyCliToolsProxyConfigRequest>,
+) -> Result<impl IntoResponse, ApiError> {
+    let listen_addr = state.listen_addr;
+    let tools = input
+        .tools
+        .unwrap_or_else(|| vec![CliToolId::Claude, CliToolId::Codex, CliToolId::Gemini]);
+
+    // Avoid holding references across the blocking boundary.
+    let tools2 = tools.clone();
+    let res = tokio::task::spawn_blocking(move || {
+        crate::cli_tool_proxy_config::apply(listen_addr, &tools2)
+    })
+    .await;
+
+    match res {
+        Ok(Ok(v)) => Ok(Json(v)),
+        Ok(Err(e)) => Err(ApiError::bad_request(
+            "tools_proxy_config_apply_failed",
+            e.to_string(),
+        )),
+        Err(e) => Err(ApiError::Internal(anyhow::anyhow!(
+            "cli tools proxy config apply task join failed: {e}"
+        ))),
+    }
+}

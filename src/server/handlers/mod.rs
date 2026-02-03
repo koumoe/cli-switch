@@ -26,6 +26,7 @@ pub(super) use route::{
 pub(super) use settings::{get_settings, update_settings};
 pub(super) use stats::{stats_channels, stats_summary, stats_trend};
 pub(super) use system::{open_in_browser, pick_folder};
+pub(super) use tools::{cli_tools_proxy_config_apply, cli_tools_proxy_config_status};
 pub(super) use tools::{cli_tools_status, install_cli_tool};
 pub(super) use update::{
     update_changelog, update_check, update_download, update_ignore, update_status,

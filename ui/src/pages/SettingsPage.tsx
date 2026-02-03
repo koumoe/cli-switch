@@ -41,7 +41,7 @@ import { setLogLevel } from "@/lib/logger";
 import { UpdatePromptDialog } from "@/components/UpdatePromptDialog";
 import { postIpc } from "@/lib/ipc";
 import { formatBytes, formatDateTime } from "../lib";
-import { checkUpdate, clearLogs, clearRecords, downloadUpdate, getCliToolsStatus, getDbSize, getHealth, getLogsSize, getSettings, getUpdateChangelog, getUpdateStatus, ignoreUpdate, pricingStatus, pricingSync, updateSettings, type AppSettings, type AutoStartLaunchMode, type CloseBehavior, type DbSize, type Health, type LogsSize, type PricingStatus, type RecordsClearMode, type UpdateCheck, type UpdateStatus, type ChangelogSection, type CliToolId, type CliToolsStatus, type CliToolStatus } from "../api";
+import { applyCliToolsProxyConfig, checkUpdate, clearLogs, clearRecords, downloadUpdate, getCliToolsProxyConfigStatus, getCliToolsStatus, getDbSize, getHealth, getLogsSize, getSettings, getUpdateChangelog, getUpdateStatus, ignoreUpdate, pricingStatus, pricingSync, updateSettings, type AppSettings, type AutoStartLaunchMode, type CloseBehavior, type DbSize, type Health, type LogsSize, type PricingStatus, type RecordsClearMode, type UpdateCheck, type UpdateStatus, type ChangelogSection, type CliToolId, type CliToolsStatus, type CliToolStatus, type CliToolProxyConfigStatus, type CliToolProxyConfigToolStatus } from "../api";
 import type { CliswitchUpdateStatusEvent } from "@/lib/cliswitchEvents";
 import { clearUpdateReadyShown } from "@/lib/updateReadyPrompt";
 
@@ -70,6 +70,9 @@ export function SettingsPage() {
   const [updateIgnoring, setUpdateIgnoring] = useState(false);
   const [cliToolsStatus, setCliToolsStatus] = useState<CliToolsStatus | null>(null);
   const [cliToolsLoading, setCliToolsLoading] = useState(false);
+  const [cliToolsProxyConfig, setCliToolsProxyConfig] = useState<CliToolProxyConfigStatus | null>(null);
+  const [cliToolsProxyConfigLoading, setCliToolsProxyConfigLoading] = useState(false);
+  const [cliToolsProxyConfigApplying, setCliToolsProxyConfigApplying] = useState(false);
   const [cliToolBusy, setCliToolBusy] = useState<Record<CliToolId, boolean>>({
     gemini: false,
     claude: false,
@@ -138,6 +141,18 @@ export function SettingsPage() {
     }
   }
 
+  async function refreshCliToolsProxyConfigStatus() {
+    setCliToolsProxyConfigLoading(true);
+    try {
+      const next = await getCliToolsProxyConfigStatus();
+      setCliToolsProxyConfig(next);
+    } catch (e) {
+      toast.error(t("settings.cliProxyConfig.loadFail"), { description: humanizeApiError(e, t) });
+    } finally {
+      setCliToolsProxyConfigLoading(false);
+    }
+  }
+
   useEffect(() => {
     getHealth()
       .then(setHealth)
@@ -162,6 +177,7 @@ export function SettingsPage() {
     void refreshDbSize();
     void refreshLogsSize();
     void refreshCliToolsStatus();
+    void refreshCliToolsProxyConfigStatus();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -936,6 +952,103 @@ export function SettingsPage() {
                   </div>
                 );
               })}
+            </CardContent>
+          </Card>
+
+          {/* CLI 代理配置（Claude / Codex / Gemini -> CliSwitch） */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-start justify-between gap-3">
+                <div className="space-y-1">
+                  <CardTitle className="flex items-center gap-2">
+                    <Power className="h-4 w-4" />
+                    {t("settings.cliProxyConfig.title")}
+                  </CardTitle>
+                  <CardDescription>{t("settings.cliProxyConfig.subtitle")}</CardDescription>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={refreshCliToolsProxyConfigStatus}
+                    disabled={cliToolsProxyConfigLoading}
+                    className="gap-2"
+                  >
+                    <RefreshCw className={`h-4 w-4 ${cliToolsProxyConfigLoading ? "animate-spin" : ""}`} />
+                    {t("settings.cliProxyConfig.refresh")}
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={async () => {
+                      setCliToolsProxyConfigApplying(true);
+                      try {
+                        const res = await applyCliToolsProxyConfig();
+                        setCliToolsProxyConfig(res.status);
+                        if (res.ok) {
+                          toast.success(t("settings.cliProxyConfig.applied"));
+                        } else {
+                          const failed = res.applied.filter((x) => !x.ok).map((x) => x.id).join(", ");
+                          toast.warning(t("settings.cliProxyConfig.appliedPartial"), {
+                            description: failed ? t("settings.cliProxyConfig.partialDesc", { tools: failed }) : undefined,
+                          });
+                        }
+                      } catch (e) {
+                        toast.error(t("settings.cliProxyConfig.applyFail"), { description: humanizeApiError(e, t) });
+                      } finally {
+                        setCliToolsProxyConfigApplying(false);
+                        void refreshCliToolsProxyConfigStatus();
+                      }
+                    }}
+                    disabled={cliToolsProxyConfigApplying}
+                    className="gap-2"
+                  >
+                    <Power className="h-4 w-4" />
+                    {cliToolsProxyConfigApplying ? t("common.loading") : t("settings.cliProxyConfig.apply")}
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {!cliToolsProxyConfig ? (
+                <div className="text-sm text-muted-foreground">
+                  {cliToolsProxyConfigLoading ? t("common.loading") : "-"}
+                </div>
+              ) : null}
+
+              {(cliToolsProxyConfig?.tools ?? []).map((tool: CliToolProxyConfigToolStatus) => (
+                <div key={tool.id} className="border rounded-lg p-3 space-y-2 bg-background">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="font-medium text-sm">{tool.name}</div>
+                    <Badge variant={tool.ok ? "success" : "warning"}>
+                      {tool.ok ? t("settings.cliProxyConfig.ok") : t("settings.cliProxyConfig.needsFix")}
+                    </Badge>
+                  </div>
+
+                  <div className="space-y-1">
+                    {tool.checks.map((c) => (
+                      <div key={c.id} className="text-xs text-muted-foreground">
+                        <span className={c.ok ? "text-success" : "text-warning"}>
+                          {c.ok ? "✓" : "!"}
+                        </span>
+                        <span className="ml-2">
+                          <span className="font-mono">{c.key}</span>
+                          {" · "}
+                          {t("settings.cliProxyConfig.current")}{" "}
+                          <span className="font-mono">{c.current ?? "-"}</span>
+                          {" · "}
+                          {t("settings.cliProxyConfig.expected")}{" "}
+                          <span className="font-mono">{c.expected}</span>
+                        </span>
+                        {c.message ? (
+                          <div className="text-[11px] text-destructive mt-1 whitespace-pre-wrap break-all">
+                            {c.message}
+                          </div>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
             </CardContent>
           </Card>
 
