@@ -553,7 +553,8 @@ fn apply_codex(urls: &ProxyUrls) -> anyhow::Result<()> {
         .unwrap_or_else(|| "cliswitch".to_string());
 
     doc["model_provider"] = toml_edit::value(provider_id.as_str());
-    doc["model_providers"][provider_id.as_str()]["base_url"] = toml_edit::value(urls.openai.clone());
+    doc["model_providers"][provider_id.as_str()]["base_url"] =
+        toml_edit::value(urls.openai.clone());
 
     let mut out = doc.to_string();
     if !out.ends_with('\n') {

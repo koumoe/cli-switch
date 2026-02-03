@@ -440,12 +440,7 @@ fn open_path(path: &std::path::Path) -> std::io::Result<()> {
     #[cfg(target_os = "windows")]
     {
         let mut cmd = std::process::Command::new("cmd");
-        cmd.args([
-            "/C",
-            "start",
-            "",
-            &path.to_string_lossy().to_string(),
-        ]);
+        cmd.args(["/C", "start", "", &path.to_string_lossy().to_string()]);
         crate::process::command_silent(&mut cmd);
         cmd.spawn()?;
         Ok(())
