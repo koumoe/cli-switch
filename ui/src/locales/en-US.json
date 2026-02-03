@@ -550,7 +550,7 @@
       "partialDesc": "Failed tools: {{tools}}",
       "applyFail": "Failed to write config",
       "ok": "Configured",
-      "needsFix": "Needs config",
+      "needsFix": "Not configured",
       "current": "Current",
       "expected": "Expected"
     },

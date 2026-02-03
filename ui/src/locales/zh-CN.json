@@ -550,7 +550,7 @@
       "partialDesc": "失败工具：{{tools}}",
       "applyFail": "写入配置失败",
       "ok": "已配置",
-      "needsFix": "需配置",
+      "needsFix": "未配置",
       "current": "当前",
       "expected": "期望"
     },
