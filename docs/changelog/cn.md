@@ -1,3 +1,7 @@
+## [0.33.3](https://github.com/koumoe/cli-switch/compare/v0.33.2...v0.33.3) (2026-02-04)
+
+### 修复
+* 改进流错误处理 (#117) ([#117](https://github.com/koumoe/cli-switch/issues/117)) ([5275d70](https://github.com/koumoe/cli-switch/commit/5275d70ce6d8aa3443fbdaace4a9fa2688c1395f))
 ## [0.33.2](https://github.com/koumoe/cli-switch/compare/v0.33.1...v0.33.2) (2026-02-03)
 
 ### 修复
