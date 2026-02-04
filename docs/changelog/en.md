@@ -1,3 +1,8 @@
+## [0.34.0](https://github.com/koumoe/cli-switch/compare/v0.33.3...v0.34.0) (2026-02-04)
+
+### Features
+
+* mock Anthropic count_tokens (#118) ([#118](https://github.com/koumoe/cli-switch/issues/118)) ([b6ace9e](https://github.com/koumoe/cli-switch/commit/b6ace9e35664fdaa294bad339debac38b3e656bc))
 ## [0.33.3](https://github.com/koumoe/cli-switch/compare/v0.33.2...v0.33.3) (2026-02-04)
 
 ### Bug Fixes
