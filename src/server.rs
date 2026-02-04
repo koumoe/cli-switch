@@ -167,6 +167,11 @@ fn build_app(state: AppState) -> Router {
             let path = uri.path();
             let endpoint = request_endpoint_template(method, path).unwrap_or(path);
             let purpose = request_purpose(method, path);
+            let user_agent = request
+                .headers()
+                .get(http::header::USER_AGENT)
+                .and_then(|v| v.to_str().ok())
+                .unwrap_or("-");
 
             tracing::span!(
                 tracing::Level::DEBUG,
@@ -175,7 +180,8 @@ fn build_app(state: AppState) -> Router {
                 uri = %uri,
                 path = %path,
                 endpoint = endpoint,
-                purpose = purpose
+                purpose = purpose,
+                user_agent = %user_agent
             )
         })
         .on_response(DefaultOnResponse::new().level(tracing::Level::DEBUG))

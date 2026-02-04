@@ -1,5 +1,5 @@
 use axum::body::{Body, to_bytes};
-use axum::http::{HeaderMap, HeaderName, Request, Response};
+use axum::http::{HeaderMap, HeaderName, HeaderValue, Request, Response};
 use bytes::{Bytes, BytesMut};
 use futures_util::StreamExt as _;
 use futures_util::TryStreamExt as _;
@@ -171,6 +171,12 @@ pub async fn forward_with_config(
         };
 
         let mut out_headers = filtered_headers(&parts.headers);
+        // Prefer identity encoding to reduce decode errors on streaming responses when upstream
+        // closes the connection abruptly.
+        out_headers.insert(
+            axum::http::header::ACCEPT_ENCODING,
+            HeaderValue::from_static("identity"),
+        );
         if let Err(e) = apply_auth(&channel, protocol, &mut url, &mut out_headers) {
             if !is_count_tokens {
                 attempt_ctx.fail(&e, "proxy attempt failed (apply auth)");
