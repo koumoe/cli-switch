@@ -88,6 +88,7 @@ export function SettingsPage() {
   const [autoStartSaving, setAutoStartSaving] = useState(false);
   const [autoStartLaunchSaving, setAutoStartLaunchSaving] = useState(false);
   const [serverLanSaving, setServerLanSaving] = useState(false);
+  const [countTokensMockSaving, setCountTokensMockSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [logSaving, setLogSaving] = useState(false);
   const [logRetentionDraft, setLogRetentionDraft] = useState<string>("");
@@ -1510,6 +1511,47 @@ export function SettingsPage() {
                     }
                   }}
                   disabled={!appSettings || serverLanSaving}
+                />
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* 兼容性 */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Info className="h-4 w-4" />
+                {t("settings.compatibility.title")}
+              </CardTitle>
+              <CardDescription>{t("settings.compatibility.subtitle")}</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <div className="font-medium text-sm">{t("settings.compatibility.mockCountTokens")}</div>
+                  <div className="text-xs text-muted-foreground">
+                    {t("settings.compatibility.mockCountTokensHint")}
+                  </div>
+                </div>
+                <Switch
+                  checked={appSettings?.anthropic_count_tokens_mock_enabled ?? false}
+                  onCheckedChange={async (v) => {
+                    if (!appSettings) return;
+                    const prev = appSettings.anthropic_count_tokens_mock_enabled;
+                    setAppSettings({ ...appSettings, anthropic_count_tokens_mock_enabled: v });
+                    setCountTokensMockSaving(true);
+                    try {
+                      const next = await updateSettings({ anthropic_count_tokens_mock_enabled: v });
+                      setAppSettings(next);
+                      toast.success(t("settings.compatibility.saved"));
+                    } catch (e) {
+                      setAppSettings({ ...appSettings, anthropic_count_tokens_mock_enabled: prev });
+                      toast.error(t("settings.compatibility.saveFail"), { description: humanizeApiError(e, t) });
+                    } finally {
+                      setCountTokensMockSaving(false);
+                    }
+                  }}
+                  disabled={!appSettings || countTokensMockSaving}
                 />
               </div>
             </CardContent>

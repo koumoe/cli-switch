@@ -1,5 +1,5 @@
 use axum::body::{Body, to_bytes};
-use axum::http::{HeaderMap, HeaderName, HeaderValue, Request, Response};
+use axum::http::{HeaderMap, HeaderName, HeaderValue, Request, Response, StatusCode};
 use bytes::{Bytes, BytesMut};
 use futures_util::StreamExt as _;
 use futures_util::TryStreamExt as _;
@@ -112,14 +112,26 @@ pub async fn forward_with_config(
         channels: all_channels,
         channels_cache,
     } = cfg;
-    let now_ms = storage::now_ms();
-    let channels =
-        list_available_channels(all_channels.as_ref(), protocol, now_ms, settings.as_ref())?;
-    let total_channels = channels.len();
 
     let (parts, body) = req.into_parts();
     let is_count_tokens = protocol == Protocol::Anthropic
         && parts.uri.path().trim_end_matches('/') == "/v1/messages/count_tokens";
+
+    if is_count_tokens && settings.anthropic_count_tokens_mock_enabled {
+        // Some clients (e.g. Claude Code) use this endpoint heavily. When upstream providers
+        // don't support it (403/404) or are unreachable, they may fall back to other models.
+        // This is a best-effort local simulation; it is NOT an official Anthropic tokenizer.
+        let body_bytes = to_bytes(body, limits::MAX_INBOUND_BODY_BYTES)
+            .await
+            .map_err(|e| ProxyError::ReadBody(e.to_string()))?;
+        let input_tokens = mock_anthropic_count_tokens_input_tokens(&body_bytes);
+        return Ok(build_anthropic_count_tokens_response(input_tokens));
+    }
+
+    let now_ms = storage::now_ms();
+    let channels =
+        list_available_channels(all_channels.as_ref(), protocol, now_ms, settings.as_ref())?;
+    let total_channels = channels.len();
     let body_bytes = to_bytes(body, limits::MAX_INBOUND_BODY_BYTES)
         .await
         .map_err(|e| ProxyError::ReadBody(e.to_string()))?;
@@ -309,6 +321,43 @@ pub async fn forward_with_config(
     }
 
     Err(last_err.unwrap_or_else(|| ProxyError::Upstream("all channels failed".to_string())))
+}
+
+fn build_anthropic_count_tokens_response(input_tokens: i64) -> Response<Body> {
+    let payload = serde_json::json!({ "input_tokens": input_tokens });
+    let mut resp = Response::new(Body::from(payload.to_string()));
+    *resp.status_mut() = StatusCode::OK;
+    resp.headers_mut().insert(
+        axum::http::header::CONTENT_TYPE,
+        HeaderValue::from_static("application/json"),
+    );
+    resp
+}
+
+fn mock_anthropic_count_tokens_input_tokens(body: &[u8]) -> i64 {
+    // Make the estimate stable across different JSON formatting by normalizing it.
+    // serde_json::Map is sorted by key by default (no preserve_order), so serialization is stable.
+    if let Ok(v) = serde_json::from_slice::<serde_json::Value>(body)
+        && let Ok(s) = serde_json::to_string(&v)
+    {
+        return estimate_tokens_from_string(&s);
+    }
+
+    // Best-effort fallback when request isn't valid JSON.
+    match std::str::from_utf8(body) {
+        Ok(s) => estimate_tokens_from_string(s),
+        Err(_) => body.len().div_ceil(4) as i64,
+    }
+}
+
+fn estimate_tokens_from_string(s: &str) -> i64 {
+    let ascii_bytes = s.as_bytes().iter().filter(|b| b.is_ascii()).count();
+    let non_ascii_chars = s.chars().filter(|c| !c.is_ascii()).count();
+
+    // Heuristic:
+    // - ASCII: ~4 bytes per token on average
+    // - Non-ASCII: count each Unicode scalar value as 1 token (conservative for CJK)
+    (ascii_bytes.div_ceil(4) + non_ascii_chars) as i64
 }
 
 fn list_available_channels(
