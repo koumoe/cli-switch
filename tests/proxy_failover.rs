@@ -1105,3 +1105,123 @@ async fn anthropic_count_tokens_does_not_auto_disable() {
 
     assert_no_usage_events(db_path.clone()).await;
 }
+
+#[tokio::test]
+async fn anthropic_count_tokens_mock_enabled_returns_local_estimate_without_channels() {
+    let db_path = temp_db_path();
+    storage::init_db(&db_path).expect("init_db");
+    storage::update_app_settings(
+        db_path.clone(),
+        storage::AppSettingsPatch {
+            anthropic_count_tokens_mock_enabled: Some(true),
+            ..Default::default()
+        },
+    )
+    .await
+    .expect("update settings");
+
+    let client = reqwest::Client::builder().build().expect("client");
+    let body = r#"{"model":"claude-test","messages":[{"role":"user","content":"foo"}],"tools":[{"name":"mcp__chrome-devtools__performance_analyze_insight","description":"Provides more detailed information on a specific Performance Insight.","input_schema":{"type":"object","properties":{"insightSetId":{"type":"string"},"insightName":{"type":"string"}},"required":["insightSetId","insightName"],"additionalProperties":false}}]}"#;
+    let req = Request::builder()
+        .method("POST")
+        .uri("/v1/messages/count_tokens?beta=true")
+        .header(axum::http::header::CONTENT_TYPE, "application/json")
+        .body(Body::from(body))
+        .expect("req");
+
+    let resp = proxy::forward(
+        &client,
+        db_path.clone(),
+        storage::Protocol::Anthropic,
+        "/v1",
+        req,
+    )
+    .await
+    .expect("forward");
+
+    assert_eq!(resp.status(), StatusCode::OK);
+    let bytes = to_bytes(resp.into_body(), 1024 * 1024)
+        .await
+        .expect("read body");
+    let v: serde_json::Value = serde_json::from_slice(&bytes).expect("parse resp json");
+    let got = v
+        .get("input_tokens")
+        .and_then(|n| n.as_i64())
+        .expect("input_tokens missing");
+
+    let req_v: serde_json::Value = serde_json::from_str(body).expect("parse req json");
+    let canonical = serde_json::to_string(&req_v).expect("canonical json");
+    let ascii_bytes = canonical.as_bytes().iter().filter(|b| b.is_ascii()).count();
+    let non_ascii_chars = canonical.chars().filter(|c| !c.is_ascii()).count();
+    let expected = (ascii_bytes.div_ceil(4) + non_ascii_chars) as i64;
+    assert_eq!(got, expected);
+
+    assert_no_usage_events(db_path.clone()).await;
+}
+
+#[tokio::test]
+async fn anthropic_count_tokens_mock_enabled_does_not_hit_upstream() {
+    let (base, calls) = spawn_upstream_counted(StatusCode::OK, r#"{"input_tokens":999}"#).await;
+
+    let db_path = temp_db_path();
+    storage::init_db(&db_path).expect("init_db");
+    storage::update_app_settings(
+        db_path.clone(),
+        storage::AppSettingsPatch {
+            anthropic_count_tokens_mock_enabled: Some(true),
+            ..Default::default()
+        },
+    )
+    .await
+    .expect("update settings");
+
+    storage::create_channel(
+        db_path.clone(),
+        storage::CreateChannel {
+            name: "c1".to_string(),
+            protocol: storage::Protocol::Anthropic,
+            base_url: format!("{base}/v1"),
+            auth_type: None,
+            auth_ref: "t1".to_string(),
+            checkin_url: None,
+            priority: 10,
+            recharge_currency: None,
+            real_multiplier: None,
+            enabled: true,
+        },
+    )
+    .await
+    .expect("create channel");
+
+    let client = reqwest::Client::builder().build().expect("client");
+    let req = Request::builder()
+        .method("POST")
+        .uri("/v1/messages/count_tokens?beta=true")
+        .header(axum::http::header::CONTENT_TYPE, "application/json")
+        .body(Body::from(
+            r#"{"model":"claude-test","messages":[{"role":"user","content":"hi"}]}"#,
+        ))
+        .expect("req");
+
+    let resp = proxy::forward(
+        &client,
+        db_path.clone(),
+        storage::Protocol::Anthropic,
+        "/v1",
+        req,
+    )
+    .await
+    .expect("forward");
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    // If we still hit upstream, we'd get {"input_tokens":999} and calls would be 1.
+    let bytes = to_bytes(resp.into_body(), 1024 * 1024)
+        .await
+        .expect("read body");
+    assert_ne!(
+        std::str::from_utf8(&bytes).unwrap(),
+        r#"{"input_tokens":999}"#
+    );
+    assert_eq!(calls.load(Ordering::Relaxed), 0);
+    assert_no_usage_events(db_path.clone()).await;
+}

@@ -32,6 +32,7 @@ pub(in crate::server) struct UpdateSettingsInput {
     auto_disable_window_minutes: Option<i64>,
     auto_disable_failure_times: Option<i64>,
     auto_disable_disable_minutes: Option<i64>,
+    anthropic_count_tokens_mock_enabled: Option<bool>,
     log_level: Option<logging::LogLevel>,
     log_retention_days: Option<i64>,
 }
@@ -90,6 +91,10 @@ pub(in crate::server) async fn update_settings(
         (
             "auto_disable_disable_minutes",
             input.auto_disable_disable_minutes.is_some(),
+        ),
+        (
+            "anthropic_count_tokens_mock_enabled",
+            input.anthropic_count_tokens_mock_enabled.is_some(),
         ),
         ("log_level", input.log_level.is_some()),
         ("log_retention_days", input.log_retention_days.is_some()),
@@ -178,6 +183,7 @@ pub(in crate::server) async fn update_settings(
             auto_disable_window_minutes: input.auto_disable_window_minutes,
             auto_disable_failure_times: input.auto_disable_failure_times,
             auto_disable_disable_minutes: input.auto_disable_disable_minutes,
+            anthropic_count_tokens_mock_enabled: input.anthropic_count_tokens_mock_enabled,
             log_level: input.log_level,
             log_retention_days: input.log_retention_days,
             ..Default::default()

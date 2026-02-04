@@ -30,6 +30,7 @@ export type AppSettings = {
   auto_disable_window_minutes: number;
   auto_disable_failure_times: number;
   auto_disable_disable_minutes: number;
+  anthropic_count_tokens_mock_enabled: boolean;
   log_level: LogLevel;
   log_retention_days: number;
 };

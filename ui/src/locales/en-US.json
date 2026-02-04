@@ -680,6 +680,14 @@
       "saved": "Saved",
       "saveFail": "Save failed"
     },
+    "compatibility": {
+      "title": "Compatibility",
+      "subtitle": "Special endpoints for client compatibility",
+      "mockCountTokens": "Mock Anthropic count_tokens",
+      "mockCountTokensHint": "Intercept /v1/messages/count_tokens and estimate input_tokens locally",
+      "saved": "Saved",
+      "saveFail": "Save failed"
+    },
     "about": {
       "title": "About",
       "subtitle": "App version and system info",

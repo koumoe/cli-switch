@@ -680,6 +680,14 @@
       "saved": "已保存",
       "saveFail": "保存失败"
     },
+    "compatibility": {
+      "title": "兼容性",
+      "subtitle": "兼容不同客户端的特殊接口",
+      "mockCountTokens": "模拟 Anthropic count_tokens",
+      "mockCountTokensHint": "拦截 /v1/messages/count_tokens 并在本地估算 input_tokens",
+      "saved": "已保存",
+      "saveFail": "保存失败"
+    },
     "about": {
       "title": "关于",
       "subtitle": "应用版本和系统信息",
