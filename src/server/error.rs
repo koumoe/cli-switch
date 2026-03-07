@@ -18,6 +18,8 @@ pub(crate) enum ApiError {
     #[error("{message}")]
     NotFound { code: &'static str, message: String },
     #[error("{message}")]
+    Conflict { code: &'static str, message: String },
+    #[error("{message}")]
     BadGateway { code: &'static str, message: String },
     #[error("{message}")]
     Unavailable { code: &'static str, message: String },
@@ -35,6 +37,13 @@ impl ApiError {
 
     pub(crate) fn not_found(code: &'static str, message: impl Into<String>) -> Self {
         ApiError::NotFound {
+            code,
+            message: message.into(),
+        }
+    }
+
+    pub(crate) fn conflict(code: &'static str, message: impl Into<String>) -> Self {
+        ApiError::Conflict {
             code,
             message: message.into(),
         }
@@ -65,6 +74,9 @@ impl IntoResponse for ApiError {
             ),
             ApiError::NotFound { code, message } => {
                 (StatusCode::NOT_FOUND, (*code).to_string(), message.clone())
+            }
+            ApiError::Conflict { code, message } => {
+                (StatusCode::CONFLICT, (*code).to_string(), message.clone())
             }
             ApiError::BadGateway { code, message } => (
                 StatusCode::BAD_GATEWAY,

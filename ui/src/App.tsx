@@ -4,6 +4,7 @@ import {
   Radio,
   Activity,
   ScrollText,
+  FileText,
   Settings,
   Zap,
   PanelLeftClose,
@@ -45,13 +46,15 @@ import { OverviewPage } from "./pages/OverviewPage";
 import { ChannelsPage } from "./pages/ChannelsPage";
 import { MonitorPage } from "./pages/MonitorPage";
 import { LogsPage } from "./pages/LogsPage";
+import { PromptsPage } from "./pages/PromptsPage";
 import { SettingsPage } from "./pages/SettingsPage";
 
-type AppRoute = "overview" | "channels" | "monitor" | "logs" | "settings";
+type AppRoute = "overview" | "channels" | "prompts" | "monitor" | "logs" | "settings";
 
 const NAV_ITEMS: { route: AppRoute; labelKey: string; icon: React.ElementType }[] = [
   { route: "overview", labelKey: "nav.overview", icon: LayoutGrid },
   { route: "channels", labelKey: "nav.channels", icon: Radio },
+  { route: "prompts", labelKey: "nav.prompts", icon: FileText },
   { route: "monitor", labelKey: "nav.monitor", icon: Activity },
   { route: "logs", labelKey: "nav.logs", icon: ScrollText },
   { route: "settings", labelKey: "nav.settings", icon: Settings },
@@ -64,6 +67,7 @@ const CLI_TOOLS_ONBOARDING_SHOWN_KEY = "cliswitch-cli-tools-onboarding-shown";
 function routeFromPath(pathname: string): AppRoute {
   if (pathname === "/") return "overview";
   if (pathname.startsWith("/channels")) return "channels";
+  if (pathname.startsWith("/prompts")) return "prompts";
   if (pathname.startsWith("/monitor")) return "monitor";
   if (pathname.startsWith("/logs")) return "logs";
   if (pathname.startsWith("/settings")) return "settings";
@@ -716,6 +720,8 @@ export default function App() {
               <OverviewPage />
             ) : route === "channels" ? (
               <ChannelsPage />
+            ) : route === "prompts" ? (
+              <PromptsPage />
             ) : route === "monitor" ? (
               <MonitorPage />
             ) : route === "logs" ? (

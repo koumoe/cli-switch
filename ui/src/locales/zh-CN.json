@@ -11,7 +11,6 @@
     "proxy_read_body_failed": "读取请求体失败",
     "proxy_upstream_failed": "上游请求失败",
     "tools_proxy_config_apply_failed": "写入配置失败",
-
     "settings_pricing_auto_update_interval_hours_out_of_range": "自动同步间隔必须在 1~8760 小时之间",
     "settings_auto_disable_window_minutes_out_of_range": "自动禁用窗口分钟数必须 >= 1",
     "settings_auto_disable_failure_times_out_of_range": "自动禁用失败次数必须 >= 1",
@@ -19,16 +18,13 @@
     "settings_log_retention_days_out_of_range": "日志保留天数必须在 1~3650 之间",
     "settings_autostart_set_failed": "设置开机自启动失败",
     "settings_autostart_args_update_failed": "更新开机自启动参数失败",
-
     "stats_range_invalid": "统计范围参数无效",
     "stats_trend_range_unsupported": "趋势统计仅支持 range=month",
-
     "pricing_metadata_request_failed": "获取价格数据失败",
     "pricing_metadata_read_failed": "读取价格数据响应失败",
     "pricing_metadata_status_not_success": "价格数据返回非成功状态",
     "pricing_metadata_json_parse_failed": "解析价格数据失败",
     "pricing_metadata_json_root_not_object": "价格数据格式错误",
-
     "usage_query_param_invalid": "查询参数无效",
     "usage_start_ms_invalid": "start_ms 参数无效",
     "usage_end_ms_invalid": "end_ms 参数无效",
@@ -36,11 +32,9 @@
     "usage_offset_invalid": "offset 参数无效",
     "usage_success_invalid": "success 参数无效",
     "usage_protocol_invalid": "protocol 参数无效",
-
     "system_url_required": "URL 不能为空",
     "system_url_invalid": "URL 无效",
     "system_url_scheme_not_supported": "仅支持 http/https URL",
-
     "channel_ids_duplicate": "channel_ids 存在重复项",
     "channel_ids_mismatch": "channel_ids 需要覆盖所有渠道",
     "channel_name_required": "渠道名称不能为空",
@@ -49,22 +43,36 @@
     "channel_base_url_invalid": "base_url 无效",
     "channel_auth_apply_failed": "渠道鉴权配置无效",
     "channel_not_found": "渠道不存在",
-
     "route_name_required": "路由名称不能为空",
     "route_not_found": "路由不存在",
     "route_channel_ids_duplicate": "channel_ids 存在重复项",
     "route_channel_protocol_mismatch": "路由与渠道协议不匹配",
-
     "maintenance_records_start_ms_required": "清理记录时 start_ms 必填",
     "maintenance_records_end_ms_required": "清理记录时 end_ms 必填",
     "maintenance_records_start_ms_gt_end_ms": "start_ms 不能大于 end_ms",
     "maintenance_logs_date_format_invalid": "日期格式非法（期望 YYYY-MM-DD 或 YYYY/MM/DD）",
     "maintenance_logs_date_range_requires_one": "清理日志时 start_date/end_date 至少填一个",
-    "maintenance_logs_start_date_gt_end_date": "start_date 不能大于 end_date"
+    "maintenance_logs_start_date_gt_end_date": "start_date 不能大于 end_date",
+    "prompt_tool_required": "提示词工具不能为空",
+    "prompt_tool_invalid": "提示词工具无效",
+    "prompt_scope_required": "提示词范围不能为空",
+    "prompt_scope_invalid": "提示词范围无效",
+    "prompt_project_not_found": "项目不存在",
+    "prompt_project_path_required": "项目路径不能为空",
+    "prompt_project_path_invalid": "项目路径必须是现有目录",
+    "prompt_project_path_exists": "项目路径已存在",
+    "prompt_project_name_exists": "项目名称已存在，请换一个名称",
+    "prompt_document_project_id_required": "项目级提示词必须携带 project_id",
+    "prompt_document_project_id_forbidden": "全局提示词不能携带 project_id",
+    "prompt_document_not_found": "提示词文档不存在",
+    "prompt_document_too_large": "提示词文档过大，请精简内容",
+    "prompt_document_version_conflict": "提示词已被其他编辑器更新，请刷新后再处理",
+    "prompt_document_expected_updated_at_ms_invalid": "版本号参数无效"
   },
   "nav": {
     "overview": "概览",
     "channels": "渠道",
+    "prompts": "提示词",
     "routes": "路由",
     "monitor": "监控",
     "logs": "日志",
@@ -101,6 +109,99 @@
     "actions": "操作",
     "channel": "渠道",
     "route": "路由"
+  },
+  "prompts": {
+    "title": "提示词管理",
+    "subtitle": "分别管理 Codex、Claude Code 与 Gemini CLI 的全局及项目级提示词",
+    "tabs": {
+      "codex": "Codex",
+      "claude": "Claude Code",
+      "gemini": "Gemini CLI"
+    },
+    "sidebar": {
+      "title": "提示词范围",
+      "description": "全局提示词置顶，项目提示词按目录管理"
+    },
+    "global": {
+      "title": "全局提示词",
+      "description": "对 {{tool}} 统一生效的全局提示词文档"
+    },
+    "projects": {
+      "title": "项目提示词",
+      "subtitle": "全局提示词置顶，项目级提示词在下方按目录独立管理。",
+      "empty": "还没有项目，点击“新增项目”后即可开始编辑。",
+      "add": "新增项目",
+      "edit": "编辑项目",
+      "delete": "删除项目",
+      "name": "项目名称",
+      "path": "项目路径",
+      "pickFolder": "选择目录",
+      "pickFail": "选择目录失败",
+      "loadFail": "加载项目失败",
+      "saveFail": "保存项目失败",
+      "save": "保存项目",
+      "saved": "项目已保存",
+      "deleted": "项目已删除",
+      "deleteFail": "删除项目失败",
+      "createTitle": "新增项目提示词",
+      "editTitle": "编辑项目提示词",
+      "dialogDescription": "项目列表当前为手动维护，后续可以再接 session 或最近项目来源。",
+      "deleteConfirmTitle": "删除项目",
+      "deleteConfirmDescription": "确定删除项目“{{name}}”以及该项目下的全部提示词吗？",
+      "namePlaceholder": "例如：CliSwitch",
+      "pathPlaceholder": "/Users/you/Projects/example"
+    },
+    "editor": {
+      "placeholder": "# 在这里编写 Markdown 提示词",
+      "empty": "当前还没有内容",
+      "readonly": "点击右上角“编辑”开始编写 Markdown 文档。",
+      "edit": "编辑",
+      "cancel": "取消编辑",
+      "save": "保存文档",
+      "saved": "提示词已保存",
+      "saveFail": "保存提示词失败",
+      "loadFail": "加载提示词失败",
+      "unsavedConfirm": "当前有未保存修改，确认放弃吗？",
+      "unsavedDescription": "当前有未保存修改，确认放弃吗？",
+      "globalBadge": "全局",
+      "projectBadge": "项目",
+      "updatedAt": "最后更新：{{value}}",
+      "noSelection": "未选择提示词",
+      "noProjectHint": "请选择表格中的项目，或直接编辑全局提示词。",
+      "size": "内容大小：{{current}} / {{max}}"
+    },
+    "actions": {
+      "deleteDocument": "删除文档",
+      "browse": "浏览"
+    },
+    "projectDialog": {
+      "pickTitle": "选择项目目录",
+      "createTitle": "新增项目",
+      "editTitle": "编辑项目",
+      "description": "为当前 CLI 单独维护项目级提示词项目，保存后即可在列表中编辑对应 Markdown 文档。",
+      "nameLabel": "项目名称",
+      "namePlaceholder": "例如：CliSwitch",
+      "pathLabel": "项目路径",
+      "pathPlaceholder": "/Users/you/Projects/example"
+    },
+    "documentDeleteDialog": {
+      "title": "删除提示词文档",
+      "description": "确定删除“{{name}}”当前提示词文档吗？此操作不可撤销。"
+    },
+    "toast": {
+      "documentDeleted": "提示词文档已删除",
+      "deleteDocumentFail": "删除提示词文档失败",
+      "loadProjectsFail": "加载项目失败",
+      "loadDocumentFail": "加载提示词失败",
+      "pickFolderFail": "选择目录失败",
+      "projectCreated": "项目已创建",
+      "projectUpdated": "项目已更新",
+      "saveProjectFail": "保存项目失败",
+      "projectDeleted": "项目已删除",
+      "deleteProjectFail": "删除项目失败",
+      "documentSaved": "提示词已保存",
+      "saveDocumentFail": "保存提示词失败"
+    }
   },
   "overview": {
     "title": "概览",

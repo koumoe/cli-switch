@@ -39,6 +39,11 @@ fn request_endpoint_template(method: &Method, path: &str) -> Option<&'static str
         ("GET", "/api/tools/status") => Some("/api/tools/status"),
         ("POST", "/api/tools/install") => Some("/api/tools/install"),
         ("GET", "/api/tools/config/status") => Some("/api/tools/config/status"),
+        ("GET", "/api/prompts/projects") => Some("/api/prompts/projects"),
+        ("POST", "/api/prompts/projects") => Some("/api/prompts/projects"),
+        ("GET", "/api/prompts/document") => Some("/api/prompts/document"),
+        ("PUT", "/api/prompts/document") => Some("/api/prompts/document"),
+        ("DELETE", "/api/prompts/document") => Some("/api/prompts/document"),
         ("POST", "/api/tools/config/apply") => Some("/api/tools/config/apply"),
         ("GET", "/api/channels") => Some("/api/channels"),
         ("POST", "/api/channels") => Some("/api/channels"),
@@ -81,6 +86,12 @@ fn request_endpoint_template(method: &Method, path: &str) -> Option<&'static str
                 ["api", "routes", _, "channels", "reorder"] if method == Method::POST => {
                     Some("/api/routes/{id}/channels/reorder")
                 }
+                ["api", "prompts", "projects", _] if method == Method::PUT => {
+                    Some("/api/prompts/projects/{id}")
+                }
+                ["api", "prompts", "projects", _] if method == Method::DELETE => {
+                    Some("/api/prompts/projects/{id}")
+                }
                 ["v1", "messages", ..] => Some("/v1/messages/{*path}"),
                 ["v1beta", ..] => Some("/v1beta/{*path}"),
                 ["v1", ..] => Some("/v1/{*path}"),
@@ -107,6 +118,11 @@ fn request_purpose(method: &Method, path: &str) -> &'static str {
         ("POST", "/api/tools/install") => "handlers::install_cli_tool",
         ("GET", "/api/tools/config/status") => "handlers::cli_tools_proxy_config_status",
         ("POST", "/api/tools/config/apply") => "handlers::cli_tools_proxy_config_apply",
+        ("GET", "/api/prompts/projects") => "handlers::list_prompt_projects",
+        ("POST", "/api/prompts/projects") => "handlers::create_prompt_project",
+        ("GET", "/api/prompts/document") => "handlers::get_prompt_document",
+        ("PUT", "/api/prompts/document") => "handlers::save_prompt_document",
+        ("DELETE", "/api/prompts/document") => "handlers::delete_prompt_document",
         ("GET", "/api/channels") => "handlers::list_channels",
         ("POST", "/api/channels") => "handlers::create_channel",
         ("POST", "/api/channels/reorder") => "handlers::reorder_channels",
@@ -147,6 +163,12 @@ fn request_purpose(method: &Method, path: &str) -> &'static str {
                 }
                 ["api", "routes", _, "channels", "reorder"] if method == Method::POST => {
                     "handlers::reorder_route_channels"
+                }
+                ["api", "prompts", "projects", _] if method == Method::PUT => {
+                    "handlers::update_prompt_project"
+                }
+                ["api", "prompts", "projects", _] if method == Method::DELETE => {
+                    "handlers::delete_prompt_project"
                 }
                 ["v1", "messages", ..] => "handlers::proxy_anthropic",
                 ["v1beta", ..] => "handlers::proxy_gemini",
@@ -215,6 +237,20 @@ fn build_app(state: AppState) -> Router {
         .route(
             "/api/tools/config/apply",
             post(handlers::cli_tools_proxy_config_apply),
+        )
+        .route(
+            "/api/prompts/projects",
+            get(handlers::list_prompt_projects).post(handlers::create_prompt_project),
+        )
+        .route(
+            "/api/prompts/projects/{id}",
+            put(handlers::update_prompt_project).delete(handlers::delete_prompt_project),
+        )
+        .route(
+            "/api/prompts/document",
+            get(handlers::get_prompt_document)
+                .put(handlers::save_prompt_document)
+                .delete(handlers::delete_prompt_document),
         )
         .route(
             "/api/channels",
