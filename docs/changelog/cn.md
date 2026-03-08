@@ -1,3 +1,7 @@
+## [0.35.0](https://github.com/koumoe/cli-switch/compare/v0.34.0...v0.35.0) (2026-03-08)
+
+### 功能
+* 添加提示词管理功能 (#119) ([#119](https://github.com/koumoe/cli-switch/issues/119)) ([c0a5bb1](https://github.com/koumoe/cli-switch/commit/c0a5bb194cf0f270f41960d90e7738b4927d3b56))
 ## [0.34.0](https://github.com/koumoe/cli-switch/compare/v0.33.3...v0.34.0) (2026-02-04)
 
 ### 功能
