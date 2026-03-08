@@ -9,6 +9,7 @@ mod channel;
 mod checkin;
 mod error;
 mod pricing;
+mod prompt;
 mod protocol;
 mod route;
 mod settings;
@@ -30,6 +31,12 @@ pub use checkin::{
 pub use pricing::{
     PricingModel, PricingStatus, UpsertPricingModel, pricing_status, search_pricing_models,
     upsert_pricing_models,
+};
+pub use prompt::{
+    CreatePromptProject, DeletePromptDocument, PromptDocument, PromptProject, PromptScope,
+    SavePromptDocument, UpdatePromptProject, create_prompt_project, delete_prompt_document,
+    delete_prompt_project, get_prompt_document, list_prompt_projects, save_prompt_document,
+    update_prompt_project,
 };
 pub use protocol::Protocol;
 pub(crate) use protocol::normalize_base_url;

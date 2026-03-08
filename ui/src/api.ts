@@ -37,6 +37,51 @@ export type AppSettings = {
 
 export type CliToolId = "gemini" | "claude" | "codex";
 
+export type PromptScope = "global" | "project";
+
+export type PromptProject = {
+  id: string;
+  name: string;
+  path: string;
+  created_at_ms: number;
+  updated_at_ms: number;
+};
+
+export type CreatePromptProjectInput = {
+  name: string;
+  path: string;
+};
+
+export type UpdatePromptProjectInput = Partial<{
+  name: string;
+  path: string;
+}>;
+
+export type PromptDocument = {
+  tool: CliToolId;
+  scope: PromptScope;
+  project_id: string | null;
+  content_md: string;
+  exists: boolean;
+  created_at_ms: number | null;
+  updated_at_ms: number | null;
+};
+
+export type SavePromptDocumentInput = {
+  tool: CliToolId;
+  scope: PromptScope;
+  project_id?: string | null;
+  content_md: string;
+  expected_updated_at_ms?: number | null;
+};
+
+export type DeletePromptDocumentInput = {
+  tool: CliToolId;
+  scope: PromptScope;
+  project_id?: string | null;
+  expected_updated_at_ms?: number | null;
+};
+
 export type CliToolInstallMethod = "managed_npm_prefix" | "brew" | "npm" | "other";
 
 export type CliToolStatus = {
@@ -411,6 +456,49 @@ export function applyCliToolsProxyConfig(
 
 export function pickFolder(input: PickFolderInput = {}): Promise<PickFolderResponse> {
   return http<PickFolderResponse>("POST", "/api/system/pick_folder", input);
+}
+
+export function listPromptProjects(): Promise<PromptProject[]> {
+  return http<PromptProject[]>("GET", "/api/prompts/projects");
+}
+
+export function createPromptProject(input: CreatePromptProjectInput): Promise<PromptProject> {
+  return http<PromptProject>("POST", "/api/prompts/projects", input);
+}
+
+export function updatePromptProject(id: string, input: UpdatePromptProjectInput): Promise<void> {
+  return http<void>("PUT", `/api/prompts/projects/${encodeURIComponent(id)}`, input);
+}
+
+export function deletePromptProject(id: string): Promise<void> {
+  return http<void>("DELETE", `/api/prompts/projects/${encodeURIComponent(id)}`);
+}
+
+export function getPromptDocument(query: {
+  tool: CliToolId;
+  scope: PromptScope;
+  project_id?: string | null;
+}): Promise<PromptDocument> {
+  const p = new URLSearchParams();
+  p.set("tool", query.tool);
+  p.set("scope", query.scope);
+  if (query.project_id) p.set("project_id", query.project_id);
+  return http<PromptDocument>("GET", `/api/prompts/document?${p.toString()}`);
+}
+
+export function savePromptDocument(input: SavePromptDocumentInput): Promise<PromptDocument> {
+  return http<PromptDocument>("PUT", "/api/prompts/document", input);
+}
+
+export function deletePromptDocument(input: DeletePromptDocumentInput): Promise<void> {
+  const p = new URLSearchParams();
+  p.set("tool", input.tool);
+  p.set("scope", input.scope);
+  if (input.project_id) p.set("project_id", input.project_id);
+  if (input.expected_updated_at_ms !== undefined && input.expected_updated_at_ms !== null) {
+    p.set("expected_updated_at_ms", String(input.expected_updated_at_ms));
+  }
+  return http<void>("DELETE", `/api/prompts/document?${p.toString()}`);
 }
 
 export function listChannels(): Promise<Channel[]> {

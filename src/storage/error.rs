@@ -14,4 +14,30 @@ pub enum StorageError {
 
     #[error("channel reorder mismatch: {reason}")]
     ChannelReorderMismatch { reason: &'static str },
+
+    #[error("prompt project not found: {project_id}")]
+    PromptProjectNotFound { project_id: String },
+
+    #[error("prompt project path already exists: {path}")]
+    PromptProjectPathExists { path: String },
+
+    #[error("prompt project name already exists: {name}")]
+    PromptProjectNameExists { name: String },
+
+    #[error("prompt document not found")]
+    PromptDocumentNotFound,
+
+    #[error("prompt document too large: actual={actual_bytes} max={max_bytes}")]
+    PromptDocumentTooLarge {
+        actual_bytes: usize,
+        max_bytes: usize,
+    },
+
+    #[error(
+        "prompt document version conflict: expected={expected_updated_at_ms:?} current={current_updated_at_ms:?}"
+    )]
+    PromptDocumentVersionConflict {
+        expected_updated_at_ms: Option<i64>,
+        current_updated_at_ms: Option<i64>,
+    },
 }

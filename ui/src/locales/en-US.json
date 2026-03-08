@@ -11,7 +11,6 @@
     "proxy_read_body_failed": "Failed to read request body",
     "proxy_upstream_failed": "Upstream request failed",
     "tools_proxy_config_apply_failed": "Failed to write config",
-
     "settings_pricing_auto_update_interval_hours_out_of_range": "Auto sync interval must be between 1 and 8760 hours",
     "settings_auto_disable_window_minutes_out_of_range": "Auto-disable window minutes must be >= 1",
     "settings_auto_disable_failure_times_out_of_range": "Auto-disable failure times must be >= 1",
@@ -19,16 +18,13 @@
     "settings_log_retention_days_out_of_range": "Log retention days must be between 1 and 3650",
     "settings_autostart_set_failed": "Failed to update auto-start",
     "settings_autostart_args_update_failed": "Failed to update auto-start args",
-
     "stats_range_invalid": "Invalid stats range",
     "stats_trend_range_unsupported": "Trend only supports range=month",
-
     "pricing_metadata_request_failed": "Failed to fetch pricing data",
     "pricing_metadata_read_failed": "Failed to read pricing data response",
     "pricing_metadata_status_not_success": "Pricing data returned non-success status",
     "pricing_metadata_json_parse_failed": "Failed to parse pricing data",
     "pricing_metadata_json_root_not_object": "Invalid pricing data format",
-
     "usage_query_param_invalid": "Invalid query parameter",
     "usage_start_ms_invalid": "Invalid start_ms",
     "usage_end_ms_invalid": "Invalid end_ms",
@@ -36,11 +32,9 @@
     "usage_offset_invalid": "Invalid offset",
     "usage_success_invalid": "Invalid success",
     "usage_protocol_invalid": "Invalid protocol",
-
     "system_url_required": "URL is required",
     "system_url_invalid": "Invalid URL",
     "system_url_scheme_not_supported": "Only http/https URLs are supported",
-
     "channel_ids_duplicate": "channel_ids contains duplicates",
     "channel_ids_mismatch": "channel_ids must cover all channels",
     "channel_name_required": "Channel name is required",
@@ -49,22 +43,36 @@
     "channel_base_url_invalid": "Invalid base_url",
     "channel_auth_apply_failed": "Invalid channel auth config",
     "channel_not_found": "Channel not found",
-
     "route_name_required": "Route name is required",
     "route_not_found": "Route not found",
     "route_channel_ids_duplicate": "channel_ids contains duplicates",
     "route_channel_protocol_mismatch": "Channel protocol does not match route protocol",
-
     "maintenance_records_start_ms_required": "start_ms is required for record cleanup",
     "maintenance_records_end_ms_required": "end_ms is required for record cleanup",
     "maintenance_records_start_ms_gt_end_ms": "start_ms must be <= end_ms",
     "maintenance_logs_date_format_invalid": "Invalid date format (expected YYYY-MM-DD or YYYY/MM/DD)",
     "maintenance_logs_date_range_requires_one": "start_date or end_date is required for log cleanup",
-    "maintenance_logs_start_date_gt_end_date": "start_date must be <= end_date"
+    "maintenance_logs_start_date_gt_end_date": "start_date must be <= end_date",
+    "prompt_tool_required": "Prompt tool is required",
+    "prompt_tool_invalid": "Invalid prompt tool",
+    "prompt_scope_required": "Prompt scope is required",
+    "prompt_scope_invalid": "Invalid prompt scope",
+    "prompt_project_not_found": "Prompt project not found",
+    "prompt_project_path_required": "Project path is required",
+    "prompt_project_path_invalid": "Project path must be an existing directory",
+    "prompt_project_path_exists": "Project path already exists",
+    "prompt_project_name_exists": "Project name already exists",
+    "prompt_document_project_id_required": "project_id is required for project prompts",
+    "prompt_document_project_id_forbidden": "Global prompts cannot carry project_id",
+    "prompt_document_not_found": "Prompt document not found",
+    "prompt_document_too_large": "Prompt document is too large",
+    "prompt_document_version_conflict": "Prompt document was updated by another editor",
+    "prompt_document_expected_updated_at_ms_invalid": "Invalid version parameter"
   },
   "nav": {
     "overview": "Overview",
     "channels": "Channels",
+    "prompts": "Prompts",
     "routes": "Routes",
     "monitor": "Monitor",
     "logs": "Logs",
@@ -101,6 +109,99 @@
     "actions": "Actions",
     "channel": "Channel",
     "route": "Route"
+  },
+  "prompts": {
+    "title": "Prompt Management",
+    "subtitle": "Manage global and project-level prompts for Codex, Claude Code, and Gemini CLI separately",
+    "tabs": {
+      "codex": "Codex",
+      "claude": "Claude Code",
+      "gemini": "Gemini CLI"
+    },
+    "sidebar": {
+      "title": "Prompt Scope",
+      "description": "Global prompt stays on top, project prompts are managed by folder"
+    },
+    "global": {
+      "title": "Global Prompt",
+      "description": "Shared markdown prompt document applied to {{tool}}"
+    },
+    "projects": {
+      "title": "Project Prompts",
+      "subtitle": "Global prompt stays on top, followed by project-level prompt documents managed by folder.",
+      "empty": "No projects yet. Click “Add Project” to start editing.",
+      "add": "Add Project",
+      "edit": "Edit Project",
+      "delete": "Delete Project",
+      "name": "Project Name",
+      "path": "Project Path",
+      "pickFolder": "Choose Folder",
+      "pickFail": "Failed to choose folder",
+      "loadFail": "Failed to load projects",
+      "saveFail": "Failed to save project",
+      "save": "Save Project",
+      "saved": "Project saved",
+      "deleted": "Project deleted",
+      "deleteFail": "Failed to delete project",
+      "createTitle": "Add Project Prompt",
+      "editTitle": "Edit Project Prompt",
+      "dialogDescription": "The project list is manually maintained for now and can be connected to sessions or recent projects later.",
+      "deleteConfirmTitle": "Delete Project",
+      "deleteConfirmDescription": "Delete project “{{name}}” and all prompts under it?",
+      "namePlaceholder": "e.g. CliSwitch",
+      "pathPlaceholder": "/Users/you/Projects/example"
+    },
+    "editor": {
+      "placeholder": "# Write your Markdown prompt here",
+      "empty": "No content yet",
+      "readonly": "Click “Edit” in the top-right corner to start writing the Markdown document.",
+      "edit": "Edit",
+      "cancel": "Cancel Editing",
+      "save": "Save Document",
+      "saved": "Prompt saved",
+      "saveFail": "Failed to save prompt",
+      "loadFail": "Failed to load prompt",
+      "unsavedConfirm": "You have unsaved changes. Discard them?",
+      "unsavedDescription": "You have unsaved changes. Discard them?",
+      "globalBadge": "Global",
+      "projectBadge": "Project",
+      "updatedAt": "Updated: {{value}}",
+      "noSelection": "No prompt selected",
+      "noProjectHint": "Select a project in the table, or edit the global prompt directly.",
+      "size": "Size: {{current}} / {{max}}"
+    },
+    "actions": {
+      "deleteDocument": "Delete Document",
+      "browse": "Browse"
+    },
+    "projectDialog": {
+      "pickTitle": "Select Project Folder",
+      "createTitle": "Add Project",
+      "editTitle": "Edit Project",
+      "description": "Maintain a project entry for this CLI separately. After saving, you can edit its Markdown prompt document from the list.",
+      "nameLabel": "Project Name",
+      "namePlaceholder": "e.g. CliSwitch",
+      "pathLabel": "Project Path",
+      "pathPlaceholder": "/Users/you/Projects/example"
+    },
+    "documentDeleteDialog": {
+      "title": "Delete Prompt Document",
+      "description": "Delete the current prompt document for \"{{name}}\"? This cannot be undone."
+    },
+    "toast": {
+      "documentDeleted": "Prompt document deleted",
+      "deleteDocumentFail": "Failed to delete prompt document",
+      "loadProjectsFail": "Failed to load projects",
+      "loadDocumentFail": "Failed to load prompt",
+      "pickFolderFail": "Failed to choose folder",
+      "projectCreated": "Project created",
+      "projectUpdated": "Project updated",
+      "saveProjectFail": "Failed to save project",
+      "projectDeleted": "Project deleted",
+      "deleteProjectFail": "Failed to delete project",
+      "documentSaved": "Prompt saved",
+      "saveDocumentFail": "Failed to save prompt"
+    }
   },
   "overview": {
     "title": "Overview",

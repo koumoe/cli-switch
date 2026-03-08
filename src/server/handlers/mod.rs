@@ -2,6 +2,7 @@ pub(super) mod channel;
 pub(super) mod health;
 pub(super) mod maintenance;
 pub(super) mod pricing;
+pub(super) mod prompt;
 pub(super) mod proxy;
 pub(super) mod route;
 pub(super) mod settings;
@@ -18,6 +19,10 @@ pub(super) use channel::{
 pub(super) use health::health;
 pub(super) use maintenance::{db_size, frontend_log_ingest, logs_clear, logs_size, records_clear};
 pub(super) use pricing::{pricing_models, pricing_status, pricing_sync};
+pub(super) use prompt::{
+    create_prompt_project, delete_prompt_document, delete_prompt_project, get_prompt_document,
+    list_prompt_projects, save_prompt_document, update_prompt_project,
+};
 pub(super) use proxy::{proxy_anthropic, proxy_gemini, proxy_openai};
 pub(super) use route::{
     create_route, delete_route, list_route_channels, list_routes, reorder_route_channels,
