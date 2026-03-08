@@ -115,7 +115,7 @@ fn normalize_project_name(raw: &str, path: &str) -> String {
 }
 
 fn validate_document_size(content_md: &str) -> anyhow::Result<()> {
-    let actual_bytes = content_md.as_bytes().len();
+    let actual_bytes = content_md.len();
     if actual_bytes > PROMPT_DOCUMENT_MAX_BYTES {
         return Err(StorageError::PromptDocumentTooLarge {
             actual_bytes,
@@ -267,7 +267,11 @@ fn ensure_document_version(
     .into())
 }
 
-fn touch_prompt_project(conn: &Connection, project_id: Option<&str>, touched_at_ms: i64) -> anyhow::Result<()> {
+fn touch_prompt_project(
+    conn: &Connection,
+    project_id: Option<&str>,
+    touched_at_ms: i64,
+) -> anyhow::Result<()> {
     if let Some(project_id) = project_id {
         conn.execute(
             r#"UPDATE prompt_projects SET updated_at_ms = ?2 WHERE id = ?1"#,
@@ -538,10 +542,7 @@ pub async fn delete_prompt_document(
         let existing = fetch_prompt_document_row(&tx, input.tool, &scope_key)?
             .ok_or(StorageError::PromptDocumentNotFound)?;
 
-        ensure_document_version(
-            Some(existing.updated_at_ms),
-            input.expected_updated_at_ms,
-        )?;
+        ensure_document_version(Some(existing.updated_at_ms), input.expected_updated_at_ms)?;
 
         tx.execute(
             r#"DELETE FROM prompt_documents WHERE id = ?1"#,

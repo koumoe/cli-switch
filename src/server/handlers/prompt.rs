@@ -87,9 +87,10 @@ fn parse_optional_i64(
     if value.is_empty() {
         return Ok(None);
     }
-    value.parse::<i64>().map(Some).map_err(|e| {
-        ApiError::bad_request(code, format!("Invalid {name}: {e}"))
-    })
+    value
+        .parse::<i64>()
+        .map(Some)
+        .map_err(|e| ApiError::bad_request(code, format!("Invalid {name}: {e}")))
 }
 
 fn validate_project_id(

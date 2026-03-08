@@ -28,7 +28,10 @@ pub enum StorageError {
     PromptDocumentNotFound,
 
     #[error("prompt document too large: actual={actual_bytes} max={max_bytes}")]
-    PromptDocumentTooLarge { actual_bytes: usize, max_bytes: usize },
+    PromptDocumentTooLarge {
+        actual_bytes: usize,
+        max_bytes: usize,
+    },
 
     #[error(
         "prompt document version conflict: expected={expected_updated_at_ms:?} current={current_updated_at_ms:?}"
