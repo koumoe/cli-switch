@@ -1,5 +1,5 @@
 import React, { Suspense, useCallback, useEffect, useRef, useState } from "react";
-import { Pencil, Plus, Settings2, Trash2 } from "lucide-react";
+import { Pencil } from "lucide-react";
 
 import {
   Badge,
@@ -19,9 +19,8 @@ import {
 import { useI18n } from "@/lib/i18n";
 
 import { DeleteConfirmDialog } from "./prompts/DeleteConfirmDialog";
-import { ProjectDialog } from "./prompts/ProjectDialog";
 import { PROMPT_TOOL_IDS } from "./prompts/shared";
-import { EMPTY_PROJECT_DIALOG, usePromptsPageState } from "./prompts/usePromptsPageState";
+import { usePromptsPageState } from "./prompts/usePromptsPageState";
 
 const PromptEditorDialog = React.lazy(() =>
   import("./prompts/PromptEditorDialog").then((m) => ({ default: m.PromptEditorDialog }))
@@ -105,15 +104,9 @@ export function PromptsPage() {
 
   return (
     <div className="space-y-4 pb-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-lg font-semibold">{t("prompts.title")}</h1>
-          <p className="text-muted-foreground text-xs mt-0.5">{t("prompts.subtitle")}</p>
-        </div>
-        <Button size="sm" onClick={state.handleOpenCreateProjectDialog}>
-          <Plus className="h-4 w-4 mr-2" />
-          {t("prompts.projects.add")}
-        </Button>
+      <div>
+        <h1 className="text-lg font-semibold">{t("prompts.title")}</h1>
+        <p className="text-muted-foreground text-xs mt-0.5">{t("prompts.subtitle")}</p>
       </div>
 
       <Tabs value={state.activeTool} onValueChange={state.handleToolChange}>
@@ -167,7 +160,7 @@ export function PromptsPage() {
                   ) : state.projects.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
-                        {t("prompts.projects.empty")}
+                        {t("prompts.projects.empty", { tool: toolLabel })}
                       </TableCell>
                     </TableRow>
                   ) : (
@@ -181,32 +174,14 @@ export function PromptsPage() {
                           {project.path}
                         </TableCell>
                         <TableCell>
-                          <div className="flex items-center gap-1">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleEditDocument("project", project.id)}
-                              title={t("prompts.editor.edit")}
-                            >
-                              <Pencil className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => state.handleOpenEditProjectDialog(project)}
-                              title={t("prompts.projects.edit")}
-                            >
-                              <Settings2 className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => state.setProjectDeleteTarget(project)}
-                              title={t("prompts.projects.delete")}
-                            >
-                              <Trash2 className="h-4 w-4 text-destructive" />
-                            </Button>
-                          </div>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleEditDocument("project", project.id)}
+                            title={t("prompts.editor.edit")}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
                         </TableCell>
                       </TableRow>
                     ))
@@ -240,35 +215,6 @@ export function PromptsPage() {
           />
         </Suspense>
       )}
-
-      {/* Project CRUD dialogs */}
-      <ProjectDialog
-        open={state.projectDialog.open}
-        mode={state.projectDialog.mode}
-        name={state.projectDialog.name}
-        path={state.projectDialog.path}
-        saving={state.projectSaving}
-        picking={state.projectPicking}
-        onOpenChange={(open) => {
-          if (state.projectSaving) return;
-          state.setProjectDialog(open ? state.projectDialog : EMPTY_PROJECT_DIALOG);
-        }}
-        onNameChange={(value) => state.setProjectDialog((prev) => ({ ...prev, name: value }))}
-        onPathChange={(value) => state.setProjectDialog((prev) => ({ ...prev, path: value }))}
-        onPickFolder={state.handlePickFolder}
-        onSubmit={state.handleSubmitProjectDialog}
-      />
-
-      <DeleteConfirmDialog
-        open={!!state.projectDeleteTarget}
-        title={t("prompts.projects.deleteConfirmTitle")}
-        description={t("prompts.projects.deleteConfirmDescription", {
-          name: state.projectDeleteTarget?.name ?? "-",
-        })}
-        busy={state.projectDeleting}
-        onOpenChange={(open) => !open && state.setProjectDeleteTarget(null)}
-        onConfirm={state.handleDeleteProject}
-      />
 
       <DeleteConfirmDialog
         open={state.documentDeleteOpen}

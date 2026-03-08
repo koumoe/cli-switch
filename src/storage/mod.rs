@@ -33,10 +33,8 @@ pub use pricing::{
     upsert_pricing_models,
 };
 pub use prompt::{
-    CreatePromptProject, DeletePromptDocument, PromptDocument, PromptProject, PromptScope,
-    SavePromptDocument, UpdatePromptProject, create_prompt_project, delete_prompt_document,
-    delete_prompt_project, get_prompt_document, list_prompt_projects, save_prompt_document,
-    update_prompt_project,
+    DeletePromptDocument, PromptDocument, PromptProject, PromptScope, SavePromptDocument,
+    delete_prompt_document, get_prompt_document, list_prompt_projects, save_prompt_document,
 };
 pub use protocol::Protocol;
 pub(crate) use protocol::normalize_base_url;

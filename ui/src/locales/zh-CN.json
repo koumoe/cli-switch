@@ -129,27 +129,9 @@
     "projects": {
       "title": "项目提示词",
       "subtitle": "全局提示词置顶，项目级提示词在下方按目录独立管理。",
-      "empty": "还没有项目，点击“新增项目”后即可开始编辑。",
-      "add": "新增项目",
-      "edit": "编辑项目",
-      "delete": "删除项目",
+      "empty": "尚未从 {{tool}} 发现项目，请先在对应 CLI 中打开过项目后再回来编辑。",
       "name": "项目名称",
-      "path": "项目路径",
-      "pickFolder": "选择目录",
-      "pickFail": "选择目录失败",
-      "loadFail": "加载项目失败",
-      "saveFail": "保存项目失败",
-      "save": "保存项目",
-      "saved": "项目已保存",
-      "deleted": "项目已删除",
-      "deleteFail": "删除项目失败",
-      "createTitle": "新增项目提示词",
-      "editTitle": "编辑项目提示词",
-      "dialogDescription": "项目列表当前为手动维护，后续可以再接 session 或最近项目来源。",
-      "deleteConfirmTitle": "删除项目",
-      "deleteConfirmDescription": "确定删除项目“{{name}}”以及该项目下的全部提示词吗？",
-      "namePlaceholder": "例如：CliSwitch",
-      "pathPlaceholder": "/Users/you/Projects/example"
+      "path": "项目路径"
     },
     "editor": {
       "placeholder": "# 在这里编写 Markdown 提示词",
@@ -171,18 +153,7 @@
       "size": "内容大小：{{current}} / {{max}}"
     },
     "actions": {
-      "deleteDocument": "删除文档",
-      "browse": "浏览"
-    },
-    "projectDialog": {
-      "pickTitle": "选择项目目录",
-      "createTitle": "新增项目",
-      "editTitle": "编辑项目",
-      "description": "为当前 CLI 单独维护项目级提示词项目，保存后即可在列表中编辑对应 Markdown 文档。",
-      "nameLabel": "项目名称",
-      "namePlaceholder": "例如：CliSwitch",
-      "pathLabel": "项目路径",
-      "pathPlaceholder": "/Users/you/Projects/example"
+      "deleteDocument": "删除文档"
     },
     "documentDeleteDialog": {
       "title": "删除提示词文档",
@@ -193,12 +164,6 @@
       "deleteDocumentFail": "删除提示词文档失败",
       "loadProjectsFail": "加载项目失败",
       "loadDocumentFail": "加载提示词失败",
-      "pickFolderFail": "选择目录失败",
-      "projectCreated": "项目已创建",
-      "projectUpdated": "项目已更新",
-      "saveProjectFail": "保存项目失败",
-      "projectDeleted": "项目已删除",
-      "deleteProjectFail": "删除项目失败",
       "documentSaved": "提示词已保存",
       "saveDocumentFail": "保存提示词失败"
     }

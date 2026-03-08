@@ -129,27 +129,9 @@
     "projects": {
       "title": "Project Prompts",
       "subtitle": "Global prompt stays on top, followed by project-level prompt documents managed by folder.",
-      "empty": "No projects yet. Click “Add Project” to start editing.",
-      "add": "Add Project",
-      "edit": "Edit Project",
-      "delete": "Delete Project",
+      "empty": "No projects discovered from {{tool}} yet. Open a project in that CLI first, then come back to edit it.",
       "name": "Project Name",
-      "path": "Project Path",
-      "pickFolder": "Choose Folder",
-      "pickFail": "Failed to choose folder",
-      "loadFail": "Failed to load projects",
-      "saveFail": "Failed to save project",
-      "save": "Save Project",
-      "saved": "Project saved",
-      "deleted": "Project deleted",
-      "deleteFail": "Failed to delete project",
-      "createTitle": "Add Project Prompt",
-      "editTitle": "Edit Project Prompt",
-      "dialogDescription": "The project list is manually maintained for now and can be connected to sessions or recent projects later.",
-      "deleteConfirmTitle": "Delete Project",
-      "deleteConfirmDescription": "Delete project “{{name}}” and all prompts under it?",
-      "namePlaceholder": "e.g. CliSwitch",
-      "pathPlaceholder": "/Users/you/Projects/example"
+      "path": "Project Path"
     },
     "editor": {
       "placeholder": "# Write your Markdown prompt here",
@@ -171,18 +153,7 @@
       "size": "Size: {{current}} / {{max}}"
     },
     "actions": {
-      "deleteDocument": "Delete Document",
-      "browse": "Browse"
-    },
-    "projectDialog": {
-      "pickTitle": "Select Project Folder",
-      "createTitle": "Add Project",
-      "editTitle": "Edit Project",
-      "description": "Maintain a project entry for this CLI separately. After saving, you can edit its Markdown prompt document from the list.",
-      "nameLabel": "Project Name",
-      "namePlaceholder": "e.g. CliSwitch",
-      "pathLabel": "Project Path",
-      "pathPlaceholder": "/Users/you/Projects/example"
+      "deleteDocument": "Delete Document"
     },
     "documentDeleteDialog": {
       "title": "Delete Prompt Document",
@@ -193,12 +164,6 @@
       "deleteDocumentFail": "Failed to delete prompt document",
       "loadProjectsFail": "Failed to load projects",
       "loadDocumentFail": "Failed to load prompt",
-      "pickFolderFail": "Failed to choose folder",
-      "projectCreated": "Project created",
-      "projectUpdated": "Project updated",
-      "saveProjectFail": "Failed to save project",
-      "projectDeleted": "Project deleted",
-      "deleteProjectFail": "Failed to delete project",
       "documentSaved": "Prompt saved",
       "saveDocumentFail": "Failed to save prompt"
     }
