@@ -18,12 +18,6 @@ pub enum StorageError {
     #[error("prompt project not found: {project_id}")]
     PromptProjectNotFound { project_id: String },
 
-    #[error("prompt project path already exists: {path}")]
-    PromptProjectPathExists { path: String },
-
-    #[error("prompt project name already exists: {name}")]
-    PromptProjectNameExists { name: String },
-
     #[error("prompt document not found")]
     PromptDocumentNotFound,
 

@@ -47,16 +47,6 @@ export type PromptProject = {
   updated_at_ms: number;
 };
 
-export type CreatePromptProjectInput = {
-  name: string;
-  path: string;
-};
-
-export type UpdatePromptProjectInput = Partial<{
-  name: string;
-  path: string;
-}>;
-
 export type PromptDocument = {
   tool: CliToolId;
   scope: PromptScope;
@@ -458,20 +448,10 @@ export function pickFolder(input: PickFolderInput = {}): Promise<PickFolderRespo
   return http<PickFolderResponse>("POST", "/api/system/pick_folder", input);
 }
 
-export function listPromptProjects(): Promise<PromptProject[]> {
-  return http<PromptProject[]>("GET", "/api/prompts/projects");
-}
-
-export function createPromptProject(input: CreatePromptProjectInput): Promise<PromptProject> {
-  return http<PromptProject>("POST", "/api/prompts/projects", input);
-}
-
-export function updatePromptProject(id: string, input: UpdatePromptProjectInput): Promise<void> {
-  return http<void>("PUT", `/api/prompts/projects/${encodeURIComponent(id)}`, input);
-}
-
-export function deletePromptProject(id: string): Promise<void> {
-  return http<void>("DELETE", `/api/prompts/projects/${encodeURIComponent(id)}`);
+export function listPromptProjects(tool: CliToolId): Promise<PromptProject[]> {
+  const p = new URLSearchParams();
+  p.set("tool", tool);
+  return http<PromptProject[]>("GET", `/api/prompts/projects?${p.toString()}`);
 }
 
 export function getPromptDocument(query: {

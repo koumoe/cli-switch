@@ -3,7 +3,6 @@ use axum::extract::{Query, State};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use serde::Deserialize;
-use std::path::Path;
 
 use crate::cli_tools::CliToolId;
 use crate::server::AppState;
@@ -11,15 +10,8 @@ use crate::server::error::{ApiError, map_storage_unit_no_content_err};
 use crate::storage;
 
 #[derive(Debug, Deserialize)]
-pub(in crate::server) struct PromptProjectInput {
-    name: String,
-    path: String,
-}
-
-#[derive(Debug, Deserialize)]
-pub(in crate::server) struct UpdatePromptProjectInput {
-    name: Option<String>,
-    path: Option<String>,
+pub(in crate::server) struct PromptProjectsQuery {
+    tool: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -47,7 +39,7 @@ pub(in crate::server) struct SavePromptDocumentInput {
 }
 
 fn parse_tool(raw: Option<&str>) -> Result<CliToolId, ApiError> {
-    match raw.map(str::trim).filter(|v| !v.is_empty()) {
+    match raw.map(str::trim).filter(|value| !value.is_empty()) {
         Some("gemini") => Ok(CliToolId::Gemini),
         Some("claude") => Ok(CliToolId::Claude),
         Some("codex") => Ok(CliToolId::Codex),
@@ -63,7 +55,7 @@ fn parse_tool(raw: Option<&str>) -> Result<CliToolId, ApiError> {
 }
 
 fn parse_scope(raw: Option<&str>) -> Result<storage::PromptScope, ApiError> {
-    match raw.map(str::trim).filter(|v| !v.is_empty()) {
+    match raw.map(str::trim).filter(|value| !value.is_empty()) {
         Some("global") => Ok(storage::PromptScope::Global),
         Some("project") => Ok(storage::PromptScope::Project),
         Some(other) => Err(ApiError::bad_request(
@@ -90,7 +82,7 @@ fn parse_optional_i64(
     value
         .parse::<i64>()
         .map(Some)
-        .map_err(|e| ApiError::bad_request(code, format!("Invalid {name}: {e}")))
+        .map_err(|err| ApiError::bad_request(code, format!("Invalid {name}: {err}")))
 }
 
 fn validate_project_id(
@@ -98,8 +90,8 @@ fn validate_project_id(
     project_id: Option<String>,
 ) -> Result<Option<String>, ApiError> {
     let project_id = project_id
-        .map(|v| v.trim().to_string())
-        .filter(|v| !v.is_empty());
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
 
     match scope {
         storage::PromptScope::Global => {
@@ -120,38 +112,11 @@ fn validate_project_id(
     }
 }
 
-fn validate_project_path(raw: &str) -> Result<String, ApiError> {
-    let trimmed = raw.trim();
-    if trimmed.is_empty() {
-        return Err(ApiError::bad_request(
-            "prompt_project_path_required",
-            "Project path is required",
-        ));
-    }
-
-    if !Path::new(trimmed).is_dir() {
-        return Err(ApiError::bad_request(
-            "prompt_project_path_invalid",
-            "Project path must be an existing directory",
-        ));
-    }
-
-    Ok(trimmed.to_string())
-}
-
-fn map_prompt_storage_error(e: &anyhow::Error) -> Option<ApiError> {
-    match e.downcast_ref::<storage::StorageError>() {
+fn map_prompt_storage_error(err: &anyhow::Error) -> Option<ApiError> {
+    match err.downcast_ref::<storage::StorageError>() {
         Some(storage::StorageError::PromptProjectNotFound { .. }) => Some(ApiError::not_found(
             "prompt_project_not_found",
             "Prompt project not found",
-        )),
-        Some(storage::StorageError::PromptProjectPathExists { .. }) => Some(ApiError::bad_request(
-            "prompt_project_path_exists",
-            "Project path already exists",
-        )),
-        Some(storage::StorageError::PromptProjectNameExists { .. }) => Some(ApiError::bad_request(
-            "prompt_project_name_exists",
-            "Project name already exists",
         )),
         Some(storage::StorageError::PromptDocumentNotFound) => Some(ApiError::not_found(
             "prompt_document_not_found",
@@ -173,57 +138,13 @@ fn map_prompt_storage_error(e: &anyhow::Error) -> Option<ApiError> {
 
 pub(in crate::server) async fn list_prompt_projects(
     State(state): State<AppState>,
+    Query(query): Query<PromptProjectsQuery>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let items = storage::list_prompt_projects(state.db_path()).await?;
+    let tool = parse_tool(query.tool.as_deref())?;
+    let items = storage::list_prompt_projects(state.db_path(), tool)
+        .await
+        .map_err(|err| map_prompt_storage_error(&err).unwrap_or_else(|| ApiError::Internal(err)))?;
     Ok(Json(items))
-}
-
-pub(in crate::server) async fn create_prompt_project(
-    State(state): State<AppState>,
-    Json(input): Json<PromptProjectInput>,
-) -> Result<impl IntoResponse, ApiError> {
-    let path = validate_project_path(&input.path)?;
-    let item = storage::create_prompt_project(
-        state.db_path(),
-        storage::CreatePromptProject {
-            name: input.name,
-            path,
-        },
-    )
-    .await
-    .map_err(|e| map_prompt_storage_error(&e).unwrap_or(ApiError::Internal(e)))?;
-    Ok((StatusCode::CREATED, Json(item)))
-}
-
-pub(in crate::server) async fn update_prompt_project(
-    State(state): State<AppState>,
-    axum::extract::Path(project_id): axum::extract::Path<String>,
-    Json(input): Json<UpdatePromptProjectInput>,
-) -> Result<impl IntoResponse, ApiError> {
-    let path = match input.path {
-        Some(path) => Some(validate_project_path(&path)?),
-        None => None,
-    };
-
-    let res = storage::update_prompt_project(
-        state.db_path(),
-        project_id,
-        storage::UpdatePromptProject {
-            name: input.name,
-            path,
-        },
-    )
-    .await;
-
-    map_storage_unit_no_content_err(res, map_prompt_storage_error)
-}
-
-pub(in crate::server) async fn delete_prompt_project(
-    State(state): State<AppState>,
-    axum::extract::Path(project_id): axum::extract::Path<String>,
-) -> Result<impl IntoResponse, ApiError> {
-    let res = storage::delete_prompt_project(state.db_path(), project_id).await;
-    map_storage_unit_no_content_err(res, map_prompt_storage_error)
 }
 
 pub(in crate::server) async fn get_prompt_document(
@@ -236,7 +157,7 @@ pub(in crate::server) async fn get_prompt_document(
 
     let doc = storage::get_prompt_document(state.db_path(), tool, scope, project_id)
         .await
-        .map_err(|e| map_prompt_storage_error(&e).unwrap_or(ApiError::Internal(e)))?;
+        .map_err(|err| map_prompt_storage_error(&err).unwrap_or_else(|| ApiError::Internal(err)))?;
     Ok(Json(doc))
 }
 
@@ -259,22 +180,22 @@ pub(in crate::server) async fn save_prompt_document(
         },
     )
     .await
-    .map_err(|e| map_prompt_storage_error(&e).unwrap_or(ApiError::Internal(e)))?;
+    .map_err(|err| map_prompt_storage_error(&err).unwrap_or_else(|| ApiError::Internal(err)))?;
 
-    Ok(Json(doc))
+    Ok((StatusCode::OK, Json(doc)))
 }
 
 pub(in crate::server) async fn delete_prompt_document(
     State(state): State<AppState>,
     Query(query): Query<DeletePromptDocumentQuery>,
-) -> Result<impl IntoResponse, ApiError> {
+) -> Result<StatusCode, ApiError> {
     let tool = parse_tool(query.tool.as_deref())?;
     let scope = parse_scope(query.scope.as_deref())?;
     let project_id = validate_project_id(scope, query.project_id)?;
     let expected_updated_at_ms = parse_optional_i64(
         "expected_updated_at_ms",
         query.expected_updated_at_ms,
-        "prompt_document_expected_updated_at_ms_invalid",
+        "prompt_document_expected_updated_at_invalid",
     )?;
 
     let res = storage::delete_prompt_document(
