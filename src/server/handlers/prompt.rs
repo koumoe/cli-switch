@@ -15,6 +15,12 @@ pub(in crate::server) struct PromptProjectsQuery {
 }
 
 #[derive(Debug, Deserialize)]
+pub(in crate::server) struct DeletePromptProjectQuery {
+    tool: Option<String>,
+    project_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
 pub(in crate::server) struct PromptDocumentQuery {
     tool: Option<String>,
     scope: Option<String>,
@@ -112,6 +118,15 @@ fn validate_project_id(
     }
 }
 
+fn require_project_id(project_id: Option<String>) -> Result<String, ApiError> {
+    project_id
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| {
+            ApiError::bad_request("prompt_project_id_required", "project_id is required")
+        })
+}
+
 fn map_prompt_storage_error(err: &anyhow::Error) -> Option<ApiError> {
     match err.downcast_ref::<storage::StorageError>() {
         Some(storage::StorageError::PromptProjectNotFound { .. }) => Some(ApiError::not_found(
@@ -159,6 +174,17 @@ pub(in crate::server) async fn get_prompt_document(
         .await
         .map_err(|err| map_prompt_storage_error(&err).unwrap_or_else(|| ApiError::Internal(err)))?;
     Ok(Json(doc))
+}
+
+pub(in crate::server) async fn delete_prompt_project(
+    State(state): State<AppState>,
+    Query(query): Query<DeletePromptProjectQuery>,
+) -> Result<StatusCode, ApiError> {
+    let tool = parse_tool(query.tool.as_deref())?;
+    let project_id = require_project_id(query.project_id)?;
+
+    let res = storage::delete_prompt_project(state.db_path(), tool, project_id).await;
+    map_storage_unit_no_content_err(res, map_prompt_storage_error)
 }
 
 pub(in crate::server) async fn save_prompt_document(

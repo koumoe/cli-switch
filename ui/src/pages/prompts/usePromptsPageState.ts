@@ -168,6 +168,15 @@ export function usePromptsPageState() {
     setEditorOpen(false);
   }, [savedContent]);
 
+  const resetToGlobalSelection = useCallback(() => {
+    setSelection(emptyPromptSelection());
+    setDocument(null);
+    setSavedContent("");
+    setDraftContent("");
+    setEditorOpen(false);
+    setDocumentDeleteOpen(false);
+  }, []);
+
   const handleSaveDocument = useCallback(async () => {
     if (draftBytes > PROMPT_DOCUMENT_MAX_BYTES) {
       toast.error(t("errors.prompt_document_too_large"), {
@@ -266,6 +275,7 @@ export function usePromptsPageState() {
     document,
     documentLoading,
     editorOpen,
+    dirty,
     draftContent,
     draftBytes,
     documentSaving,
@@ -279,6 +289,9 @@ export function usePromptsPageState() {
     handleSaveDocument,
     handleRequestDeleteDocument,
     handleDeleteDocument,
+    refreshProjects,
+    refreshDocument,
+    resetToGlobalSelection,
     setDraftContent,
     setDocumentDeleteOpen,
   };

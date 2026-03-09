@@ -40,6 +40,7 @@ fn request_endpoint_template(method: &Method, path: &str) -> Option<&'static str
         ("POST", "/api/tools/install") => Some("/api/tools/install"),
         ("GET", "/api/tools/config/status") => Some("/api/tools/config/status"),
         ("GET", "/api/prompts/projects") => Some("/api/prompts/projects"),
+        ("DELETE", "/api/prompts/projects") => Some("/api/prompts/projects"),
         ("GET", "/api/prompts/document") => Some("/api/prompts/document"),
         ("PUT", "/api/prompts/document") => Some("/api/prompts/document"),
         ("DELETE", "/api/prompts/document") => Some("/api/prompts/document"),
@@ -112,6 +113,7 @@ fn request_purpose(method: &Method, path: &str) -> &'static str {
         ("GET", "/api/tools/config/status") => "handlers::cli_tools_proxy_config_status",
         ("POST", "/api/tools/config/apply") => "handlers::cli_tools_proxy_config_apply",
         ("GET", "/api/prompts/projects") => "handlers::list_prompt_projects",
+        ("DELETE", "/api/prompts/projects") => "handlers::delete_prompt_project",
         ("GET", "/api/prompts/document") => "handlers::get_prompt_document",
         ("PUT", "/api/prompts/document") => "handlers::save_prompt_document",
         ("DELETE", "/api/prompts/document") => "handlers::delete_prompt_document",
@@ -224,7 +226,10 @@ fn build_app(state: AppState) -> Router {
             "/api/tools/config/apply",
             post(handlers::cli_tools_proxy_config_apply),
         )
-        .route("/api/prompts/projects", get(handlers::list_prompt_projects))
+        .route(
+            "/api/prompts/projects",
+            get(handlers::list_prompt_projects).delete(handlers::delete_prompt_project),
+        )
         .route(
             "/api/prompts/document",
             get(handlers::get_prompt_document)

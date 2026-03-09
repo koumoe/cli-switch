@@ -454,6 +454,13 @@ export function listPromptProjects(tool: CliToolId): Promise<PromptProject[]> {
   return http<PromptProject[]>("GET", `/api/prompts/projects?${p.toString()}`);
 }
 
+export function deletePromptProject(tool: CliToolId, projectId: string): Promise<void> {
+  const p = new URLSearchParams();
+  p.set("tool", tool);
+  p.set("project_id", projectId);
+  return http<void>("DELETE", `/api/prompts/projects?${p.toString()}`);
+}
+
 export function getPromptDocument(query: {
   tool: CliToolId;
   scope: PromptScope;

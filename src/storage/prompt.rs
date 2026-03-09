@@ -397,6 +397,105 @@ fn discover_projects(tool: CliToolId) -> anyhow::Result<Vec<DiscoveredProject>> 
     }
 }
 
+fn project_root_matches(path: &Path, target_root: &Path) -> bool {
+    canonical_project_root(path)
+        .map(|root| root == target_root)
+        .unwrap_or(false)
+}
+
+fn collect_session_files_for_project(
+    root: &Path,
+    target_root: &Path,
+) -> anyhow::Result<Vec<PathBuf>> {
+    let mut matches = Vec::new();
+
+    visit_files_recursively(root, &mut |path| {
+        if path.extension().and_then(|value| value.to_str()) != Some("jsonl") {
+            return;
+        }
+        let Some(cwd) = extract_cwd_from_jsonl(path) else {
+            return;
+        };
+        if project_root_matches(Path::new(&cwd), target_root) {
+            matches.push(path.to_path_buf());
+        }
+    })?;
+
+    Ok(matches)
+}
+
+fn remove_files(paths: &[PathBuf], kind: &str) -> anyhow::Result<()> {
+    for path in paths {
+        fs::remove_file(path).with_context(|| format!("删除 {kind} 失败：{}", path.display()))?;
+    }
+    Ok(())
+}
+
+fn remove_gemini_project_entries(gemini_root: &Path, target_root: &Path) -> anyhow::Result<()> {
+    let projects_json = gemini_root.join("projects.json");
+    match fs::read_to_string(&projects_json) {
+        Ok(raw) => match serde_json::from_str::<Value>(&raw) {
+            Ok(mut value) => {
+                let mut changed = false;
+                if let Some(items) = value.get_mut("projects").and_then(Value::as_object_mut) {
+                    let keys_to_remove = items
+                        .keys()
+                        .filter(|path| project_root_matches(Path::new(path), target_root))
+                        .cloned()
+                        .collect::<Vec<_>>();
+
+                    for key in keys_to_remove {
+                        changed |= items.remove(&key).is_some();
+                    }
+                }
+
+                if changed {
+                    let serialized = serde_json::to_string_pretty(&value)
+                        .context("序列化 Gemini projects.json 失败")?;
+                    fs::write(&projects_json, serialized).with_context(|| {
+                        format!(
+                            "写入 Gemini projects.json 失败：{}",
+                            projects_json.display()
+                        )
+                    })?;
+                }
+            }
+            Err(err) => {
+                tracing::warn!(
+                    path = %projects_json.display(),
+                    err = %err,
+                    "failed to parse gemini projects.json during project cleanup"
+                );
+            }
+        },
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+        Err(err) => {
+            tracing::warn!(
+                path = %projects_json.display(),
+                err = %err,
+                "failed to read gemini projects.json during project cleanup"
+            );
+        }
+    }
+
+    let mut marker_files = Vec::new();
+    for marker_root in [gemini_root.join("history"), gemini_root.join("tmp")] {
+        visit_files_recursively(&marker_root, &mut |path| {
+            if path.file_name().and_then(|value| value.to_str()) != Some(".project_root") {
+                return;
+            }
+            let Ok(raw) = fs::read_to_string(path) else {
+                return;
+            };
+            if project_root_matches(Path::new(raw.trim()), target_root) {
+                marker_files.push(path.to_path_buf());
+            }
+        })?;
+    }
+
+    remove_files(&marker_files, "Gemini 项目标记文件")
+}
+
 fn sort_prompt_projects(items: &mut [PromptProject]) {
     items.sort_by(|left, right| {
         right
@@ -585,6 +684,39 @@ pub async fn delete_prompt_document(
 
         fs::remove_file(&path)
             .with_context(|| format!("删除提示词文件失败：{}", path.display()))?;
+        Ok(())
+    })
+    .await
+}
+
+pub async fn delete_prompt_project(
+    _db_path: PathBuf,
+    tool: CliToolId,
+    project_id: String,
+) -> anyhow::Result<()> {
+    run_prompt_io(move || {
+        let target_root = resolve_project_root(tool, &project_id)?;
+
+        match tool {
+            CliToolId::Claude => {
+                let session_files = collect_session_files_for_project(
+                    &claude_home_dir()?.join("projects"),
+                    &target_root,
+                )?;
+                remove_files(&session_files, "Claude session 文件")?;
+            }
+            CliToolId::Codex => {
+                let session_files = collect_session_files_for_project(
+                    &codex_home_dir()?.join("sessions"),
+                    &target_root,
+                )?;
+                remove_files(&session_files, "Codex session 文件")?;
+            }
+            CliToolId::Gemini => {
+                remove_gemini_project_entries(&gemini_home_dir()?, &target_root)?;
+            }
+        }
+
         Ok(())
     })
     .await
@@ -876,6 +1008,199 @@ mod tests {
                 .unwrap();
                 assert!(!doc.exists);
                 assert!(doc.content_md.is_empty());
+            });
+        }
+
+        cleanup_dir(&dir);
+    }
+
+    #[test]
+    fn delete_prompt_project_removes_codex_sessions_only() {
+        let dir = temp_dir("delete-codex-project");
+        let repo_root = dir.join("repo");
+        let nested = repo_root.join("packages/app");
+        let other_root = dir.join("other-repo");
+        let sessions_root = dir.join("sessions/2026/03/08");
+
+        fs::create_dir_all(&nested).unwrap();
+        fs::create_dir_all(&other_root).unwrap();
+        fs::create_dir_all(&sessions_root).unwrap();
+        fs::write(repo_root.join(".git"), "gitdir: /tmp/worktree").unwrap();
+        fs::write(other_root.join(".git"), "gitdir: /tmp/worktree").unwrap();
+        fs::write(repo_root.join("AGENTS.md"), "# prompt").unwrap();
+
+        let target_session = sessions_root.join("target.jsonl");
+        let other_session = sessions_root.join("other.jsonl");
+        fs::write(
+            &target_session,
+            format!(
+                "{{\"type\":\"session_meta\",\"cwd\":\"{}\"}}\n",
+                nested.display()
+            ),
+        )
+        .unwrap();
+        fs::write(
+            &other_session,
+            format!(
+                "{{\"type\":\"session_meta\",\"cwd\":\"{}\"}}\n",
+                other_root.display()
+            ),
+        )
+        .unwrap();
+
+        {
+            let _env = ScopedEnvVar::set_path("CODEX_HOME", &dir);
+            run_async_test(async {
+                let project_id = fs::canonicalize(&repo_root)
+                    .unwrap()
+                    .to_string_lossy()
+                    .to_string();
+
+                delete_prompt_project(PathBuf::new(), CliToolId::Codex, project_id)
+                    .await
+                    .unwrap();
+
+                let projects = list_prompt_projects(PathBuf::new(), CliToolId::Codex)
+                    .await
+                    .unwrap();
+                assert_eq!(projects.len(), 1);
+                assert_eq!(
+                    projects[0].path,
+                    fs::canonicalize(&other_root).unwrap().to_string_lossy()
+                );
+                assert!(!target_session.exists());
+                assert!(other_session.exists());
+                assert!(repo_root.exists());
+                assert!(repo_root.join("AGENTS.md").exists());
+            });
+        }
+
+        cleanup_dir(&dir);
+    }
+
+    #[test]
+    fn delete_prompt_project_removes_claude_sessions_only() {
+        let dir = temp_dir("delete-claude-project");
+        let repo_root = dir.join("repo");
+        let nested = repo_root.join("packages/app");
+        let other_root = dir.join("other-repo");
+        let projects_root = dir.join("projects/workspace");
+
+        fs::create_dir_all(&nested).unwrap();
+        fs::create_dir_all(&other_root).unwrap();
+        fs::create_dir_all(&projects_root).unwrap();
+        fs::write(repo_root.join(".git"), "gitdir: /tmp/worktree").unwrap();
+        fs::write(other_root.join(".git"), "gitdir: /tmp/worktree").unwrap();
+        fs::write(repo_root.join("CLAUDE.md"), "# prompt").unwrap();
+
+        let target_session = projects_root.join("target.jsonl");
+        let other_session = projects_root.join("other.jsonl");
+        fs::write(
+            &target_session,
+            format!(
+                "{{\"type\":\"session_meta\",\"cwd\":\"{}\"}}\n",
+                nested.display()
+            ),
+        )
+        .unwrap();
+        fs::write(
+            &other_session,
+            format!(
+                "{{\"type\":\"session_meta\",\"payload\":{{\"cwd\":\"{}\"}}}}\n",
+                other_root.display()
+            ),
+        )
+        .unwrap();
+
+        {
+            let _env = ScopedEnvVar::set_path("CLAUDE_CONFIG_DIR", &dir);
+            run_async_test(async {
+                let project_id = fs::canonicalize(&repo_root)
+                    .unwrap()
+                    .to_string_lossy()
+                    .to_string();
+
+                delete_prompt_project(PathBuf::new(), CliToolId::Claude, project_id)
+                    .await
+                    .unwrap();
+
+                let projects = list_prompt_projects(PathBuf::new(), CliToolId::Claude)
+                    .await
+                    .unwrap();
+                assert_eq!(projects.len(), 1);
+                assert_eq!(
+                    projects[0].path,
+                    fs::canonicalize(&other_root).unwrap().to_string_lossy()
+                );
+                assert!(!target_session.exists());
+                assert!(other_session.exists());
+                assert!(repo_root.exists());
+                assert!(repo_root.join("CLAUDE.md").exists());
+            });
+        }
+
+        cleanup_dir(&dir);
+    }
+
+    #[test]
+    fn delete_prompt_project_removes_gemini_discovery_entries() {
+        let dir = temp_dir("delete-gemini-project");
+        let home = dir.join("home");
+        let gemini_root = home.join(".gemini");
+        let repo_root = dir.join("repo");
+        let other_root = dir.join("other-repo");
+        let history_root = gemini_root.join("history/a");
+        let tmp_root = gemini_root.join("tmp/b");
+
+        fs::create_dir_all(&history_root).unwrap();
+        fs::create_dir_all(&tmp_root).unwrap();
+        fs::create_dir_all(&repo_root).unwrap();
+        fs::create_dir_all(&other_root).unwrap();
+        fs::write(repo_root.join(".git"), "gitdir: /tmp/worktree").unwrap();
+        fs::write(other_root.join(".git"), "gitdir: /tmp/worktree").unwrap();
+        fs::write(
+            gemini_root.join("projects.json"),
+            format!(
+                "{{\"projects\":{{\"{}\":\"repo\",\"{}\":\"other\"}}}}",
+                repo_root.display(),
+                other_root.display()
+            ),
+        )
+        .unwrap();
+        fs::write(
+            history_root.join(".project_root"),
+            repo_root.to_string_lossy().as_ref(),
+        )
+        .unwrap();
+        fs::write(
+            tmp_root.join(".project_root"),
+            other_root.to_string_lossy().as_ref(),
+        )
+        .unwrap();
+
+        {
+            let _env = ScopedEnvVar::set_path("HOME", &home);
+            run_async_test(async {
+                let project_id = fs::canonicalize(&repo_root)
+                    .unwrap()
+                    .to_string_lossy()
+                    .to_string();
+
+                delete_prompt_project(PathBuf::new(), CliToolId::Gemini, project_id)
+                    .await
+                    .unwrap();
+
+                let projects = list_prompt_projects(PathBuf::new(), CliToolId::Gemini)
+                    .await
+                    .unwrap();
+                assert_eq!(projects.len(), 1);
+                assert_eq!(
+                    projects[0].path,
+                    fs::canonicalize(&other_root).unwrap().to_string_lossy()
+                );
+                assert!(!history_root.join(".project_root").exists());
+                assert!(tmp_root.join(".project_root").exists());
+                assert!(repo_root.exists());
             });
         }
 

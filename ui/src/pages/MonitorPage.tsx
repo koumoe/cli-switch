@@ -19,6 +19,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui";
+import { PaginationBar } from "@/components/PaginationBar";
 import { useI18n } from "@/lib/i18n";
 import { humanizeApiError } from "@/lib/error";
 import { useWindowEvent } from "@/lib/useWindowEvent";
@@ -51,6 +52,8 @@ export function MonitorPage() {
   const [channels, setChannels] = useState<Channel[]>([]);
   const [loading, setLoading] = useState(false);
   const loadingRef = useRef(false);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
 
   const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
     const now = new Date();
@@ -120,6 +123,21 @@ export function MonitorPage() {
     }
     return hasAny ? sum : null;
   }, [channelStats, channels.length, channelsById]);
+
+  const totalPages = React.useMemo(
+    () => Math.max(1, Math.ceil(channelStats.length / pageSize)),
+    [channelStats.length, pageSize]
+  );
+
+  const currentPage = Math.min(page, totalPages);
+  const pagedChannelStats = React.useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return channelStats.slice(start, start + pageSize);
+  }, [channelStats, currentPage, pageSize]);
+
+  useEffect(() => {
+    setPage((current) => Math.min(current, totalPages));
+  }, [totalPages]);
 
   return (
     <div className="space-y-4 pb-4">
@@ -211,12 +229,19 @@ export function MonitorPage() {
 
       {/* 渠道统计 */}
       {channelStats.length > 0 && (
-        <Card>
+        <Card className="flex flex-col">
           <CardHeader>
-            <CardTitle>{t("monitor.channelStats.title")}</CardTitle>
-            <CardDescription>{t("monitor.channelStats.subtitle")}</CardDescription>
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <CardTitle>{t("monitor.channelStats.title")}</CardTitle>
+                <CardDescription>{t("monitor.channelStats.subtitle")}</CardDescription>
+              </div>
+              <div className="text-xs text-muted-foreground">
+                {t("common.pagination.total", { total: channelStats.length.toLocaleString() })}
+              </div>
+            </div>
           </CardHeader>
-          <CardContent className="p-0">
+          <CardContent className="flex min-h-0 flex-col p-0">
 	            <Table>
 	              <TableHeader>
 	                <TableRow>
@@ -247,7 +272,7 @@ export function MonitorPage() {
 	                </TableRow>
 	              </TableHeader>
               <TableBody>
-                {channelStats.map((cs) => (
+                {pagedChannelStats.map((cs) => (
                   <TableRow key={cs.channel_id}>
                     <TableCell className="font-medium">{cs.name}</TableCell>
                     <TableCell>
@@ -282,6 +307,18 @@ export function MonitorPage() {
                 ))}
               </TableBody>
             </Table>
+            <PaginationBar
+              page={currentPage}
+              total={channelStats.length}
+              totalPages={totalPages}
+              pageSize={pageSize}
+              disabled={loading}
+              onPageChange={setPage}
+              onPageSizeChange={(next) => {
+                setPageSize(next);
+                setPage(1);
+              }}
+            />
           </CardContent>
         </Card>
       )}

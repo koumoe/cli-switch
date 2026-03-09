@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo } from "react";
 import MDEditor from "@uiw/react-md-editor";
-import { Save } from "lucide-react";
+import { Save, Trash2 } from "lucide-react";
 
 import type { PromptDocument } from "@/api";
 import {
@@ -28,8 +28,10 @@ type PromptEditorDialogProps = {
   draftBytes: number;
   saving: boolean;
   deleting: boolean;
+  documentExists: boolean;
   onDraftChange: (value: string) => void;
   onStartEdit: () => void;
+  onRequestDelete: () => void;
   onSave: () => void;
   onClose: () => void;
 };
@@ -46,8 +48,10 @@ export function PromptEditorDialog({
   draftBytes,
   saving,
   deleting,
+  documentExists,
   onDraftChange,
   onStartEdit,
+  onRequestDelete,
   onSave,
   onClose,
 }: PromptEditorDialogProps) {
@@ -73,7 +77,7 @@ export function PromptEditorDialog({
         if (!isOpen) onClose();
       }}
     >
-      <DialogContent className="sm:max-w-[900px] max-h-[85vh] overflow-hidden flex flex-col">
+      <DialogContent className="flex h-[70vh] max-h-[85vh] flex-col overflow-hidden sm:max-w-[900px]">
         <DialogHeader className="shrink-0">
           <div className="flex items-center gap-2">
             <DialogTitle>{title}</DialogTitle>
@@ -106,6 +110,15 @@ export function PromptEditorDialog({
             })}
           </div>
           <div className="flex items-center gap-2">
+            <Button
+              variant="destructive"
+              className="gap-2"
+              onClick={onRequestDelete}
+              disabled={saving || deleting || loading || !documentExists}
+            >
+              <Trash2 className="h-4 w-4" />
+              {t("prompts.actions.deleteDocument")}
+            </Button>
             <Button variant="outline" onClick={onClose} disabled={saving || deleting}>
               {t("common.cancel")}
             </Button>
