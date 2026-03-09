@@ -1,3 +1,11 @@
+## [0.36.0](https://github.com/koumoe/cli-switch/compare/v0.35.1...v0.36.0) (2026-03-09)
+
+### 功能
+* 优化项目管理流程 ([c696f18](https://github.com/koumoe/cli-switch/commit/c696f1892277d662ebadce4968a9b7e7566cea48))
+* 为监控统计增加分页 ([c22f8eb](https://github.com/koumoe/cli-switch/commit/c22f8ebb2b3ceb3ef5533989b60f1d9cfdb40e87))
+
+### 修复
+* 修复评审反馈 ([0af9963](https://github.com/koumoe/cli-switch/commit/0af9963cb6bd82d29a41bb121c50d5552bc8b58d))
 ## [0.35.1](https://github.com/koumoe/cli-switch/compare/v0.35.0...v0.35.1) (2026-03-09)
 
 ### 修复
