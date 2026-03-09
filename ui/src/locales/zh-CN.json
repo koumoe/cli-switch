@@ -58,6 +58,7 @@
     "prompt_scope_required": "提示词范围不能为空",
     "prompt_scope_invalid": "提示词范围无效",
     "prompt_project_not_found": "项目不存在",
+    "prompt_project_id_required": "project_id 不能为空",
     "prompt_project_path_required": "项目路径不能为空",
     "prompt_project_path_invalid": "项目路径必须是现有目录",
     "prompt_project_path_exists": "项目路径已存在",
@@ -67,12 +68,13 @@
     "prompt_document_not_found": "提示词文档不存在",
     "prompt_document_too_large": "提示词文档过大，请精简内容",
     "prompt_document_version_conflict": "提示词已被其他编辑器更新，请刷新后再处理",
-    "prompt_document_expected_updated_at_ms_invalid": "版本号参数无效"
+    "prompt_document_expected_updated_at_ms_invalid": "版本号参数无效",
+    "prompt_document_expected_updated_at_invalid": "版本号参数无效"
   },
   "nav": {
     "overview": "概览",
     "channels": "渠道",
-    "prompts": "提示词",
+    "prompts": "项目管理",
     "routes": "路由",
     "monitor": "监控",
     "logs": "日志",
@@ -108,11 +110,18 @@
     "free": "免费",
     "actions": "操作",
     "channel": "渠道",
-    "route": "路由"
+    "route": "路由",
+    "pagination": {
+      "total": "共 {{total}} 条",
+      "page": "第 {{page}} / {{totalPages}} 页",
+      "perPage": "每页",
+      "prev": "上一页",
+      "next": "下一页"
+    }
   },
   "prompts": {
-    "title": "提示词管理",
-    "subtitle": "分别管理 Codex、Claude Code 与 Gemini CLI 的全局及项目级提示词",
+    "title": "项目管理",
+    "subtitle": "管理 Codex、Claude Code 与 Gemini CLI 发现到的项目及对应提示词文件",
     "tabs": {
       "codex": "Codex",
       "claude": "Claude Code",
@@ -127,8 +136,8 @@
       "description": "对 {{tool}} 统一生效的全局提示词文档"
     },
     "projects": {
-      "title": "项目提示词",
-      "subtitle": "全局提示词置顶，项目级提示词在下方按目录独立管理。",
+      "title": "项目列表",
+      "subtitle": "全局提示词固定置顶，项目级提示词按目录独立管理。",
       "empty": "尚未从 {{tool}} 发现项目，请先在对应 CLI 中打开过项目后再回来编辑。",
       "name": "项目名称",
       "path": "项目路径"
@@ -137,7 +146,7 @@
       "placeholder": "# 在这里编写 Markdown 提示词",
       "empty": "当前还没有内容",
       "readonly": "点击右上角“编辑”开始编写 Markdown 文档。",
-      "edit": "编辑",
+      "edit": "修改提示词",
       "cancel": "取消编辑",
       "save": "保存文档",
       "saved": "提示词已保存",
@@ -153,15 +162,22 @@
       "size": "内容大小：{{current}} / {{max}}"
     },
     "actions": {
-      "deleteDocument": "删除文档"
+      "deleteDocument": "删除提示词文件",
+      "deleteProject": "删除项目"
+    },
+    "projectDeleteDialog": {
+      "title": "删除项目",
+      "description": "确定删除项目“{{name}}”吗？不会删除项目文件夹，只会清理 CLI session 发现记录。"
     },
     "documentDeleteDialog": {
-      "title": "删除提示词文档",
-      "description": "确定删除“{{name}}”当前提示词文档吗？此操作不可撤销。"
+      "title": "删除提示词文件",
+      "description": "确定删除“{{name}}”当前提示词文件吗？此操作不可撤销。"
     },
     "toast": {
-      "documentDeleted": "提示词文档已删除",
-      "deleteDocumentFail": "删除提示词文档失败",
+      "documentDeleted": "提示词文件已删除",
+      "deleteDocumentFail": "删除提示词文件失败",
+      "projectDeleted": "已删除项目 {{name}}",
+      "deleteProjectFail": "删除项目失败",
       "loadProjectsFail": "加载项目失败",
       "loadDocumentFail": "加载提示词失败",
       "documentSaved": "提示词已保存",

@@ -58,6 +58,7 @@
     "prompt_scope_required": "Prompt scope is required",
     "prompt_scope_invalid": "Invalid prompt scope",
     "prompt_project_not_found": "Prompt project not found",
+    "prompt_project_id_required": "project_id is required",
     "prompt_project_path_required": "Project path is required",
     "prompt_project_path_invalid": "Project path must be an existing directory",
     "prompt_project_path_exists": "Project path already exists",
@@ -67,12 +68,13 @@
     "prompt_document_not_found": "Prompt document not found",
     "prompt_document_too_large": "Prompt document is too large",
     "prompt_document_version_conflict": "Prompt document was updated by another editor",
-    "prompt_document_expected_updated_at_ms_invalid": "Invalid version parameter"
+    "prompt_document_expected_updated_at_ms_invalid": "Invalid version parameter",
+    "prompt_document_expected_updated_at_invalid": "Invalid version parameter"
   },
   "nav": {
     "overview": "Overview",
     "channels": "Channels",
-    "prompts": "Prompts",
+    "prompts": "Project Management",
     "routes": "Routes",
     "monitor": "Monitor",
     "logs": "Logs",
@@ -108,11 +110,18 @@
     "free": "Free",
     "actions": "Actions",
     "channel": "Channel",
-    "route": "Route"
+    "route": "Route",
+    "pagination": {
+      "total": "{{total}} total",
+      "page": "Page {{page}} / {{totalPages}}",
+      "perPage": "per page",
+      "prev": "Previous",
+      "next": "Next"
+    }
   },
   "prompts": {
-    "title": "Prompt Management",
-    "subtitle": "Manage global and project-level prompts for Codex, Claude Code, and Gemini CLI separately",
+    "title": "Project Management",
+    "subtitle": "Manage discovered projects and their prompt files for Codex, Claude Code, and Gemini CLI",
     "tabs": {
       "codex": "Codex",
       "claude": "Claude Code",
@@ -127,8 +136,8 @@
       "description": "Shared markdown prompt document applied to {{tool}}"
     },
     "projects": {
-      "title": "Project Prompts",
-      "subtitle": "Global prompt stays on top, followed by project-level prompt documents managed by folder.",
+      "title": "Projects",
+      "subtitle": "The global prompt stays pinned on top, followed by project-level prompt files grouped by folder.",
       "empty": "No projects discovered from {{tool}} yet. Open a project in that CLI first, then come back to edit it.",
       "name": "Project Name",
       "path": "Project Path"
@@ -137,7 +146,7 @@
       "placeholder": "# Write your Markdown prompt here",
       "empty": "No content yet",
       "readonly": "Click “Edit” in the top-right corner to start writing the Markdown document.",
-      "edit": "Edit",
+      "edit": "Edit Prompt",
       "cancel": "Cancel Editing",
       "save": "Save Document",
       "saved": "Prompt saved",
@@ -153,15 +162,22 @@
       "size": "Size: {{current}} / {{max}}"
     },
     "actions": {
-      "deleteDocument": "Delete Document"
+      "deleteDocument": "Delete Prompt File",
+      "deleteProject": "Delete Project"
+    },
+    "projectDeleteDialog": {
+      "title": "Delete Project",
+      "description": "Delete project \"{{name}}\"? This keeps the project folder and only removes CLI session discovery records."
     },
     "documentDeleteDialog": {
-      "title": "Delete Prompt Document",
-      "description": "Delete the current prompt document for \"{{name}}\"? This cannot be undone."
+      "title": "Delete Prompt File",
+      "description": "Delete the current prompt file for \"{{name}}\"? This cannot be undone."
     },
     "toast": {
-      "documentDeleted": "Prompt document deleted",
-      "deleteDocumentFail": "Failed to delete prompt document",
+      "documentDeleted": "Prompt file deleted",
+      "deleteDocumentFail": "Failed to delete prompt file",
+      "projectDeleted": "Deleted project {{name}}",
+      "deleteProjectFail": "Failed to delete project",
       "loadProjectsFail": "Failed to load projects",
       "loadDocumentFail": "Failed to load prompt",
       "documentSaved": "Prompt saved",

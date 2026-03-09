@@ -1,11 +1,14 @@
-import React, { Suspense, useCallback, useEffect, useRef, useState } from "react";
-import { Pencil } from "lucide-react";
+import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 
 import {
   Badge,
   Button,
   Card,
   CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
   Table,
   TableBody,
   TableCell,
@@ -16,6 +19,9 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui";
+import { PaginationBar } from "@/components/PaginationBar";
+import { deletePromptProject } from "@/api";
+import { humanizeApiError } from "@/lib/error";
 import { useI18n } from "@/lib/i18n";
 
 import { DeleteConfirmDialog } from "./prompts/DeleteConfirmDialog";
@@ -32,7 +38,23 @@ export function PromptsPage() {
 
   const [editorDialogOpen, setEditorDialogOpen] = useState(false);
   const [closingAfterSave, setClosingAfterSave] = useState(false);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+  const [projectDeleteOpen, setProjectDeleteOpen] = useState(false);
+  const [projectDeleteTarget, setProjectDeleteTarget] = useState<(typeof state.projects)[number] | null>(null);
+  const [projectDeleting, setProjectDeleting] = useState(false);
   const shouldAutoStartEdit = useRef(false);
+
+  const totalPages = useMemo(() => {
+    if (state.projects.length <= 0) return 1;
+    return Math.max(1, Math.ceil(state.projects.length / pageSize));
+  }, [pageSize, state.projects.length]);
+  const currentPage = Math.min(page, totalPages);
+
+  const pagedProjects = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return state.projects.slice(start, start + pageSize);
+  }, [currentPage, pageSize, state.projects]);
 
   // Auto-start edit after document loads when switching scope via edit button
   useEffect(() => {
@@ -52,6 +74,14 @@ export function PromptsPage() {
       setClosingAfterSave(false);
     }
   }, [closingAfterSave, state.documentSaving, state.editorOpen]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [state.activeTool]);
+
+  useEffect(() => {
+    setPage((current) => Math.min(current, totalPages));
+  }, [totalPages]);
 
   const handleEditDocument = useCallback(
     (scope: "global" | "project", projectId?: string) => {
@@ -92,6 +122,45 @@ export function PromptsPage() {
     setClosingAfterSave(true);
   }, [state.handleSaveDocument]);
 
+  const handleDeleteProject = useCallback(async () => {
+    if (!projectDeleteTarget) return;
+
+    const isCurrentSelection =
+      state.selection.scope === "project" && state.selection.projectId === projectDeleteTarget.id;
+    if (isCurrentSelection && state.dirty && !window.confirm(t("prompts.editor.unsavedConfirm"))) {
+      return;
+    }
+
+    setProjectDeleting(true);
+    try {
+      await deletePromptProject(state.activeTool, projectDeleteTarget.id);
+      if (isCurrentSelection) {
+        handleEditorDialogClose();
+        state.resetToGlobalSelection();
+      }
+      await state.refreshProjects();
+      toast.success(t("prompts.toast.projectDeleted", { name: projectDeleteTarget.name }));
+      setProjectDeleteOpen(false);
+      setProjectDeleteTarget(null);
+    } catch (e) {
+      toast.error(t("prompts.toast.deleteProjectFail"), {
+        description: humanizeApiError(e, t),
+      });
+    } finally {
+      setProjectDeleting(false);
+    }
+  }, [
+    handleEditorDialogClose,
+    projectDeleteTarget,
+    state.activeTool,
+    state.dirty,
+    state.refreshProjects,
+    state.resetToGlobalSelection,
+    state.selection.projectId,
+    state.selection.scope,
+    t,
+  ]);
+
   const toolLabel = t(`prompts.tabs.${state.activeTool}`);
   const editorTitle =
     state.selection.scope === "global"
@@ -119,15 +188,26 @@ export function PromptsPage() {
         </TabsList>
 
         <div className="mt-4">
-          <Card>
-            <CardContent className="p-0">
+          <Card className="flex flex-col">
+            <CardHeader>
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <CardTitle>{t("prompts.projects.title")}</CardTitle>
+                  <CardDescription>{t("prompts.projects.subtitle")}</CardDescription>
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {t("common.pagination.total", { total: state.projects.length.toLocaleString() })}
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="flex min-h-0 flex-col p-0">
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-24">{t("prompts.sidebar.title")}</TableHead>
                     <TableHead className="w-48">{t("prompts.projects.name")}</TableHead>
                     <TableHead>{t("prompts.projects.path")}</TableHead>
-                    <TableHead className="w-28">{t("common.actions")}</TableHead>
+                    <TableHead className="w-52">{t("common.actions")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -138,14 +218,15 @@ export function PromptsPage() {
                     </TableCell>
                     <TableCell className="font-medium">{t("prompts.global.title")}</TableCell>
                     <TableCell className="text-muted-foreground text-xs">—</TableCell>
-                    <TableCell>
+                    <TableCell className="text-center">
                       <Button
                         variant="ghost"
-                        size="icon"
+                        size="sm"
+                        className="h-8 px-2 text-xs"
                         onClick={() => handleEditDocument("global")}
                         title={t("prompts.editor.edit")}
                       >
-                        <Pencil className="h-4 w-4" />
+                        {t("prompts.editor.edit")}
                       </Button>
                     </TableCell>
                   </TableRow>
@@ -164,7 +245,7 @@ export function PromptsPage() {
                       </TableCell>
                     </TableRow>
                   ) : (
-                    state.projects.map((project) => (
+                    pagedProjects.map((project) => (
                       <TableRow key={project.id}>
                         <TableCell>
                           <Badge variant="outline">{t("prompts.editor.projectBadge")}</Badge>
@@ -174,20 +255,47 @@ export function PromptsPage() {
                           {project.path}
                         </TableCell>
                         <TableCell>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleEditDocument("project", project.id)}
-                            title={t("prompts.editor.edit")}
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
+                          <div className="flex items-center justify-center gap-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 px-2 text-xs"
+                              onClick={() => handleEditDocument("project", project.id)}
+                              title={t("prompts.editor.edit")}
+                            >
+                              {t("prompts.editor.edit")}
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 px-2 text-xs text-destructive hover:text-destructive"
+                              onClick={() => {
+                                setProjectDeleteTarget(project);
+                                setProjectDeleteOpen(true);
+                              }}
+                              title={t("prompts.actions.deleteProject")}
+                            >
+                              {t("prompts.actions.deleteProject")}
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))
                   )}
                 </TableBody>
               </Table>
+              <PaginationBar
+                page={currentPage}
+                total={state.projects.length}
+                totalPages={totalPages}
+                pageSize={pageSize}
+                disabled={state.projectsLoading}
+                onPageChange={setPage}
+                onPageSizeChange={(next) => {
+                  setPageSize(next);
+                  setPage(1);
+                }}
+              />
             </CardContent>
           </Card>
         </div>
@@ -208,13 +316,32 @@ export function PromptsPage() {
             draftBytes={state.draftBytes}
             saving={state.documentSaving}
             deleting={state.documentDeleting}
+            documentExists={!!state.document?.exists}
             onDraftChange={state.setDraftContent}
             onStartEdit={state.handleStartEdit}
+            onRequestDelete={state.handleRequestDeleteDocument}
             onSave={handleEditorSave}
             onClose={handleEditorDialogClose}
           />
         </Suspense>
       )}
+
+      <DeleteConfirmDialog
+        open={projectDeleteOpen}
+        title={t("prompts.projectDeleteDialog.title")}
+        description={t("prompts.projectDeleteDialog.description", {
+          name: projectDeleteTarget?.name ?? "",
+        })}
+        confirmLabel={t("prompts.actions.deleteProject")}
+        busy={projectDeleting}
+        onOpenChange={(open) => {
+          setProjectDeleteOpen(open);
+          if (!open) {
+            setProjectDeleteTarget(null);
+          }
+        }}
+        onConfirm={handleDeleteProject}
+      />
 
       <DeleteConfirmDialog
         open={state.documentDeleteOpen}
