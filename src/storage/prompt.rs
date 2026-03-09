@@ -433,31 +433,48 @@ fn remove_files(paths: &[PathBuf], kind: &str) -> anyhow::Result<()> {
 
 fn remove_gemini_project_entries(gemini_root: &Path, target_root: &Path) -> anyhow::Result<()> {
     let projects_json = gemini_root.join("projects.json");
-    if let Ok(raw) = fs::read_to_string(&projects_json)
-        && let Ok(mut value) = serde_json::from_str::<Value>(&raw)
-    {
-        let mut changed = false;
-        if let Some(items) = value.get_mut("projects").and_then(Value::as_object_mut) {
-            let keys_to_remove = items
-                .keys()
-                .filter(|path| project_root_matches(Path::new(path), target_root))
-                .cloned()
-                .collect::<Vec<_>>();
+    match fs::read_to_string(&projects_json) {
+        Ok(raw) => match serde_json::from_str::<Value>(&raw) {
+            Ok(mut value) => {
+                let mut changed = false;
+                if let Some(items) = value.get_mut("projects").and_then(Value::as_object_mut) {
+                    let keys_to_remove = items
+                        .keys()
+                        .filter(|path| project_root_matches(Path::new(path), target_root))
+                        .cloned()
+                        .collect::<Vec<_>>();
 
-            for key in keys_to_remove {
-                changed |= items.remove(&key).is_some();
+                    for key in keys_to_remove {
+                        changed |= items.remove(&key).is_some();
+                    }
+                }
+
+                if changed {
+                    let serialized = serde_json::to_string_pretty(&value)
+                        .context("序列化 Gemini projects.json 失败")?;
+                    fs::write(&projects_json, serialized).with_context(|| {
+                        format!(
+                            "写入 Gemini projects.json 失败：{}",
+                            projects_json.display()
+                        )
+                    })?;
+                }
             }
-        }
-
-        if changed {
-            let serialized =
-                serde_json::to_string_pretty(&value).context("序列化 Gemini projects.json 失败")?;
-            fs::write(&projects_json, serialized).with_context(|| {
-                format!(
-                    "写入 Gemini projects.json 失败：{}",
-                    projects_json.display()
-                )
-            })?;
+            Err(err) => {
+                tracing::warn!(
+                    path = %projects_json.display(),
+                    err = %err,
+                    "failed to parse gemini projects.json during project cleanup"
+                );
+            }
+        },
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+        Err(err) => {
+            tracing::warn!(
+                path = %projects_json.display(),
+                err = %err,
+                "failed to read gemini projects.json during project cleanup"
+            );
         }
     }
 
@@ -1055,6 +1072,70 @@ mod tests {
                 assert!(other_session.exists());
                 assert!(repo_root.exists());
                 assert!(repo_root.join("AGENTS.md").exists());
+            });
+        }
+
+        cleanup_dir(&dir);
+    }
+
+    #[test]
+    fn delete_prompt_project_removes_claude_sessions_only() {
+        let dir = temp_dir("delete-claude-project");
+        let repo_root = dir.join("repo");
+        let nested = repo_root.join("packages/app");
+        let other_root = dir.join("other-repo");
+        let projects_root = dir.join("projects/workspace");
+
+        fs::create_dir_all(&nested).unwrap();
+        fs::create_dir_all(&other_root).unwrap();
+        fs::create_dir_all(&projects_root).unwrap();
+        fs::write(repo_root.join(".git"), "gitdir: /tmp/worktree").unwrap();
+        fs::write(other_root.join(".git"), "gitdir: /tmp/worktree").unwrap();
+        fs::write(repo_root.join("CLAUDE.md"), "# prompt").unwrap();
+
+        let target_session = projects_root.join("target.jsonl");
+        let other_session = projects_root.join("other.jsonl");
+        fs::write(
+            &target_session,
+            format!(
+                "{{\"type\":\"session_meta\",\"cwd\":\"{}\"}}\n",
+                nested.display()
+            ),
+        )
+        .unwrap();
+        fs::write(
+            &other_session,
+            format!(
+                "{{\"type\":\"session_meta\",\"payload\":{{\"cwd\":\"{}\"}}}}\n",
+                other_root.display()
+            ),
+        )
+        .unwrap();
+
+        {
+            let _env = ScopedEnvVar::set_path("CLAUDE_CONFIG_DIR", &dir);
+            run_async_test(async {
+                let project_id = fs::canonicalize(&repo_root)
+                    .unwrap()
+                    .to_string_lossy()
+                    .to_string();
+
+                delete_prompt_project(PathBuf::new(), CliToolId::Claude, project_id)
+                    .await
+                    .unwrap();
+
+                let projects = list_prompt_projects(PathBuf::new(), CliToolId::Claude)
+                    .await
+                    .unwrap();
+                assert_eq!(projects.len(), 1);
+                assert_eq!(
+                    projects[0].path,
+                    fs::canonicalize(&other_root).unwrap().to_string_lossy()
+                );
+                assert!(!target_session.exists());
+                assert!(other_session.exists());
+                assert!(repo_root.exists());
+                assert!(repo_root.join("CLAUDE.md").exists());
             });
         }
 

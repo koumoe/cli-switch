@@ -124,10 +124,10 @@ export function MonitorPage() {
     return hasAny ? sum : null;
   }, [channelStats, channels.length, channelsById]);
 
-  const totalPages = React.useMemo(() => {
-    if (channelStats.length <= 0) return 1;
-    return Math.max(1, Math.ceil(channelStats.length / pageSize));
-  }, [channelStats.length, pageSize]);
+  const totalPages = React.useMemo(
+    () => Math.max(1, Math.ceil(channelStats.length / pageSize)),
+    [channelStats.length, pageSize]
+  );
 
   const currentPage = Math.min(page, totalPages);
   const pagedChannelStats = React.useMemo(() => {

@@ -45,10 +45,10 @@ export function PromptsPage() {
   const [projectDeleting, setProjectDeleting] = useState(false);
   const shouldAutoStartEdit = useRef(false);
 
-  const totalPages = useMemo(() => {
-    if (state.projects.length <= 0) return 1;
-    return Math.max(1, Math.ceil(state.projects.length / pageSize));
-  }, [pageSize, state.projects.length]);
+  const totalPages = useMemo(
+    () => Math.max(1, Math.ceil(state.projects.length / pageSize)),
+    [pageSize, state.projects.length]
+  );
   const currentPage = Math.min(page, totalPages);
 
   const pagedProjects = useMemo(() => {

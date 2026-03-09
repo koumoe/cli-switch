@@ -68,7 +68,6 @@
     "prompt_document_not_found": "Prompt document not found",
     "prompt_document_too_large": "Prompt document is too large",
     "prompt_document_version_conflict": "Prompt document was updated by another editor",
-    "prompt_document_expected_updated_at_ms_invalid": "Invalid version parameter",
     "prompt_document_expected_updated_at_invalid": "Invalid version parameter"
   },
   "nav": {

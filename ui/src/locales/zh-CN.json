@@ -68,7 +68,6 @@
     "prompt_document_not_found": "提示词文档不存在",
     "prompt_document_too_large": "提示词文档过大，请精简内容",
     "prompt_document_version_conflict": "提示词已被其他编辑器更新，请刷新后再处理",
-    "prompt_document_expected_updated_at_ms_invalid": "版本号参数无效",
     "prompt_document_expected_updated_at_invalid": "版本号参数无效"
   },
   "nav": {
