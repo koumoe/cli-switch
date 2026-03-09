@@ -1,3 +1,7 @@
+## [0.35.1](https://github.com/koumoe/cli-switch/compare/v0.35.0...v0.35.1) (2026-03-09)
+
+### 修复
+* 修复从 CLI 会话自动发现提示词 (#120) ([#120](https://github.com/koumoe/cli-switch/issues/120)) ([d24180c](https://github.com/koumoe/cli-switch/commit/d24180cbd83ca1c04271850fc9b2128799200f62))
 ## [0.35.0](https://github.com/koumoe/cli-switch/compare/v0.34.0...v0.35.0) (2026-03-08)
 
 ### 功能
