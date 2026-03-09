@@ -593,6 +593,8 @@ pub async fn delete_prompt_document(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::ffi::OsString;
+    use std::sync::{Mutex, OnceLock};
 
     fn temp_dir(name: &str) -> PathBuf {
         let path =
@@ -604,6 +606,56 @@ mod tests {
 
     fn cleanup_dir(path: &Path) {
         let _ = fs::remove_dir_all(path);
+    }
+
+    fn run_async_test<F>(f: F)
+    where
+        F: std::future::Future<Output = ()>,
+    {
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap()
+            .block_on(f);
+    }
+
+    fn env_lock() -> &'static Mutex<()> {
+        static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        ENV_LOCK.get_or_init(|| Mutex::new(()))
+    }
+
+    struct ScopedEnvVar {
+        _guard: std::sync::MutexGuard<'static, ()>,
+        key: &'static str,
+        previous: Option<OsString>,
+    }
+
+    impl ScopedEnvVar {
+        fn set_path(key: &'static str, value: &Path) -> Self {
+            let guard = env_lock().lock().unwrap();
+            let previous = std::env::var_os(key);
+            unsafe {
+                std::env::set_var(key, value);
+            }
+            Self {
+                _guard: guard,
+                key,
+                previous,
+            }
+        }
+    }
+
+    impl Drop for ScopedEnvVar {
+        fn drop(&mut self) {
+            match self.previous.as_ref() {
+                Some(previous) => unsafe {
+                    std::env::set_var(self.key, previous);
+                },
+                None => unsafe {
+                    std::env::remove_var(self.key);
+                },
+            }
+        }
     }
 
     #[test]
@@ -658,6 +710,40 @@ mod tests {
     }
 
     #[test]
+    fn discover_claude_projects_uses_git_root_and_deduplicates() {
+        let dir = temp_dir("claude-discovery");
+        let repo_root = dir.join("repo");
+        let nested = repo_root.join("packages/app");
+        let projects_root = dir.join("projects/workspace");
+
+        fs::create_dir_all(&nested).unwrap();
+        fs::create_dir_all(&projects_root).unwrap();
+        fs::write(repo_root.join(".git"), "gitdir: /tmp/worktree").unwrap();
+        fs::write(
+            projects_root.join("a.jsonl"),
+            format!(
+                "{{\"type\":\"session_meta\",\"cwd\":\"{}\"}}\n",
+                nested.display()
+            ),
+        )
+        .unwrap();
+        fs::write(
+            projects_root.join("b.jsonl"),
+            format!(
+                "{{\"type\":\"session_meta\",\"payload\":{{\"cwd\":\"{}\"}}}}\n",
+                repo_root.display()
+            ),
+        )
+        .unwrap();
+
+        let projects = discover_claude_projects_in_dir(&dir.join("projects")).unwrap();
+        let expected_root = fs::canonicalize(&repo_root).unwrap();
+        assert_eq!(projects.len(), 1);
+        assert_eq!(projects[0].root, expected_root);
+        cleanup_dir(&dir);
+    }
+
+    #[test]
     fn discover_gemini_projects_reads_projects_json() {
         let dir = temp_dir("gemini-discovery");
         let gemini_root = dir.join(".gemini");
@@ -679,6 +765,120 @@ mod tests {
         let expected_root = fs::canonicalize(&project_root).unwrap();
         assert_eq!(projects.len(), 1);
         assert_eq!(projects[0].root, expected_root);
+        cleanup_dir(&dir);
+    }
+
+    #[test]
+    fn save_prompt_document_rejects_oversized_content() {
+        let dir = temp_dir("too-large");
+
+        {
+            let _env = ScopedEnvVar::set_path("CODEX_HOME", &dir);
+            run_async_test(async {
+                let err = save_prompt_document(
+                    PathBuf::new(),
+                    SavePromptDocument {
+                        tool: CliToolId::Codex,
+                        scope: PromptScope::Global,
+                        project_id: None,
+                        content_md: "a".repeat(PROMPT_DOCUMENT_MAX_BYTES + 1),
+                        expected_updated_at_ms: None,
+                    },
+                )
+                .await
+                .unwrap_err();
+
+                assert!(matches!(
+                    err.downcast_ref::<StorageError>(),
+                    Some(StorageError::PromptDocumentTooLarge { .. })
+                ));
+            });
+        }
+
+        cleanup_dir(&dir);
+    }
+
+    #[test]
+    fn prompt_document_uses_optimistic_lock_and_can_delete() {
+        let dir = temp_dir("optimistic-lock");
+
+        {
+            let _env = ScopedEnvVar::set_path("CODEX_HOME", &dir);
+            run_async_test(async {
+                let first = save_prompt_document(
+                    PathBuf::new(),
+                    SavePromptDocument {
+                        tool: CliToolId::Codex,
+                        scope: PromptScope::Global,
+                        project_id: None,
+                        content_md: "hello".to_string(),
+                        expected_updated_at_ms: None,
+                    },
+                )
+                .await
+                .unwrap();
+
+                // Give the filesystem mtime enough room to advance before the next write.
+                std::thread::sleep(std::time::Duration::from_millis(10));
+
+                let second = save_prompt_document(
+                    PathBuf::new(),
+                    SavePromptDocument {
+                        tool: CliToolId::Codex,
+                        scope: PromptScope::Global,
+                        project_id: None,
+                        content_md: "world".to_string(),
+                        expected_updated_at_ms: first.updated_at_ms,
+                    },
+                )
+                .await
+                .unwrap();
+
+                assert_ne!(first.updated_at_ms, second.updated_at_ms);
+
+                let err = save_prompt_document(
+                    PathBuf::new(),
+                    SavePromptDocument {
+                        tool: CliToolId::Codex,
+                        scope: PromptScope::Global,
+                        project_id: None,
+                        content_md: "stale".to_string(),
+                        expected_updated_at_ms: first.updated_at_ms,
+                    },
+                )
+                .await
+                .unwrap_err();
+
+                assert!(matches!(
+                    err.downcast_ref::<StorageError>(),
+                    Some(StorageError::PromptDocumentVersionConflict { .. })
+                ));
+
+                delete_prompt_document(
+                    PathBuf::new(),
+                    DeletePromptDocument {
+                        tool: CliToolId::Codex,
+                        scope: PromptScope::Global,
+                        project_id: None,
+                        expected_updated_at_ms: second.updated_at_ms,
+                    },
+                )
+                .await
+                .unwrap();
+
+                let doc = get_prompt_document(
+                    PathBuf::new(),
+                    CliToolId::Codex,
+                    PromptScope::Global,
+                    None,
+                )
+                .await
+                .unwrap();
+                assert!(!doc.exists);
+                assert!(doc.content_md.is_empty());
+            });
+        }
+
         cleanup_dir(&dir);
     }
 }
