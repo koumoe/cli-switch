@@ -220,9 +220,9 @@ export function PromptsPage() {
                     <TableCell className="text-muted-foreground text-xs">—</TableCell>
                     <TableCell className="text-center">
                       <Button
-                        variant="ghost"
+                        variant="outline"
                         size="sm"
-                        className="h-8 px-2 text-xs"
+                        className="h-8 min-w-20 text-xs"
                         onClick={() => handleEditDocument("global")}
                         title={t("prompts.editor.edit")}
                       >
@@ -257,18 +257,18 @@ export function PromptsPage() {
                         <TableCell>
                           <div className="flex items-center justify-center gap-1">
                             <Button
-                              variant="ghost"
+                              variant="outline"
                               size="sm"
-                              className="h-8 px-2 text-xs"
+                              className="h-8 min-w-20 text-xs"
                               onClick={() => handleEditDocument("project", project.id)}
                               title={t("prompts.editor.edit")}
                             >
                               {t("prompts.editor.edit")}
                             </Button>
                             <Button
-                              variant="ghost"
+                              variant="outline"
                               size="sm"
-                              className="h-8 px-2 text-xs text-destructive hover:text-destructive"
+                              className="h-8 min-w-20 border-destructive/40 text-xs text-destructive hover:border-destructive hover:bg-destructive/10 hover:text-destructive"
                               onClick={() => {
                                 setProjectDeleteTarget(project);
                                 setProjectDeleteOpen(true);

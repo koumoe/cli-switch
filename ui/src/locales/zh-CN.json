@@ -55,8 +55,8 @@
     "maintenance_logs_start_date_gt_end_date": "start_date 不能大于 end_date",
     "prompt_tool_required": "提示词工具不能为空",
     "prompt_tool_invalid": "提示词工具无效",
-    "prompt_scope_required": "提示词范围不能为空",
-    "prompt_scope_invalid": "提示词范围无效",
+    "prompt_scope_required": "类型不能为空",
+    "prompt_scope_invalid": "类型无效",
     "prompt_project_not_found": "项目不存在",
     "prompt_project_id_required": "project_id 不能为空",
     "prompt_project_path_required": "项目路径不能为空",
@@ -127,7 +127,7 @@
       "gemini": "Gemini CLI"
     },
     "sidebar": {
-      "title": "提示词范围",
+      "title": "类型",
       "description": "全局提示词置顶，项目提示词按目录管理"
     },
     "global": {
@@ -147,7 +147,7 @@
       "readonly": "点击右上角“编辑”开始编写 Markdown 文档。",
       "edit": "修改提示词",
       "cancel": "取消编辑",
-      "save": "保存文档",
+      "save": "保存提示词",
       "saved": "提示词已保存",
       "saveFail": "保存提示词失败",
       "loadFail": "加载提示词失败",

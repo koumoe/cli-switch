@@ -186,3 +186,260 @@ a {
 ::selection {
   background-color: hsl(var(--primary) / 0.2);
 }
+
+.prompt-mdx-editor-shell {
+  --accentBase: hsl(var(--background));
+  --accentBgSubtle: hsl(var(--secondary));
+  --accentBg: hsl(var(--secondary));
+  --accentBgHover: hsl(var(--accent));
+  --accentBgActive: hsl(var(--accent));
+  --accentLine: hsl(var(--primary) / 0.18);
+  --accentBorder: hsl(var(--primary) / 0.24);
+  --accentBorderHover: hsl(var(--primary) / 0.4);
+  --accentSolid: hsl(var(--primary));
+  --accentSolidHover: hsl(var(--primary) / 0.92);
+  --accentText: hsl(var(--primary));
+  --accentTextContrast: hsl(var(--foreground));
+
+  --basePageBg: hsl(var(--background));
+  --baseBase: hsl(var(--background));
+  --baseBgSubtle: hsl(var(--muted));
+  --baseBg: hsl(var(--card));
+  --baseBgHover: hsl(var(--accent));
+  --baseBgActive: hsl(var(--accent));
+  --baseLine: hsl(var(--border));
+  --baseBorder: hsl(var(--border));
+  --baseBorderHover: hsl(var(--muted-foreground) / 0.6);
+  --baseSolid: hsl(var(--muted-foreground));
+  --baseSolidHover: hsl(var(--foreground));
+  --baseText: hsl(var(--muted-foreground));
+  --baseTextContrast: hsl(var(--foreground));
+}
+
+.mdxeditor.prompt-mdx-editor-shell {
+  margin: 0;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow: hidden;
+  background: transparent;
+}
+
+.mdxeditor.prompt-mdx-editor-shell .prompt-mdx-editor-toolbar {
+  position: static;
+  top: auto;
+  z-index: auto;
+  flex-shrink: 0;
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 10px;
+  border: 1px solid hsl(var(--border));
+  border-radius: calc(var(--radius) + 2px);
+  background:
+    linear-gradient(180deg, hsl(var(--card)), hsl(var(--secondary)));
+  box-shadow: inset 0 1px 0 hsl(var(--background) / 0.9);
+}
+
+.mdxeditor.prompt-mdx-editor-shell .mdxeditor-diff-source-wrapper {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.mdxeditor.prompt-mdx-editor-shell .mdxeditor-rich-text-editor {
+  flex: 1;
+  min-height: 0;
+  /* !important needed: MDXEditor sets inline style="display: block;" on this element */
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+/* When MDXEditor hides the rich-text editor (e.g. source mode), respect display: none */
+.mdxeditor.prompt-mdx-editor-shell .mdxeditor-rich-text-editor[style*="display: none"] {
+  display: none !important;
+}
+
+.mdxeditor.prompt-mdx-editor-shell .mdxeditor-root-contenteditable {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border: 1px solid hsl(var(--border));
+  border-radius: calc(var(--radius) + 4px);
+  background-color: hsl(var(--card));
+  overflow: hidden;
+  box-shadow:
+    inset 0 1px 0 hsl(var(--background) / 0.9),
+    0 1px 2px hsl(var(--foreground) / 0.03);
+}
+
+.mdxeditor.prompt-mdx-editor-shell .mdxeditor-root-contenteditable > div {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  background-color: hsl(var(--card));
+}
+
+.mdxeditor.prompt-mdx-editor-shell .prompt-mdx-editor-content {
+  min-height: 100%;
+  height: 100%;
+  padding: 18px 20px 28px;
+  font-size: 13px;
+  line-height: 1.7;
+  background-color: transparent;
+}
+
+.mdxeditor.prompt-mdx-editor-shell .prompt-mdx-editor-content > *:first-child {
+  margin-top: 0;
+}
+
+.mdxeditor.prompt-mdx-editor-shell .prompt-mdx-editor-content > *:last-child {
+  margin-bottom: 0;
+}
+
+.mdxeditor.prompt-mdx-editor-shell .prompt-mdx-editor-content p {
+  margin: 0 0 0.9em;
+}
+
+.mdxeditor.prompt-mdx-editor-shell .prompt-mdx-editor-content h1,
+.mdxeditor.prompt-mdx-editor-shell .prompt-mdx-editor-content h2,
+.mdxeditor.prompt-mdx-editor-shell .prompt-mdx-editor-content h3,
+.mdxeditor.prompt-mdx-editor-shell .prompt-mdx-editor-content h4,
+.mdxeditor.prompt-mdx-editor-shell .prompt-mdx-editor-content h5,
+.mdxeditor.prompt-mdx-editor-shell .prompt-mdx-editor-content h6 {
+  margin: 1.1em 0 0.55em;
+  font-weight: 700;
+  line-height: 1.3;
+  color: hsl(var(--foreground));
+}
+
+.mdxeditor.prompt-mdx-editor-shell .prompt-mdx-editor-content h1 {
+  font-size: 1.55rem;
+}
+
+.mdxeditor.prompt-mdx-editor-shell .prompt-mdx-editor-content h2 {
+  font-size: 1.3rem;
+}
+
+.mdxeditor.prompt-mdx-editor-shell .prompt-mdx-editor-content h3 {
+  font-size: 1.12rem;
+}
+
+.mdxeditor.prompt-mdx-editor-shell .prompt-mdx-editor-content h4,
+.mdxeditor.prompt-mdx-editor-shell .prompt-mdx-editor-content h5,
+.mdxeditor.prompt-mdx-editor-shell .prompt-mdx-editor-content h6 {
+  font-size: 1rem;
+}
+
+.mdxeditor.prompt-mdx-editor-shell .prompt-mdx-editor-content ul,
+.mdxeditor.prompt-mdx-editor-shell .prompt-mdx-editor-content ol {
+  margin: 0 0 1em;
+  padding-left: 1.5rem;
+}
+
+.mdxeditor.prompt-mdx-editor-shell .prompt-mdx-editor-content ul {
+  list-style: disc;
+}
+
+.mdxeditor.prompt-mdx-editor-shell .prompt-mdx-editor-content ol {
+  list-style: decimal;
+}
+
+.mdxeditor.prompt-mdx-editor-shell .prompt-mdx-editor-content li {
+  margin: 0.3em 0;
+}
+
+.mdxeditor.prompt-mdx-editor-shell .prompt-mdx-editor-content blockquote {
+  margin: 1em 0;
+  padding: 0.2em 0 0.2em 1em;
+  border-left: 3px solid hsl(var(--primary) / 0.4);
+  color: hsl(var(--muted-foreground));
+  background-color: hsl(var(--muted) / 0.55);
+}
+
+.mdxeditor.prompt-mdx-editor-shell .prompt-mdx-editor-content hr {
+  margin: 1.3em 0;
+  border: 0;
+  border-top: 1px solid hsl(var(--border));
+}
+
+.mdxeditor.prompt-mdx-editor-shell .prompt-mdx-editor-content a {
+  color: hsl(var(--primary));
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+}
+
+.mdxeditor.prompt-mdx-editor-shell .prompt-mdx-editor-content code {
+  padding: 0.1em 0.35em;
+  border-radius: 6px;
+  background-color: hsl(var(--muted));
+  font-size: 0.92em;
+}
+
+.mdxeditor.prompt-mdx-editor-shell .prompt-mdx-editor-content pre {
+  margin: 1em 0;
+  padding: 0.9em 1em;
+  overflow: auto;
+  border: 1px solid hsl(var(--border));
+  border-radius: calc(var(--radius) - 1px);
+  background-color: hsl(var(--muted) / 0.78);
+}
+
+.mdxeditor.prompt-mdx-editor-shell .prompt-mdx-editor-content pre code {
+  padding: 0;
+  background: transparent;
+}
+
+.mdxeditor.prompt-mdx-editor-shell .mdxeditor-source-editor {
+  flex: 1;
+  min-height: 0;
+  border: 1px solid hsl(var(--border));
+  border-radius: calc(var(--radius) + 4px);
+  background-color: hsl(var(--card));
+  overflow: hidden;
+  box-shadow:
+    inset 0 1px 0 hsl(var(--background) / 0.9),
+    0 1px 2px hsl(var(--foreground) / 0.03);
+}
+
+.mdxeditor.prompt-mdx-editor-shell .sp-wrapper,
+.mdxeditor.prompt-mdx-editor-shell .sp-layout,
+.mdxeditor.prompt-mdx-editor-shell .cm-editor,
+.mdxeditor.prompt-mdx-editor-shell .cm-sourceView,
+.mdxeditor.prompt-mdx-editor-shell .cm-sourceView .cm-editor,
+.mdxeditor.prompt-mdx-editor-shell .cm-sourceView .cm-scroller {
+  height: 100%;
+  min-height: 0;
+  background-color: hsl(var(--card));
+}
+
+.mdxeditor.prompt-mdx-editor-shell .cm-sourceView {
+  border-radius: inherit;
+}
+
+.mdxeditor.prompt-mdx-editor-shell .cm-sourceView .cm-editor {
+  border-radius: inherit;
+}
+
+.mdxeditor.prompt-mdx-editor-shell .cm-scroller,
+.mdxeditor.prompt-mdx-editor-shell .cm-sourceView .cm-scroller {
+  overflow: auto;
+}
+
+.mdxeditor.prompt-mdx-editor-shell .cm-gutters {
+  background-color: hsl(var(--muted) / 0.72);
+  border-right: 1px solid hsl(var(--border));
+}
+
+.mdxeditor.prompt-mdx-editor-shell .cm-lineNumbers .cm-gutterElement {
+  color: hsl(var(--muted-foreground));
+}
+
+.prompt-mdx-editor-source-label {
+  padding-left: 4px;
+  font-size: 12px;
+  color: hsl(var(--muted-foreground));
+}
