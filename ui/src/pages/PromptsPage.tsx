@@ -44,16 +44,25 @@ export function PromptsPage() {
   const [projectDeleteTarget, setProjectDeleteTarget] = useState<(typeof state.projects)[number] | null>(null);
   const [projectDeleting, setProjectDeleting] = useState(false);
   const shouldAutoStartEdit = useRef(false);
+  const tableRowTotal = state.projects.length + 1;
 
   const totalPages = useMemo(
-    () => Math.max(1, Math.ceil(state.projects.length / pageSize)),
-    [pageSize, state.projects.length]
+    () => Math.max(1, Math.ceil(tableRowTotal / pageSize)),
+    [pageSize, tableRowTotal]
   );
   const currentPage = Math.min(page, totalPages);
 
-  const pagedProjects = useMemo(() => {
-    const start = (currentPage - 1) * pageSize;
-    return state.projects.slice(start, start + pageSize);
+  const { showGlobalRow, pagedProjects } = useMemo(() => {
+    const pageStart = (currentPage - 1) * pageSize;
+    const pageEnd = pageStart + pageSize;
+    const showGlobalRow = pageStart === 0;
+    const projectStart = Math.max(0, pageStart - 1);
+    const projectEnd = Math.max(projectStart, pageEnd - 1);
+
+    return {
+      showGlobalRow,
+      pagedProjects: state.projects.slice(projectStart, projectEnd),
+    };
   }, [currentPage, pageSize, state.projects]);
 
   // Auto-start edit after document loads when switching scope via edit button
@@ -196,7 +205,7 @@ export function PromptsPage() {
                   <CardDescription>{t("prompts.projects.subtitle")}</CardDescription>
                 </div>
                 <div className="text-xs text-muted-foreground">
-                  {t("common.pagination.total", { total: state.projects.length.toLocaleString() })}
+                  {t("common.pagination.total", { total: tableRowTotal.toLocaleString() })}
                 </div>
               </div>
             </CardHeader>
@@ -211,25 +220,26 @@ export function PromptsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {/* Global prompt — pinned at top */}
-                  <TableRow>
-                    <TableCell>
-                      <Badge variant="secondary">{t("prompts.editor.globalBadge")}</Badge>
-                    </TableCell>
-                    <TableCell className="font-medium">{t("prompts.global.title")}</TableCell>
-                    <TableCell className="text-muted-foreground text-xs">—</TableCell>
-                    <TableCell className="text-center">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-8 min-w-20 text-xs"
-                        onClick={() => handleEditDocument("global")}
-                        title={t("prompts.editor.edit")}
-                      >
-                        {t("prompts.editor.edit")}
-                      </Button>
-                    </TableCell>
-                  </TableRow>
+                  {showGlobalRow && (
+                    <TableRow>
+                      <TableCell>
+                        <Badge variant="secondary">{t("prompts.editor.globalBadge")}</Badge>
+                      </TableCell>
+                      <TableCell className="font-medium">{t("prompts.global.title")}</TableCell>
+                      <TableCell className="text-muted-foreground text-xs">—</TableCell>
+                      <TableCell className="text-center">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-8 min-w-20 text-xs"
+                          onClick={() => handleEditDocument("global")}
+                          title={t("prompts.editor.edit")}
+                        >
+                          {t("prompts.editor.edit")}
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  )}
 
                   {/* Project rows */}
                   {state.projectsLoading ? (
@@ -286,7 +296,7 @@ export function PromptsPage() {
               </Table>
               <PaginationBar
                 page={currentPage}
-                total={state.projects.length}
+                total={tableRowTotal}
                 totalPages={totalPages}
                 pageSize={pageSize}
                 pageSizeOptions={[5, 10, 20, 50]}
