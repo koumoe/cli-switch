@@ -6,9 +6,7 @@ import {
   Button,
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
-  CardTitle,
   Badge,
   DateRangePicker,
   dateRangeToMs,
@@ -33,6 +31,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui";
+import { PaginationBar } from "@/components/PaginationBar";
 import { humanizeApiError, humanizeErrorText } from "@/lib/error";
 import { useI18n } from "@/lib/i18n";
 import { useWindowEvent } from "@/lib/useWindowEvent";
@@ -253,29 +252,15 @@ export function LogsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-lg font-semibold">{t("logs.title")}</h1>
-          <p className="text-muted-foreground text-xs mt-0.5">{t("logs.subtitle")}</p>
         </div>
-        <div className="flex flex-col items-end gap-1">
-          <Button size="sm" variant="outline" onClick={() => refresh(page)} disabled={loading}>
-            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
-            {t("common.refresh")}
-          </Button>
-          <div className="text-xs text-muted-foreground">{t("common.autoRefresh1m")}</div>
-        </div>
+        <Button size="sm" variant="outline" onClick={() => refresh(page)} disabled={loading}>
+          <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
+          {t("common.refresh")}
+        </Button>
       </div>
 
       <Card className="flex-1 min-h-0 flex flex-col">
         <CardHeader>
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <CardTitle>{t("logs.table.title")}</CardTitle>
-              <CardDescription>{t("logs.table.subtitle")}</CardDescription>
-            </div>
-            <div className="text-xs text-muted-foreground">
-              {t("logs.pagination.total", { total: total.toLocaleString() })}
-            </div>
-          </div>
-
           <div className="flex flex-wrap items-end gap-2 pt-2">
             <div className="space-y-1">
               <div className="text-xs text-muted-foreground">{t("logs.filters.dateRange")}</div>
@@ -509,47 +494,20 @@ export function LogsPage() {
             </Table>
           </div>
 
-          <div className="flex items-center justify-between px-4 py-3 border-t bg-background rounded-b-lg">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              {t("logs.pagination.page", { page, totalPages })}
-              <Select
-                value={String(pageSize)}
-                onValueChange={(v) => {
-                  const n = Number(v);
-                  if (Number.isFinite(n) && n > 0) setPageSize(n);
-                }}
-              >
-                <SelectTrigger className="h-8 w-[100px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="20">20</SelectItem>
-                  <SelectItem value="50">50</SelectItem>
-                  <SelectItem value="100">100</SelectItem>
-                  <SelectItem value="200">200</SelectItem>
-                </SelectContent>
-              </Select>
-              <span>{t("logs.pagination.perPage")}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => refresh(Math.max(1, page - 1))}
-                disabled={loading || page <= 1}
-              >
-                {t("logs.pagination.prev")}
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => refresh(Math.min(totalPages, page + 1))}
-                disabled={loading || page >= totalPages}
-              >
-                {t("logs.pagination.next")}
-              </Button>
-            </div>
-          </div>
+          <PaginationBar
+            page={page}
+            total={total}
+            totalPages={totalPages}
+            pageSize={pageSize}
+            disabled={loading}
+            onPageChange={(next) => {
+              void refresh(next);
+            }}
+            onPageSizeChange={(next) => {
+              setPageSize(next);
+              setPage(1);
+            }}
+          />
         </CardContent>
       </Card>
     </div>

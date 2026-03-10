@@ -72,11 +72,11 @@
   },
   "nav": {
     "overview": "Overview",
-    "channels": "Channels",
+    "channels": "Channel Management",
     "prompts": "Project Management",
     "routes": "Routes",
-    "monitor": "Monitor",
-    "logs": "Logs",
+    "monitor": "Channel Statistics",
+    "logs": "Request Details",
     "settings": "Settings"
   },
   "theme": {
@@ -208,16 +208,16 @@
       }
     },
     "activeChannels": {
-      "title": "Active Channels",
+      "title": "Available Channels",
       "subtitle": "Currently enabled channels",
-      "empty": "No channels enabled"
+      "empty": "No available channels"
     },
     "toast": {
       "loadFail": "Failed to load"
     }
   },
   "channels": {
-    "title": "Channels",
+    "title": "Channel Management",
     "subtitle": "Manage upstream API channel configuration and connectivity",
     "new": "New Channel",
     "autoSort": {
@@ -380,7 +380,7 @@
     }
   },
   "monitor": {
-    "title": "Monitor",
+    "title": "Channel Statistics",
     "subtitle": "Statistics and channel performance",
     "range": {
       "today": "Today",
@@ -430,7 +430,7 @@
     }
   },
   "logs": {
-    "title": "Logs",
+    "title": "Request Details",
     "subtitle": "Request details with duration / tokens",
     "table": {
       "title": "Request Logs",

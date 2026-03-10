@@ -72,11 +72,11 @@
   },
   "nav": {
     "overview": "概览",
-    "channels": "渠道",
+    "channels": "渠道管理",
     "prompts": "项目管理",
     "routes": "路由",
-    "monitor": "监控",
-    "logs": "日志",
+    "monitor": "渠道统计",
+    "logs": "请求明细",
     "settings": "设置"
   },
   "theme": {
@@ -208,16 +208,16 @@
       }
     },
     "activeChannels": {
-      "title": "活跃渠道",
+      "title": "可用渠道",
       "subtitle": "当前启用的渠道列表",
-      "empty": "暂无启用渠道"
+      "empty": "暂无可用渠道"
     },
     "toast": {
       "loadFail": "加载失败"
     }
   },
   "channels": {
-    "title": "渠道",
+    "title": "渠道管理",
     "subtitle": "管理上游 API 渠道的配置和连接",
     "new": "新建渠道",
     "autoSort": {
@@ -380,7 +380,7 @@
     }
   },
   "monitor": {
-    "title": "监控",
+    "title": "渠道统计",
     "subtitle": "统计和渠道性能",
     "range": {
       "today": "今天",
@@ -430,7 +430,7 @@
     }
   },
   "logs": {
-    "title": "日志",
+    "title": "请求明细",
     "subtitle": "请求明细与耗时 / Token 统计",
     "table": {
       "title": "请求日志",
