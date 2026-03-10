@@ -1,3 +1,8 @@
+## [0.37.2](https://github.com/koumoe/cli-switch/compare/v0.37.1...v0.37.2) (2026-03-10)
+
+### Bug Fixes
+
+* align table page sizes and fixed footer layout ([44d06c5](https://github.com/koumoe/cli-switch/commit/44d06c56dc5ced8fa7bb3c8acdda8fc718708fd4))
 ## [0.37.1](https://github.com/koumoe/cli-switch/compare/v0.37.0...v0.37.1) (2026-03-10)
 
 ### Bug Fixes
