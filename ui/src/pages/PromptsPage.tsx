@@ -305,7 +305,6 @@ export function PromptsPage() {
                 total={tableRowTotal}
                 totalPages={totalPages}
                 pageSize={pageSize}
-                pageSizeOptions={[20, 50, 100, 200]}
                 disabled={state.projectsLoading}
                 onPageChange={setPage}
                 onPageSizeChange={(next) => {

@@ -314,7 +314,6 @@ export function MonitorPage() {
               total={channelStats.length}
               totalPages={totalPages}
               pageSize={pageSize}
-              pageSizeOptions={[20, 50, 100, 200]}
               disabled={loading}
               onPageChange={setPage}
               onPageSizeChange={(next) => {
