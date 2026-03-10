@@ -34,7 +34,8 @@ export function DeleteConfirmDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[480px]">
+      {/* Offset slightly above center (44%) so this dialog clears the tall editor dialog behind it */}
+      <DialogContent className="top-[44%] translate-y-[-44%] sm:max-w-[480px]">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>

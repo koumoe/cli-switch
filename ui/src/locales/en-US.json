@@ -55,8 +55,8 @@
     "maintenance_logs_start_date_gt_end_date": "start_date must be <= end_date",
     "prompt_tool_required": "Prompt tool is required",
     "prompt_tool_invalid": "Invalid prompt tool",
-    "prompt_scope_required": "Prompt scope is required",
-    "prompt_scope_invalid": "Invalid prompt scope",
+    "prompt_scope_required": "Type is required",
+    "prompt_scope_invalid": "Invalid type",
     "prompt_project_not_found": "Prompt project not found",
     "prompt_project_id_required": "project_id is required",
     "prompt_project_path_required": "Project path is required",
@@ -127,7 +127,7 @@
       "gemini": "Gemini CLI"
     },
     "sidebar": {
-      "title": "Prompt Scope",
+      "title": "Type",
       "description": "Global prompt stays on top, project prompts are managed by folder"
     },
     "global": {
@@ -147,7 +147,7 @@
       "readonly": "Click “Edit” in the top-right corner to start writing the Markdown document.",
       "edit": "Edit Prompt",
       "cancel": "Cancel Editing",
-      "save": "Save Document",
+      "save": "Save Prompt",
       "saved": "Prompt saved",
       "saveFail": "Failed to save prompt",
       "loadFail": "Failed to load prompt",
