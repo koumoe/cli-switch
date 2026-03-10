@@ -1,3 +1,7 @@
+## [0.37.1](https://github.com/koumoe/cli-switch/compare/v0.37.0...v0.37.1) (2026-03-10)
+
+### 修复
+* 修复全局提示词分页显示异常 ([2312304](https://github.com/koumoe/cli-switch/commit/2312304a0e96137ab053218a3c1d5e1e0e58c725))
 ## [0.37.0](https://github.com/koumoe/cli-switch/compare/v0.36.0...v0.37.0) (2026-03-10)
 
 ### 功能
