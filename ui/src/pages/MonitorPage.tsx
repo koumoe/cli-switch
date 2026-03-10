@@ -53,7 +53,7 @@ export function MonitorPage() {
   const [loading, setLoading] = useState(false);
   const loadingRef = useRef(false);
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(6);
+  const [pageSize, setPageSize] = useState(20);
 
   const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
     const now = new Date();
@@ -140,7 +140,7 @@ export function MonitorPage() {
   }, [totalPages]);
 
   return (
-    <div className="space-y-4 pb-4">
+    <div className="flex h-full min-h-0 flex-col gap-4 pb-4">
       {/* 页面标题 */}
       <div className="flex items-center justify-between">
         <div>
@@ -229,7 +229,7 @@ export function MonitorPage() {
 
       {/* 渠道统计 */}
       {channelStats.length > 0 && (
-        <Card className="flex flex-col">
+        <Card className="flex flex-1 min-h-0 flex-col">
           <CardHeader>
             <div className="flex items-start justify-between gap-4">
               <div>
@@ -241,77 +241,80 @@ export function MonitorPage() {
               </div>
             </div>
           </CardHeader>
-          <CardContent className="flex min-h-0 flex-col p-0">
-	            <Table>
-	              <TableHeader>
-	                <TableRow>
-	                  <TableHead className={colClass.channel}>
-	                    {t("monitor.channelStats.headers.channel")}
-	                  </TableHead>
-	                  <TableHead className={colClass.terminal}>
-	                    {t("monitor.channelStats.headers.terminal")}
-	                  </TableHead>
-	                  <TableHead className={colClass.requests}>
-	                    {t("monitor.channelStats.headers.requests")}
-	                  </TableHead>
-	                  <TableHead className={colClass.success}>
-	                    {t("monitor.channelStats.headers.success")}
-	                  </TableHead>
-                  <TableHead className={colClass.failed}>
-                    {t("monitor.channelStats.headers.failed")}
-                  </TableHead>
-                  <TableHead className={colClass.estimatedCost}>
-                    {t("monitor.channelStats.headers.estimatedCost")}
-                  </TableHead>
-                  <TableHead className={colClass.actualSpend}>
-                    {t("monitor.channelStats.headers.actualSpend")}
-                  </TableHead>
-                  <TableHead className={colClass.avgLatency}>
-                    {t("monitor.channelStats.headers.avgLatency")}
-                  </TableHead>
-	                </TableRow>
-	              </TableHeader>
-              <TableBody>
-                {pagedChannelStats.map((cs) => (
-                  <TableRow key={cs.channel_id}>
-                    <TableCell className="font-medium">{cs.name}</TableCell>
-                    <TableCell>
-                      <Badge variant="outline">{protocolLabel(t, cs.protocol)}</Badge>
-                    </TableCell>
-                    <TableCell>{cs.requests}</TableCell>
-                    <TableCell className="text-success">
-                      {cs.success}
-                    </TableCell>
-                    <TableCell className="text-destructive">
-                      {cs.failed}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground font-mono">
-                      {cs.estimated_cost_usd ? `$${cs.estimated_cost_usd}` : "-"}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground font-mono">
-                      {(() => {
-                        const est = parseDecimalLike(cs.estimated_cost_usd);
-                        const ch = channelsById.get(cs.channel_id);
-                        const real = Number(ch?.real_multiplier ?? 1);
-                        if (!est || est <= 0) return "-";
-                        if (!Number.isFinite(real) || real < 0) return "-";
-                        return formatMoney(est * real, currency);
-                      })()}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {cs.avg_latency_ms
-                        ? `${Math.round(cs.avg_latency_ms)}ms`
-                        : "-"}
-                    </TableCell>
+          <CardContent className="flex flex-1 min-h-0 flex-col p-0">
+            <div className="flex-1 min-h-0 overflow-hidden">
+              <Table containerClassName="h-full overflow-y-auto">
+                <TableHeader className="sticky top-0 z-10 bg-background">
+                  <TableRow>
+                    <TableHead className={colClass.channel}>
+                      {t("monitor.channelStats.headers.channel")}
+                    </TableHead>
+                    <TableHead className={colClass.terminal}>
+                      {t("monitor.channelStats.headers.terminal")}
+                    </TableHead>
+                    <TableHead className={colClass.requests}>
+                      {t("monitor.channelStats.headers.requests")}
+                    </TableHead>
+                    <TableHead className={colClass.success}>
+                      {t("monitor.channelStats.headers.success")}
+                    </TableHead>
+                    <TableHead className={colClass.failed}>
+                      {t("monitor.channelStats.headers.failed")}
+                    </TableHead>
+                    <TableHead className={colClass.estimatedCost}>
+                      {t("monitor.channelStats.headers.estimatedCost")}
+                    </TableHead>
+                    <TableHead className={colClass.actualSpend}>
+                      {t("monitor.channelStats.headers.actualSpend")}
+                    </TableHead>
+                    <TableHead className={colClass.avgLatency}>
+                      {t("monitor.channelStats.headers.avgLatency")}
+                    </TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {pagedChannelStats.map((cs) => (
+                    <TableRow key={cs.channel_id}>
+                      <TableCell className="font-medium">{cs.name}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{protocolLabel(t, cs.protocol)}</Badge>
+                      </TableCell>
+                      <TableCell>{cs.requests}</TableCell>
+                      <TableCell className="text-success">
+                        {cs.success}
+                      </TableCell>
+                      <TableCell className="text-destructive">
+                        {cs.failed}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground font-mono">
+                        {cs.estimated_cost_usd ? `$${cs.estimated_cost_usd}` : "-"}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground font-mono">
+                        {(() => {
+                          const est = parseDecimalLike(cs.estimated_cost_usd);
+                          const ch = channelsById.get(cs.channel_id);
+                          const real = Number(ch?.real_multiplier ?? 1);
+                          if (!est || est <= 0) return "-";
+                          if (!Number.isFinite(real) || real < 0) return "-";
+                          return formatMoney(est * real, currency);
+                        })()}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {cs.avg_latency_ms
+                          ? `${Math.round(cs.avg_latency_ms)}ms`
+                          : "-"}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
             <PaginationBar
               page={currentPage}
               total={channelStats.length}
               totalPages={totalPages}
               pageSize={pageSize}
+              pageSizeOptions={[20, 50, 100, 200]}
               disabled={loading}
               onPageChange={setPage}
               onPageSizeChange={(next) => {

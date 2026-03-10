@@ -39,7 +39,7 @@ export function PromptsPage() {
   const [editorDialogOpen, setEditorDialogOpen] = useState(false);
   const [closingAfterSave, setClosingAfterSave] = useState(false);
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(5);
+  const [pageSize, setPageSize] = useState(20);
   const [projectDeleteOpen, setProjectDeleteOpen] = useState(false);
   const [projectDeleteTarget, setProjectDeleteTarget] = useState<(typeof state.projects)[number] | null>(null);
   const [projectDeleting, setProjectDeleting] = useState(false);
@@ -181,13 +181,17 @@ export function PromptsPage() {
       : t("prompts.editor.projectBadge");
 
   return (
-    <div className="space-y-4 pb-4">
+    <div className="flex h-full min-h-0 flex-col gap-4 pb-4">
       <div>
         <h1 className="text-lg font-semibold">{t("prompts.title")}</h1>
         <p className="text-muted-foreground text-xs mt-0.5">{t("prompts.subtitle")}</p>
       </div>
 
-      <Tabs value={state.activeTool} onValueChange={state.handleToolChange}>
+      <Tabs
+        value={state.activeTool}
+        onValueChange={state.handleToolChange}
+        className="flex flex-1 min-h-0 flex-col"
+      >
         <TabsList>
           {PROMPT_TOOL_IDS.map((tool) => (
             <TabsTrigger key={tool} value={tool}>
@@ -196,8 +200,8 @@ export function PromptsPage() {
           ))}
         </TabsList>
 
-        <div className="mt-4">
-          <Card className="flex flex-col">
+        <div className="mt-4 flex flex-1 min-h-0 flex-col">
+          <Card className="flex flex-1 min-h-0 flex-col">
             <CardHeader>
               <div className="flex items-start justify-between gap-4">
                 <div>
@@ -209,97 +213,99 @@ export function PromptsPage() {
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="flex min-h-0 flex-col p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-24">{t("prompts.sidebar.title")}</TableHead>
-                    <TableHead className="w-48">{t("prompts.projects.name")}</TableHead>
-                    <TableHead>{t("prompts.projects.path")}</TableHead>
-                    <TableHead className="w-52">{t("common.actions")}</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {showGlobalRow && (
+            <CardContent className="flex flex-1 min-h-0 flex-col p-0">
+              <div className="flex-1 min-h-0 overflow-hidden">
+                <Table containerClassName="h-full overflow-y-auto">
+                  <TableHeader className="sticky top-0 z-10 bg-background">
                     <TableRow>
-                      <TableCell>
-                        <Badge variant="secondary">{t("prompts.editor.globalBadge")}</Badge>
-                      </TableCell>
-                      <TableCell className="font-medium">{t("prompts.global.title")}</TableCell>
-                      <TableCell className="text-muted-foreground text-xs">—</TableCell>
-                      <TableCell className="text-center">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-8 min-w-20 text-xs"
-                          onClick={() => handleEditDocument("global")}
-                          title={t("prompts.editor.edit")}
-                        >
-                          {t("prompts.editor.edit")}
-                        </Button>
-                      </TableCell>
+                      <TableHead className="w-24">{t("prompts.sidebar.title")}</TableHead>
+                      <TableHead className="w-48">{t("prompts.projects.name")}</TableHead>
+                      <TableHead>{t("prompts.projects.path")}</TableHead>
+                      <TableHead className="w-52">{t("common.actions")}</TableHead>
                     </TableRow>
-                  )}
-
-                  {/* Project rows */}
-                  {state.projectsLoading ? (
-                    <TableRow>
-                      <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
-                        {t("common.loading")}
-                      </TableCell>
-                    </TableRow>
-                  ) : state.projects.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
-                        {t("prompts.projects.empty", { tool: toolLabel })}
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    pagedProjects.map((project) => (
-                      <TableRow key={project.id}>
+                  </TableHeader>
+                  <TableBody>
+                    {showGlobalRow && (
+                      <TableRow>
                         <TableCell>
-                          <Badge variant="outline">{t("prompts.editor.projectBadge")}</Badge>
+                          <Badge variant="secondary">{t("prompts.editor.globalBadge")}</Badge>
                         </TableCell>
-                        <TableCell className="font-medium">{project.name}</TableCell>
-                        <TableCell className="font-mono text-xs text-muted-foreground truncate max-w-[300px]">
-                          {project.path}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center justify-center gap-1">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-8 min-w-20 text-xs"
-                              onClick={() => handleEditDocument("project", project.id)}
-                              title={t("prompts.editor.edit")}
-                            >
-                              {t("prompts.editor.edit")}
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-8 min-w-20 border-destructive/40 text-xs text-destructive hover:border-destructive hover:bg-destructive/10 hover:text-destructive"
-                              onClick={() => {
-                                setProjectDeleteTarget(project);
-                                setProjectDeleteOpen(true);
-                              }}
-                              title={t("prompts.actions.deleteProject")}
-                            >
-                              {t("prompts.actions.deleteProject")}
-                            </Button>
-                          </div>
+                        <TableCell className="font-medium">{t("prompts.global.title")}</TableCell>
+                        <TableCell className="text-muted-foreground text-xs">—</TableCell>
+                        <TableCell className="text-center">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 min-w-20 text-xs"
+                            onClick={() => handleEditDocument("global")}
+                            title={t("prompts.editor.edit")}
+                          >
+                            {t("prompts.editor.edit")}
+                          </Button>
                         </TableCell>
                       </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
+                    )}
+
+                    {/* Project rows */}
+                    {state.projectsLoading ? (
+                      <TableRow>
+                        <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
+                          {t("common.loading")}
+                        </TableCell>
+                      </TableRow>
+                    ) : state.projects.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
+                          {t("prompts.projects.empty", { tool: toolLabel })}
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      pagedProjects.map((project) => (
+                        <TableRow key={project.id}>
+                          <TableCell>
+                            <Badge variant="outline">{t("prompts.editor.projectBadge")}</Badge>
+                          </TableCell>
+                          <TableCell className="font-medium">{project.name}</TableCell>
+                          <TableCell className="font-mono text-xs text-muted-foreground truncate max-w-[300px]">
+                            {project.path}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center justify-center gap-1">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-8 min-w-20 text-xs"
+                                onClick={() => handleEditDocument("project", project.id)}
+                                title={t("prompts.editor.edit")}
+                              >
+                                {t("prompts.editor.edit")}
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-8 min-w-20 border-destructive/40 text-xs text-destructive hover:border-destructive hover:bg-destructive/10 hover:text-destructive"
+                                onClick={() => {
+                                  setProjectDeleteTarget(project);
+                                  setProjectDeleteOpen(true);
+                                }}
+                                title={t("prompts.actions.deleteProject")}
+                              >
+                                {t("prompts.actions.deleteProject")}
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
               <PaginationBar
                 page={currentPage}
                 total={tableRowTotal}
                 totalPages={totalPages}
                 pageSize={pageSize}
-                pageSizeOptions={[5, 10, 20, 50]}
+                pageSizeOptions={[20, 50, 100, 200]}
                 disabled={state.projectsLoading}
                 onPageChange={setPage}
                 onPageSizeChange={(next) => {
