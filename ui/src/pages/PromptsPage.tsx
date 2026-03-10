@@ -39,7 +39,7 @@ export function PromptsPage() {
   const [editorDialogOpen, setEditorDialogOpen] = useState(false);
   const [closingAfterSave, setClosingAfterSave] = useState(false);
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(20);
+  const [pageSize, setPageSize] = useState(5);
   const [projectDeleteOpen, setProjectDeleteOpen] = useState(false);
   const [projectDeleteTarget, setProjectDeleteTarget] = useState<(typeof state.projects)[number] | null>(null);
   const [projectDeleting, setProjectDeleting] = useState(false);
@@ -289,6 +289,7 @@ export function PromptsPage() {
                 total={state.projects.length}
                 totalPages={totalPages}
                 pageSize={pageSize}
+                pageSizeOptions={[5, 10, 20, 50]}
                 disabled={state.projectsLoading}
                 onPageChange={setPage}
                 onPageSizeChange={(next) => {

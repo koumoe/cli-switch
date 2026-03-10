@@ -24,7 +24,7 @@ export function PaginationBar({
   total,
   totalPages,
   pageSize,
-  pageSizeOptions = [20, 50, 100, 200],
+  pageSizeOptions = [6, 10, 20, 50],
   disabled = false,
   onPageChange,
   onPageSizeChange,

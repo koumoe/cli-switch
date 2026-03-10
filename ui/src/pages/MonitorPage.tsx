@@ -53,7 +53,7 @@ export function MonitorPage() {
   const [loading, setLoading] = useState(false);
   const loadingRef = useRef(false);
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(20);
+  const [pageSize, setPageSize] = useState(6);
 
   const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
     const now = new Date();
