@@ -1,3 +1,8 @@
+## [0.37.0](https://github.com/koumoe/cli-switch/compare/v0.36.0...v0.37.0) (2026-03-10)
+
+### 功能
+* 优化提示词编辑器弹窗UI并替换Markdown编辑器 (#123) ([#123](https://github.com/koumoe/cli-switch/issues/123)) ([64f2928](https://github.com/koumoe/cli-switch/commit/64f2928e3384e98e42064f00f46013bb88d37dd4))
+* 减少项目管理和监控页面默认每页数量 (#122) ([#122](https://github.com/koumoe/cli-switch/issues/122)) ([08e99da](https://github.com/koumoe/cli-switch/commit/08e99daf6f2dca329ef829e0aea5489b8a21535b))
 ## [0.36.0](https://github.com/koumoe/cli-switch/compare/v0.35.1...v0.36.0) (2026-03-09)
 
 ### 功能

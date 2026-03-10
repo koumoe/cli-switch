@@ -1,3 +1,9 @@
+## [0.37.0](https://github.com/koumoe/cli-switch/compare/v0.36.0...v0.37.0) (2026-03-10)
+
+### Features
+
+* improve prompts editor dialog UI and replace markdown editor (#123) ([#123](https://github.com/koumoe/cli-switch/issues/123)) ([64f2928](https://github.com/koumoe/cli-switch/commit/64f2928e3384e98e42064f00f46013bb88d37dd4))
+* reduce default page size for project and monitor pages (#122) ([#122](https://github.com/koumoe/cli-switch/issues/122)) ([08e99da](https://github.com/koumoe/cli-switch/commit/08e99daf6f2dca329ef829e0aea5489b8a21535b))
 ## [0.36.0](https://github.com/koumoe/cli-switch/compare/v0.35.1...v0.36.0) (2026-03-09)
 
 ### Features
