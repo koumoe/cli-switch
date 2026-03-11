@@ -96,7 +96,6 @@
   "common": {
     "loading": "Loading...",
     "refresh": "Refresh",
-    "autoRefresh1m": "Auto updates when new data arrives",
     "cancel": "Cancel",
     "ok": "OK",
     "save": "Save",
@@ -421,13 +420,6 @@
       "failed": "Failed",
       "search": "Search",
       "reset": "Reset"
-    },
-    "pagination": {
-      "total": "Total {{total}}",
-      "page": "Page {{page}} / {{totalPages}}",
-      "perPage": "per page",
-      "prev": "Prev",
-      "next": "Next"
     },
     "headers": {
       "time": "Time",

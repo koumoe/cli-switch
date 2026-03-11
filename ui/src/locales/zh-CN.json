@@ -96,7 +96,6 @@
   "common": {
     "loading": "加载中...",
     "refresh": "刷新",
-    "autoRefresh1m": "有新数据时自动更新",
     "cancel": "取消",
     "ok": "知道了",
     "save": "保存",
@@ -421,13 +420,6 @@
       "failed": "失败",
       "search": "查询",
       "reset": "重置"
-    },
-    "pagination": {
-      "total": "共 {{total}} 条",
-      "page": "第 {{page}} / {{totalPages}} 页",
-      "perPage": "每页",
-      "prev": "上一页",
-      "next": "下一页"
     },
     "headers": {
       "time": "时间",
