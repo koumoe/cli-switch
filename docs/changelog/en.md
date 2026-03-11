@@ -1,3 +1,10 @@
+## [0.37.3](https://github.com/koumoe/cli-switch/compare/v0.37.2...v0.37.3) (2026-03-11)
+
+### Bug Fixes
+
+* align page copy and table layout ([b05ee49](https://github.com/koumoe/cli-switch/commit/b05ee498e629442412ffa3bf56cd5bc7490719f2))
+* remove remaining unused locale keys ([13c5e3c](https://github.com/koumoe/cli-switch/commit/13c5e3c98712c4a5e0a456001a3203d078b3d9c9))
+* remove unused locale copy ([216db5f](https://github.com/koumoe/cli-switch/commit/216db5f7e7a70c41de706e451967843847fe6376))
 ## [0.37.2](https://github.com/koumoe/cli-switch/compare/v0.37.1...v0.37.2) (2026-03-10)
 
 ### Bug Fixes
