@@ -72,11 +72,11 @@
   },
   "nav": {
     "overview": "Overview",
-    "channels": "Channels",
+    "channels": "Channel Management",
     "prompts": "Project Management",
     "routes": "Routes",
-    "monitor": "Monitor",
-    "logs": "Logs",
+    "monitor": "Channel Statistics",
+    "logs": "Request Details",
     "settings": "Settings"
   },
   "theme": {
@@ -96,7 +96,6 @@
   "common": {
     "loading": "Loading...",
     "refresh": "Refresh",
-    "autoRefresh1m": "Auto updates when new data arrives",
     "cancel": "Cancel",
     "ok": "OK",
     "save": "Save",
@@ -120,7 +119,6 @@
   },
   "prompts": {
     "title": "Project Management",
-    "subtitle": "Manage discovered projects and their prompt files for Codex, Claude Code, and Gemini CLI",
     "tabs": {
       "codex": "Codex",
       "claude": "Claude Code",
@@ -135,8 +133,6 @@
       "description": "Shared markdown prompt document applied to {{tool}}"
     },
     "projects": {
-      "title": "Projects",
-      "subtitle": "The global prompt stays pinned on top, followed by project-level prompt files grouped by folder.",
       "empty": "No projects discovered from {{tool}} yet. Open a project in that CLI first, then come back to edit it.",
       "name": "Project Name",
       "path": "Project Path"
@@ -185,7 +181,6 @@
   },
   "overview": {
     "title": "Overview",
-    "subtitle": "This month's stats, request trends, and channel distribution",
     "cards": {
       "todayRequests": "This Month Requests",
       "totalTokens": "This Month Tokens",
@@ -195,12 +190,10 @@
     },
     "trend": {
       "title": "This Month Request Trend",
-      "subtitle": "Daily requests, one line per channel",
       "empty": "No trend data"
     },
     "distribution": {
       "title": "Channel Usage",
-      "subtitle": "This month's successful request share by channel",
       "empty": "No request data",
       "view": {
         "percent": "Percent",
@@ -208,17 +201,15 @@
       }
     },
     "activeChannels": {
-      "title": "Active Channels",
-      "subtitle": "Currently enabled channels",
-      "empty": "No channels enabled"
+      "title": "Available Channels",
+      "empty": "No available channels"
     },
     "toast": {
       "loadFail": "Failed to load"
     }
   },
   "channels": {
-    "title": "Channels",
-    "subtitle": "Manage upstream API channel configuration and connectivity",
+    "title": "Channel Management",
     "new": "New Channel",
     "autoSort": {
       "button": "Sort by multiplier",
@@ -380,8 +371,7 @@
     }
   },
   "monitor": {
-    "title": "Monitor",
-    "subtitle": "Statistics and channel performance",
+    "title": "Channel Statistics",
     "range": {
       "today": "Today",
       "yesterday": "Yesterday",
@@ -398,8 +388,6 @@
       "actualSpend": "Estimated Cost"
     },
     "channelStats": {
-      "title": "Channel Stats",
-      "subtitle": "Requests and performance by channel",
       "headers": {
         "channel": "Channel",
         "terminal": "Terminal",
@@ -411,31 +399,12 @@
         "avgLatency": "Avg Duration"
       }
     },
-    "log": {
-      "title": "Request Logs",
-      "subtitle": "Latest 100 request records",
-      "headers": {
-        "time": "Time",
-        "terminal": "Terminal",
-        "channel": "Channel",
-        "model": "Model",
-        "status": "Status",
-        "latency": "Latency",
-        "error": "Error"
-      },
-      "empty": "No request records"
-    },
     "toast": {
       "loadFail": "Failed to load"
     }
   },
   "logs": {
-    "title": "Logs",
-    "subtitle": "Request details with duration / tokens",
-    "table": {
-      "title": "Request Logs",
-      "subtitle": "Filter and paginate all request records"
-    },
+    "title": "Request Details",
     "filters": {
       "all": "All",
       "dateRange": "Date range",
@@ -451,13 +420,6 @@
       "failed": "Failed",
       "search": "Search",
       "reset": "Reset"
-    },
-    "pagination": {
-      "total": "Total {{total}}",
-      "page": "Page {{page}} / {{totalPages}}",
-      "perPage": "per page",
-      "prev": "Prev",
-      "next": "Next"
     },
     "headers": {
       "time": "Time",

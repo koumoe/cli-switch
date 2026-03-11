@@ -805,12 +805,9 @@ export function ChannelsPage() {
   return (
     <div className="space-y-4 pb-4">
       {/* 页面标题 */}
-        <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between">
         <div>
           <h1 className="text-lg font-semibold">{t("channels.title")}</h1>
-          <p className="text-muted-foreground text-xs mt-0.5">
-            {t("channels.subtitle")}
-          </p>
         </div>
         <div className="flex gap-2">
           <Button

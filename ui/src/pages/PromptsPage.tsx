@@ -6,9 +6,6 @@ import {
   Button,
   Card,
   CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
   Table,
   TableBody,
   TableCell,
@@ -181,10 +178,9 @@ export function PromptsPage() {
       : t("prompts.editor.projectBadge");
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-4 pb-4">
+    <div className="flex h-full min-h-0 flex-col gap-4">
       <div>
         <h1 className="text-lg font-semibold">{t("prompts.title")}</h1>
-        <p className="text-muted-foreground text-xs mt-0.5">{t("prompts.subtitle")}</p>
       </div>
 
       <Tabs
@@ -202,17 +198,6 @@ export function PromptsPage() {
 
         <div className="mt-4 flex flex-1 min-h-0 flex-col">
           <Card className="flex flex-1 min-h-0 flex-col">
-            <CardHeader>
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <CardTitle>{t("prompts.projects.title")}</CardTitle>
-                  <CardDescription>{t("prompts.projects.subtitle")}</CardDescription>
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  {t("common.pagination.total", { total: tableRowTotal.toLocaleString() })}
-                </div>
-              </div>
-            </CardHeader>
             <CardContent className="flex flex-1 min-h-0 flex-col p-0">
               <div className="flex-1 min-h-0 overflow-hidden">
                 <Table containerClassName="h-full overflow-y-auto">

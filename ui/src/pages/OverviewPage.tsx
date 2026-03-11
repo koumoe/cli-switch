@@ -352,9 +352,6 @@ export function OverviewPage() {
       {/* 页面标题 */}
       <div>
         <h1 className="text-lg font-semibold">{t("overview.title")}</h1>
-        <p className="text-muted-foreground text-xs mt-0.5">
-          {t("overview.subtitle")}
-        </p>
       </div>
 
       {/* 核心指标卡片 */}
@@ -418,9 +415,6 @@ export function OverviewPage() {
         <Card className="flex flex-col md:col-span-3">
           <CardHeader className="py-3 px-3">
             <CardTitle className="text-sm">{t("overview.trend.title")}</CardTitle>
-            <CardDescription className="text-xs">
-              {t("overview.trend.subtitle")}
-            </CardDescription>
           </CardHeader>
           <CardContent className="px-3 pb-3 flex-1 flex flex-col">
             {loading ? (
@@ -462,9 +456,6 @@ export function OverviewPage() {
                 </TabsList>
               </Tabs>
             </div>
-            <CardDescription className="text-xs">
-              {t("overview.distribution.subtitle")}
-            </CardDescription>
           </CardHeader>
           <CardContent className="px-3 pb-3">
             {loading ? (
@@ -490,9 +481,6 @@ export function OverviewPage() {
       <Card>
         <CardHeader className="py-3 px-3">
           <CardTitle className="text-sm">{t("overview.activeChannels.title")}</CardTitle>
-          <CardDescription className="text-xs">
-            {t("overview.activeChannels.subtitle")}
-          </CardDescription>
         </CardHeader>
         <CardContent className="px-3 pb-3">
           {loading ? (
