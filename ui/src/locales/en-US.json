@@ -120,7 +120,6 @@
   },
   "prompts": {
     "title": "Project Management",
-    "subtitle": "Manage discovered projects and their prompt files for Codex, Claude Code, and Gemini CLI",
     "tabs": {
       "codex": "Codex",
       "claude": "Claude Code",
@@ -135,8 +134,6 @@
       "description": "Shared markdown prompt document applied to {{tool}}"
     },
     "projects": {
-      "title": "Projects",
-      "subtitle": "The global prompt stays pinned on top, followed by project-level prompt files grouped by folder.",
       "empty": "No projects discovered from {{tool}} yet. Open a project in that CLI first, then come back to edit it.",
       "name": "Project Name",
       "path": "Project Path"
@@ -185,7 +182,6 @@
   },
   "overview": {
     "title": "Overview",
-    "subtitle": "This month's stats, request trends, and channel distribution",
     "cards": {
       "todayRequests": "This Month Requests",
       "totalTokens": "This Month Tokens",
@@ -195,12 +191,10 @@
     },
     "trend": {
       "title": "This Month Request Trend",
-      "subtitle": "Daily requests, one line per channel",
       "empty": "No trend data"
     },
     "distribution": {
       "title": "Channel Usage",
-      "subtitle": "This month's successful request share by channel",
       "empty": "No request data",
       "view": {
         "percent": "Percent",
@@ -209,7 +203,6 @@
     },
     "activeChannels": {
       "title": "Available Channels",
-      "subtitle": "Currently enabled channels",
       "empty": "No available channels"
     },
     "toast": {
@@ -218,7 +211,6 @@
   },
   "channels": {
     "title": "Channel Management",
-    "subtitle": "Manage upstream API channel configuration and connectivity",
     "new": "New Channel",
     "autoSort": {
       "button": "Sort by multiplier",
@@ -381,7 +373,6 @@
   },
   "monitor": {
     "title": "Channel Statistics",
-    "subtitle": "Statistics and channel performance",
     "range": {
       "today": "Today",
       "yesterday": "Yesterday",
@@ -398,8 +389,6 @@
       "actualSpend": "Estimated Cost"
     },
     "channelStats": {
-      "title": "Channel Stats",
-      "subtitle": "Requests and performance by channel",
       "headers": {
         "channel": "Channel",
         "terminal": "Terminal",
@@ -411,31 +400,12 @@
         "avgLatency": "Avg Duration"
       }
     },
-    "log": {
-      "title": "Request Logs",
-      "subtitle": "Latest 100 request records",
-      "headers": {
-        "time": "Time",
-        "terminal": "Terminal",
-        "channel": "Channel",
-        "model": "Model",
-        "status": "Status",
-        "latency": "Latency",
-        "error": "Error"
-      },
-      "empty": "No request records"
-    },
     "toast": {
       "loadFail": "Failed to load"
     }
   },
   "logs": {
     "title": "Request Details",
-    "subtitle": "Request details with duration / tokens",
-    "table": {
-      "title": "Request Logs",
-      "subtitle": "Filter and paginate all request records"
-    },
     "filters": {
       "all": "All",
       "dateRange": "Date range",
