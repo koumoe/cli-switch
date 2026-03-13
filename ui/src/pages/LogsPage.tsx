@@ -74,6 +74,14 @@ export function LogsPage() {
   }, [channels]);
 
   const channelsById = useMemo(() => new Map(channels.map((c) => [c.id, c] as const)), [channels]);
+  const filteredChannels = useMemo(() => {
+    if (protocol === "all") return channels;
+    return channels.filter((channel) => channel.protocol === protocol);
+  }, [channels, protocol]);
+  const selectedChannel = useMemo(
+    () => filteredChannels.find((channel) => channel.id === channelId) ?? null,
+    [channelId, filteredChannels]
+  );
 
   const totalPages = useMemo(() => {
     if (total <= 0) return 1;
@@ -138,6 +146,12 @@ export function LogsPage() {
   useEffect(() => {
     refresh(1);
   }, [pageSize]);
+
+  useEffect(() => {
+    if (channelId === "all") return;
+    if (filteredChannels.some((channel) => channel.id === channelId)) return;
+    setChannelId("all");
+  }, [channelId, filteredChannels]);
 
   useWindowEvent("cliswitch-usage-changed", () => {
     if (loadingRef.current) return;
@@ -290,25 +304,37 @@ export function LogsPage() {
             <div className="space-y-1">
               <div className="text-xs text-muted-foreground">{t("logs.filters.channel")}</div>
               <Select value={channelId} onValueChange={setChannelId}>
-                <SelectTrigger className="h-8 w-[170px]">
-                  <SelectValue />
+                <SelectTrigger className="h-8 w-[190px]">
+                  <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden text-left">
+                    {selectedChannel ? (
+                      <>
+                        <span className="inline-flex shrink-0 items-center whitespace-nowrap rounded-md border px-1 py-0.5 text-[10px] font-medium leading-none">
+                          {protocolLabel(t, selectedChannel.protocol)}
+                        </span>
+                        <span className="truncate">{selectedChannel.name}</span>
+                      </>
+                    ) : (
+                      <span className="truncate">{t("logs.filters.all")}</span>
+                    )}
+                  </div>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">{t("logs.filters.all")}</SelectItem>
-                  {channels.map((c) => {
+                  {filteredChannels.map((c) => {
                     const endpoint = protocolLabel(t, c.protocol);
                     return (
                       <SelectItem
                         key={c.id}
                         value={c.id}
                         textValue={`${c.name} ${endpoint}`}
+                        className="py-2"
                       >
-                        <div className="flex items-center gap-2 min-w-0">
-                          <Badge variant="outline" className="text-[10px] px-1 py-0">
+                        <span className="flex min-w-0 items-center gap-2">
+                          <span className="inline-flex shrink-0 items-center whitespace-nowrap rounded-md border px-1 py-0.5 text-[10px] font-medium leading-none">
                             {endpoint}
-                          </Badge>
+                          </span>
                           <span className="truncate">{c.name}</span>
-                        </div>
+                        </span>
                       </SelectItem>
                     );
                   })}
