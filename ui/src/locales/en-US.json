@@ -474,7 +474,6 @@
   },
   "settings": {
     "title": "Settings",
-    "subtitle": "App configuration and system information",
     "tabs": {
       "appearance": "Appearance",
       "channel": "Channel",

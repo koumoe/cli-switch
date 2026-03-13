@@ -51,6 +51,8 @@ import { SettingsPage } from "./pages/SettingsPage";
 
 type AppRoute = "overview" | "channels" | "prompts" | "monitor" | "logs" | "settings";
 
+const AUTO_HEIGHT_ROUTES: AppRoute[] = ["overview", "channels", "settings"];
+
 const NAV_ITEMS: { route: AppRoute; labelKey: string; icon: React.ElementType }[] = [
   { route: "overview", labelKey: "nav.overview", icon: LayoutGrid },
   { route: "channels", labelKey: "nav.channels", icon: Radio },
@@ -187,6 +189,7 @@ function StatusIndicator({ status, collapsed }: { status: string; collapsed: boo
 export default function App() {
   const [pathname, setPathname] = useState(() => window.location.pathname);
   const route = useMemo(() => routeFromPath(pathname), [pathname]);
+  const useAutoHeightLayout = AUTO_HEIGHT_ROUTES.includes(route);
   const [health, setHealth] = useState<string>("...");
   const [collapsed, setCollapsed] = useState(() => {
     if (typeof window === "undefined") return false;
@@ -714,8 +717,13 @@ export default function App() {
 
       {/* 内容区 */}
       <div className="flex-1 min-w-0 flex flex-col">
-        <main className="flex-1 overflow-auto bg-muted/30">
-          <div className="mx-auto w-full max-w-7xl p-5 h-full min-h-0 flex flex-col">
+        <main className={cn("flex-1 bg-muted/30", useAutoHeightLayout ? "overflow-auto" : "overflow-hidden")}>
+          <div
+            className={cn(
+              "mx-auto w-full max-w-7xl p-5",
+              useAutoHeightLayout ? "min-h-full" : "flex h-full min-h-0 flex-col overflow-hidden"
+            )}
+          >
             {route === "overview" ? (
               <OverviewPage />
             ) : route === "channels" ? (

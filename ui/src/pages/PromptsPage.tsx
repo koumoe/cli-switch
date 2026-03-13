@@ -16,6 +16,7 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui";
+import { PageHeader } from "@/components/PageHeader";
 import { PaginationBar } from "@/components/PaginationBar";
 import { deletePromptProject } from "@/api";
 import { humanizeApiError } from "@/lib/error";
@@ -178,17 +179,15 @@ export function PromptsPage() {
       : t("prompts.editor.projectBadge");
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-4">
-      <div>
-        <h1 className="text-lg font-semibold">{t("prompts.title")}</h1>
-      </div>
+    <div className="flex h-full min-h-0 flex-col gap-4 overflow-hidden">
+      <PageHeader title={t("prompts.title")} />
 
       <Tabs
         value={state.activeTool}
         onValueChange={state.handleToolChange}
         className="flex flex-1 min-h-0 flex-col"
       >
-        <TabsList>
+        <TabsList className="self-start">
           {PROMPT_TOOL_IDS.map((tool) => (
             <TabsTrigger key={tool} value={tool}>
               {t(`prompts.tabs.${tool}`)}
@@ -196,7 +195,7 @@ export function PromptsPage() {
           ))}
         </TabsList>
 
-        <div className="mt-4 flex flex-1 min-h-0 flex-col">
+        <div className="mt-2 flex flex-1 min-h-0 flex-col">
           <Card className="flex flex-1 min-h-0 flex-col">
             <CardContent className="flex flex-1 min-h-0 flex-col p-0">
               <div className="flex-1 min-h-0 overflow-hidden">

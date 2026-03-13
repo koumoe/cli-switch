@@ -31,6 +31,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui";
+import { PageHeader } from "@/components/PageHeader";
 import { PaginationBar } from "@/components/PaginationBar";
 import { humanizeApiError, humanizeErrorText } from "@/lib/error";
 import { useI18n } from "@/lib/i18n";
@@ -144,7 +145,7 @@ export function LogsPage() {
   });
 
   return (
-    <div className="flex flex-col gap-4 h-full min-h-0">
+    <div className="flex h-full min-h-0 flex-col gap-4 overflow-hidden">
       <Dialog
         open={detailOpen}
         onOpenChange={(v) => {
@@ -249,15 +250,15 @@ export function LogsPage() {
         </DialogContent>
       </Dialog>
 
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-lg font-semibold">{t("logs.title")}</h1>
-        </div>
-        <Button size="sm" variant="outline" onClick={() => refresh(page)} disabled={loading}>
-          <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
-          {t("common.refresh")}
-        </Button>
-      </div>
+      <PageHeader
+        title={t("logs.title")}
+        actions={
+          <Button size="sm" variant="outline" onClick={() => refresh(page)} disabled={loading}>
+            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
+            {t("common.refresh")}
+          </Button>
+        }
+      />
 
       <Card className="flex-1 min-h-0 flex flex-col">
         <CardHeader>

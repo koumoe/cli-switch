@@ -474,7 +474,6 @@
   },
   "settings": {
     "title": "设置",
-    "subtitle": "应用配置和系统信息",
     "tabs": {
       "appearance": "界面",
       "channel": "渠道",
