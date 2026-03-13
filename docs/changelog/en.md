@@ -1,3 +1,8 @@
+## [0.37.5](https://github.com/koumoe/cli-switch/compare/v0.37.4...v0.37.5) (2026-03-13)
+
+### Bug Fixes
+
+* align page layouts and improve log filters (#128) ([#128](https://github.com/koumoe/cli-switch/issues/128)) ([34a1284](https://github.com/koumoe/cli-switch/commit/34a1284904377f3271bd47cec906dd6540268171))
 ## [0.37.4](https://github.com/koumoe/cli-switch/compare/v0.37.3...v0.37.4) (2026-03-13)
 
 ### Bug Fixes
