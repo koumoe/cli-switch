@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { Suspense, useEffect } from "react";
 import { Save, Trash2 } from "lucide-react";
 
 import type { PromptDocument } from "@/api";
@@ -13,8 +13,11 @@ import {
 } from "@/components/ui";
 import { useI18n } from "@/lib/i18n";
 
-import { PromptMarkdownEditor } from "./PromptMarkdownEditor";
 import { PROMPT_DOCUMENT_MAX_BYTES, formatBytes } from "./shared";
+
+const PromptMarkdownEditor = React.lazy(() =>
+  import("./PromptMarkdownEditor").then((module) => ({ default: module.PromptMarkdownEditor }))
+);
 
 type PromptEditorDialogProps = {
   open: boolean;
@@ -99,12 +102,20 @@ export function PromptEditorDialog({
               {t("common.loading")}
             </div>
           ) : (
-            <PromptMarkdownEditor
-              value={draftContent}
-              onChange={onDraftChange}
-              placeholder={t("prompts.editor.placeholder")}
-              disabled={saving || deleting}
-            />
+            <Suspense
+              fallback={
+                <div className="flex h-full min-h-[300px] items-center justify-center text-sm text-muted-foreground">
+                  {t("common.loading")}
+                </div>
+              }
+            >
+              <PromptMarkdownEditor
+                value={draftContent}
+                onChange={onDraftChange}
+                placeholder={t("prompts.editor.placeholder")}
+                disabled={saving || deleting}
+              />
+            </Suspense>
           )}
         </div>
 
