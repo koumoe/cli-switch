@@ -32,6 +32,7 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui";
+import { PageHeader } from "@/components/PageHeader";
 import { useTheme, type Theme } from "@/lib/theme";
 import { type Locale, useI18n } from "@/lib/i18n";
 import { humanizeApiError } from "@/lib/error";
@@ -299,13 +300,7 @@ export function SettingsPage() {
 
   return (
     <div className="space-y-4 pb-4">
-      {/* 页面标题 */}
-      <div>
-        <h1 className="text-lg font-semibold">{t("settings.title")}</h1>
-        <p className="text-muted-foreground text-xs mt-0.5">
-          {t("settings.subtitle")}
-        </p>
-      </div>
+      <PageHeader title={t("settings.title")} />
 
       {/* 标签页 */}
       <Tabs defaultValue="appearance" className="w-full">
@@ -337,7 +332,7 @@ export function SettingsPage() {
         </TabsList>
 
         {/* 界面标签页 */}
-        <TabsContent value="appearance" className="space-y-4 mt-4">
+        <TabsContent value="appearance" className="mt-2 space-y-4">
           {/* 外观设置 */}
           <Card>
             <CardHeader>
@@ -440,7 +435,7 @@ export function SettingsPage() {
         </TabsContent>
 
         {/* 渠道标签页 */}
-        <TabsContent value="channel" className="space-y-4 mt-4">
+        <TabsContent value="channel" className="mt-2 space-y-4">
           {/* 渠道保护（原自动禁用） */}
           <Card>
             <CardHeader>
@@ -700,7 +695,7 @@ export function SettingsPage() {
         </TabsContent>
 
         {/* 应用标签页 */}
-        <TabsContent value="application" className="space-y-4 mt-4">
+        <TabsContent value="application" className="mt-2 space-y-4">
           {/* 窗口关闭（原关闭行为） */}
           <Card>
             <CardHeader>
@@ -838,7 +833,7 @@ export function SettingsPage() {
         </TabsContent>
 
         {/* CLI 标签页 */}
-        <TabsContent value="update" className="space-y-4 mt-4">
+        <TabsContent value="update" className="mt-2 space-y-4">
           {/* CLI 代理配置（Claude / Codex / Gemini -> CliSwitch） */}
           <Card>
             <CardHeader>
@@ -1039,7 +1034,7 @@ export function SettingsPage() {
         </TabsContent>
 
         {/* 数据标签页 */}
-        <TabsContent value="data" className="space-y-4 mt-4">
+        <TabsContent value="data" className="mt-2 space-y-4">
           {/* 数据存储 */}
           <Card>
             <CardHeader>
@@ -1453,7 +1448,7 @@ export function SettingsPage() {
         </TabsContent>
 
         {/* 系统标签页 */}
-        <TabsContent value="system" className="space-y-4 mt-4">
+        <TabsContent value="system" className="mt-2 space-y-4">
           {/* 服务信息（原代理配置） */}
           <Card>
             <CardHeader>

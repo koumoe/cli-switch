@@ -12,6 +12,7 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui";
+import { PageHeader } from "@/components/PageHeader";
 import { useI18n } from "@/lib/i18n";
 import { humanizeApiError } from "@/lib/error";
 import { useCurrency, formatMoney, parseDecimalLike } from "@/lib/currency";
@@ -349,10 +350,7 @@ export function OverviewPage() {
 
   return (
     <div className="space-y-4 pb-4">
-      {/* 页面标题 */}
-      <div>
-        <h1 className="text-lg font-semibold">{t("overview.title")}</h1>
-      </div>
+      <PageHeader title={t("overview.title")} />
 
       {/* 核心指标卡片 */}
       <div className="grid gap-3 md:grid-cols-4">

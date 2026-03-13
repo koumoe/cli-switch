@@ -18,6 +18,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui";
+import { PageHeader } from "@/components/PageHeader";
 import { PaginationBar } from "@/components/PaginationBar";
 import { useI18n } from "@/lib/i18n";
 import { humanizeApiError } from "@/lib/error";
@@ -139,32 +140,31 @@ export function MonitorPage() {
   }, [totalPages]);
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-4">
-      {/* 页面标题 */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-lg font-semibold">{t("monitor.title")}</h1>
-        </div>
-        <div className="flex items-center gap-2">
-          <DateRangePicker
-            value={dateRange}
-            onChange={setDateRange}
-            placeholder={t("monitor.range.selectRange")}
-            className="w-[260px] h-8"
-            disabled={loading}
-            locale={locale}
-          />
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={refresh}
-            disabled={loading || !dateRange?.from}
-          >
-            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
-            {t("common.refresh")}
-          </Button>
-        </div>
-      </div>
+    <div className="flex h-full min-h-0 flex-col gap-4 overflow-hidden">
+      <PageHeader
+        title={t("monitor.title")}
+        actions={
+          <>
+            <DateRangePicker
+              value={dateRange}
+              onChange={setDateRange}
+              placeholder={t("monitor.range.selectRange")}
+              className="h-8 w-[260px]"
+              disabled={loading}
+              locale={locale}
+            />
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={refresh}
+              disabled={loading || !dateRange?.from}
+            >
+              <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
+              {t("common.refresh")}
+            </Button>
+          </>
+        }
+      />
 
       {/* 统计卡片 */}
       <div className="grid gap-3 md:grid-cols-5">

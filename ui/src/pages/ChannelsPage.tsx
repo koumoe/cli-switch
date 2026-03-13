@@ -39,6 +39,7 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui";
+import { PageHeader } from "@/components/PageHeader";
 import { useI18n } from "@/lib/i18n";
 import { humanizeApiError } from "@/lib/error";
 import { useCurrency } from "@/lib/currency";
@@ -804,27 +805,26 @@ export function ChannelsPage() {
 
   return (
     <div className="space-y-4 pb-4">
-      {/* 页面标题 */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-lg font-semibold">{t("channels.title")}</h1>
-        </div>
-        <div className="flex gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => setAutoSortOpen(true)}
-            disabled={autoSortCurrent.length <= 1}
-          >
-            <ArrowDownUp className="h-4 w-4 mr-2" />
-            {t("channels.autoSort.button")}
-          </Button>
-          <Button size="sm" onClick={openCreate}>
-            <Plus className="h-4 w-4 mr-2" />
-            {t("channels.new")}
-          </Button>
-        </div>
-      </div>
+      <PageHeader
+        title={t("channels.title")}
+        actions={
+          <>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setAutoSortOpen(true)}
+              disabled={autoSortCurrent.length <= 1}
+            >
+              <ArrowDownUp className="h-4 w-4 mr-2" />
+              {t("channels.autoSort.button")}
+            </Button>
+            <Button size="sm" onClick={openCreate}>
+              <Plus className="h-4 w-4 mr-2" />
+              {t("channels.new")}
+            </Button>
+          </>
+        }
+      />
 
       {/* 渠道表格 */}
       <Tabs
