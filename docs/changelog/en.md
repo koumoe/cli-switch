@@ -1,3 +1,9 @@
+## [0.37.4](https://github.com/koumoe/cli-switch/compare/v0.37.3...v0.37.4) (2026-03-13)
+
+### Bug Fixes
+
+* reduce prompt editor build warnings ([f769b20](https://github.com/koumoe/cli-switch/commit/f769b20423769732a8bd4f4e1769fbd2387b35d3))
+* upgrade rollup to resolve audit warning ([646d48e](https://github.com/koumoe/cli-switch/commit/646d48e1f38c9740b090b61d5ee79beb3e42f38e))
 ## [0.37.3](https://github.com/koumoe/cli-switch/compare/v0.37.2...v0.37.3) (2026-03-11)
 
 ### Bug Fixes
