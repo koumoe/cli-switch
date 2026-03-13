@@ -6,6 +6,64 @@ function isNodeModulePkg(id: string, name: string): boolean {
   return id.includes(`/node_modules/${name}/`) || id.includes(`\\node_modules\\${name}\\`);
 }
 
+function isNodeModulePattern(id: string, pattern: string): boolean {
+  const normalizedId = id.replaceAll("\\", "/");
+  return normalizedId.includes(`/node_modules/${pattern}`);
+}
+
+function matchesNodeModulePatterns(id: string, patterns: string[]): boolean {
+  return patterns.some((pattern) => isNodeModulePattern(id, pattern));
+}
+
+const EDITOR_LEXICAL_PATTERNS = [
+  "@lexical/",
+  "lexical/",
+];
+
+const EDITOR_CODE_LANG_PATTERNS = [
+  "@codemirror/lang-",
+  "@codemirror/language-data/",
+];
+
+const EDITOR_CODE_PARSER_PATTERNS = [
+  "@lezer/",
+];
+
+const EDITOR_CODE_CORE_PATTERNS = [
+  "@codemirror/",
+  "codemirror/",
+  "cm6-theme-basic-light/",
+];
+
+const EDITOR_MARKDOWN_PATTERNS = [
+  "@mdxeditor/",
+  "react-hook-form/",
+  "downshift/",
+  "unidiff/",
+  "js-yaml/",
+  "classnames/",
+  "mdast-util-",
+  "micromark-",
+  "remark-",
+  "rehype-",
+  "hast-util-",
+  "unist-util-",
+  "vfile",
+  "decode-named-character-reference/",
+  "character-entities",
+  "property-information/",
+  "space-separated-tokens/",
+  "comma-separated-tokens/",
+  "mdurl/",
+  "devlop/",
+  "trim-lines/",
+  "ccount/",
+  "estree-util-",
+  "bail/",
+  "trough/",
+  "zwitch/",
+];
+
 export default defineConfig(() => {
   const sourcemap = process.env.VITE_SOURCEMAP === "true";
   return {
@@ -39,7 +97,39 @@ export default defineConfig(() => {
             ) {
               return "react-vendor";
             }
-            return "vendor";
+            if (isNodeModulePkg(id, "@codemirror/legacy-modes")) {
+              return "editor-code-legacy-vendor";
+            }
+            if (isNodeModulePkg(id, "@codemirror/lang-markdown")) {
+              return "editor-markdown-vendor";
+            }
+            if (isNodeModulePkg(id, "@lezer/markdown")) {
+              return "editor-code-parser-markdown-vendor";
+            }
+            if (isNodeModulePkg(id, "@lezer/cpp")) {
+              return "editor-code-parser-cpp-vendor";
+            }
+            if (isNodeModulePkg(id, "@lezer/php")) {
+              return "editor-code-parser-php-vendor";
+            }
+            if (isNodeModulePkg(id, "@lezer/javascript")) {
+              return "editor-code-parser-js-vendor";
+            }
+            if (matchesNodeModulePatterns(id, EDITOR_LEXICAL_PATTERNS)) {
+              return "editor-lexical-vendor";
+            }
+            if (matchesNodeModulePatterns(id, EDITOR_CODE_LANG_PATTERNS)) {
+              return "editor-markdown-vendor";
+            }
+            if (matchesNodeModulePatterns(id, EDITOR_CODE_PARSER_PATTERNS)) {
+              return "editor-code-parser-vendor";
+            }
+            if (matchesNodeModulePatterns(id, EDITOR_CODE_CORE_PATTERNS)) {
+              return "editor-code-core-vendor";
+            }
+            if (matchesNodeModulePatterns(id, EDITOR_MARKDOWN_PATTERNS)) {
+              return "editor-markdown-vendor";
+            }
           },
         },
       },
