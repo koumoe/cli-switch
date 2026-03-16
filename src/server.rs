@@ -1,5 +1,5 @@
 use axum::Router;
-use axum::routing::{any, get, post, put};
+use axum::routing::{any, delete, get, post, put};
 use http::Method;
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -13,7 +13,7 @@ use tower_http::trace::{DefaultOnFailure, DefaultOnResponse};
 
 use crate::events::AppEvent;
 use crate::update;
-use crate::{events, storage};
+use crate::{chat_bridge, events, storage};
 
 mod error;
 mod handlers;
@@ -39,12 +39,14 @@ fn request_endpoint_template(method: &Method, path: &str) -> Option<&'static str
         ("GET", "/api/tools/status") => Some("/api/tools/status"),
         ("POST", "/api/tools/install") => Some("/api/tools/install"),
         ("GET", "/api/tools/config/status") => Some("/api/tools/config/status"),
+        ("GET", "/api/chat_bridge/bindings") => Some("/api/chat_bridge/bindings"),
         ("GET", "/api/prompts/projects") => Some("/api/prompts/projects"),
         ("DELETE", "/api/prompts/projects") => Some("/api/prompts/projects"),
         ("GET", "/api/prompts/document") => Some("/api/prompts/document"),
         ("PUT", "/api/prompts/document") => Some("/api/prompts/document"),
         ("DELETE", "/api/prompts/document") => Some("/api/prompts/document"),
         ("POST", "/api/tools/config/apply") => Some("/api/tools/config/apply"),
+        ("POST", "/api/chat_bridge/pairing_tokens") => Some("/api/chat_bridge/pairing_tokens"),
         ("GET", "/api/channels") => Some("/api/channels"),
         ("POST", "/api/channels") => Some("/api/channels"),
         ("POST", "/api/channels/reorder") => Some("/api/channels/reorder"),
@@ -75,6 +77,9 @@ fn request_endpoint_template(method: &Method, path: &str) -> Option<&'static str
                 }
                 ["api", "channels", _, "checkins", "complete"] if method == Method::POST => {
                     Some("/api/channels/{id}/checkins/complete")
+                }
+                ["api", "chat_bridge", "bindings", _] if method == Method::DELETE => {
+                    Some("/api/chat_bridge/bindings/{id}")
                 }
                 ["api", "channels", _] if method == Method::PUT => Some("/api/channels/{id}"),
                 ["api", "channels", _] if method == Method::DELETE => Some("/api/channels/{id}"),
@@ -112,6 +117,8 @@ fn request_purpose(method: &Method, path: &str) -> &'static str {
         ("POST", "/api/tools/install") => "handlers::install_cli_tool",
         ("GET", "/api/tools/config/status") => "handlers::cli_tools_proxy_config_status",
         ("POST", "/api/tools/config/apply") => "handlers::cli_tools_proxy_config_apply",
+        ("GET", "/api/chat_bridge/bindings") => "handlers::list_chat_bridge_bindings",
+        ("POST", "/api/chat_bridge/pairing_tokens") => "handlers::create_chat_bridge_pairing_token",
         ("GET", "/api/prompts/projects") => "handlers::list_prompt_projects",
         ("DELETE", "/api/prompts/projects") => "handlers::delete_prompt_project",
         ("GET", "/api/prompts/document") => "handlers::get_prompt_document",
@@ -147,6 +154,9 @@ fn request_purpose(method: &Method, path: &str) -> &'static str {
                 }
                 ["api", "channels", _, "checkins", "complete"] if method == Method::POST => {
                     "handlers::complete_channel_checkin_today"
+                }
+                ["api", "chat_bridge", "bindings", _] if method == Method::DELETE => {
+                    "handlers::deactivate_chat_bridge_binding"
                 }
                 ["api", "channels", _] if method == Method::PUT => "handlers::update_channel",
                 ["api", "channels", _] if method == Method::DELETE => "handlers::delete_channel",
@@ -225,6 +235,18 @@ fn build_app(state: AppState) -> Router {
         .route(
             "/api/tools/config/apply",
             post(handlers::cli_tools_proxy_config_apply),
+        )
+        .route(
+            "/api/chat_bridge/bindings",
+            get(handlers::list_chat_bridge_bindings),
+        )
+        .route(
+            "/api/chat_bridge/bindings/{id}",
+            delete(handlers::deactivate_chat_bridge_binding),
+        )
+        .route(
+            "/api/chat_bridge/pairing_tokens",
+            post(handlers::create_chat_bridge_pairing_token),
         )
         .route(
             "/api/prompts/projects",
@@ -343,6 +365,7 @@ pub async fn serve_with_listener(
 
     tracing::info!(addr = %addr, open_browser, "backend server starting");
 
+    let chat_bridge_settings_rx = state.settings_cache_rx.clone();
     let app = build_app(state);
 
     let mut bg = tokio::task::JoinSet::<()>::new();
@@ -401,6 +424,11 @@ pub async fn serve_with_listener(
     ));
 
     bg.spawn(tasks::apply_autostart_setting((*db_path).clone()));
+    bg.spawn(chat_bridge::run_supervisor(
+        (*db_path).clone(),
+        http_client.clone(),
+        chat_bridge_settings_rx,
+    ));
 
     if open_browser {
         let url = format!("http://{addr}");

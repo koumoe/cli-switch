@@ -1,4 +1,5 @@
 pub(super) mod channel;
+pub(super) mod chat_bridge;
 pub(super) mod health;
 pub(super) mod maintenance;
 pub(super) mod pricing;
@@ -15,6 +16,9 @@ pub(super) mod usage;
 pub(super) use channel::{
     channel_checkins_today, complete_channel_checkin_today, create_channel, delete_channel,
     disable_channel, enable_channel, list_channels, reorder_channels, test_channel, update_channel,
+};
+pub(super) use chat_bridge::{
+    create_chat_bridge_pairing_token, deactivate_chat_bridge_binding, list_chat_bridge_bindings,
 };
 pub(super) use health::health;
 pub(super) use maintenance::{db_size, frontend_log_ingest, logs_clear, logs_size, records_clear};

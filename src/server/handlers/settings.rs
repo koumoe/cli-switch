@@ -35,6 +35,10 @@ pub(in crate::server) struct UpdateSettingsInput {
     anthropic_count_tokens_mock_enabled: Option<bool>,
     log_level: Option<logging::LogLevel>,
     log_retention_days: Option<i64>,
+    chat_bridge_enabled: Option<bool>,
+    chat_bridge_telegram_enabled: Option<bool>,
+    chat_bridge_telegram_bot_token: Option<String>,
+    chat_bridge_allow_new_projects: Option<bool>,
 }
 
 pub(in crate::server) async fn update_settings(
@@ -98,6 +102,19 @@ pub(in crate::server) async fn update_settings(
         ),
         ("log_level", input.log_level.is_some()),
         ("log_retention_days", input.log_retention_days.is_some()),
+        ("chat_bridge_enabled", input.chat_bridge_enabled.is_some()),
+        (
+            "chat_bridge_telegram_enabled",
+            input.chat_bridge_telegram_enabled.is_some(),
+        ),
+        (
+            "chat_bridge_telegram_bot_token",
+            input.chat_bridge_telegram_bot_token.is_some(),
+        ),
+        (
+            "chat_bridge_allow_new_projects",
+            input.chat_bridge_allow_new_projects.is_some(),
+        ),
     ]
     .into_iter()
     .filter_map(|(name, is_changed)| is_changed.then_some(name))
@@ -186,6 +203,10 @@ pub(in crate::server) async fn update_settings(
             anthropic_count_tokens_mock_enabled: input.anthropic_count_tokens_mock_enabled,
             log_level: input.log_level,
             log_retention_days: input.log_retention_days,
+            chat_bridge_enabled: input.chat_bridge_enabled,
+            chat_bridge_telegram_enabled: input.chat_bridge_telegram_enabled,
+            chat_bridge_telegram_bot_token: input.chat_bridge_telegram_bot_token,
+            chat_bridge_allow_new_projects: input.chat_bridge_allow_new_projects,
             ..Default::default()
         },
     )
