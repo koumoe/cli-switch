@@ -1,6 +1,7 @@
 pub mod app;
 pub mod autostart;
 pub mod changelog;
+pub mod chat_bridge;
 pub mod cli_tool_proxy_config;
 pub mod cli_tools;
 pub mod events;
