@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 const SQLITE_BUSY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(1);
 
 mod channel;
+mod chat_bridge;
 mod checkin;
 mod error;
 mod pricing;
@@ -24,6 +25,18 @@ pub use channel::{
     clear_channel_failures, create_channel, delete_channel, get_channel, list_channels,
     record_channel_failure_and_maybe_disable, reorder_channels, set_channel_enabled,
     update_channel,
+};
+pub use chat_bridge::{
+    BridgeKnownProject, BridgePermissionMode, BridgeSession, BridgeSessionStatus,
+    ChatBridgeBinding, ChatBridgePairingToken, ChatPlatform, CreateBridgeSessionInput,
+    CreateChatAuditLogInput, CreatePairingTokenInput, DEFAULT_PAIRING_TOKEN_EXPIRES_MINUTES,
+    MAX_PAIRING_TOKEN_EXPIRES_MINUTES, UpdateBridgeSessionInput, consume_pairing_token,
+    count_active_bridge_sessions_for_platform, create_bridge_session, create_chat_audit_log,
+    create_pairing_token, deactivate_chat_binding, get_bridge_session,
+    get_default_bridge_session_for_platform, list_bridge_known_projects,
+    list_bridge_sessions_for_platform, list_chat_bindings, resolve_chat_binding,
+    set_default_bridge_session_for_platform, stop_all_bridge_sessions_for_platform,
+    stop_bridge_session, update_bridge_session, upsert_bridge_known_project,
 };
 pub use checkin::{
     ChannelCheckinsToday, complete_channel_checkin_today, get_channel_checkins_today,
@@ -65,12 +78,18 @@ fn open_conn(db_path: &Path) -> anyhow::Result<Connection> {
     Ok(conn)
 }
 
+fn ensure_schema_upgrades(conn: &Connection) -> anyhow::Result<()> {
+    chat_bridge::ensure_chat_bridge_schema(conn)?;
+    Ok(())
+}
+
 pub fn init_db(db_path: &Path) -> anyhow::Result<()> {
     let conn = open_conn(db_path)?;
 
     let migration = include_str!("../../migrations/001_init.sql");
     conn.execute_batch(migration)
         .with_context(|| "执行 migrations/001_init.sql 失败")?;
+    ensure_schema_upgrades(&conn)?;
 
     Ok(())
 }
