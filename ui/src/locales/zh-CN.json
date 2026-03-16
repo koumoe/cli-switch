@@ -68,7 +68,13 @@
     "prompt_document_not_found": "提示词文档不存在",
     "prompt_document_too_large": "提示词文档过大，请精简内容",
     "prompt_document_version_conflict": "提示词已被其他编辑器更新，请刷新后再处理",
-    "prompt_document_expected_updated_at_invalid": "版本号参数无效"
+    "prompt_document_expected_updated_at_invalid": "版本号参数无效",
+    "chat_bridge_pairing_token_invalid": "配对 Token 无效",
+    "chat_bridge_pairing_token_expired": "配对 Token 已过期",
+    "chat_bridge_pairing_token_used": "配对 Token 已被使用",
+    "chat_bridge_pairing_token_platform_mismatch": "配对 Token 与当前平台不匹配",
+    "chat_bridge_binding_exists": "该平台账号已绑定",
+    "chat_bridge_pairing_token_expires_out_of_range": "配对 Token 过期时间必须在 1 到 1440 分钟之间"
   },
   "nav": {
     "overview": "概览",
@@ -478,6 +484,7 @@
       "appearance": "界面",
       "channel": "渠道",
       "application": "应用",
+      "chatBridge": "消息互联",
       "update": "CLI",
       "data": "数据",
       "system": "系统"
@@ -721,6 +728,71 @@
       "lanAccessibleHint": "允许局域网设备访问此服务",
       "saved": "已保存",
       "saveFail": "保存失败"
+    },
+    "chatBridge": {
+      "title": "消息互联",
+      "subtitle": "统一管理消息平台入口、配对绑定与聊天项目访问。",
+      "configTitle": "基础配置",
+      "configHint": "控制消息互联运行时与项目创建策略。",
+      "platformConfigTitle": "平台配置",
+      "platformConfigHint": "当前仅 Telegram 已接入运行时。WhatsApp / Discord 配置入口已预留，但后端能力尚未接入。",
+      "platformConfigLabel": "{{platform}} 配置",
+      "enable": "启用消息互联",
+      "enableHint": "关闭后会保留配置，但不会启动消息互联运行时。",
+      "telegramEnable": "启用 Telegram",
+      "telegramEnableHint": "允许 Telegram Bot 接入消息互联。",
+      "telegramConfigTitle": "Telegram 配置",
+      "telegramConfigHint": "管理 Telegram Bot Token、启用状态，以及 Telegram 侧的绑定入口。",
+      "telegramToken": "Telegram Bot Token",
+      "telegramTokenPlaceholder": "123456:ABC-DEF...",
+      "telegramTokenPlaceholderConfigured": "已配置，留空表示保持当前 Token",
+      "telegramTokenHint": "通过 @BotFather 创建 Bot 后获取。",
+      "telegramTokenHintConfigured": "当前不会回显已保存的 Token。留空保存会保持原值，输入新 Token 才会覆盖。",
+      "allowNewProjects": "允许通过聊天添加新项目",
+      "allowNewProjectsHint": "开启后允许使用新路径，并会在目录不存在时自动创建目录。",
+      "saved": "消息互联设置已保存",
+      "saveFail": "保存消息互联设置失败",
+      "supportReady": "已接入",
+      "supportPending": "未接入",
+      "supportPendingHint": "{{platform}} 运行时尚未接入，当前仅保留配置入口与平台分组视图。",
+      "actions": {
+        "pairing": "配对 Token",
+        "bindings": "已绑定账号"
+      },
+      "platform": {
+        "telegram": "Telegram",
+        "discord": "Discord",
+        "whatsapp": "WhatsApp"
+      },
+      "pairing": {
+        "title": "配对 Token",
+        "subtitle": "生成一次性 Token，用于在 {{platform}} 聊天端执行 `/bind <token>` 完成绑定。",
+        "generate": "生成 Token",
+        "created": "配对 Token 已生成",
+        "createFail": "生成配对 Token 失败",
+        "platform": "目标平台",
+        "platformHint": "该 Token 只能在 {{platform}} 中使用，其他平台无法消费。",
+        "token": "当前 Token",
+        "tokenHint": "Token 只在这里明文展示一次，请尽快到聊天端完成绑定。",
+        "expiresAt": "过期时间",
+        "expiresHint": "默认 10 分钟失效，过期后需要重新生成。",
+        "empty": "尚未生成"
+      },
+      "bindings": {
+        "title": "已绑定账号",
+        "subtitle": "显示当前已完成绑定的聊天平台账号。",
+        "summary": "当前平台已绑定 {{count}} 个账号",
+        "loadFail": "获取绑定列表失败",
+        "empty": "暂无已绑定账号",
+        "emptyForPlatform": "{{platform}} 暂无已绑定账号",
+        "dialogTitle": "{{platform}} 已绑定账号",
+        "dialogSubtitle": "这里只显示 {{platform}} 平台下已完成绑定的账号。",
+        "unbindTitle": "解除绑定",
+        "unbindConfirm": "确定要解绑 {{name}}（{{platform}}）吗？解绑后需要重新生成配对 Token 才能再次绑定。",
+        "unbind": "解绑",
+        "unbindOk": "已解除绑定",
+        "unbindFail": "解除绑定失败"
+      }
     },
     "compatibility": {
       "title": "兼容性",

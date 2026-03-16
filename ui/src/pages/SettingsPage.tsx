@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Sun, Moon, Monitor, FolderOpen, Info, Database, Languages, DollarSign, RefreshCw, Shield, Power, ScrollText, Palette, Settings2, Cpu } from "lucide-react";
+import { Sun, Moon, Monitor, FolderOpen, Info, Database, Languages, DollarSign, RefreshCw, Shield, Power, ScrollText, Palette, Settings2, Cpu, Bot, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import type { DateRange } from "react-day-picker";
@@ -42,7 +42,7 @@ import { setLogLevel } from "@/lib/logger";
 import { UpdatePromptDialog } from "@/components/UpdatePromptDialog";
 import { postIpc } from "@/lib/ipc";
 import { formatBytes, formatDateTime } from "../lib";
-import { applyCliToolsProxyConfig, checkUpdate, clearLogs, clearRecords, downloadUpdate, getCliToolsProxyConfigStatus, getCliToolsStatus, getDbSize, getHealth, getLogsSize, getSettings, getUpdateChangelog, getUpdateStatus, ignoreUpdate, openDataDir, pricingStatus, pricingSync, updateSettings, type AppSettings, type AutoStartLaunchMode, type CloseBehavior, type DbSize, type Health, type LogsSize, type PricingStatus, type RecordsClearMode, type UpdateCheck, type UpdateStatus, type ChangelogSection, type CliToolId, type CliToolsStatus, type CliToolStatus, type CliToolProxyConfigStatus, type CliToolProxyConfigToolStatus } from "../api";
+import { applyCliToolsProxyConfig, checkUpdate, clearLogs, clearRecords, createChatBridgePairingToken, deactivateChatBridgeBinding, downloadUpdate, getCliToolsProxyConfigStatus, getCliToolsStatus, getDbSize, getHealth, getLogsSize, getSettings, getUpdateChangelog, getUpdateStatus, ignoreUpdate, listChatBridgeBindings, openDataDir, pricingStatus, pricingSync, updateSettings, type AppSettings, type AutoStartLaunchMode, type ChatBridgeBinding, type ChatBridgePairingToken, type ChatPlatform, type CloseBehavior, type DbSize, type Health, type LogsSize, type PricingStatus, type RecordsClearMode, type UpdateCheck, type UpdateStatus, type ChangelogSection, type CliToolId, type CliToolsStatus, type CliToolStatus, type CliToolProxyConfigStatus, type CliToolProxyConfigToolStatus } from "../api";
 import type { CliswitchUpdateStatusEvent } from "@/lib/cliswitchEvents";
 import { clearUpdateReadyShown } from "@/lib/updateReadyPrompt";
 
@@ -93,6 +93,18 @@ export function SettingsPage() {
   const [syncing, setSyncing] = useState(false);
   const [logSaving, setLogSaving] = useState(false);
   const [logRetentionDraft, setLogRetentionDraft] = useState<string>("");
+  const [chatBridgeSaving, setChatBridgeSaving] = useState(false);
+  const [chatBridgeBindings, setChatBridgeBindings] = useState<ChatBridgeBinding[]>([]);
+  const [chatBridgeBindingsLoading, setChatBridgeBindingsLoading] = useState(false);
+  const [chatBridgePairingToken, setChatBridgePairingToken] = useState<ChatBridgePairingToken | null>(null);
+  const [chatBridgePairingCreating, setChatBridgePairingCreating] = useState(false);
+  const [chatBridgePairingPlatform, setChatBridgePairingPlatform] = useState<ChatPlatform>("telegram");
+  const [chatBridgeUnbindTarget, setChatBridgeUnbindTarget] = useState<ChatBridgeBinding | null>(null);
+  const [chatBridgeUnbinding, setChatBridgeUnbinding] = useState(false);
+  const [chatBridgeTelegramTokenDraft, setChatBridgeTelegramTokenDraft] = useState("");
+  const [chatBridgePlatformTab, setChatBridgePlatformTab] = useState<ChatPlatform>("telegram");
+  const [chatBridgePairingDialogOpen, setChatBridgePairingDialogOpen] = useState(false);
+  const [chatBridgeBindingsDialogPlatform, setChatBridgeBindingsDialogPlatform] = useState<ChatPlatform | null>(null);
 
   // 数据库相关 state
   const [dbSize, setDbSize] = useState<DbSize | null>(null);
@@ -159,6 +171,97 @@ export function SettingsPage() {
     }
   }
 
+  async function refreshChatBridgeBindings() {
+    setChatBridgeBindingsLoading(true);
+    try {
+      const next = await listChatBridgeBindings();
+      setChatBridgeBindings(next);
+    } catch (e) {
+      toast.error(t("settings.chatBridge.bindings.loadFail"), { description: humanizeApiError(e, t) });
+    } finally {
+      setChatBridgeBindingsLoading(false);
+    }
+  }
+
+  async function confirmUnbind() {
+    if (!chatBridgeUnbindTarget) return;
+    setChatBridgeUnbinding(true);
+    try {
+      await deactivateChatBridgeBinding(chatBridgeUnbindTarget.id);
+      toast.success(t("settings.chatBridge.bindings.unbindOk"));
+      setChatBridgeUnbindTarget(null);
+      await refreshChatBridgeBindings();
+    } catch (e) {
+      toast.error(t("settings.chatBridge.bindings.unbindFail"), { description: humanizeApiError(e, t) });
+    } finally {
+      setChatBridgeUnbinding(false);
+    }
+  }
+
+  async function saveChatBridgeBaseConfig() {
+    if (!appSettings) return;
+    setChatBridgeSaving(true);
+    try {
+      const next = await updateSettings({
+        chat_bridge_enabled: appSettings.chat_bridge_enabled,
+        chat_bridge_allow_new_projects: appSettings.chat_bridge_allow_new_projects,
+      });
+      setAppSettings(next);
+      toast.success(t("settings.chatBridge.saved"));
+    } catch (e) {
+      toast.error(t("settings.chatBridge.saveFail"), { description: humanizeApiError(e, t) });
+    } finally {
+      setChatBridgeSaving(false);
+    }
+  }
+
+  async function saveTelegramConfig() {
+    if (!appSettings) return;
+    setChatBridgeSaving(true);
+    try {
+      const patch: Partial<AppSettings> = {
+        chat_bridge_telegram_enabled: appSettings.chat_bridge_telegram_enabled,
+      };
+      if (chatBridgeTelegramTokenDraft.trim().length > 0) {
+        patch.chat_bridge_telegram_bot_token = chatBridgeTelegramTokenDraft;
+      }
+      const next = await updateSettings(patch);
+      setAppSettings(next);
+      setChatBridgeTelegramTokenDraft("");
+      toast.success(t("settings.chatBridge.saved"));
+    } catch (e) {
+      toast.error(t("settings.chatBridge.saveFail"), { description: humanizeApiError(e, t) });
+    } finally {
+      setChatBridgeSaving(false);
+    }
+  }
+
+  async function generateChatBridgePairingToken() {
+    setChatBridgePairingCreating(true);
+    try {
+      const next = await createChatBridgePairingToken({
+        platform: chatBridgePairingPlatform,
+      });
+      setChatBridgePairingToken(next);
+      toast.success(t("settings.chatBridge.pairing.created"));
+    } catch (e) {
+      toast.error(t("settings.chatBridge.pairing.createFail"), { description: humanizeApiError(e, t) });
+    } finally {
+      setChatBridgePairingCreating(false);
+    }
+  }
+
+  function openChatBridgePairing(platform: ChatPlatform) {
+    setChatBridgePairingPlatform(platform);
+    setChatBridgePairingToken(null);
+    setChatBridgePairingDialogOpen(true);
+  }
+
+  function openChatBridgeBindings(platform: ChatPlatform) {
+    setChatBridgeBindingsDialogPlatform(platform);
+    void refreshChatBridgeBindings();
+  }
+
   useEffect(() => {
     getHealth()
       .then(setHealth)
@@ -171,6 +274,7 @@ export function SettingsPage() {
     getSettings()
       .then((s) => {
         setAppSettings(s);
+        setChatBridgeTelegramTokenDraft("");
         setLogRetentionDraft(String(s.log_retention_days ?? ""));
         setLogLevel(s.log_level);
       })
@@ -184,6 +288,7 @@ export function SettingsPage() {
     void refreshLogsSize();
     void refreshCliToolsStatus();
     void refreshCliToolsProxyConfigStatus();
+    void refreshChatBridgeBindings();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -198,6 +303,16 @@ export function SettingsPage() {
       window.removeEventListener("cliswitch-update-status", onUpdateStatus as EventListener);
     };
   }, []);
+
+  const chatBridgeBindingsByPlatform: Record<ChatPlatform, ChatBridgeBinding[]> = {
+    telegram: chatBridgeBindings.filter((binding) => binding.platform === "telegram"),
+    whatsapp: chatBridgeBindings.filter((binding) => binding.platform === "whatsapp"),
+    discord: chatBridgeBindings.filter((binding) => binding.platform === "discord"),
+  };
+
+  const chatBridgeBindingsDialogItems = chatBridgeBindingsDialogPlatform
+    ? chatBridgeBindingsByPlatform[chatBridgeBindingsDialogPlatform]
+    : [];
 
   const apiEndpoint = (() => {
     const env = (import.meta.env.VITE_BACKEND_URL as string | undefined)?.trim();
@@ -298,6 +413,352 @@ export function SettingsPage() {
     };
   }, [updatePromptOpen, updatePromptVersion, locale, t]);
 
+  const chatBridgeTab = (
+    <>
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Bot className="h-4 w-4" />
+            {t("settings.chatBridge.configTitle")}
+          </CardTitle>
+          <CardDescription>{t("settings.chatBridge.configHint")}</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <div className="font-medium text-sm">{t("settings.chatBridge.enable")}</div>
+              <div className="text-xs text-muted-foreground">{t("settings.chatBridge.enableHint")}</div>
+            </div>
+            <Switch
+              checked={appSettings?.chat_bridge_enabled ?? false}
+              onCheckedChange={(v) => {
+                setAppSettings((prev) => (prev ? { ...prev, chat_bridge_enabled: v } : prev));
+              }}
+              disabled={!appSettings || chatBridgeSaving}
+            />
+          </div>
+
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <div className="font-medium text-sm">{t("settings.chatBridge.allowNewProjects")}</div>
+              <div className="text-xs text-muted-foreground">{t("settings.chatBridge.allowNewProjectsHint")}</div>
+            </div>
+            <Switch
+              checked={appSettings?.chat_bridge_allow_new_projects ?? false}
+              onCheckedChange={(v) => {
+                setAppSettings((prev) => (prev ? { ...prev, chat_bridge_allow_new_projects: v } : prev));
+              }}
+              disabled={!appSettings || chatBridgeSaving}
+            />
+          </div>
+
+          <div className="flex justify-end">
+            <Button
+              size="sm"
+              disabled={!appSettings || chatBridgeSaving}
+              onClick={() => void saveChatBridgeBaseConfig()}
+            >
+              {t("common.save")}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Bot className="h-4 w-4" />
+            {t("settings.chatBridge.platformConfigTitle")}
+          </CardTitle>
+          <CardDescription>{t("settings.chatBridge.platformConfigHint")}</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <Tabs value={chatBridgePlatformTab} onValueChange={(value) => setChatBridgePlatformTab(value as ChatPlatform)} className="w-full">
+            <TabsList className="w-full justify-start">
+              <TabsTrigger value="telegram">{t("settings.chatBridge.platform.telegram")}</TabsTrigger>
+              <TabsTrigger value="whatsapp">{t("settings.chatBridge.platform.whatsapp")}</TabsTrigger>
+              <TabsTrigger value="discord">{t("settings.chatBridge.platform.discord")}</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="telegram" className="mt-4">
+              <div className="rounded-lg border p-4 space-y-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="space-y-1">
+                    <div className="font-medium text-sm">{t("settings.chatBridge.telegramConfigTitle")}</div>
+                    <div className="text-xs text-muted-foreground">{t("settings.chatBridge.telegramConfigHint")}</div>
+                  </div>
+                  <Badge variant="secondary">{t("settings.chatBridge.supportReady")}</Badge>
+                </div>
+
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <div className="font-medium text-sm">{t("settings.chatBridge.telegramEnable")}</div>
+                    <div className="text-xs text-muted-foreground">{t("settings.chatBridge.telegramEnableHint")}</div>
+                  </div>
+                  <Switch
+                    checked={appSettings?.chat_bridge_telegram_enabled ?? false}
+                    onCheckedChange={(v) => {
+                      setAppSettings((prev) => (prev ? { ...prev, chat_bridge_telegram_enabled: v } : prev));
+                    }}
+                    disabled={!appSettings || chatBridgeSaving}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">{t("settings.chatBridge.telegramToken")}</label>
+                  <Input
+                    type="password"
+                    autoComplete="new-password"
+                    value={chatBridgeTelegramTokenDraft}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setChatBridgeTelegramTokenDraft(value);
+                    }}
+                    placeholder={appSettings?.chat_bridge_telegram_bot_token_configured
+                      ? t("settings.chatBridge.telegramTokenPlaceholderConfigured")
+                      : t("settings.chatBridge.telegramTokenPlaceholder")}
+                    disabled={!appSettings || chatBridgeSaving}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {appSettings?.chat_bridge_telegram_bot_token_configured
+                      ? t("settings.chatBridge.telegramTokenHintConfigured")
+                      : t("settings.chatBridge.telegramTokenHint")}
+                  </p>
+                </div>
+
+                <div className="flex items-center justify-between gap-4 rounded-lg border bg-muted/30 px-3 py-3">
+                  <div className="space-y-1">
+                    <div className="font-medium text-sm">{t("settings.chatBridge.bindings.title")}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {t("settings.chatBridge.bindings.summary", { count: chatBridgeBindingsByPlatform.telegram.length })}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => openChatBridgePairing("telegram")}
+                    >
+                      {t("settings.chatBridge.actions.pairing")}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => openChatBridgeBindings("telegram")}
+                    >
+                      {t("settings.chatBridge.actions.bindings")}
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="flex justify-end">
+                  <Button
+                    size="sm"
+                    disabled={!appSettings || chatBridgeSaving}
+                    onClick={() => void saveTelegramConfig()}
+                  >
+                    {t("common.save")}
+                  </Button>
+                </div>
+              </div>
+            </TabsContent>
+
+            {(["whatsapp", "discord"] as const).map((platform) => (
+              <TabsContent key={platform} value={platform} className="mt-4">
+                <div className="rounded-lg border border-dashed p-4 space-y-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="space-y-1">
+                      <div className="font-medium text-sm">
+                        {t("settings.chatBridge.platformConfigLabel", {
+                          platform: t(`settings.chatBridge.platform.${platform}`),
+                        })}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {t("settings.chatBridge.supportPendingHint", {
+                          platform: t(`settings.chatBridge.platform.${platform}`),
+                        })}
+                      </div>
+                    </div>
+                    <Badge variant="secondary">{t("settings.chatBridge.supportPending")}</Badge>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-4 rounded-lg border bg-muted/30 px-3 py-3">
+                    <div className="space-y-1">
+                      <div className="font-medium text-sm">{t("settings.chatBridge.bindings.title")}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {t("settings.chatBridge.bindings.summary", { count: chatBridgeBindingsByPlatform[platform].length })}
+                      </div>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => openChatBridgeBindings(platform)}
+                    >
+                      {t("settings.chatBridge.actions.bindings")}
+                    </Button>
+                  </div>
+                </div>
+              </TabsContent>
+            ))}
+          </Tabs>
+        </CardContent>
+      </Card>
+
+      <Dialog
+        open={chatBridgePairingDialogOpen}
+        onOpenChange={(open) => {
+          if (!chatBridgePairingCreating) {
+            setChatBridgePairingDialogOpen(open);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-[560px]">
+          <DialogHeader>
+            <DialogTitle>{t("settings.chatBridge.pairing.title")}</DialogTitle>
+            <DialogDescription>
+              {t("settings.chatBridge.pairing.subtitle", {
+                platform: t(`settings.chatBridge.platform.${chatBridgePairingPlatform}`),
+              })}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">{t("settings.chatBridge.pairing.platform")}</label>
+              <Input
+                value={t(`settings.chatBridge.platform.${chatBridgePairingPlatform}`)}
+                disabled
+              />
+              <p className="text-xs text-muted-foreground">
+                {t("settings.chatBridge.pairing.platformHint", {
+                  platform: t(`settings.chatBridge.platform.${chatBridgePairingPlatform}`),
+                })}
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">{t("settings.chatBridge.pairing.token")}</label>
+              <Input value={chatBridgePairingToken?.token ?? ""} disabled placeholder={t("settings.chatBridge.pairing.empty")} className="font-mono text-sm" />
+              <p className="text-xs text-muted-foreground">{t("settings.chatBridge.pairing.tokenHint")}</p>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">{t("settings.chatBridge.pairing.expiresAt")}</label>
+              <Input
+                value={chatBridgePairingToken?.expires_at_ms ? formatDateTime(chatBridgePairingToken.expires_at_ms) : "-"}
+                disabled
+              />
+              <p className="text-xs text-muted-foreground">{t("settings.chatBridge.pairing.expiresHint")}</p>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setChatBridgePairingDialogOpen(false)}
+              disabled={chatBridgePairingCreating}
+            >
+              {t("common.cancel")}
+            </Button>
+            <Button onClick={() => void generateChatBridgePairingToken()} disabled={chatBridgePairingCreating}>
+              {t("settings.chatBridge.pairing.generate")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!chatBridgeBindingsDialogPlatform}
+        onOpenChange={(open) => {
+          if (!open && !chatBridgeUnbinding) {
+            setChatBridgeBindingsDialogPlatform(null);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-[560px]">
+          <DialogHeader>
+            <DialogTitle>
+              {t("settings.chatBridge.bindings.dialogTitle", {
+                platform: t(`settings.chatBridge.platform.${chatBridgeBindingsDialogPlatform ?? "telegram"}`),
+              })}
+            </DialogTitle>
+            <DialogDescription>
+              {t("settings.chatBridge.bindings.dialogSubtitle", {
+                platform: t(`settings.chatBridge.platform.${chatBridgeBindingsDialogPlatform ?? "telegram"}`),
+              })}
+            </DialogDescription>
+          </DialogHeader>
+
+          {chatBridgeBindingsLoading && chatBridgeBindingsDialogItems.length === 0 ? (
+            <div className="text-sm text-muted-foreground">{t("common.loading")}</div>
+          ) : chatBridgeBindingsDialogItems.length === 0 ? (
+            <div className="text-sm text-muted-foreground">
+              {t("settings.chatBridge.bindings.emptyForPlatform", {
+                platform: t(`settings.chatBridge.platform.${chatBridgeBindingsDialogPlatform ?? "telegram"}`),
+              })}
+            </div>
+          ) : (
+            <div className="space-y-2 max-h-[360px] overflow-y-auto pr-1">
+              {chatBridgeBindingsDialogItems.map((binding) => (
+                <div key={binding.id} className="flex items-start justify-between gap-4 rounded-lg border bg-background px-3 py-2">
+                  <div className="min-w-0">
+                    <div className="font-medium text-sm truncate">
+                      {binding.display_name ?? binding.platform_user_id}
+                    </div>
+                    <div className="text-xs text-muted-foreground truncate">
+                      {binding.platform_user_id}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <div className="text-xs text-muted-foreground whitespace-nowrap">
+                      {formatDateTime(binding.bound_at_ms)}
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-destructive hover:text-destructive"
+                      onClick={() => setChatBridgeUnbindTarget(binding)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setChatBridgeBindingsDialogPlatform(null)} disabled={chatBridgeUnbinding}>
+              {t("common.ok")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!chatBridgeUnbindTarget} onOpenChange={(v) => { if (!chatBridgeUnbinding) { if (!v) setChatBridgeUnbindTarget(null); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("settings.chatBridge.bindings.unbindTitle")}</DialogTitle>
+            <DialogDescription>
+              {t("settings.chatBridge.bindings.unbindConfirm", {
+                name: chatBridgeUnbindTarget?.display_name ?? chatBridgeUnbindTarget?.platform_user_id ?? "",
+                platform: t(`settings.chatBridge.platform.${chatBridgeUnbindTarget?.platform ?? "telegram"}`)
+              })}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setChatBridgeUnbindTarget(null)} disabled={chatBridgeUnbinding}>
+              {t("common.cancel")}
+            </Button>
+            <Button variant="destructive" onClick={confirmUnbind} disabled={chatBridgeUnbinding}>
+              {t("settings.chatBridge.bindings.unbind")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+
   return (
     <div className="space-y-4 pb-4">
       <PageHeader title={t("settings.title")} />
@@ -324,6 +785,10 @@ export function SettingsPage() {
           <TabsTrigger value="data" className="gap-1.5">
             <Database className="h-3.5 w-3.5" />
             {t("settings.tabs.data")}
+          </TabsTrigger>
+          <TabsTrigger value="chatBridge" className="gap-1.5">
+            <Bot className="h-3.5 w-3.5" />
+            {t("settings.tabs.chatBridge")}
           </TabsTrigger>
           <TabsTrigger value="system" className="gap-1.5">
             <Cpu className="h-3.5 w-3.5" />
@@ -1445,6 +1910,10 @@ export function SettingsPage() {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="chatBridge" className="mt-2 space-y-4">
+          {chatBridgeTab}
         </TabsContent>
 
         {/* 系统标签页 */}

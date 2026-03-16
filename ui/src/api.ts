@@ -33,6 +33,33 @@ export type AppSettings = {
   anthropic_count_tokens_mock_enabled: boolean;
   log_level: LogLevel;
   log_retention_days: number;
+  chat_bridge_enabled: boolean;
+  chat_bridge_telegram_enabled: boolean;
+  chat_bridge_telegram_bot_token?: string | null;
+  chat_bridge_telegram_bot_token_configured: boolean;
+  chat_bridge_allow_new_projects: boolean;
+};
+
+export type ChatPlatform = "telegram" | "discord" | "whatsapp";
+
+export type ChatBridgeBinding = {
+  id: number;
+  platform: ChatPlatform;
+  platform_user_id: string;
+  display_name: string | null;
+  bound_at_ms: number;
+  is_active: boolean;
+};
+
+export type ChatBridgePairingToken = {
+  token: string;
+  platform: ChatPlatform;
+  expires_at_ms: number;
+};
+
+export type CreateChatBridgePairingTokenInput = {
+  platform: ChatPlatform;
+  expires_in_minutes?: number | null;
 };
 
 export type CliToolId = "gemini" | "claude" | "codex";
@@ -424,6 +451,20 @@ export function updateSettings(
   patch: Partial<AppSettings>
 ): Promise<AppSettings> {
   return http<AppSettings>("PUT", "/api/settings", patch);
+}
+
+export function listChatBridgeBindings(): Promise<ChatBridgeBinding[]> {
+  return http<ChatBridgeBinding[]>("GET", "/api/chat_bridge/bindings");
+}
+
+export function deactivateChatBridgeBinding(bindingId: number): Promise<void> {
+  return http<void>("DELETE", `/api/chat_bridge/bindings/${bindingId}`);
+}
+
+export function createChatBridgePairingToken(
+  input: CreateChatBridgePairingTokenInput
+): Promise<ChatBridgePairingToken> {
+  return http<ChatBridgePairingToken>("POST", "/api/chat_bridge/pairing_tokens", input);
 }
 
 export function getCliToolsStatus(): Promise<CliToolsStatus> {
