@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use super::ChatBridgeRuntime;
 use super::adapter::{ChatAdapter, IncomingMessage};
+use super::output::redact_sensitive_text;
 use super::router::{Command, ParsedInput, parse_input};
 use crate::storage::{self, StorageError};
 
@@ -134,7 +135,7 @@ impl ChatBridgeRuntime {
                 sender_id: msg.sender_id.clone(),
                 chat_id: msg.chat_id.clone(),
                 message_type: message_type.to_string(),
-                content: content.to_string(),
+                content: redact_sensitive_text(&format_audit_log_content(msg, content)),
                 session_id,
             },
         )
@@ -156,6 +157,29 @@ impl ChatBridgeRuntime {
             platform: msg.platform.as_str().to_string(),
             chat_id: msg.chat_id.clone(),
         }
+    }
+}
+
+fn format_audit_log_content(msg: &IncomingMessage, content: &str) -> String {
+    let mut lines = Vec::<String>::new();
+    let trimmed = content.trim();
+    if !trimmed.is_empty() {
+        lines.push(trimmed.to_string());
+    }
+    if !msg.attachments.is_empty() {
+        lines.push(format!(
+            "attachments: {}",
+            msg.attachments
+                .iter()
+                .map(|item| format!("[{}] {}", item.kind.label(), item.filename))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
+    }
+    if lines.is_empty() {
+        "(empty message)".to_string()
+    } else {
+        lines.join("\n")
     }
 }
 

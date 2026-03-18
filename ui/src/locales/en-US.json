@@ -735,7 +735,7 @@
       "configTitle": "Base Config",
       "configHint": "Controls the messaging runtime and how chat-created projects are handled.",
       "platformConfigTitle": "Platform Config",
-      "platformConfigHint": "Only Telegram is wired into the runtime today. WhatsApp / Discord tabs are reserved, but backend support is not connected yet.",
+      "platformConfigHint": "Telegram and Discord are wired into the runtime today. The WhatsApp tab is still reserved for future backend support.",
       "platformConfigLabel": "{{platform}} Config",
       "enable": "Enable Messaging",
       "enableHint": "Keeps settings when off, but disables the messaging runtime.",
@@ -748,6 +748,15 @@
       "telegramTokenPlaceholderConfigured": "Configured. Leave blank to keep the current token",
       "telegramTokenHint": "Create a bot with @BotFather to get the token.",
       "telegramTokenHintConfigured": "The saved token is no longer echoed back to the UI. Leaving this blank keeps the current value; enter a new token to replace it.",
+      "discordEnable": "Enable Discord",
+      "discordEnableHint": "Allow a Discord bot to connect to Messaging.",
+      "discordConfigTitle": "Discord Config",
+      "discordConfigHint": "Manage the Discord bot token, runtime toggle, and Discord-side binding entrypoints. Enable Message Content Intent for the bot in Discord Developer Portal.",
+      "discordToken": "Discord Bot Token",
+      "discordTokenPlaceholder": "MTEx...Q2F0",
+      "discordTokenPlaceholderConfigured": "Configured. Leave blank to keep the current token",
+      "discordTokenHint": "Copy the token from the Bot page in Discord Developer Portal.",
+      "discordTokenHintConfigured": "The saved token is no longer echoed back to the UI. Leaving this blank keeps the current value; enter a new token to replace it.",
       "allowNewProjects": "Allow new projects from chat",
       "allowNewProjectsHint": "When enabled, new paths are allowed and missing directories will be created automatically.",
       "saved": "Messaging settings saved",
@@ -792,6 +801,33 @@
         "unbind": "Unbind",
         "unbindOk": "Account unbound",
         "unbindFail": "Failed to unbind account"
+      },
+      "audit": {
+        "title": "Audit Logs",
+        "subtitle": "Review recent chat commands and message audit records.",
+        "latest": "Latest Records",
+        "latestHint": "Shows 100 records per page and supports platform filtering with paging.",
+        "view": "View Logs",
+        "loadFail": "Failed to load audit logs",
+        "dialogTitle": "Messaging Audit Logs",
+        "dialogSubtitle": "This dialog shows recent chat-side audit records persisted in the database, with page-by-page browsing.",
+        "empty": "No audit logs yet",
+        "platform": {
+          "all": "All Platforms"
+        },
+        "headers": {
+          "time": "Time",
+          "platform": "Platform",
+          "type": "Type",
+          "sender": "Sender",
+          "chat": "Chat",
+          "session": "Session",
+          "content": "Content"
+        },
+        "type": {
+          "chat": "Chat",
+          "command": "Command"
+        }
       }
     },
     "compatibility": {

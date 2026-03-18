@@ -38,6 +38,8 @@ pub(in crate::server) struct UpdateSettingsInput {
     chat_bridge_enabled: Option<bool>,
     chat_bridge_telegram_enabled: Option<bool>,
     chat_bridge_telegram_bot_token: Option<String>,
+    chat_bridge_discord_enabled: Option<bool>,
+    chat_bridge_discord_bot_token: Option<String>,
     chat_bridge_allow_new_projects: Option<bool>,
 }
 
@@ -110,6 +112,14 @@ pub(in crate::server) async fn update_settings(
         (
             "chat_bridge_telegram_bot_token",
             input.chat_bridge_telegram_bot_token.is_some(),
+        ),
+        (
+            "chat_bridge_discord_enabled",
+            input.chat_bridge_discord_enabled.is_some(),
+        ),
+        (
+            "chat_bridge_discord_bot_token",
+            input.chat_bridge_discord_bot_token.is_some(),
         ),
         (
             "chat_bridge_allow_new_projects",
@@ -206,6 +216,8 @@ pub(in crate::server) async fn update_settings(
             chat_bridge_enabled: input.chat_bridge_enabled,
             chat_bridge_telegram_enabled: input.chat_bridge_telegram_enabled,
             chat_bridge_telegram_bot_token: input.chat_bridge_telegram_bot_token,
+            chat_bridge_discord_enabled: input.chat_bridge_discord_enabled,
+            chat_bridge_discord_bot_token: input.chat_bridge_discord_bot_token,
             chat_bridge_allow_new_projects: input.chat_bridge_allow_new_projects,
             ..Default::default()
         },

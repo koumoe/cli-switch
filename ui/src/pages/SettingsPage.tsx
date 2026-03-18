@@ -28,6 +28,12 @@ import {
   SelectTrigger,
   SelectValue,
   Tabs,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
   TabsContent,
   TabsList,
   TabsTrigger,
@@ -42,9 +48,11 @@ import { setLogLevel } from "@/lib/logger";
 import { UpdatePromptDialog } from "@/components/UpdatePromptDialog";
 import { postIpc } from "@/lib/ipc";
 import { formatBytes, formatDateTime } from "../lib";
-import { applyCliToolsProxyConfig, checkUpdate, clearLogs, clearRecords, createChatBridgePairingToken, deactivateChatBridgeBinding, downloadUpdate, getCliToolsProxyConfigStatus, getCliToolsStatus, getDbSize, getHealth, getLogsSize, getSettings, getUpdateChangelog, getUpdateStatus, ignoreUpdate, listChatBridgeBindings, openDataDir, pricingStatus, pricingSync, updateSettings, type AppSettings, type AutoStartLaunchMode, type ChatBridgeBinding, type ChatBridgePairingToken, type ChatPlatform, type CloseBehavior, type DbSize, type Health, type LogsSize, type PricingStatus, type RecordsClearMode, type UpdateCheck, type UpdateStatus, type ChangelogSection, type CliToolId, type CliToolsStatus, type CliToolStatus, type CliToolProxyConfigStatus, type CliToolProxyConfigToolStatus } from "../api";
+import { applyCliToolsProxyConfig, checkUpdate, clearLogs, clearRecords, createChatBridgePairingToken, deactivateChatBridgeBinding, downloadUpdate, getCliToolsProxyConfigStatus, getCliToolsStatus, getDbSize, getHealth, getLogsSize, getSettings, getUpdateChangelog, getUpdateStatus, ignoreUpdate, listChatBridgeAuditLogs, listChatBridgeBindings, openDataDir, pricingStatus, pricingSync, updateSettings, type AppSettings, type AutoStartLaunchMode, type ChatBridgeAuditLogEntry, type ChatBridgeBinding, type ChatBridgePairingToken, type ChatPlatform, type CloseBehavior, type DbSize, type Health, type LogsSize, type PricingStatus, type RecordsClearMode, type UpdateCheck, type UpdateStatus, type ChangelogSection, type CliToolId, type CliToolsStatus, type CliToolStatus, type CliToolProxyConfigStatus, type CliToolProxyConfigToolStatus } from "../api";
 import type { CliswitchUpdateStatusEvent } from "@/lib/cliswitchEvents";
 import { clearUpdateReadyShown } from "@/lib/updateReadyPrompt";
+
+const CHAT_BRIDGE_AUDIT_PAGE_SIZE = 100;
 
 function joinPath(base: string, sub: string): string {
   const sep = base.includes("\\") ? "\\" : "/";
@@ -102,9 +110,16 @@ export function SettingsPage() {
   const [chatBridgeUnbindTarget, setChatBridgeUnbindTarget] = useState<ChatBridgeBinding | null>(null);
   const [chatBridgeUnbinding, setChatBridgeUnbinding] = useState(false);
   const [chatBridgeTelegramTokenDraft, setChatBridgeTelegramTokenDraft] = useState("");
+  const [chatBridgeDiscordTokenDraft, setChatBridgeDiscordTokenDraft] = useState("");
   const [chatBridgePlatformTab, setChatBridgePlatformTab] = useState<ChatPlatform>("telegram");
   const [chatBridgePairingDialogOpen, setChatBridgePairingDialogOpen] = useState(false);
   const [chatBridgeBindingsDialogPlatform, setChatBridgeBindingsDialogPlatform] = useState<ChatPlatform | null>(null);
+  const [chatBridgeAuditLogs, setChatBridgeAuditLogs] = useState<ChatBridgeAuditLogEntry[]>([]);
+  const [chatBridgeAuditLoading, setChatBridgeAuditLoading] = useState(false);
+  const [chatBridgeAuditDialogOpen, setChatBridgeAuditDialogOpen] = useState(false);
+  const [chatBridgeAuditPlatform, setChatBridgeAuditPlatform] = useState<"all" | ChatPlatform>("all");
+  const [chatBridgeAuditOffset, setChatBridgeAuditOffset] = useState(0);
+  const [chatBridgeAuditHasMore, setChatBridgeAuditHasMore] = useState(false);
 
   // 数据库相关 state
   const [dbSize, setDbSize] = useState<DbSize | null>(null);
@@ -183,6 +198,27 @@ export function SettingsPage() {
     }
   }
 
+  async function refreshChatBridgeAuditLogs(
+    platform: "all" | ChatPlatform = chatBridgeAuditPlatform,
+    offset: number = chatBridgeAuditOffset,
+  ) {
+    setChatBridgeAuditLoading(true);
+    try {
+      const next = await listChatBridgeAuditLogs({
+        platform: platform === "all" ? undefined : platform,
+        limit: CHAT_BRIDGE_AUDIT_PAGE_SIZE,
+        offset,
+      });
+      setChatBridgeAuditLogs(next.items);
+      setChatBridgeAuditOffset(next.offset);
+      setChatBridgeAuditHasMore(next.has_more);
+    } catch (e) {
+      toast.error(t("settings.chatBridge.audit.loadFail"), { description: humanizeApiError(e, t) });
+    } finally {
+      setChatBridgeAuditLoading(false);
+    }
+  }
+
   async function confirmUnbind() {
     if (!chatBridgeUnbindTarget) return;
     setChatBridgeUnbinding(true);
@@ -236,6 +272,27 @@ export function SettingsPage() {
     }
   }
 
+  async function saveDiscordConfig() {
+    if (!appSettings) return;
+    setChatBridgeSaving(true);
+    try {
+      const patch: Partial<AppSettings> = {
+        chat_bridge_discord_enabled: appSettings.chat_bridge_discord_enabled,
+      };
+      if (chatBridgeDiscordTokenDraft.trim().length > 0) {
+        patch.chat_bridge_discord_bot_token = chatBridgeDiscordTokenDraft;
+      }
+      const next = await updateSettings(patch);
+      setAppSettings(next);
+      setChatBridgeDiscordTokenDraft("");
+      toast.success(t("settings.chatBridge.saved"));
+    } catch (e) {
+      toast.error(t("settings.chatBridge.saveFail"), { description: humanizeApiError(e, t) });
+    } finally {
+      setChatBridgeSaving(false);
+    }
+  }
+
   async function generateChatBridgePairingToken() {
     setChatBridgePairingCreating(true);
     try {
@@ -275,6 +332,7 @@ export function SettingsPage() {
       .then((s) => {
         setAppSettings(s);
         setChatBridgeTelegramTokenDraft("");
+        setChatBridgeDiscordTokenDraft("");
         setLogRetentionDraft(String(s.log_retention_days ?? ""));
         setLogLevel(s.log_level);
       })
@@ -303,6 +361,12 @@ export function SettingsPage() {
       window.removeEventListener("cliswitch-update-status", onUpdateStatus as EventListener);
     };
   }, []);
+
+  useEffect(() => {
+    if (!chatBridgeAuditDialogOpen) return;
+    void refreshChatBridgeAuditLogs(chatBridgeAuditPlatform, chatBridgeAuditOffset);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chatBridgeAuditDialogOpen, chatBridgeAuditPlatform, chatBridgeAuditOffset]);
 
   const chatBridgeBindingsByPlatform: Record<ChatPlatform, ChatBridgeBinding[]> = {
     telegram: chatBridgeBindings.filter((binding) => binding.platform === "telegram"),
@@ -563,46 +627,304 @@ export function SettingsPage() {
               </div>
             </TabsContent>
 
-            {(["whatsapp", "discord"] as const).map((platform) => (
-              <TabsContent key={platform} value={platform} className="mt-4">
-                <div className="rounded-lg border border-dashed p-4 space-y-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="space-y-1">
-                      <div className="font-medium text-sm">
-                        {t("settings.chatBridge.platformConfigLabel", {
-                          platform: t(`settings.chatBridge.platform.${platform}`),
-                        })}
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        {t("settings.chatBridge.supportPendingHint", {
-                          platform: t(`settings.chatBridge.platform.${platform}`),
-                        })}
-                      </div>
-                    </div>
-                    <Badge variant="secondary">{t("settings.chatBridge.supportPending")}</Badge>
+            <TabsContent value="discord" className="mt-4">
+              <div className="rounded-lg border p-4 space-y-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="space-y-1">
+                    <div className="font-medium text-sm">{t("settings.chatBridge.discordConfigTitle")}</div>
+                    <div className="text-xs text-muted-foreground">{t("settings.chatBridge.discordConfigHint")}</div>
                   </div>
+                  <Badge variant="secondary">{t("settings.chatBridge.supportReady")}</Badge>
+                </div>
 
-                  <div className="flex items-center justify-between gap-4 rounded-lg border bg-muted/30 px-3 py-3">
-                    <div className="space-y-1">
-                      <div className="font-medium text-sm">{t("settings.chatBridge.bindings.title")}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {t("settings.chatBridge.bindings.summary", { count: chatBridgeBindingsByPlatform[platform].length })}
-                      </div>
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <div className="font-medium text-sm">{t("settings.chatBridge.discordEnable")}</div>
+                    <div className="text-xs text-muted-foreground">{t("settings.chatBridge.discordEnableHint")}</div>
+                  </div>
+                  <Switch
+                    checked={appSettings?.chat_bridge_discord_enabled ?? false}
+                    onCheckedChange={(v) => {
+                      setAppSettings((prev) => (prev ? { ...prev, chat_bridge_discord_enabled: v } : prev));
+                    }}
+                    disabled={!appSettings || chatBridgeSaving}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">{t("settings.chatBridge.discordToken")}</label>
+                  <Input
+                    type="password"
+                    autoComplete="new-password"
+                    value={chatBridgeDiscordTokenDraft}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setChatBridgeDiscordTokenDraft(value);
+                    }}
+                    placeholder={appSettings?.chat_bridge_discord_bot_token_configured
+                      ? t("settings.chatBridge.discordTokenPlaceholderConfigured")
+                      : t("settings.chatBridge.discordTokenPlaceholder")}
+                    disabled={!appSettings || chatBridgeSaving}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {appSettings?.chat_bridge_discord_bot_token_configured
+                      ? t("settings.chatBridge.discordTokenHintConfigured")
+                      : t("settings.chatBridge.discordTokenHint")}
+                  </p>
+                </div>
+
+                <div className="flex items-center justify-between gap-4 rounded-lg border bg-muted/30 px-3 py-3">
+                  <div className="space-y-1">
+                    <div className="font-medium text-sm">{t("settings.chatBridge.bindings.title")}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {t("settings.chatBridge.bindings.summary", { count: chatBridgeBindingsByPlatform.discord.length })}
                     </div>
+                  </div>
+                  <div className="flex items-center gap-2">
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => openChatBridgeBindings(platform)}
+                      onClick={() => openChatBridgePairing("discord")}
+                    >
+                      {t("settings.chatBridge.actions.pairing")}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => openChatBridgeBindings("discord")}
                     >
                       {t("settings.chatBridge.actions.bindings")}
                     </Button>
                   </div>
                 </div>
-              </TabsContent>
-            ))}
+
+                <div className="flex justify-end">
+                  <Button
+                    size="sm"
+                    disabled={!appSettings || chatBridgeSaving}
+                    onClick={() => void saveDiscordConfig()}
+                  >
+                    {t("common.save")}
+                  </Button>
+                </div>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="whatsapp" className="mt-4">
+              <div className="rounded-lg border border-dashed p-4 space-y-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="space-y-1">
+                    <div className="font-medium text-sm">
+                      {t("settings.chatBridge.platformConfigLabel", {
+                        platform: t("settings.chatBridge.platform.whatsapp"),
+                      })}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {t("settings.chatBridge.supportPendingHint", {
+                        platform: t("settings.chatBridge.platform.whatsapp"),
+                      })}
+                    </div>
+                  </div>
+                  <Badge variant="secondary">{t("settings.chatBridge.supportPending")}</Badge>
+                </div>
+
+                <div className="flex items-center justify-between gap-4 rounded-lg border bg-muted/30 px-3 py-3">
+                  <div className="space-y-1">
+                    <div className="font-medium text-sm">{t("settings.chatBridge.bindings.title")}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {t("settings.chatBridge.bindings.summary", { count: chatBridgeBindingsByPlatform.whatsapp.length })}
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => openChatBridgeBindings("whatsapp")}
+                  >
+                    {t("settings.chatBridge.actions.bindings")}
+                  </Button>
+                </div>
+              </div>
+            </TabsContent>
           </Tabs>
         </CardContent>
       </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <ScrollText className="h-4 w-4" />
+            {t("settings.chatBridge.audit.title")}
+          </CardTitle>
+          <CardDescription>{t("settings.chatBridge.audit.subtitle")}</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between gap-4 rounded-lg border bg-muted/30 px-3 py-3">
+            <div className="space-y-1">
+              <div className="font-medium text-sm">{t("settings.chatBridge.audit.latest")}</div>
+              <div className="text-xs text-muted-foreground">
+                {t("settings.chatBridge.audit.latestHint")}
+              </div>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setChatBridgeAuditOffset(0);
+                setChatBridgeAuditDialogOpen(true);
+              }}
+            >
+              {t("settings.chatBridge.audit.view")}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Dialog
+        open={chatBridgeAuditDialogOpen}
+        onOpenChange={(open) => {
+          if (!chatBridgeAuditLoading) {
+            setChatBridgeAuditDialogOpen(open);
+          }
+        }}
+      >
+        <DialogContent className="flex max-h-[82vh] w-[calc(100vw-2rem)] max-w-[1040px] flex-col overflow-hidden p-0">
+          <DialogHeader className="gap-1 border-b px-6 py-5 pr-12">
+            <DialogTitle>{t("settings.chatBridge.audit.dialogTitle")}</DialogTitle>
+            <DialogDescription>{t("settings.chatBridge.audit.dialogSubtitle")}</DialogDescription>
+          </DialogHeader>
+
+          <div className="border-b bg-muted/20 px-6 py-4">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex flex-1 flex-col gap-3 sm:flex-row sm:items-center">
+                <div className="w-full sm:w-[200px]">
+                  <Select
+                    value={chatBridgeAuditPlatform}
+                    onValueChange={(value) => {
+                      setChatBridgeAuditPlatform(value as "all" | ChatPlatform);
+                      setChatBridgeAuditOffset(0);
+                    }}
+                  >
+                    <SelectTrigger className="bg-background">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">{t("settings.chatBridge.audit.platform.all")}</SelectItem>
+                      <SelectItem value="telegram">{t("settings.chatBridge.platform.telegram")}</SelectItem>
+                      <SelectItem value="discord">{t("settings.chatBridge.platform.discord")}</SelectItem>
+                      <SelectItem value="whatsapp">{t("settings.chatBridge.platform.whatsapp")}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="inline-flex w-fit items-center rounded-md border bg-background px-3 py-2 text-xs text-muted-foreground">
+                  {chatBridgeAuditLogs.length === 0
+                    ? "0"
+                    : `${chatBridgeAuditOffset + 1}-${chatBridgeAuditOffset + chatBridgeAuditLogs.length}`}
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => void refreshChatBridgeAuditLogs(chatBridgeAuditPlatform, chatBridgeAuditOffset)}
+                  disabled={chatBridgeAuditLoading}
+                >
+                  {t("common.refresh")}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setChatBridgeAuditOffset((prev) => Math.max(0, prev - CHAT_BRIDGE_AUDIT_PAGE_SIZE))}
+                  disabled={chatBridgeAuditLoading || chatBridgeAuditOffset <= 0}
+                >
+                  {t("common.pagination.prev")}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setChatBridgeAuditOffset((prev) => prev + CHAT_BRIDGE_AUDIT_PAGE_SIZE)}
+                  disabled={chatBridgeAuditLoading || !chatBridgeAuditHasMore}
+                >
+                  {t("common.pagination.next")}
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          <div className="min-h-0 flex-1 px-6 py-5">
+            {chatBridgeAuditLoading && chatBridgeAuditLogs.length === 0 ? (
+              <div className="flex h-full min-h-[280px] items-center justify-center rounded-lg border border-dashed text-sm text-muted-foreground">
+                {t("common.loading")}
+              </div>
+            ) : chatBridgeAuditLogs.length === 0 ? (
+              <div className="flex h-full min-h-[280px] items-center justify-center rounded-lg border border-dashed text-sm text-muted-foreground">
+                {t("settings.chatBridge.audit.empty")}
+              </div>
+            ) : (
+              <div className="h-full overflow-hidden rounded-lg border bg-background shadow-sm">
+                <Table
+                  containerClassName="h-full overflow-y-auto"
+                  className="table-fixed text-xs"
+                >
+                  <TableHeader className="sticky top-0 z-10 bg-background [&_th]:whitespace-nowrap">
+                    <TableRow>
+                      <TableHead className="w-[140px]">{t("settings.chatBridge.audit.headers.time")}</TableHead>
+                      <TableHead className="w-[80px]">{t("settings.chatBridge.audit.headers.platform")}</TableHead>
+                      <TableHead className="w-[72px]">{t("settings.chatBridge.audit.headers.type")}</TableHead>
+                      <TableHead className="w-[120px]">{t("settings.chatBridge.audit.headers.sender")}</TableHead>
+                      <TableHead className="w-[120px]">{t("settings.chatBridge.audit.headers.chat")}</TableHead>
+                      <TableHead className="w-[56px]">{t("settings.chatBridge.audit.headers.session")}</TableHead>
+                      <TableHead className="text-left">{t("settings.chatBridge.audit.headers.content")}</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {chatBridgeAuditLogs.map((entry) => (
+                      <TableRow key={entry.id}>
+                        <TableCell className="whitespace-nowrap text-muted-foreground">
+                          {formatDateTime(entry.created_at_ms)}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="secondary">
+                            {t(`settings.chatBridge.platform.${entry.platform}`)}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline">
+                            {t(`settings.chatBridge.audit.type.${entry.message_type}`)}
+                          </Badge>
+                        </TableCell>
+                        <TableCell title={entry.sender_id}>
+                          <div className="truncate font-mono text-muted-foreground">
+                            {entry.sender_id}
+                          </div>
+                        </TableCell>
+                        <TableCell title={entry.chat_id}>
+                          <div className="truncate font-mono text-muted-foreground">
+                            {entry.chat_id}
+                          </div>
+                        </TableCell>
+                        <TableCell className="font-mono">
+                          {entry.session_id === null ? "—" : `#${entry.session_id}`}
+                        </TableCell>
+                        <TableCell className="text-left align-top">
+                          <div className="whitespace-pre-wrap break-words leading-5">
+                            {entry.content}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="border-t px-6 py-4">
+            <Button variant="outline" onClick={() => setChatBridgeAuditDialogOpen(false)} disabled={chatBridgeAuditLoading}>
+              {t("common.ok")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={chatBridgePairingDialogOpen}

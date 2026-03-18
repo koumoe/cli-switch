@@ -37,6 +37,9 @@ export type AppSettings = {
   chat_bridge_telegram_enabled: boolean;
   chat_bridge_telegram_bot_token?: string | null;
   chat_bridge_telegram_bot_token_configured: boolean;
+  chat_bridge_discord_enabled: boolean;
+  chat_bridge_discord_bot_token?: string | null;
+  chat_bridge_discord_bot_token_configured: boolean;
   chat_bridge_allow_new_projects: boolean;
 };
 
@@ -55,6 +58,31 @@ export type ChatBridgePairingToken = {
   token: string;
   platform: ChatPlatform;
   expires_at_ms: number;
+};
+
+export type ChatBridgeAuditLogEntry = {
+  id: number;
+  platform: ChatPlatform;
+  sender_id: string;
+  chat_id: string;
+  message_type: string;
+  content: string;
+  session_id: number | null;
+  created_at_ms: number;
+};
+
+export type ListChatBridgeAuditResponse = {
+  items: ChatBridgeAuditLogEntry[];
+  limit: number;
+  offset: number;
+  has_more: boolean;
+  next_offset: number | null;
+};
+
+export type ListChatBridgeAuditQuery = {
+  platform?: ChatPlatform;
+  limit?: number;
+  offset?: number;
 };
 
 export type CreateChatBridgePairingTokenInput = {
@@ -465,6 +493,20 @@ export function createChatBridgePairingToken(
   input: CreateChatBridgePairingTokenInput
 ): Promise<ChatBridgePairingToken> {
   return http<ChatBridgePairingToken>("POST", "/api/chat_bridge/pairing_tokens", input);
+}
+
+export function listChatBridgeAuditLogs(
+  query: ListChatBridgeAuditQuery = {}
+): Promise<ListChatBridgeAuditResponse> {
+  const p = new URLSearchParams();
+  if (query.platform) p.set("platform", query.platform);
+  if (query.limit !== undefined) p.set("limit", String(query.limit));
+  if (query.offset !== undefined) p.set("offset", String(query.offset));
+  const suffix = p.toString();
+  return http<ListChatBridgeAuditResponse>(
+    "GET",
+    suffix ? `/api/chat_bridge/audit?${suffix}` : "/api/chat_bridge/audit"
+  );
 }
 
 export function getCliToolsStatus(): Promise<CliToolsStatus> {

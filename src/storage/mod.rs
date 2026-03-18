@@ -28,15 +28,17 @@ pub use channel::{
 };
 pub use chat_bridge::{
     BridgeKnownProject, BridgePermissionMode, BridgeSession, BridgeSessionStatus,
-    ChatBridgeBinding, ChatBridgePairingToken, ChatPlatform, CreateBridgeSessionInput,
-    CreateChatAuditLogInput, CreatePairingTokenInput, DEFAULT_PAIRING_TOKEN_EXPIRES_MINUTES,
+    ChatAuditLogEntry, ChatBridgeBinding, ChatBridgePairingToken, ChatPlatform,
+    CreateBridgeSessionInput, CreateChatAuditLogInput, CreatePairingTokenInput,
+    DEFAULT_PAIRING_TOKEN_EXPIRES_MINUTES, ListChatAuditLogsInput, ListChatAuditLogsResult,
     MAX_PAIRING_TOKEN_EXPIRES_MINUTES, UpdateBridgeSessionInput, consume_pairing_token,
     count_active_bridge_sessions_for_platform, create_bridge_session, create_chat_audit_log,
     create_pairing_token, deactivate_chat_binding, get_bridge_session,
     get_default_bridge_session_for_platform, list_bridge_known_projects,
-    list_bridge_sessions_for_platform, list_chat_bindings, resolve_chat_binding,
-    set_default_bridge_session_for_platform, stop_all_bridge_sessions_for_platform,
-    stop_bridge_session, update_bridge_session, upsert_bridge_known_project,
+    list_bridge_sessions_for_platform, list_chat_audit_logs, list_chat_bindings,
+    resolve_chat_binding, set_default_bridge_session_for_platform,
+    stop_all_bridge_sessions_for_platform, stop_bridge_session, update_bridge_session,
+    upsert_bridge_known_project,
 };
 pub use checkin::{
     ChannelCheckinsToday, complete_channel_checkin_today, get_channel_checkins_today,

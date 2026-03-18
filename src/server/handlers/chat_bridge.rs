@@ -1,5 +1,5 @@
 use axum::Json;
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use serde::Deserialize;
@@ -47,6 +47,48 @@ pub(in crate::server) async fn list_chat_bridge_bindings(
         .await
         .map_err(|err| map_chat_bridge_storage_error(&err).unwrap_or(ApiError::Internal(err)))?;
     Ok(Json(items))
+}
+
+#[derive(Debug, Deserialize)]
+pub(in crate::server) struct ListChatBridgeAuditQuery {
+    platform: Option<storage::ChatPlatform>,
+    limit: Option<i64>,
+    offset: Option<i64>,
+}
+
+pub(in crate::server) async fn list_chat_bridge_audit_logs(
+    State(state): State<AppState>,
+    Query(query): Query<ListChatBridgeAuditQuery>,
+) -> Result<impl IntoResponse, ApiError> {
+    if let Some(limit) = query.limit
+        && !(1..=200).contains(&limit)
+    {
+        return Err(ApiError::bad_request(
+            "chat_bridge_audit_limit_out_of_range",
+            "limit must be between 1 and 200",
+        ));
+    }
+    if let Some(offset) = query.offset
+        && offset < 0
+    {
+        return Err(ApiError::bad_request(
+            "chat_bridge_audit_offset_out_of_range",
+            "offset must be >= 0",
+        ));
+    }
+
+    let result = storage::list_chat_audit_logs(
+        state.db_path(),
+        storage::ListChatAuditLogsInput {
+            platform: query.platform,
+            limit: query.limit,
+            offset: query.offset,
+        },
+    )
+    .await
+    .map_err(|err| map_chat_bridge_storage_error(&err).unwrap_or(ApiError::Internal(err)))?;
+
+    Ok(Json(result))
 }
 
 #[derive(Debug, Deserialize)]

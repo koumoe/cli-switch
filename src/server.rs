@@ -40,6 +40,7 @@ fn request_endpoint_template(method: &Method, path: &str) -> Option<&'static str
         ("POST", "/api/tools/install") => Some("/api/tools/install"),
         ("GET", "/api/tools/config/status") => Some("/api/tools/config/status"),
         ("GET", "/api/chat_bridge/bindings") => Some("/api/chat_bridge/bindings"),
+        ("GET", "/api/chat_bridge/audit") => Some("/api/chat_bridge/audit"),
         ("GET", "/api/prompts/projects") => Some("/api/prompts/projects"),
         ("DELETE", "/api/prompts/projects") => Some("/api/prompts/projects"),
         ("GET", "/api/prompts/document") => Some("/api/prompts/document"),
@@ -118,6 +119,7 @@ fn request_purpose(method: &Method, path: &str) -> &'static str {
         ("GET", "/api/tools/config/status") => "handlers::cli_tools_proxy_config_status",
         ("POST", "/api/tools/config/apply") => "handlers::cli_tools_proxy_config_apply",
         ("GET", "/api/chat_bridge/bindings") => "handlers::list_chat_bridge_bindings",
+        ("GET", "/api/chat_bridge/audit") => "handlers::list_chat_bridge_audit_logs",
         ("POST", "/api/chat_bridge/pairing_tokens") => "handlers::create_chat_bridge_pairing_token",
         ("GET", "/api/prompts/projects") => "handlers::list_prompt_projects",
         ("DELETE", "/api/prompts/projects") => "handlers::delete_prompt_project",
@@ -239,6 +241,10 @@ fn build_app(state: AppState) -> Router {
         .route(
             "/api/chat_bridge/bindings",
             get(handlers::list_chat_bridge_bindings),
+        )
+        .route(
+            "/api/chat_bridge/audit",
+            get(handlers::list_chat_bridge_audit_logs),
         )
         .route(
             "/api/chat_bridge/bindings/{id}",

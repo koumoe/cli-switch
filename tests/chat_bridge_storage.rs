@@ -450,3 +450,82 @@ async fn init_db_migrates_legacy_chat_bridge_schema_in_one_step() {
 
     remove_sqlite_artifacts(&db_path);
 }
+
+#[tokio::test]
+async fn audit_logs_can_be_listed_with_platform_filter() {
+    let db_path = temp_db_path();
+    remove_sqlite_artifacts(&db_path);
+    storage::init_db(&db_path).unwrap();
+
+    storage::create_chat_audit_log(
+        db_path.clone(),
+        storage::CreateChatAuditLogInput {
+            platform: storage::ChatPlatform::Telegram,
+            sender_id: "tg-user-1".to_string(),
+            chat_id: "tg-chat".to_string(),
+            message_type: "chat".to_string(),
+            content: "telegram message".to_string(),
+            session_id: Some(1),
+        },
+    )
+    .await
+    .unwrap();
+    storage::create_chat_audit_log(
+        db_path.clone(),
+        storage::CreateChatAuditLogInput {
+            platform: storage::ChatPlatform::Discord,
+            sender_id: "dc-user-1".to_string(),
+            chat_id: "dc-chat".to_string(),
+            message_type: "command".to_string(),
+            content: "/sessions".to_string(),
+            session_id: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    let all = storage::list_chat_audit_logs(
+        db_path.clone(),
+        storage::ListChatAuditLogsInput {
+            platform: None,
+            limit: Some(10),
+            offset: None,
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(all.items.len(), 2);
+    assert_eq!(all.items[0].platform, storage::ChatPlatform::Discord);
+    assert!(!all.has_more);
+
+    let telegram = storage::list_chat_audit_logs(
+        db_path.clone(),
+        storage::ListChatAuditLogsInput {
+            platform: Some(storage::ChatPlatform::Telegram),
+            limit: Some(10),
+            offset: None,
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(telegram.items.len(), 1);
+    assert_eq!(telegram.items[0].content, "telegram message");
+    assert_eq!(telegram.items[0].session_id, Some(1));
+
+    let paged = storage::list_chat_audit_logs(
+        db_path.clone(),
+        storage::ListChatAuditLogsInput {
+            platform: None,
+            limit: Some(1),
+            offset: Some(1),
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(paged.items.len(), 1);
+    assert_eq!(paged.items[0].platform, storage::ChatPlatform::Telegram);
+    assert!(!paged.has_more);
+    assert_eq!(paged.offset, 1);
+
+    remove_sqlite_artifacts(&db_path);
+}

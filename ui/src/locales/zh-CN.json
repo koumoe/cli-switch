@@ -735,7 +735,7 @@
       "configTitle": "基础配置",
       "configHint": "控制消息互联运行时与项目创建策略。",
       "platformConfigTitle": "平台配置",
-      "platformConfigHint": "当前仅 Telegram 已接入运行时。WhatsApp / Discord 配置入口已预留，但后端能力尚未接入。",
+      "platformConfigHint": "当前 Telegram / Discord 已接入运行时。WhatsApp 配置入口已预留，但后端能力尚未接入。",
       "platformConfigLabel": "{{platform}} 配置",
       "enable": "启用消息互联",
       "enableHint": "关闭后会保留配置，但不会启动消息互联运行时。",
@@ -748,6 +748,15 @@
       "telegramTokenPlaceholderConfigured": "已配置，留空表示保持当前 Token",
       "telegramTokenHint": "通过 @BotFather 创建 Bot 后获取。",
       "telegramTokenHintConfigured": "当前不会回显已保存的 Token。留空保存会保持原值，输入新 Token 才会覆盖。",
+      "discordEnable": "启用 Discord",
+      "discordEnableHint": "允许 Discord Bot 接入消息互联。",
+      "discordConfigTitle": "Discord 配置",
+      "discordConfigHint": "管理 Discord Bot Token、启用状态，以及 Discord 侧的绑定入口。需在 Discord Developer Portal 为 Bot 开启 Message Content Intent。",
+      "discordToken": "Discord Bot Token",
+      "discordTokenPlaceholder": "MTEx...Q2F0",
+      "discordTokenPlaceholderConfigured": "已配置，留空表示保持当前 Token",
+      "discordTokenHint": "在 Discord Developer Portal 的 Bot 页面复制 Token。",
+      "discordTokenHintConfigured": "当前不会回显已保存的 Token。留空保存会保持原值，输入新 Token 才会覆盖。",
       "allowNewProjects": "允许通过聊天添加新项目",
       "allowNewProjectsHint": "开启后允许使用新路径，并会在目录不存在时自动创建目录。",
       "saved": "消息互联设置已保存",
@@ -792,6 +801,33 @@
         "unbind": "解绑",
         "unbindOk": "已解除绑定",
         "unbindFail": "解除绑定失败"
+      },
+      "audit": {
+        "title": "审计日志",
+        "subtitle": "查看最近的聊天命令和消息审计记录。",
+        "latest": "最近记录",
+        "latestHint": "默认每页展示 100 条记录，支持按平台过滤和翻页查看。",
+        "view": "查看日志",
+        "loadFail": "获取审计日志失败",
+        "dialogTitle": "消息互联审计日志",
+        "dialogSubtitle": "这里只展示最近写入数据库的聊天侧审计记录，支持按页浏览。",
+        "empty": "暂无审计日志记录",
+        "platform": {
+          "all": "全部平台"
+        },
+        "headers": {
+          "time": "时间",
+          "platform": "平台",
+          "type": "类型",
+          "sender": "发送者",
+          "chat": "聊天",
+          "session": "会话",
+          "content": "内容"
+        },
+        "type": {
+          "chat": "聊天",
+          "command": "命令"
+        }
       }
     },
     "compatibility": {

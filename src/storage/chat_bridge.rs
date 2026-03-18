@@ -8,7 +8,7 @@ pub(super) use super::{StorageError, now_ms, with_conn};
 pub(super) use crate::cli_tools::CliToolId;
 use serde::{Deserialize, Serialize};
 
-pub use audit::create_chat_audit_log;
+pub use audit::{create_chat_audit_log, list_chat_audit_logs};
 pub use bindings::{
     consume_pairing_token, create_pairing_token, deactivate_chat_binding, list_chat_bindings,
     resolve_chat_binding,
@@ -191,6 +191,34 @@ pub struct CreateChatAuditLogInput {
     pub message_type: String,
     pub content: String,
     pub session_id: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatAuditLogEntry {
+    pub id: i64,
+    pub platform: ChatPlatform,
+    pub sender_id: String,
+    pub chat_id: String,
+    pub message_type: String,
+    pub content: String,
+    pub session_id: Option<i64>,
+    pub created_at_ms: i64,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct ListChatAuditLogsInput {
+    pub platform: Option<ChatPlatform>,
+    pub limit: Option<i64>,
+    pub offset: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ListChatAuditLogsResult {
+    pub items: Vec<ChatAuditLogEntry>,
+    pub limit: i64,
+    pub offset: i64,
+    pub has_more: bool,
+    pub next_offset: Option<i64>,
 }
 
 fn normalize_optional_text(value: Option<String>) -> Option<String> {

@@ -239,12 +239,20 @@ pub fn format_ambiguous_target(target: &str, items: &[BridgeSession]) -> String 
 
 pub fn help_text() -> String {
     [
-        "可用命令:",
+        "可用命令",
+        "",
+        "认证",
         "/bind <token>  绑定当前聊天账号",
-        "/projects  列出项目列表并生成临时编号",
+        "",
+        "项目",
+        "/projects  列出项目列表并生成临时编号（10 分钟内有效）",
+        "",
+        "启动代理",
         "/codex <project_ref> [alias] [--yolo]  启动 Codex 会话",
         "/claude <project_ref> [alias] [--yolo]  启动 Claude Code 会话",
         "/gemini <project_ref> [alias] [--yolo]  启动 Gemini CLI 会话",
+        "",
+        "会话交互",
         "/chat <target> <message>  向指定会话发送消息",
         "/switch <target>  切换默认会话",
         "/sessions  查看活跃会话",
@@ -252,9 +260,12 @@ pub fn help_text() -> String {
         "/stop all  停止全部会话",
         "/help  查看帮助",
         "",
-        "说明:",
+        "说明",
         "- <project_ref> 支持 /projects 中的编号、绝对路径、唯一项目名",
-        "- 直接发送普通文本会自动路由到默认会话",
+        "- <target> 支持数字 ID、alias、唯一项目名、CLI 类型",
+        "- 不带命令前缀的普通文本会自动路由到默认会话",
+        "- 图片/文件会保存到应用数据目录的 chat-bridge/inbox/ 后再交给 CLI 处理",
+        "- safe 为默认模式；追加 --yolo 可跳过权限确认",
     ]
     .join("\n")
 }

@@ -2,12 +2,17 @@ use anyhow::Context as _;
 use async_trait::async_trait;
 use bytes::Bytes;
 use reqwest::StatusCode;
+use reqwest::multipart::{Form, Part};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use std::sync::atomic::{AtomicI64, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 
-use super::{ChatAdapter, IncomingMessage, OutgoingMessage, SentMessage, StreamingMessage};
+use super::{
+    Attachment, ChatAdapter, IncomingAttachment, IncomingAttachmentKind, IncomingMessage,
+    OutgoingMessage, ParseMode, SentMessage,
+};
+use crate::chat_bridge::output::render_chat_message;
 use crate::storage::ChatPlatform;
 
 const TELEGRAM_API_BASE: &str = "https://api.telegram.org";
@@ -16,9 +21,9 @@ const TELEGRAM_RECENT_UPDATE_GRACE_MS: i64 = 15_000;
 const TELEGRAM_REQUEST_TIMEOUT: Duration = Duration::from_secs(6);
 const TELEGRAM_LONG_POLL_REQUEST_TIMEOUT: Duration =
     Duration::from_secs(TELEGRAM_LONG_POLL_TIMEOUT_SECS as u64 + 10);
-const TELEGRAM_REQUEST_MAX_ATTEMPTS: usize = 2;
-const TELEGRAM_RETRY_DELAY: Duration = Duration::from_millis(250);
-static NEXT_TELEGRAM_DRAFT_ID: AtomicI64 = AtomicI64::new(1);
+const TELEGRAM_REQUEST_MAX_ATTEMPTS: usize = 3;
+const TELEGRAM_RETRY_DELAY_BASE: Duration = Duration::from_millis(250);
+const TELEGRAM_RETRY_DELAY_MAX: Duration = Duration::from_secs(2);
 
 #[derive(Clone)]
 pub struct TelegramAdapter {
@@ -79,7 +84,7 @@ impl TelegramAdapter {
                         err = %err,
                         "telegram request transport failed; retrying"
                     );
-                    tokio::time::sleep(TELEGRAM_RETRY_DELAY).await;
+                    tokio::time::sleep(request_retry_backoff_delay(attempt)).await;
                     continue;
                 }
                 Err(err) => {
@@ -101,7 +106,7 @@ impl TelegramAdapter {
                     body = %telegram_response_body_preview(&bytes),
                     "telegram api returned server error; retrying"
                 );
-                tokio::time::sleep(TELEGRAM_RETRY_DELAY).await;
+                tokio::time::sleep(request_retry_backoff_delay(attempt)).await;
                 continue;
             }
 
@@ -116,31 +121,214 @@ impl TelegramAdapter {
         anyhow::bail!("telegram {method} request loop exhausted unexpectedly");
     }
 
-    async fn send_message_draft(
-        &self,
-        chat_id: &str,
-        draft_id: i64,
-        text: &str,
-    ) -> anyhow::Result<()> {
+    async fn send_text_message(&self, msg: &OutgoingMessage) -> anyhow::Result<SentMessage> {
         #[derive(Serialize)]
-        struct SendMessageDraftRequest<'a> {
-            chat_id: i64,
-            draft_id: i64,
+        struct SendMessageRequest<'a> {
+            chat_id: &'a str,
             text: &'a str,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            reply_to_message_id: Option<i64>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            parse_mode: Option<&'static str>,
+            disable_web_page_preview: bool,
         }
 
-        let _: bool = self
+        let (content, parse_mode) = match msg.parse_mode {
+            ParseMode::PlainText => {
+                let rendered = render_chat_message(ChatPlatform::Telegram, &msg.content);
+                (rendered.content, rendered.parse_mode)
+            }
+            _ => (msg.content.clone(), msg.parse_mode),
+        };
+        let reply_to_message_id = parse_reply_to_message_id(msg.reply_to.as_deref());
+        let message: TelegramMessage = self
             .post_json(
-                "sendMessageDraft",
-                &SendMessageDraftRequest {
-                    chat_id: parse_chat_id(chat_id)?,
-                    draft_id,
-                    text,
+                "sendMessage",
+                &SendMessageRequest {
+                    chat_id: &msg.chat_id,
+                    text: &content,
+                    reply_to_message_id,
+                    parse_mode: parse_mode.as_telegram_str(),
+                    disable_web_page_preview: true,
                 },
                 TELEGRAM_REQUEST_TIMEOUT,
             )
             .await?;
-        Ok(())
+
+        Ok(SentMessage {
+            message_id: message.message_id.to_string(),
+        })
+    }
+
+    async fn send_document(
+        &self,
+        chat_id: &str,
+        reply_to: Option<&str>,
+        attachment: &Attachment,
+    ) -> anyhow::Result<SentMessage> {
+        let url = self.method_url("sendDocument");
+
+        for attempt in 1..=TELEGRAM_REQUEST_MAX_ATTEMPTS {
+            let part = Part::bytes(attachment.data.clone())
+                .file_name(attachment.filename.clone())
+                .mime_str(&attachment.mime_type)
+                .with_context(|| {
+                    format!(
+                        "telegram attachment mime type is invalid: {}",
+                        attachment.mime_type
+                    )
+                })?;
+
+            let mut form = Form::new()
+                .text("chat_id", chat_id.to_string())
+                .part("document", part);
+            if let Some(reply_to_message_id) = parse_reply_to_message_id(reply_to) {
+                form = form.text("reply_to_message_id", reply_to_message_id.to_string());
+            }
+
+            let response = match self
+                .client
+                .post(&url)
+                .timeout(TELEGRAM_REQUEST_TIMEOUT)
+                .multipart(form)
+                .send()
+                .await
+            {
+                Ok(response) => response,
+                Err(err)
+                    if attempt < TELEGRAM_REQUEST_MAX_ATTEMPTS
+                        && is_retryable_transport_error(&err) =>
+                {
+                    tracing::warn!(
+                        attempt,
+                        err = %err,
+                        "telegram sendDocument transport failed; retrying"
+                    );
+                    tokio::time::sleep(request_retry_backoff_delay(attempt)).await;
+                    continue;
+                }
+                Err(err) => return Err(err).context("telegram sendDocument request failed"),
+            };
+
+            let status = response.status();
+            let bytes = response
+                .bytes()
+                .await
+                .context("telegram sendDocument response read failed")?;
+
+            if status.is_server_error() && attempt < TELEGRAM_REQUEST_MAX_ATTEMPTS {
+                tracing::warn!(
+                    attempt,
+                    status = %status,
+                    body = %telegram_response_body_preview(&bytes),
+                    "telegram sendDocument server error; retrying"
+                );
+                tokio::time::sleep(request_retry_backoff_delay(attempt)).await;
+                continue;
+            }
+
+            let message: TelegramMessage =
+                decode_telegram_response("sendDocument", status, &bytes)?;
+            return Ok(SentMessage {
+                message_id: message.message_id.to_string(),
+            });
+        }
+
+        anyhow::bail!("telegram sendDocument request loop exhausted unexpectedly");
+    }
+
+    async fn get_file_metadata(&self, file_id: &str) -> anyhow::Result<TelegramFile> {
+        #[derive(Serialize)]
+        struct GetFileRequest<'a> {
+            file_id: &'a str,
+        }
+
+        self.post_json(
+            "getFile",
+            &GetFileRequest { file_id },
+            TELEGRAM_REQUEST_TIMEOUT,
+        )
+        .await
+    }
+
+    async fn download_file(&self, file_path: &str) -> anyhow::Result<Arc<[u8]>> {
+        let url = format!(
+            "{TELEGRAM_API_BASE}/file/bot{}/{}",
+            self.bot_token, file_path
+        );
+        let response = self
+            .client
+            .get(&url)
+            .timeout(TELEGRAM_REQUEST_TIMEOUT)
+            .send()
+            .await
+            .with_context(|| format!("telegram file download failed: {file_path}"))?;
+        let status = response.status();
+        let bytes = response
+            .bytes()
+            .await
+            .with_context(|| format!("telegram file read failed: {file_path}"))?;
+        if !status.is_success() {
+            anyhow::bail!(
+                "telegram file download failed with {}: {}",
+                status,
+                telegram_response_body_preview(&bytes)
+            );
+        }
+        Ok(Arc::<[u8]>::from(bytes.to_vec()))
+    }
+
+    async fn download_telegram_document(
+        &self,
+        document: &TelegramDocument,
+    ) -> anyhow::Result<IncomingAttachment> {
+        let file = self.get_file_metadata(&document.file_id).await?;
+        let data = self.download_file(&file.file_path).await?;
+        let filename = document
+            .file_name
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(ToOwned::to_owned)
+            .unwrap_or_else(|| format!("telegram-document-{}", document.file_id));
+        let kind = classify_telegram_attachment(document.mime_type.as_deref(), &filename);
+        Ok(IncomingAttachment {
+            kind,
+            filename,
+            mime_type: document.mime_type.clone(),
+            data,
+            caption: None,
+        })
+    }
+
+    async fn download_telegram_photo(
+        &self,
+        photo: &TelegramPhotoSize,
+        fallback_name: &str,
+        caption: Option<&str>,
+    ) -> anyhow::Result<IncomingAttachment> {
+        let file = self.get_file_metadata(&photo.file_id).await?;
+        let data = self.download_file(&file.file_path).await?;
+        let ext = file
+            .file_path
+            .rsplit('.')
+            .next()
+            .filter(|value| !value.contains('/'))
+            .unwrap_or("jpg");
+        let mime_type = mime_guess::from_path(&file.file_path)
+            .first_raw()
+            .unwrap_or("image/jpeg")
+            .to_string();
+        Ok(IncomingAttachment {
+            kind: IncomingAttachmentKind::Image,
+            filename: format!("{}.{}", fallback_name, ext),
+            mime_type: Some(mime_type),
+            data,
+            caption: caption
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(ToOwned::to_owned),
+        })
     }
 }
 
@@ -157,7 +345,7 @@ impl TelegramPoller {
         let mut messages = Vec::new();
         for update in updates {
             self.next_offset = self.next_offset.max(update.update_id.saturating_add(1));
-            if let Some(message) = incoming_message_from_update(update) {
+            if let Some(message) = incoming_message_from_update(&self.adapter, update).await? {
                 messages.push(message);
             }
         }
@@ -189,7 +377,7 @@ impl TelegramPoller {
             return Ok(None);
         };
         self.next_offset = update.update_id.saturating_add(1);
-        let Some(message) = incoming_message_from_update(update) else {
+        let Some(message) = incoming_message_from_update(&self.adapter, update).await? else {
             return Ok(None);
         };
         let now_ms = crate::storage::now_ms();
@@ -232,72 +420,27 @@ impl TelegramPoller {
 #[async_trait]
 impl ChatAdapter for TelegramAdapter {
     async fn send_message(&self, msg: OutgoingMessage) -> anyhow::Result<SentMessage> {
-        #[derive(Serialize)]
-        struct SendMessageRequest<'a> {
-            chat_id: &'a str,
-            text: &'a str,
-            #[serde(skip_serializing_if = "Option::is_none")]
-            reply_to_message_id: Option<i64>,
-            disable_web_page_preview: bool,
+        let mut first_sent = None;
+
+        if !msg.content.trim().is_empty() {
+            first_sent = Some(self.send_text_message(&msg).await?);
         }
 
-        let reply_to_message_id = parse_reply_to_message_id(msg.reply_to.as_deref());
-        let message: TelegramMessage = self
-            .post_json(
-                "sendMessage",
-                &SendMessageRequest {
-                    chat_id: &msg.chat_id,
-                    text: &msg.content,
-                    reply_to_message_id,
-                    disable_web_page_preview: true,
-                },
-                TELEGRAM_REQUEST_TIMEOUT,
-            )
-            .await?;
-
-        Ok(SentMessage {
-            message_id: message.message_id.to_string(),
-        })
-    }
-
-    async fn begin_streaming_message(
-        &self,
-        msg: OutgoingMessage,
-    ) -> anyhow::Result<Option<StreamingMessage>> {
-        let draft_id = next_draft_id();
-        self.send_message_draft(&msg.chat_id, draft_id, &msg.content)
-            .await?;
-        Ok(Some(StreamingMessage {
-            id: draft_id.to_string(),
-        }))
-    }
-
-    async fn update_streaming_message(
-        &self,
-        chat_id: &str,
-        stream: &StreamingMessage,
-        content: &str,
-    ) -> anyhow::Result<()> {
-        self.send_message_draft(chat_id, parse_draft_id(&stream.id)?, content)
-            .await
-    }
-
-    async fn finalize_streaming_message(
-        &self,
-        stream: StreamingMessage,
-        msg: OutgoingMessage,
-    ) -> anyhow::Result<SentMessage> {
-        let draft_id = parse_draft_id(&stream.id)?;
-        let sent = self.send_message(msg.clone()).await?;
-        if let Err(err) = self.send_message_draft(&msg.chat_id, draft_id, "").await {
-            tracing::warn!(
-                chat_id = %msg.chat_id,
-                draft_id,
-                err = %err,
-                "clear telegram message draft failed after finalize"
-            );
+        for (index, attachment) in msg.attachments.iter().enumerate() {
+            let reply_to = if first_sent.is_none() && index == 0 {
+                msg.reply_to.as_deref()
+            } else {
+                None
+            };
+            let sent = self
+                .send_document(&msg.chat_id, reply_to, attachment)
+                .await?;
+            if first_sent.is_none() {
+                first_sent = Some(sent);
+            }
         }
-        Ok(sent)
+
+        first_sent.ok_or_else(|| anyhow::anyhow!("telegram outgoing message is empty"))
     }
 
     async fn edit_message(
@@ -311,9 +454,12 @@ impl ChatAdapter for TelegramAdapter {
             chat_id: &'a str,
             message_id: i64,
             text: &'a str,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            parse_mode: Option<&'static str>,
             disable_web_page_preview: bool,
         }
 
+        let rendered = render_chat_message(ChatPlatform::Telegram, content);
         let _: serde_json::Value = self
             .post_json(
                 "editMessageText",
@@ -322,8 +468,31 @@ impl ChatAdapter for TelegramAdapter {
                     message_id: message_id
                         .parse()
                         .context("telegram message_id parse failed for editMessageText")?,
-                    text: content,
+                    text: &rendered.content,
+                    parse_mode: rendered.parse_mode.as_telegram_str(),
                     disable_web_page_preview: true,
+                },
+                TELEGRAM_REQUEST_TIMEOUT,
+            )
+            .await?;
+        Ok(())
+    }
+
+    async fn delete_message(&self, chat_id: &str, message_id: &str) -> anyhow::Result<()> {
+        #[derive(Serialize)]
+        struct DeleteMessageRequest<'a> {
+            chat_id: &'a str,
+            message_id: i64,
+        }
+
+        let _: bool = self
+            .post_json(
+                "deleteMessage",
+                &DeleteMessageRequest {
+                    chat_id,
+                    message_id: message_id
+                        .parse()
+                        .context("telegram message_id parse failed for deleteMessage")?,
                 },
                 TELEGRAM_REQUEST_TIMEOUT,
             )
@@ -360,24 +529,13 @@ fn parse_reply_to_message_id(reply_to: Option<&str>) -> Option<i64> {
     reply_to.and_then(|value| value.parse().ok())
 }
 
-fn parse_chat_id(chat_id: &str) -> anyhow::Result<i64> {
-    chat_id
-        .parse()
-        .with_context(|| format!("telegram chat_id parse failed for sendMessageDraft: {chat_id}"))
-}
-
-fn parse_draft_id(draft_id: &str) -> anyhow::Result<i64> {
-    draft_id
-        .parse()
-        .with_context(|| format!("telegram draft_id parse failed for sendMessageDraft: {draft_id}"))
-}
-
-fn next_draft_id() -> i64 {
-    let id = NEXT_TELEGRAM_DRAFT_ID.fetch_add(1, Ordering::Relaxed);
-    if id >= i64::MAX - 1 {
-        NEXT_TELEGRAM_DRAFT_ID.store(1, Ordering::Relaxed);
-    }
-    id.max(1)
+fn request_retry_backoff_delay(attempt: usize) -> Duration {
+    let exponent = attempt.saturating_sub(1).min(10);
+    let factor = 1u32 << u32::try_from(exponent).unwrap_or(10);
+    TELEGRAM_RETRY_DELAY_BASE
+        .checked_mul(factor)
+        .map(|delay| delay.min(TELEGRAM_RETRY_DELAY_MAX))
+        .unwrap_or(TELEGRAM_RETRY_DELAY_MAX)
 }
 
 fn telegram_user_display_name(user: &TelegramUser) -> Option<String> {
@@ -462,7 +620,10 @@ struct TelegramMessage {
     date: i32,
     chat: TelegramChat,
     from: Option<TelegramUser>,
+    caption: Option<String>,
     text: Option<String>,
+    document: Option<TelegramDocument>,
+    photo: Option<Vec<TelegramPhotoSize>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -478,23 +639,101 @@ struct TelegramUser {
     last_name: Option<String>,
 }
 
-fn incoming_message_from_update(update: TelegramUpdate) -> Option<IncomingMessage> {
-    let message = update.message?;
-    let text = message.text.map(|value| value.trim().to_string())?;
-    if text.is_empty() {
-        return None;
-    }
-    let from = message.from?;
+#[derive(Debug, Deserialize)]
+struct TelegramDocument {
+    file_id: String,
+    file_name: Option<String>,
+    mime_type: Option<String>,
+}
 
-    Some(IncomingMessage {
+#[derive(Debug, Deserialize)]
+struct TelegramPhotoSize {
+    file_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct TelegramFile {
+    file_path: String,
+}
+
+async fn incoming_message_from_update(
+    adapter: &TelegramAdapter,
+    update: TelegramUpdate,
+) -> anyhow::Result<Option<IncomingMessage>> {
+    let Some(message) = update.message else {
+        return Ok(None);
+    };
+    let mut attachments = Vec::<IncomingAttachment>::new();
+
+    if let Some(document) = message.document.as_ref() {
+        match adapter.download_telegram_document(document).await {
+            Ok(attachment) => attachments.push(attachment),
+            Err(err) => {
+                tracing::warn!(
+                    message_id = message.message_id,
+                    err = %err,
+                    "download telegram document failed; skipping attachment"
+                );
+            }
+        }
+    }
+
+    if let Some(photo) = message.photo.as_ref().and_then(|items| items.last()) {
+        let fallback_name = format!("telegram-photo-{}", message.message_id);
+        match adapter
+            .download_telegram_photo(photo, &fallback_name, message.caption.as_deref())
+            .await
+        {
+            Ok(attachment) => attachments.push(attachment),
+            Err(err) => {
+                tracing::warn!(
+                    message_id = message.message_id,
+                    err = %err,
+                    "download telegram photo failed; skipping attachment"
+                );
+            }
+        }
+    }
+
+    let text = message
+        .text
+        .as_deref()
+        .or(message.caption.as_deref())
+        .map(str::trim)
+        .unwrap_or("")
+        .to_string();
+    if text.is_empty() && attachments.is_empty() {
+        return Ok(None);
+    }
+    let Some(from) = message.from else {
+        return Ok(None);
+    };
+
+    Ok(Some(IncomingMessage {
         platform: ChatPlatform::Telegram,
         sender_id: from.id.to_string(),
         sender_display_name: telegram_user_display_name(&from),
         chat_id: message.chat.id.to_string(),
         text,
+        attachments,
         message_id: Some(message.message_id.to_string()),
         timestamp_ms: i64::from(message.date).saturating_mul(1000),
-    })
+    }))
+}
+
+fn classify_telegram_attachment(mime_type: Option<&str>, filename: &str) -> IncomingAttachmentKind {
+    if mime_type
+        .map(|value| value.starts_with("image/"))
+        .unwrap_or(false)
+    {
+        return IncomingAttachmentKind::Image;
+    }
+    let guessed = mime_guess::from_path(filename).first_raw().unwrap_or("");
+    if guessed.starts_with("image/") {
+        IncomingAttachmentKind::Image
+    } else {
+        IncomingAttachmentKind::File
+    }
 }
 
 #[cfg(test)]
@@ -527,5 +766,13 @@ mod tests {
                 .expect("should decode telegram success payload");
         assert_eq!(message.message_id, 42);
         assert_eq!(message.text.as_deref(), Some("hello"));
+    }
+
+    #[test]
+    fn request_retry_backoff_delay_grows_and_caps() {
+        assert_eq!(request_retry_backoff_delay(1), Duration::from_millis(250));
+        assert_eq!(request_retry_backoff_delay(2), Duration::from_millis(500));
+        assert_eq!(request_retry_backoff_delay(3), Duration::from_millis(1000));
+        assert_eq!(request_retry_backoff_delay(4), Duration::from_secs(2));
     }
 }
