@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS chat_bindings (
   display_name TEXT,
   bound_at INTEGER NOT NULL,
   is_active INTEGER NOT NULL DEFAULT 1,
-  UNIQUE(platform)
+  UNIQUE(platform, platform_user_id)
 );
 
 CREATE TABLE IF NOT EXISTS bridge_known_projects (

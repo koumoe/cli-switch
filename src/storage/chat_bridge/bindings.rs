@@ -234,9 +234,9 @@ pub async fn consume_pairing_token(
                 r#"
                 SELECT id, platform_user_id, is_active
                 FROM chat_bindings
-                WHERE platform = ?1
+                WHERE platform = ?1 AND platform_user_id = ?2
                 "#,
-                params![platform.as_str()],
+                params![platform.as_str(), platform_user_id.as_str()],
                 |row| {
                     Ok((
                         row.get::<_, i64>(0)?,
@@ -262,15 +262,10 @@ pub async fn consume_pairing_token(
             tx.execute(
                 r#"
                 UPDATE chat_bindings
-                SET platform_user_id = ?2, display_name = ?3, bound_at = ?4, is_active = 1
+                SET display_name = ?2, bound_at = ?3, is_active = 1
                 WHERE id = ?1
                 "#,
-                params![
-                    binding_id,
-                    platform_user_id.as_str(),
-                    display_name.as_deref(),
-                    now
-                ],
+                params![binding_id, display_name.as_deref(), now],
             )?;
             binding_id
         } else {
