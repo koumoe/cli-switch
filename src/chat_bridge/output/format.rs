@@ -656,7 +656,6 @@ fn take_text_prefix_by_char_limit(text: &str, max_chars: usize) -> (&str, &str) 
     let max_chars = max_chars.max(1);
     let mut best_cut = None::<usize>;
     let mut fallback_cut = 0usize;
-    let mut last_was_newline = false;
     let mut char_count = 0usize;
 
     for (idx, ch) in text.char_indices() {
@@ -667,10 +666,9 @@ fn take_text_prefix_by_char_limit(text: &str, max_chars: usize) -> (&str, &str) 
 
         let cut = idx + ch.len_utf8();
         fallback_cut = cut;
-        if ch == '\n' || ch == ' ' || (last_was_newline && ch == '\n') {
+        if ch == '\n' || ch == ' ' {
             best_cut = Some(cut);
         }
-        last_was_newline = ch == '\n';
     }
 
     if fallback_cut == 0 {
