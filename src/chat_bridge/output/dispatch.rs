@@ -11,8 +11,8 @@ use super::super::{
     StreamChunk, StreamKind, TURN_EXECUTION_TIMEOUT, TYPING_INTERVAL, read_stream,
 };
 use super::format::{
-    RenderedMessage, build_live_output, chunk_text, compose_final_output, format_streaming_message,
-    render_chat_message_chunks, render_redacted_chat_message,
+    RenderedMessage, build_live_output, compose_final_output, format_streaming_message,
+    render_chat_message_chunks, render_labeled_chat_message_chunks, render_redacted_chat_message,
 };
 use super::notice::build_safe_mode_notice;
 use super::parse::append_display_chunks_from_raw;
@@ -534,20 +534,17 @@ async fn send_or_replace_labeled_text(
         return Ok(());
     }
 
-    let limit = message_char_limit(adapter.platform());
-    let max_body = limit.saturating_sub(label.chars().count() + 1);
-    let chunks = chunk_text(text, max_body.max(256));
-    for (index, chunk) in chunks.into_iter().enumerate() {
-        let title = if index == 0 {
-            label.to_string()
-        } else {
-            format!("{label} (续 {})", index + 1)
-        };
-        let content = format!("{title}\n{chunk}");
-        let _ = send_formatted_message(
+    let rendered_chunks = render_labeled_chat_message_chunks(
+        adapter.platform(),
+        label,
+        text,
+        message_char_limit(adapter.platform()),
+    );
+    for (index, rendered) in rendered_chunks.into_iter().enumerate() {
+        let _ = send_rendered_message(
             adapter,
             chat_id,
-            &content,
+            rendered,
             if index == 0 { reply_to } else { None },
             Vec::new(),
         )
