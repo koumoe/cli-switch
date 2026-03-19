@@ -670,12 +670,14 @@ impl ChatBridgeRuntime {
 
         lines.push(String::new());
         lines.push("附件：".to_string());
+        let normalized_user_text = normalized_prompt_text(trimmed);
         for (index, item) in materialized.iter().enumerate() {
             let caption = item
                 .caption
                 .as_deref()
                 .map(str::trim)
                 .filter(|value| !value.is_empty())
+                .filter(|value| should_include_attachment_caption(value, &normalized_user_text))
                 .map(|value| format!(" | caption: {value}"))
                 .unwrap_or_default();
             lines.push(format!(
@@ -901,7 +903,6 @@ async fn run_discord_bridge(runtime: ChatBridgeRuntime, client: reqwest::Client,
             Err(err) => {
                 poll_failures = poll_failures.saturating_add(1);
                 tracing::warn!(err = %err, "discord poll loop failed");
-                let _ = poller.reconnect().await;
                 tokio::time::sleep(exponential_backoff_delay(
                     poll_failures,
                     CHAT_BRIDGE_POLL_ERROR_POLICY.base_delay,
@@ -1008,6 +1009,21 @@ fn sanitize_fs_name(raw: &str) -> String {
     }
 }
 
+fn should_include_attachment_caption(caption: &str, normalized_user_text: &str) -> bool {
+    if normalized_user_text.is_empty() {
+        return true;
+    }
+    normalized_prompt_text(caption) != normalized_user_text
+}
+
+fn normalized_prompt_text(text: &str) -> String {
+    text.split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .trim()
+        .to_lowercase()
+}
+
 fn render_user_error(err: &anyhow::Error) -> String {
     match err.downcast_ref::<StorageError>() {
         Some(StorageError::ChatPairingTokenInvalid) => "配对 Token 无效".to_string(),
@@ -1103,6 +1119,24 @@ mod tests {
 "#;
 
         assert_eq!(extract_display_text(raw, true), "Newest answer");
+    }
+
+    #[test]
+    fn attachment_caption_is_omitted_when_same_as_user_text() {
+        let normalized = normalized_prompt_text("Fix   bug in   login");
+        assert!(!should_include_attachment_caption(
+            "  fix bug in login ",
+            &normalized
+        ));
+    }
+
+    #[test]
+    fn attachment_caption_is_kept_when_different_from_user_text() {
+        let normalized = normalized_prompt_text("Fix bug in login");
+        assert!(should_include_attachment_caption(
+            "screenshot: login error",
+            &normalized
+        ));
     }
 
     #[test]
