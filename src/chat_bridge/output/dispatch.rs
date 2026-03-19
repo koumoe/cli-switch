@@ -12,7 +12,7 @@ use super::super::{
 };
 use super::format::{
     RenderedMessage, build_live_output, chunk_text, compose_final_output, format_streaming_message,
-    render_chat_message, render_redacted_chat_message,
+    render_chat_message_chunks, render_redacted_chat_message,
 };
 use super::notice::build_safe_mode_notice;
 use super::parse::append_display_chunks_from_raw;
@@ -446,19 +446,7 @@ impl ChatBridgeRuntime {
         text: &str,
         reply_to: Option<&str>,
     ) -> anyhow::Result<()> {
-        for (index, chunk) in chunk_text(text, message_char_limit(adapter.platform()))
-            .into_iter()
-            .enumerate()
-        {
-            let _ = send_formatted_message(
-                &adapter,
-                chat_id,
-                &chunk,
-                if index == 0 { reply_to } else { None },
-                Vec::new(),
-            )
-            .await?;
-        }
+        let _ = send_formatted_message(&adapter, chat_id, text, reply_to, Vec::new()).await?;
         Ok(())
     }
 
@@ -576,16 +564,14 @@ fn build_single_labeled_content(
     if should_send_as_attachment(platform, text) {
         return None;
     }
-    let limit = message_char_limit(platform);
-    let max_body = limit.saturating_sub(label.chars().count() + 1).max(256);
-    let chunks = chunk_text(text, max_body);
-    if chunks.len() != 1 {
-        return None;
-    }
-    chunks
-        .into_iter()
-        .next()
-        .map(|chunk| format!("{label}\n{chunk}"))
+    let trimmed = text.trim();
+    let content = if trimmed.is_empty() {
+        label.to_string()
+    } else {
+        format!("{label}\n{trimmed}")
+    };
+    (render_chat_message_chunks(platform, &content, message_char_limit(platform)).len() == 1)
+        .then_some(content)
 }
 
 async fn send_formatted_message(
@@ -595,8 +581,33 @@ async fn send_formatted_message(
     reply_to: Option<&str>,
     attachments: Vec<Attachment>,
 ) -> anyhow::Result<SentMessage> {
-    let rendered = render_chat_message(adapter.platform(), content);
-    send_rendered_message(adapter, chat_id, rendered, reply_to, attachments).await
+    let rendered_chunks = render_chat_message_chunks(
+        adapter.platform(),
+        content,
+        message_char_limit(adapter.platform()),
+    );
+
+    let mut first_sent = None;
+    let mut pending_attachments = Some(attachments);
+    for (index, rendered) in rendered_chunks.into_iter().enumerate() {
+        let sent = send_rendered_message(
+            adapter,
+            chat_id,
+            rendered,
+            if index == 0 { reply_to } else { None },
+            if index == 0 {
+                pending_attachments.take().unwrap_or_default()
+            } else {
+                Vec::new()
+            },
+        )
+        .await?;
+        if first_sent.is_none() {
+            first_sent = Some(sent);
+        }
+    }
+
+    first_sent.ok_or_else(|| anyhow::anyhow!("formatted message is empty"))
 }
 
 async fn send_rendered_message(

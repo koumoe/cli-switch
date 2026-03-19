@@ -9,6 +9,12 @@ pub(in crate::chat_bridge) struct RenderedMessage {
     pub(in crate::chat_bridge) parse_mode: ParseMode,
 }
 
+#[derive(Debug, Clone)]
+struct SourceSegment {
+    text: String,
+    is_fenced_code: bool,
+}
+
 pub(in crate::chat_bridge) fn format_projects_list(items: &[AggregatedProject]) -> String {
     if items.is_empty() {
         return "没有发现可用项目。先在本机运行对应 CLI，或在设置里开启“允许新项目”后直接使用绝对路径。".to_string();
@@ -54,6 +60,36 @@ pub(in crate::chat_bridge) fn render_chat_message(
 ) -> RenderedMessage {
     let redacted = redact_sensitive_text(content);
     render_redacted_chat_message(platform, &redacted)
+}
+
+pub(super) fn render_chat_message_chunks(
+    platform: ChatPlatform,
+    content: &str,
+    max_chars: usize,
+) -> Vec<RenderedMessage> {
+    match platform {
+        ChatPlatform::Telegram => {
+            let redacted = redact_sensitive_text(content);
+            let raw_chunks = chunk_telegram_source_by_rendered_limit(&redacted, max_chars.max(1));
+            raw_chunks
+                .into_iter()
+                .map(|chunk| RenderedMessage {
+                    content: format_telegram_message(&chunk),
+                    parse_mode: ParseMode::Html,
+                })
+                .collect()
+        }
+        _ => {
+            let redacted = redact_sensitive_text(content);
+            chunk_text(&redacted, max_chars.max(1))
+                .into_iter()
+                .map(|chunk| RenderedMessage {
+                    content: chunk,
+                    parse_mode: ParseMode::PlainText,
+                })
+                .collect()
+        }
+    }
 }
 
 pub(super) fn render_redacted_chat_message(
@@ -241,6 +277,296 @@ fn split_long_fragment(text: &str, max_chars: usize) -> Vec<String> {
     }
 
     fragments
+}
+
+fn chunk_telegram_source_by_rendered_limit(content: &str, max_chars: usize) -> Vec<String> {
+    let normalized = content.trim();
+    if normalized.is_empty() {
+        return vec!["(空输出)".to_string()];
+    }
+
+    let segments = split_telegram_source_segments(normalized);
+    let mut chunks = Vec::<String>::new();
+    let mut current = String::new();
+
+    for segment in segments {
+        if segment.is_fenced_code {
+            append_fenced_segment(&mut chunks, &mut current, &segment.text, max_chars.max(1));
+        } else {
+            append_plain_segment(&mut chunks, &mut current, &segment.text, max_chars.max(1));
+        }
+    }
+
+    if !current.trim().is_empty() {
+        chunks.push(current.trim().to_string());
+    }
+    if chunks.is_empty() {
+        chunks.push("(空输出)".to_string());
+    }
+    chunks
+}
+
+fn split_telegram_source_segments(content: &str) -> Vec<SourceSegment> {
+    let mut out = Vec::<SourceSegment>::new();
+    let mut remaining = content;
+    while let Some((start, fence_char, fence_len)) = find_next_fence(remaining) {
+        let plain = &remaining[..start];
+        if !plain.is_empty() {
+            out.push(SourceSegment {
+                text: plain.to_string(),
+                is_fenced_code: false,
+            });
+        }
+
+        let marker = std::iter::repeat_n(fence_char, fence_len).collect::<String>();
+        let after_start = &remaining[start + marker.len()..];
+        let Some(end) = after_start.find(&marker) else {
+            out.push(SourceSegment {
+                text: remaining[start..].to_string(),
+                is_fenced_code: false,
+            });
+            return out;
+        };
+        let block_end = start + marker.len() + end + marker.len();
+        out.push(SourceSegment {
+            text: remaining[start..block_end].to_string(),
+            is_fenced_code: true,
+        });
+        remaining = &remaining[block_end..];
+    }
+
+    if !remaining.is_empty() {
+        out.push(SourceSegment {
+            text: remaining.to_string(),
+            is_fenced_code: false,
+        });
+    }
+    out
+}
+
+fn append_plain_segment(
+    chunks: &mut Vec<String>,
+    current: &mut String,
+    text: &str,
+    max_chars: usize,
+) {
+    let mut remaining = text.trim();
+    while !remaining.is_empty() {
+        let candidate = concat_source(current, remaining);
+        if telegram_rendered_len(&candidate) <= max_chars {
+            *current = candidate;
+            break;
+        }
+
+        if !current.trim().is_empty() {
+            chunks.push(current.trim().to_string());
+            current.clear();
+            continue;
+        }
+
+        let (prefix, rest) = take_plain_prefix_fitting_limit(remaining, max_chars);
+        if prefix.trim().is_empty() {
+            let forced = force_take_chars(remaining, 1);
+            chunks.push(forced.to_string());
+            remaining = remaining[forced.len()..].trim_start();
+            continue;
+        }
+        chunks.push(prefix.trim().to_string());
+        remaining = rest.trim_start();
+    }
+}
+
+fn append_fenced_segment(
+    chunks: &mut Vec<String>,
+    current: &mut String,
+    fence_block: &str,
+    max_chars: usize,
+) {
+    let candidate = concat_source(current, fence_block);
+    if telegram_rendered_len(&candidate) <= max_chars {
+        *current = candidate;
+        return;
+    }
+
+    if !current.trim().is_empty() {
+        chunks.push(current.trim().to_string());
+        current.clear();
+    }
+
+    if telegram_rendered_len(fence_block) <= max_chars {
+        *current = fence_block.trim().to_string();
+        return;
+    }
+
+    for piece in split_oversized_fenced_block(fence_block, max_chars) {
+        if piece.trim().is_empty() {
+            continue;
+        }
+        chunks.push(piece.trim().to_string());
+    }
+}
+
+fn split_oversized_fenced_block(block: &str, max_chars: usize) -> Vec<String> {
+    let Some((fence_char, fence_len, language, code)) = parse_fenced_block(block) else {
+        return split_plain_hard(block, max_chars);
+    };
+
+    let marker = std::iter::repeat_n(fence_char, fence_len).collect::<String>();
+    let lang_prefix = language
+        .as_deref()
+        .map(|lang| format!("{lang}\n"))
+        .unwrap_or_default();
+
+    let mut out = Vec::<String>::new();
+    let mut current_code = String::new();
+    for line in code.split('\n') {
+        let line_with_newline = if current_code.is_empty() {
+            line.to_string()
+        } else {
+            format!("\n{line}")
+        };
+        let candidate_code = format!("{current_code}{line_with_newline}");
+        let candidate = format!("{marker}\n{lang_prefix}{candidate_code}\n{marker}");
+        if telegram_rendered_len(&candidate) <= max_chars {
+            current_code = candidate_code;
+            continue;
+        }
+
+        if !current_code.is_empty() {
+            out.push(format!("{marker}\n{lang_prefix}{current_code}\n{marker}"));
+            current_code.clear();
+            let retry = format!("{marker}\n{lang_prefix}{line}\n{marker}");
+            if telegram_rendered_len(&retry) <= max_chars {
+                current_code = line.to_string();
+                continue;
+            }
+        }
+
+        let wrapped_limit = max_chars.saturating_sub(telegram_rendered_len(&format!(
+            "{marker}\n{lang_prefix}\n{marker}"
+        )));
+        let fragments = split_plain_hard(line, wrapped_limit.max(1));
+        for frag in fragments {
+            out.push(format!("{marker}\n{lang_prefix}{frag}\n{marker}"));
+        }
+    }
+
+    if !current_code.is_empty() {
+        out.push(format!("{marker}\n{lang_prefix}{current_code}\n{marker}"));
+    }
+    if out.is_empty() {
+        out.push(block.to_string());
+    }
+    out
+}
+
+fn parse_fenced_block(block: &str) -> Option<(char, usize, Option<String>, String)> {
+    let (start, fence_char, fence_len) = find_next_fence(block)?;
+    if start != 0 {
+        return None;
+    }
+    let marker = std::iter::repeat_n(fence_char, fence_len).collect::<String>();
+    let after_start = &block[marker.len()..];
+    let end = after_start.rfind(&marker)?;
+    let inner = after_start[..end].trim_start_matches('\n');
+
+    let (language, code) = match inner.split_once('\n') {
+        Some((first, rest))
+            if !first.contains(' ')
+                && !first.is_empty()
+                && first.len() <= 24
+                && first
+                    .chars()
+                    .all(|ch| ch.is_ascii_alphanumeric() || ch == '_' || ch == '-') =>
+        {
+            (Some(first.to_string()), rest.to_string())
+        }
+        _ => (None, inner.to_string()),
+    };
+    Some((fence_char, fence_len, language, code))
+}
+
+fn split_plain_hard(text: &str, max_chars: usize) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut remaining = text;
+    while !remaining.is_empty() {
+        let piece = force_take_chars(remaining, max_chars.max(1));
+        out.push(piece.to_string());
+        remaining = &remaining[piece.len()..];
+    }
+    if out.is_empty() {
+        out.push(String::new());
+    }
+    out
+}
+
+fn concat_source(current: &str, next: &str) -> String {
+    if current.trim().is_empty() {
+        return next.trim().to_string();
+    }
+    let left = current.trim_end();
+    let right = next.trim_start();
+    if left.ends_with('\n') || right.starts_with('\n') {
+        format!("{left}{right}")
+    } else {
+        format!("{left}\n{right}")
+    }
+}
+
+fn take_plain_prefix_fitting_limit(text: &str, max_chars: usize) -> (&str, &str) {
+    let mut best_cut = None::<usize>;
+    let mut last_was_newline = false;
+    for (idx, ch) in text.char_indices() {
+        if ch == '\n' || ch == ' ' || (last_was_newline && ch == '\n') {
+            let cut = idx + ch.len_utf8();
+            let prefix = text[..cut].trim_end();
+            if !prefix.is_empty() && telegram_rendered_len(prefix) <= max_chars {
+                best_cut = Some(cut);
+            }
+        }
+        last_was_newline = ch == '\n';
+    }
+
+    if let Some(cut) = best_cut {
+        let prefix = text[..cut].trim_end();
+        return (prefix, &text[cut..]);
+    }
+
+    let mut fallback_cut = 0usize;
+    for (idx, ch) in text.char_indices() {
+        let cut = idx + ch.len_utf8();
+        let prefix = text[..cut].trim_end();
+        if prefix.is_empty() {
+            continue;
+        }
+        if telegram_rendered_len(prefix) <= max_chars {
+            fallback_cut = cut;
+        } else {
+            break;
+        }
+    }
+    if fallback_cut == 0 {
+        let forced = force_take_chars(text, 1);
+        return (forced, &text[forced.len()..]);
+    }
+    let prefix = text[..fallback_cut].trim_end();
+    (prefix, &text[fallback_cut..])
+}
+
+fn force_take_chars(text: &str, chars: usize) -> &str {
+    if chars == 0 {
+        return "";
+    }
+    let cut = text
+        .char_indices()
+        .nth(chars)
+        .map(|(idx, _)| idx)
+        .unwrap_or(text.len());
+    &text[..cut]
+}
+
+fn telegram_rendered_len(source: &str) -> usize {
+    format_telegram_message(source).chars().count()
 }
 
 pub(super) fn cap_for_streaming(text: &str, max_chars: usize) -> String {
@@ -559,5 +885,47 @@ mod tests {
             "[#1|codex|demo]\n````markdown\ncode with ``` inside\n````",
         );
         assert!(rendered.content.contains("<pre><code>code with ``` inside"));
+    }
+
+    #[test]
+    fn render_chat_message_chunks_respects_telegram_rendered_limit_for_escaped_text() {
+        let input = format!("[#1|codex|demo]\n{}", "<>&\"".repeat(1400));
+        let chunks = render_chat_message_chunks(ChatPlatform::Telegram, &input, 320);
+        assert!(chunks.len() > 1);
+        for chunk in chunks {
+            assert_eq!(chunk.parse_mode, ParseMode::Html);
+            assert!(chunk.content.chars().count() <= 320);
+        }
+    }
+
+    #[test]
+    fn render_chat_message_chunks_keeps_fenced_block_intact_when_possible() {
+        let input = "[#1|codex|demo]\n开始\n```rust\nfn main() {}\nprintln!(\"ok\");\n```\n结束";
+        let chunks = render_chat_message_chunks(ChatPlatform::Telegram, input, 90);
+        assert!(chunks.iter().any(|chunk| {
+            chunk.content.contains("<pre><code>fn main() {}")
+                && chunk.content.contains("println!(&quot;ok&quot;);")
+        }));
+        assert!(chunks.iter().all(|chunk| {
+            let open = chunk.content.matches("<pre><code>").count();
+            let close = chunk.content.matches("</code></pre>").count();
+            open == close
+        }));
+    }
+
+    #[test]
+    fn render_chat_message_chunks_splits_oversized_fenced_block_into_balanced_blocks() {
+        let code = (0..300)
+            .map(|idx| format!("line_{idx:03} = value_{idx:03};"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let input = format!("```rust\n{code}\n```");
+        let chunks = render_chat_message_chunks(ChatPlatform::Telegram, &input, 280);
+        assert!(chunks.len() > 1);
+        for chunk in chunks {
+            assert!(chunk.content.chars().count() <= 280);
+            assert_eq!(chunk.content.matches("<pre><code>").count(), 1);
+            assert_eq!(chunk.content.matches("</code></pre>").count(), 1);
+        }
     }
 }
