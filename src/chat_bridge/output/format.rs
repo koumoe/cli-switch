@@ -70,15 +70,7 @@ pub(super) fn render_chat_message_chunks(
     match platform {
         ChatPlatform::Telegram => {
             let redacted = redact_sensitive_text(content);
-            let raw_chunks =
-                chunk_telegram_source_by_rendered_limit(&redacted, max_chars.max(1), None);
-            raw_chunks
-                .into_iter()
-                .map(|chunk| RenderedMessage {
-                    content: format_telegram_message(&chunk),
-                    parse_mode: ParseMode::Html,
-                })
-                .collect()
+            render_telegram_message_chunks(&redacted, max_chars, None)
         }
         _ => {
             let redacted = redact_sensitive_text(content);
@@ -111,42 +103,45 @@ pub(super) fn render_labeled_chat_message_chunks(
     match platform {
         ChatPlatform::Telegram => {
             let redacted_body = redact_sensitive_text(normalized_body);
-            let raw_chunks = chunk_telegram_source_by_rendered_limit(
-                &redacted_body,
-                max_chars.max(1),
-                Some(normalized_label),
-            );
-            raw_chunks
-                .into_iter()
-                .map(|chunk| RenderedMessage {
-                    content: format_telegram_message(&format!("{normalized_label}\n{chunk}")),
-                    parse_mode: ParseMode::Html,
-                })
-                .collect()
+            render_telegram_message_chunks(&redacted_body, max_chars, Some(normalized_label))
         }
         _ => {
             let redacted_body = redact_sensitive_text(normalized_body);
-            let max_body = max_chars
-                .saturating_sub(normalized_label.chars().count())
-                .saturating_sub(1)
-                .max(256);
-            let chunks = chunk_text(&redacted_body, max_body);
-            chunks
+            render_labeled_plain_text_chunks(normalized_label, &redacted_body, max_chars)
                 .into_iter()
-                .enumerate()
-                .map(|(index, chunk)| {
-                    let title = if index == 0 {
-                        normalized_label.to_string()
-                    } else {
-                        format!("{normalized_label} (续 {})", index + 1)
-                    };
-                    RenderedMessage {
-                        content: format!("{title}\n{chunk}"),
-                        parse_mode: ParseMode::PlainText,
-                    }
+                .map(|content| RenderedMessage {
+                    content,
+                    parse_mode: ParseMode::PlainText,
                 })
                 .collect()
         }
+    }
+}
+
+fn render_telegram_message_chunks(
+    source: &str,
+    max_chars: usize,
+    title: Option<&str>,
+) -> Vec<RenderedMessage> {
+    chunk_telegram_source_by_rendered_limit(source, max_chars.max(1), title)
+        .into_iter()
+        .map(|chunk| RenderedMessage {
+            content: format_telegram_chunk(title, &chunk),
+            parse_mode: ParseMode::Html,
+        })
+        .collect()
+}
+
+fn format_telegram_chunk(title: Option<&str>, source: &str) -> String {
+    match title {
+        Some(title) if !title.trim().is_empty() => {
+            let mut with_title = String::with_capacity(title.len() + 1 + source.len());
+            with_title.push_str(title.trim());
+            with_title.push('\n');
+            with_title.push_str(source);
+            format_telegram_message(&with_title)
+        }
+        _ => format_telegram_message(source),
     }
 }
 
@@ -335,6 +330,34 @@ fn split_long_fragment(text: &str, max_chars: usize) -> Vec<String> {
     }
 
     fragments
+}
+
+fn render_labeled_plain_text_chunks(label: &str, body: &str, max_chars: usize) -> Vec<String> {
+    let mut chunks = Vec::new();
+    let mut remaining = body.trim();
+    let mut index = 0usize;
+
+    while !remaining.is_empty() {
+        let title = labeled_chunk_title(label, index);
+        let max_body_chars = max_chars
+            .saturating_sub(title.chars().count())
+            .saturating_sub(1)
+            .max(1);
+        let (chunk, rest) = take_text_prefix_by_char_limit(remaining, max_body_chars);
+        chunks.push(format!("{title}\n{chunk}"));
+        remaining = rest.trim_start();
+        index += 1;
+    }
+
+    chunks
+}
+
+fn labeled_chunk_title(label: &str, index: usize) -> String {
+    if index == 0 {
+        label.to_string()
+    } else {
+        format!("{label} (续 {})", index + 1)
+    }
 }
 
 fn chunk_telegram_source_by_rendered_limit(
@@ -571,15 +594,7 @@ where
     let mut out = Vec::new();
     let mut remaining = text;
     while !remaining.is_empty() {
-        let mut cut = 0usize;
-        for (idx, ch) in remaining.char_indices() {
-            let next = idx + ch.len_utf8();
-            if fits(&remaining[..next]) {
-                cut = next;
-            } else {
-                break;
-            }
-        }
+        let cut = longest_prefix_fitting_cut(remaining, &fits);
 
         if cut == 0 {
             let forced = force_take_chars(remaining, 1);
@@ -597,6 +612,33 @@ where
     out
 }
 
+fn longest_prefix_fitting_cut<F>(text: &str, fits: &F) -> usize
+where
+    F: Fn(&str) -> bool,
+{
+    let char_endings = text
+        .char_indices()
+        .map(|(idx, ch)| idx + ch.len_utf8())
+        .collect::<Vec<_>>();
+    if char_endings.is_empty() {
+        return 0;
+    }
+
+    let mut low = 0usize;
+    let mut high = char_endings.len();
+    while low < high {
+        let probe = (low + high).div_ceil(2);
+        let cut = char_endings[probe - 1];
+        if fits(&text[..cut]) {
+            low = probe;
+        } else {
+            high = probe - 1;
+        }
+    }
+
+    if low == 0 { 0 } else { char_endings[low - 1] }
+}
+
 fn concat_source(current: &str, next: &str) -> String {
     if current.trim().is_empty() {
         return next.trim().to_string();
@@ -610,48 +652,80 @@ fn concat_source(current: &str, next: &str) -> String {
     }
 }
 
+fn take_text_prefix_by_char_limit(text: &str, max_chars: usize) -> (&str, &str) {
+    let max_chars = max_chars.max(1);
+    let mut best_cut = None::<usize>;
+    let mut fallback_cut = 0usize;
+    let mut last_was_newline = false;
+    let mut char_count = 0usize;
+
+    for (idx, ch) in text.char_indices() {
+        char_count += 1;
+        if char_count > max_chars {
+            break;
+        }
+
+        let cut = idx + ch.len_utf8();
+        fallback_cut = cut;
+        if ch == '\n' || ch == ' ' || (last_was_newline && ch == '\n') {
+            best_cut = Some(cut);
+        }
+        last_was_newline = ch == '\n';
+    }
+
+    if fallback_cut == 0 {
+        let forced = force_take_chars(text, 1);
+        return (forced, &text[forced.len()..]);
+    }
+
+    let cut = best_cut.unwrap_or(fallback_cut);
+    let prefix = text[..cut].trim_end();
+    if prefix.is_empty() {
+        let forced = force_take_chars(text, 1);
+        return (forced, &text[forced.len()..]);
+    }
+    (prefix, &text[cut..])
+}
+
 fn take_plain_prefix_fitting_limit<'a>(
     text: &'a str,
     max_chars: usize,
     title: Option<&str>,
 ) -> (&'a str, &'a str) {
-    let mut best_cut = None::<usize>;
-    let mut last_was_newline = false;
-    for (idx, ch) in text.char_indices() {
-        if ch == '\n' || ch == ' ' || (last_was_newline && ch == '\n') {
-            let cut = idx + ch.len_utf8();
-            let prefix = text[..cut].trim_end();
-            if !prefix.is_empty() && telegram_rendered_len(prefix, title) <= max_chars {
-                best_cut = Some(cut);
-            }
-        }
-        last_was_newline = ch == '\n';
-    }
-
-    if let Some(cut) = best_cut {
-        let prefix = text[..cut].trim_end();
-        return (prefix, &text[cut..]);
-    }
-
-    let mut fallback_cut = 0usize;
-    for (idx, ch) in text.char_indices() {
-        let cut = idx + ch.len_utf8();
-        let prefix = text[..cut].trim_end();
-        if prefix.is_empty() {
-            continue;
-        }
-        if telegram_rendered_len(prefix, title) <= max_chars {
-            fallback_cut = cut;
-        } else {
-            break;
-        }
-    }
+    let fits = |candidate: &str| telegram_rendered_len(candidate, title) <= max_chars;
+    let fallback_cut = longest_prefix_fitting_cut(text, &fits);
     if fallback_cut == 0 {
         let forced = force_take_chars(text, 1);
         return (forced, &text[forced.len()..]);
     }
+
+    if let Some(separator_cut) = find_last_separator_cut(text, fallback_cut) {
+        let prefix = text[..separator_cut].trim_end();
+        if !prefix.is_empty() {
+            return (prefix, &text[separator_cut..]);
+        }
+    }
+
     let prefix = text[..fallback_cut].trim_end();
     (prefix, &text[fallback_cut..])
+}
+
+fn find_last_separator_cut(text: &str, max_cut: usize) -> Option<usize> {
+    let mut best_cut = None::<usize>;
+    for (idx, ch) in text.char_indices() {
+        let cut = idx + ch.len_utf8();
+        if cut > max_cut {
+            break;
+        }
+        if ch != '\n' && ch != ' ' {
+            continue;
+        }
+        if text[..cut].trim_end().is_empty() {
+            continue;
+        }
+        best_cut = Some(cut);
+    }
+    best_cut
 }
 
 fn force_take_chars(text: &str, chars: usize) -> &str {
@@ -667,14 +741,10 @@ fn force_take_chars(text: &str, chars: usize) -> &str {
 }
 
 fn telegram_rendered_len(source: &str, title: Option<&str>) -> usize {
-    match title {
-        Some(title) if !title.trim().is_empty() && !source.trim().is_empty() => {
-            format_telegram_message(&format!("{}\n{}", title.trim(), source))
-                .chars()
-                .count()
-        }
-        _ => format_telegram_message(source).chars().count(),
+    if source.trim().is_empty() {
+        return format_telegram_message(source).chars().count();
     }
+    format_telegram_chunk(title, source).chars().count()
 }
 
 pub(super) fn cap_for_streaming(text: &str, max_chars: usize) -> String {
@@ -942,6 +1012,7 @@ mod tests {
     use super::*;
     use crate::chat_bridge::adapter::ParseMode;
     use crate::storage::ChatPlatform;
+    use std::cell::Cell;
 
     #[test]
     fn build_live_output_keeps_body_only() {
@@ -1068,5 +1139,47 @@ mod tests {
             assert_eq!(chunk.content.matches("<pre><code>").count(), 1);
             assert_eq!(chunk.content.matches("</code></pre>").count(), 1);
         }
+    }
+
+    #[test]
+    fn render_labeled_chat_message_chunks_caps_plain_text_continuation_titles() {
+        let label = "[#1|codex|demo]";
+        let body = (0..24)
+            .map(|index| format!("line_{index:02}"))
+            .collect::<Vec<_>>()
+            .join(" ");
+
+        let chunks = render_labeled_chat_message_chunks(ChatPlatform::Discord, label, &body, 32);
+
+        assert!(chunks.len() > 1);
+        for (index, chunk) in chunks.iter().enumerate() {
+            assert_eq!(chunk.parse_mode, ParseMode::PlainText);
+            let expected_title = labeled_chunk_title(label, index);
+            assert!(chunk.content.starts_with(&format!("{expected_title}\n")));
+            assert!(chunk.content.chars().count() <= 32);
+        }
+    }
+
+    #[test]
+    fn take_plain_prefix_fitting_limit_prefers_separator_within_fitting_window() {
+        let text = "alpha beta gamma";
+        let max_chars = telegram_rendered_len("alpha beta", None);
+        let (prefix, rest) = take_plain_prefix_fitting_limit(text, max_chars, None);
+        assert_eq!(prefix, "alpha beta");
+        assert_eq!(rest.trim_start(), "gamma");
+    }
+
+    #[test]
+    fn split_plain_by_rendered_limit_avoids_per_char_fit_checks() {
+        let input = "a".repeat(4096);
+        let calls = Cell::new(0usize);
+        let chunks = split_plain_by_rendered_limit(&input, |candidate| {
+            calls.set(calls.get() + 1);
+            candidate.chars().count() <= 256
+        });
+
+        assert_eq!(chunks.len(), 16);
+        assert!(chunks.iter().all(|chunk| chunk.chars().count() <= 256));
+        assert!(calls.get() < 800);
     }
 }
