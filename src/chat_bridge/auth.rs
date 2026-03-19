@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use super::ChatBridgeRuntime;
 use super::adapter::{ChatAdapter, IncomingMessage};
-use super::output::redact_sensitive_text;
 use super::router::{Command, ParsedInput, parse_input};
 use crate::storage::{self, StorageError};
 
@@ -67,7 +66,6 @@ impl ChatBridgeRuntime {
 
         match parsed {
             ParsedInput::PlainText(text) => {
-                self.record_audit_log(&msg, "chat", &text, None).await;
                 self.route_to_default(adapter, msg, binding.platform, text)
                     .await?;
             }
@@ -104,7 +102,6 @@ impl ChatBridgeRuntime {
             msg.sender_display_name.clone(),
         )
         .await?;
-        self.record_audit_log(&msg, "command", "/bind", None).await;
         let name = binding
             .display_name
             .unwrap_or_else(|| msg.sender_id.clone());
@@ -121,34 +118,6 @@ impl ChatBridgeRuntime {
         Ok(())
     }
 
-    pub(super) async fn record_audit_log(
-        &self,
-        msg: &IncomingMessage,
-        message_type: &str,
-        content: &str,
-        session_id: Option<i64>,
-    ) {
-        if let Err(err) = storage::create_chat_audit_log(
-            self.db_path.clone(),
-            storage::CreateChatAuditLogInput {
-                platform: msg.platform,
-                sender_id: msg.sender_id.clone(),
-                chat_id: msg.chat_id.clone(),
-                message_type: message_type.to_string(),
-                content: redact_sensitive_text(&format_audit_log_content(msg, content)),
-                session_id,
-            },
-        )
-        .await
-        {
-            tracing::warn!(
-                platform = %msg.platform.as_str(),
-                err = %err,
-                "create chat audit log failed"
-            );
-        }
-    }
-
     pub(super) fn project_cache_key(
         &self,
         msg: &IncomingMessage,
@@ -157,29 +126,6 @@ impl ChatBridgeRuntime {
             platform: msg.platform.as_str().to_string(),
             chat_id: msg.chat_id.clone(),
         }
-    }
-}
-
-fn format_audit_log_content(msg: &IncomingMessage, content: &str) -> String {
-    let mut lines = Vec::<String>::new();
-    let trimmed = content.trim();
-    if !trimmed.is_empty() {
-        lines.push(trimmed.to_string());
-    }
-    if !msg.attachments.is_empty() {
-        lines.push(format!(
-            "attachments: {}",
-            msg.attachments
-                .iter()
-                .map(|item| format!("[{}] {}", item.kind.label(), item.filename))
-                .collect::<Vec<_>>()
-                .join(", ")
-        ));
-    }
-    if lines.is_empty() {
-        "(empty message)".to_string()
-    } else {
-        lines.join("\n")
     }
 }
 

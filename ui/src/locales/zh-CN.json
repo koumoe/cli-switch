@@ -801,33 +801,6 @@
         "unbind": "解绑",
         "unbindOk": "已解除绑定",
         "unbindFail": "解除绑定失败"
-      },
-      "audit": {
-        "title": "审计日志",
-        "subtitle": "查看最近的聊天命令和消息审计记录。",
-        "latest": "最近记录",
-        "latestHint": "默认每页展示 100 条记录，支持按平台过滤和翻页查看。",
-        "view": "查看日志",
-        "loadFail": "获取审计日志失败",
-        "dialogTitle": "消息互联审计日志",
-        "dialogSubtitle": "这里只展示最近写入数据库的聊天侧审计记录，支持按页浏览。",
-        "empty": "暂无审计日志记录",
-        "platform": {
-          "all": "全部平台"
-        },
-        "headers": {
-          "time": "时间",
-          "platform": "平台",
-          "type": "类型",
-          "sender": "发送者",
-          "chat": "聊天",
-          "session": "会话",
-          "content": "内容"
-        },
-        "type": {
-          "chat": "聊天",
-          "command": "命令"
-        }
       }
     },
     "compatibility": {

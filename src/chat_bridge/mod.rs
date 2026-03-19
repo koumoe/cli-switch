@@ -276,8 +276,6 @@ impl ChatBridgeRuntime {
     ) -> anyhow::Result<()> {
         match command {
             Command::Projects => {
-                self.record_audit_log(&msg, "command", "/projects", None)
-                    .await;
                 let key = self.project_cache_key(&msg);
                 let items = self
                     .project_store
@@ -296,8 +294,6 @@ impl ChatBridgeRuntime {
                 alias,
                 permission_mode,
             } => {
-                self.record_audit_log(&msg, "command", &msg.text, None)
-                    .await;
                 let settings = self.settings_snapshot();
                 let key = self.project_cache_key(&msg);
                 let project = self
@@ -340,14 +336,10 @@ impl ChatBridgeRuntime {
                 else {
                     return Ok(());
                 };
-                self.record_audit_log(&msg, "chat", &message, Some(session.id))
-                    .await;
                 self.run_turn_for_session(adapter, msg, session, message)
                     .await?;
             }
             Command::Switch { target } => {
-                self.record_audit_log(&msg, "command", &msg.text, None)
-                    .await;
                 let Some(session) = self
                     .resolve_active_session_or_reply(adapter.clone(), &msg, platform, &target)
                     .await?
@@ -369,8 +361,6 @@ impl ChatBridgeRuntime {
                 .await?;
             }
             Command::Sessions => {
-                self.record_audit_log(&msg, "command", "/sessions", None)
-                    .await;
                 let sessions = storage::list_bridge_sessions_for_platform(
                     self.db_path.clone(),
                     platform,
@@ -382,8 +372,6 @@ impl ChatBridgeRuntime {
                     .await?;
             }
             Command::Stop { target } => {
-                self.record_audit_log(&msg, "command", &msg.text, None)
-                    .await;
                 let Some(session) = self
                     .resolve_active_session_or_reply(adapter.clone(), &msg, platform, &target)
                     .await?
@@ -409,8 +397,6 @@ impl ChatBridgeRuntime {
                 .await?;
             }
             Command::StopAll => {
-                self.record_audit_log(&msg, "command", "/stop all", None)
-                    .await;
                 let sessions = storage::list_bridge_sessions_for_platform(
                     self.db_path.clone(),
                     platform,
@@ -439,7 +425,6 @@ impl ChatBridgeRuntime {
                 .await?;
             }
             Command::Help => {
-                self.record_audit_log(&msg, "command", "/help", None).await;
                 self.send_text(
                     adapter,
                     &msg.chat_id,

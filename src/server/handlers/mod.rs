@@ -18,8 +18,7 @@ pub(super) use channel::{
     disable_channel, enable_channel, list_channels, reorder_channels, test_channel, update_channel,
 };
 pub(super) use chat_bridge::{
-    create_chat_bridge_pairing_token, deactivate_chat_bridge_binding, list_chat_bridge_audit_logs,
-    list_chat_bridge_bindings,
+    create_chat_bridge_pairing_token, deactivate_chat_bridge_binding, list_chat_bridge_bindings,
 };
 pub(super) use health::health;
 pub(super) use maintenance::{db_size, frontend_log_ingest, logs_clear, logs_size, records_clear};

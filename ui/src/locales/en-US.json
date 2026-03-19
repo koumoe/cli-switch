@@ -801,33 +801,6 @@
         "unbind": "Unbind",
         "unbindOk": "Account unbound",
         "unbindFail": "Failed to unbind account"
-      },
-      "audit": {
-        "title": "Audit Logs",
-        "subtitle": "Review recent chat commands and message audit records.",
-        "latest": "Latest Records",
-        "latestHint": "Shows 100 records per page and supports platform filtering with paging.",
-        "view": "View Logs",
-        "loadFail": "Failed to load audit logs",
-        "dialogTitle": "Messaging Audit Logs",
-        "dialogSubtitle": "This dialog shows recent chat-side audit records persisted in the database, with page-by-page browsing.",
-        "empty": "No audit logs yet",
-        "platform": {
-          "all": "All Platforms"
-        },
-        "headers": {
-          "time": "Time",
-          "platform": "Platform",
-          "type": "Type",
-          "sender": "Sender",
-          "chat": "Chat",
-          "session": "Session",
-          "content": "Content"
-        },
-        "type": {
-          "chat": "Chat",
-          "command": "Command"
-        }
       }
     },
     "compatibility": {
