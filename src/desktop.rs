@@ -61,7 +61,7 @@ struct DesktopState {
     dock_visible: bool,
     close_request_inflight: bool,
     close_prompt_open: bool,
-    locale: DesktopLocale,
+    locale: AppLocale,
     ui_ready: bool,
 }
 
@@ -88,110 +88,70 @@ fn dispatch_custom_event<T: Serialize>(webview: &wry::WebView, name: &str, detai
     }
 }
 
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-enum DesktopLocale {
-    #[default]
-    ZhCN,
-    EnUS,
+fn detect_desktop_locale() -> AppLocale {
+    for key in ["LC_ALL", "LC_MESSAGES", "LANG"] {
+        if let Ok(v) = std::env::var(key)
+            && let Some(locale) = AppLocale::parse(&v)
+        {
+            return locale;
+        }
+    }
+    AppLocale::default()
 }
 
-impl DesktopLocale {
-    fn from_str(input: &str) -> Self {
-        let lower = input.trim().to_ascii_lowercase();
-        if lower == "zh" || lower.starts_with("zh-") {
-            DesktopLocale::ZhCN
-        } else {
-            DesktopLocale::EnUS
-        }
-    }
-
-    fn detect() -> Self {
-        for key in ["LC_ALL", "LC_MESSAGES", "LANG"] {
-            if let Ok(v) = std::env::var(key) {
-                let lower = v.to_ascii_lowercase();
-                if lower.contains("zh") {
-                    return DesktopLocale::ZhCN;
-                }
-                if lower.contains("en") {
-                    return DesktopLocale::EnUS;
-                }
-            }
-        }
-        DesktopLocale::ZhCN
-    }
-
-    fn from_app_locale(locale: AppLocale) -> Self {
-        match locale {
-            AppLocale::ZhCN => DesktopLocale::ZhCN,
-            AppLocale::EnUS => DesktopLocale::EnUS,
-        }
-    }
-
-    fn as_app_locale(self) -> AppLocale {
-        match self {
-            DesktopLocale::ZhCN => AppLocale::ZhCN,
-            DesktopLocale::EnUS => AppLocale::EnUS,
-        }
-    }
-
-    fn fallback_edit_menu_title(self) -> &'static str {
-        match self {
-            DesktopLocale::ZhCN => "编辑",
-            DesktopLocale::EnUS => "Edit",
-        }
-    }
-
-    fn fallback_tray_show(self) -> &'static str {
-        match self {
-            DesktopLocale::ZhCN => "显示窗口",
-            DesktopLocale::EnUS => "Show Window",
-        }
-    }
-
-    fn fallback_tray_hide(self) -> &'static str {
-        match self {
-            DesktopLocale::ZhCN => "隐藏窗口",
-            DesktopLocale::EnUS => "Hide Window",
-        }
-    }
-
-    fn fallback_tray_quit(self) -> &'static str {
-        match self {
-            DesktopLocale::ZhCN => "退出",
-            DesktopLocale::EnUS => "Quit",
-        }
+fn fallback_edit_menu_title(locale: AppLocale) -> &'static str {
+    match locale {
+        AppLocale::ZhCN => "编辑",
+        AppLocale::EnUS => "Edit",
     }
 }
 
-fn desktop_text(locale: DesktopLocale, key: &str, fallback: &str) -> String {
-    i18n::render_optional(
-        locale.as_app_locale(),
-        key,
-        &BTreeMap::<String, String>::new(),
-    )
-    .unwrap_or_else(|| fallback.to_string())
+fn fallback_tray_show(locale: AppLocale) -> &'static str {
+    match locale {
+        AppLocale::ZhCN => "显示窗口",
+        AppLocale::EnUS => "Show Window",
+    }
 }
 
-fn apply_desktop_locale(locale: DesktopLocale, menus: LocalizableMenus<'_>) {
+fn fallback_tray_hide(locale: AppLocale) -> &'static str {
+    match locale {
+        AppLocale::ZhCN => "隐藏窗口",
+        AppLocale::EnUS => "Hide Window",
+    }
+}
+
+fn fallback_tray_quit(locale: AppLocale) -> &'static str {
+    match locale {
+        AppLocale::ZhCN => "退出",
+        AppLocale::EnUS => "Quit",
+    }
+}
+
+fn desktop_text(locale: AppLocale, key: &str, fallback: &str) -> String {
+    i18n::render_optional(locale, key, &BTreeMap::<String, String>::new())
+        .unwrap_or_else(|| fallback.to_string())
+}
+
+fn apply_desktop_locale(locale: AppLocale, menus: LocalizableMenus<'_>) {
     menus.edit_menu.set_text(&desktop_text(
         locale,
         "desktop.editMenuTitle",
-        locale.fallback_edit_menu_title(),
+        fallback_edit_menu_title(locale),
     ));
     menus.tray_show.set_text(&desktop_text(
         locale,
         "desktop.tray.show",
-        locale.fallback_tray_show(),
+        fallback_tray_show(locale),
     ));
     menus.tray_hide.set_text(&desktop_text(
         locale,
         "desktop.tray.hide",
-        locale.fallback_tray_hide(),
+        fallback_tray_hide(locale),
     ));
     menus.tray_quit.set_text(&desktop_text(
         locale,
         "desktop.tray.quit",
-        locale.fallback_tray_quit(),
+        fallback_tray_quit(locale),
     ));
 }
 
@@ -473,7 +433,7 @@ fn handle_user_event(
                     }
                 }
                 IpcMessage::SetLocale { locale } => {
-                    let next = DesktopLocale::from_str(&locale);
+                    let next = AppLocale::parse_or_default(&locale);
                     if next != state.locale {
                         state.locale = next;
                         apply_desktop_locale(
@@ -583,13 +543,13 @@ pub async fn run(
     let menu = Menu::new();
     let initial_locale = settings
         .as_ref()
-        .map(|s| DesktopLocale::from_app_locale(s.ui_locale))
-        .unwrap_or_else(DesktopLocale::detect);
+        .map(|s| s.ui_locale)
+        .unwrap_or_else(detect_desktop_locale);
     let edit_menu = Submenu::new(
         &desktop_text(
             initial_locale,
             "desktop.editMenuTitle",
-            initial_locale.fallback_edit_menu_title(),
+            fallback_edit_menu_title(initial_locale),
         ),
         true,
     );
@@ -656,7 +616,7 @@ pub async fn run(
         &desktop_text(
             initial_locale,
             "desktop.tray.show",
-            initial_locale.fallback_tray_show(),
+            fallback_tray_show(initial_locale),
         ),
         true,
         None,
@@ -666,7 +626,7 @@ pub async fn run(
         &desktop_text(
             initial_locale,
             "desktop.tray.hide",
-            initial_locale.fallback_tray_hide(),
+            fallback_tray_hide(initial_locale),
         ),
         true,
         None,
@@ -676,7 +636,7 @@ pub async fn run(
         &desktop_text(
             initial_locale,
             "desktop.tray.quit",
-            initial_locale.fallback_tray_quit(),
+            fallback_tray_quit(initial_locale),
         ),
         true,
         None,

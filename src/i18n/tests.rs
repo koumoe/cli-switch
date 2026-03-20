@@ -8,24 +8,25 @@ use std::collections::BTreeMap;
 use serde_json::Value;
 
 use super::catalog::{
-    shared_en_catalog_str, shared_zh_catalog_str, ui_en_catalog_str, ui_zh_catalog_str,
+    parse_catalog_strict, shared_en_catalog_str, shared_zh_catalog_str, ui_en_catalog_str,
+    ui_zh_catalog_str,
 };
 use super::translator::flatten_leaf_keys;
 use super::{AppLocale, render};
 
-fn parse_catalog(raw: &str) -> Value {
-    serde_json::from_str(raw).expect("parse catalog")
+fn parse_catalog(raw: &str, label: &str) -> Value {
+    parse_catalog_strict(raw, label).unwrap_or_else(|err| panic!("{err}"))
 }
 
-fn flattened_keys(raw: &str) -> Vec<String> {
+fn flattened_keys(raw: &str, label: &str) -> Vec<String> {
     let mut out = Vec::new();
-    flatten_leaf_keys(&parse_catalog(raw), "", &mut out);
+    flatten_leaf_keys(&parse_catalog(raw, label), "", &mut out);
     out.sort();
     out
 }
 
-fn flattened_key_set(raw: &str) -> BTreeSet<String> {
-    flattened_keys(raw).into_iter().collect()
+fn flattened_key_set(raw: &str, label: &str) -> BTreeSet<String> {
+    flattened_keys(raw, label).into_iter().collect()
 }
 
 fn collect_rs_files(root: &Path, out: &mut Vec<PathBuf>) {
@@ -55,23 +56,23 @@ fn app_locale_normalizes_values() {
 #[test]
 fn shared_locale_keys_match() {
     assert_eq!(
-        flattened_keys(shared_zh_catalog_str()),
-        flattened_keys(shared_en_catalog_str())
+        flattened_keys(shared_zh_catalog_str(), "shared zh-CN"),
+        flattened_keys(shared_en_catalog_str(), "shared en-US")
     );
 }
 
 #[test]
 fn ui_locale_keys_match() {
     assert_eq!(
-        flattened_keys(ui_zh_catalog_str()),
-        flattened_keys(ui_en_catalog_str())
+        flattened_keys(ui_zh_catalog_str(), "ui zh-CN"),
+        flattened_keys(ui_en_catalog_str(), "ui en-US")
     );
 }
 
 #[test]
 fn shared_and_ui_do_not_overlap_on_leaf_keys() {
-    let shared_keys = flattened_key_set(shared_zh_catalog_str());
-    let ui_keys = flattened_key_set(ui_zh_catalog_str());
+    let shared_keys = flattened_key_set(shared_zh_catalog_str(), "shared zh-CN");
+    let ui_keys = flattened_key_set(ui_zh_catalog_str(), "ui zh-CN");
     let overlap = shared_keys
         .intersection(&ui_keys)
         .cloned()
@@ -81,6 +82,29 @@ fn shared_and_ui_do_not_overlap_on_leaf_keys() {
         overlap.is_empty(),
         "shared/ui locale leaf keys overlap unexpectedly: {overlap:?}"
     );
+}
+
+#[test]
+fn strict_catalog_parser_rejects_duplicate_keys() {
+    let err = parse_catalog_strict(
+        r#"{"errors":{"internal_error":"a","internal_error":"b"}}"#,
+        "duplicate fixture",
+    )
+    .expect_err("duplicate keys should fail");
+
+    assert!(err.contains("duplicate key `internal_error` at $.errors"));
+}
+
+#[test]
+fn shared_catalogs_reject_duplicate_keys() {
+    parse_catalog_strict(shared_zh_catalog_str(), "shared zh-CN").expect("shared zh-CN catalog");
+    parse_catalog_strict(shared_en_catalog_str(), "shared en-US").expect("shared en-US catalog");
+}
+
+#[test]
+fn ui_catalogs_reject_duplicate_keys() {
+    parse_catalog_strict(ui_zh_catalog_str(), "ui zh-CN").expect("ui zh-CN catalog");
+    parse_catalog_strict(ui_en_catalog_str(), "ui en-US").expect("ui en-US catalog");
 }
 
 #[test]
@@ -127,7 +151,7 @@ fn backend_error_codes_have_translations() {
         }
     }
 
-    let shared_keys = flattened_key_set(shared_zh_catalog_str());
+    let shared_keys = flattened_key_set(shared_zh_catalog_str(), "shared zh-CN");
     let missing = codes
         .into_iter()
         .filter(|code| {

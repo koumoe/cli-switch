@@ -3,7 +3,7 @@ use directories::UserDirs;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use crate::chat_bridge::i18n::{args, t_args};
+use crate::chat_bridge::i18n::{args, t, t_args};
 use crate::cli_tools::CliToolId;
 use crate::i18n::AppLocale;
 use crate::storage;
@@ -144,15 +144,17 @@ impl ProjectStore {
             }
             let cache = self.selection_cache.read().await;
             let Some(snapshot) = cache.get(key) else {
-                anyhow::bail!("{}", t_args(locale, "project.index_missing", &args([])));
+                anyhow::bail!("{}", t(locale, "project.index_missing"));
             };
             if snapshot.expires_at_ms < storage::now_ms() {
-                anyhow::bail!("{}", t_args(locale, "project.index_expired", &args([])));
+                anyhow::bail!("{}", t(locale, "project.index_expired"));
             }
             let pos = index - PROJECT_SELECTION_DISPLAY_INDEX_START;
-            return snapshot.items.get(pos).cloned().ok_or_else(|| {
-                anyhow::anyhow!("{}", t_args(locale, "project.index_not_found", &args([])))
-            });
+            return snapshot
+                .items
+                .get(pos)
+                .cloned()
+                .ok_or_else(|| anyhow::anyhow!("{}", t(locale, "project.index_not_found")));
         }
 
         if let Some(path) = normalize_explicit_project_path(reference) {
@@ -180,7 +182,7 @@ impl ProjectStore {
             }
 
             if !allow_new_projects {
-                anyhow::bail!("{}", t_args(locale, "project.path_unknown", &args([])));
+                anyhow::bail!("{}", t(locale, "project.path_unknown"));
             }
 
             let known =
@@ -209,7 +211,7 @@ impl ProjectStore {
                 )
             ),
             1 => Ok(matches.into_iter().next().unwrap_or_else(|| unreachable!())),
-            _ => anyhow::bail!("{}", t_args(locale, "project.ambiguous", &args([]))),
+            _ => anyhow::bail!("{}", t(locale, "project.ambiguous")),
         }
     }
 }

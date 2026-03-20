@@ -43,9 +43,12 @@ impl UserFacingIssue {
     }
 
     pub fn legacy_error_text(&self, locale: AppLocale) -> String {
-        self.detail
-            .clone()
-            .unwrap_or_else(|| self.to_payload(locale).message)
+        let payload = self.to_payload(locale);
+        if payload.message != self.code {
+            payload.message
+        } else {
+            self.detail.clone().unwrap_or(payload.message)
+        }
     }
 }
 

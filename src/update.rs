@@ -52,8 +52,9 @@ impl Stage {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct UpdateRuntime {
+    pub locale: AppLocale,
     pub stage: Stage,
     pub latest_version: Option<String>,
     pub latest_ignored: bool,
@@ -64,6 +65,24 @@ pub struct UpdateRuntime {
     pub download_downloaded_bytes: u64,
     pub issue: Option<UserFacingIssue>,
     pub error: Option<String>,
+}
+
+impl Default for UpdateRuntime {
+    fn default() -> Self {
+        Self {
+            locale: AppLocale::default(),
+            stage: Stage::default(),
+            latest_version: None,
+            latest_ignored: false,
+            update_available: false,
+            downloading_version: None,
+            download_percent: None,
+            download_total_bytes: None,
+            download_downloaded_bytes: 0,
+            issue: None,
+            error: None,
+        }
+    }
 }
 
 impl UpdateRuntime {
@@ -79,8 +98,8 @@ impl UpdateRuntime {
         self.error = None;
     }
 
-    fn set_issue(&mut self, issue: UserFacingIssue, locale: AppLocale) {
-        self.error = Some(issue.legacy_error_text(locale));
+    fn set_issue(&mut self, issue: UserFacingIssue) {
+        self.error = Some(issue.legacy_error_text(self.locale));
         self.issue = Some(issue);
     }
 }
@@ -118,7 +137,7 @@ fn legacy_error_text(
 }
 
 fn snapshot_status(rt: &UpdateRuntime, pending_version: Option<String>) -> UpdateStatus {
-    let locale = AppLocale::default();
+    let locale = rt.locale;
     UpdateStatus {
         current_version: env!("CARGO_PKG_VERSION").to_string(),
         auto_update_enabled: false,
@@ -493,9 +512,11 @@ pub async fn check_latest(
     runtime: std::sync::Arc<tokio::sync::Mutex<UpdateRuntime>>,
     db_path: PathBuf,
     data_dir: &Path,
+    locale: AppLocale,
 ) -> UpdateCheck {
     {
-        let rt = runtime.lock().await;
+        let mut rt = runtime.lock().await;
+        rt.locale = locale;
         if matches!(
             rt.stage,
             Stage::Checking | Stage::Downloading | Stage::Staging
@@ -512,6 +533,7 @@ pub async fn check_latest(
 
     {
         let mut rt = runtime.lock().await;
+        rt.locale = locale;
         rt.stage = Stage::Checking;
         rt.clear_issue();
         rt.reset_download_state();
@@ -534,14 +556,14 @@ pub async fn check_latest(
                 }
                 _ => {
                     issue = Some(
-                        UserFacingIssue::new("update.version_parse_failed")
+                        UserFacingIssue::new("update_version_parse_failed")
                             .with_arg("version", tag.clone()),
                     );
                 }
             }
         }
         Err(e) => {
-            issue = Some(UserFacingIssue::new("update.check_failed").with_detail(e.to_string()));
+            issue = Some(UserFacingIssue::new("update_check_failed").with_detail(e.to_string()));
         }
     }
 
@@ -549,11 +571,12 @@ pub async fn check_latest(
     let pending_version = pending.as_ref().map(|p| p.version.clone());
     {
         let mut rt = runtime.lock().await;
+        rt.locale = locale;
         rt.latest_version = latest_str.clone();
         rt.latest_ignored = latest_ignored;
         rt.update_available = available;
         if let Some(issue) = issue {
-            rt.set_issue(issue, AppLocale::default());
+            rt.set_issue(issue);
             rt.stage = Stage::Error;
         } else if pending.is_some() {
             rt.clear_issue();
@@ -588,10 +611,13 @@ pub async fn get_status(
     } else {
         false
     };
+    if let Some(locale) = current_locale() {
+        rt.locale = locale;
+    }
     if pending.is_some() && rt.stage != Stage::Downloading {
         rt.stage = Stage::Ready;
     }
-    let locale = current_locale().unwrap_or_default();
+    let locale = rt.locale;
 
     UpdateStatus {
         current_version: env!("CARGO_PKG_VERSION").to_string(),
@@ -616,9 +642,11 @@ pub async fn spawn_download_latest(
     runtime: std::sync::Arc<tokio::sync::Mutex<UpdateRuntime>>,
     db_path: PathBuf,
     data_dir: PathBuf,
+    locale: AppLocale,
 ) -> bool {
     {
         let mut rt = runtime.lock().await;
+        rt.locale = locale;
         if matches!(
             rt.stage,
             Stage::Checking | Stage::Downloading | Stage::Staging
@@ -637,11 +665,9 @@ pub async fn spawn_download_latest(
             tracing::warn!(err = %e, "update download check failed: github latest release");
             let pending_version = load_pending_update(&data_dir).map(|p| p.version);
             let mut rt = runtime.lock().await;
+            rt.locale = locale;
             rt.stage = Stage::Error;
-            rt.set_issue(
-                UserFacingIssue::new("update.check_failed").with_detail(e.to_string()),
-                AppLocale::default(),
-            );
+            rt.set_issue(UserFacingIssue::new("update_check_failed").with_detail(e.to_string()));
             rt.reset_download_state();
             publish_status(&rt, pending_version);
             return false;
@@ -661,15 +687,15 @@ pub async fn spawn_download_latest(
     if let Some(err) = version_err {
         tracing::warn!(err = %err, latest = %latest, "update download check failed: version parse");
         let mut rt = runtime.lock().await;
+        rt.locale = locale;
         rt.latest_version = Some(latest.clone());
         rt.latest_ignored = ignored_latest;
         rt.update_available = false;
         rt.stage = Stage::Error;
         rt.set_issue(
-            UserFacingIssue::new("update.version_parse_failed")
+            UserFacingIssue::new("update_version_parse_failed")
                 .with_arg("version", latest.clone())
                 .with_detail(err),
-            AppLocale::default(),
         );
         rt.reset_download_state();
         publish_status(&rt, load_pending_update(&data_dir).map(|p| p.version));
@@ -743,14 +769,14 @@ pub async fn spawn_download_latest(
     if pick_asset(&release).is_none() {
         tracing::warn!(latest = %latest, platform = %current_platform_key(), "update download skipped: no matching asset");
         let mut rt = runtime.lock().await;
+        rt.locale = locale;
         rt.latest_version = Some(latest);
         rt.latest_ignored = false;
         rt.update_available = true;
         rt.stage = Stage::Error;
         rt.set_issue(
-            UserFacingIssue::new("update.asset_not_found")
+            UserFacingIssue::new("update_asset_not_found")
                 .with_arg("platform", current_platform_key()),
-            AppLocale::default(),
         );
         rt.reset_download_state();
         publish_status(&rt, load_pending_update(&data_dir).map(|p| p.version));
@@ -777,11 +803,9 @@ pub async fn spawn_download_latest(
             tracing::warn!(err = %e, "update download failed");
             let pending_version = load_pending_update(&data_dir).map(|p| p.version);
             let mut rt = runtime.lock().await;
+            rt.locale = locale;
             rt.stage = Stage::Error;
-            rt.set_issue(
-                UserFacingIssue::new("update.download_failed").with_detail(e.to_string()),
-                AppLocale::default(),
-            );
+            rt.set_issue(UserFacingIssue::new("update_download_failed").with_detail(e.to_string()));
             rt.reset_download_state();
             publish_status(&rt, pending_version);
         }

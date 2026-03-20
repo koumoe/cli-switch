@@ -39,7 +39,7 @@ use self::projects::AggregatedProject;
 use self::projects::ProjectStore;
 use self::router::{Command, format_session_label, format_sessions_list, help_text};
 use crate::cli_tools::CliToolId;
-use crate::i18n::AppLocale;
+use crate::i18n::{AppLocale, render_error};
 use crate::storage::{self, BridgeSessionStatus, ChatPlatform, StorageError};
 
 const STREAM_UPDATE_INTERVAL: Duration = Duration::from_millis(1200);
@@ -1170,6 +1170,13 @@ fn render_user_error(err: &anyhow::Error, locale: AppLocale) -> String {
             ]),
         ),
         Some(StorageError::ChatBindingAlreadyExists { .. }) => t(locale, "error.binding_exists"),
+        Some(StorageError::ChatBindingNotFound { .. })
+        | Some(StorageError::ChatBindingIdentityNotFound { .. }) => render_error(
+            locale,
+            "chat_bridge_binding_not_found",
+            &std::collections::BTreeMap::new(),
+            "Chat binding not found",
+        ),
         Some(StorageError::ChatSessionAliasExists { alias, .. }) => t_args(
             locale,
             "error.session_alias_exists",

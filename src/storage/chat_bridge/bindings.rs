@@ -436,6 +436,7 @@ pub async fn update_chat_binding_locale(
     platform_user_id: String,
     preferred_locale: String,
 ) -> anyhow::Result<()> {
+    let platform_user_id = platform_user_id.trim().to_string();
     let preferred_locale = AppLocale::parse_or_default(&preferred_locale)
         .as_str()
         .to_string();
@@ -448,12 +449,16 @@ pub async fn update_chat_binding_locale(
             "#,
             params![
                 platform.as_str(),
-                platform_user_id.trim(),
+                platform_user_id.as_str(),
                 preferred_locale.as_str()
             ],
         )?;
         if updated == 0 {
-            return Err(StorageError::ChatBindingNotFound { binding_id: 0 }.into());
+            return Err(StorageError::ChatBindingIdentityNotFound {
+                platform: platform.as_str().to_string(),
+                platform_user_id: platform_user_id.clone(),
+            }
+            .into());
         }
         Ok(())
     })

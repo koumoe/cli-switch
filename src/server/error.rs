@@ -96,13 +96,13 @@ impl IntoResponse for ApiError {
                 StatusCode::BAD_GATEWAY,
                 (*code).to_string(),
                 message.clone(),
-                Some(message.clone()),
+                None,
             ),
             ApiError::Unavailable { code, message } => (
                 StatusCode::SERVICE_UNAVAILABLE,
                 (*code).to_string(),
                 message.clone(),
-                Some(message.clone()),
+                None,
             ),
             ApiError::Internal(err) => {
                 tracing::error!(err = %err, "api internal error");

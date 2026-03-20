@@ -410,6 +410,12 @@ export type StatsTrend = {
   items: TrendPoint[];
 };
 
+const ISSUE_PAYLOAD_KEYS = new Set(["code", "message", "args", "detail"]);
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
 async function http<T>(method: string, path: string, body?: unknown): Promise<T> {
   const locale = getCurrentLocale();
   const headers: Record<string, string> = {
@@ -468,13 +474,16 @@ async function http<T>(method: string, path: string, body?: unknown): Promise<T>
 }
 
 function parseIssuePayload(payload: unknown): UserFacingIssuePayload | null {
-  if (!payload || typeof payload !== "object") return null;
+  if (!isPlainObject(payload)) return null;
 
   const obj = payload as Record<string, unknown>;
-  const candidate =
-    obj.issue && typeof obj.issue === "object"
-      ? (obj.issue as Record<string, unknown>)
-      : obj;
+  const nestedIssue = obj.issue;
+  const candidate = isPlainObject(nestedIssue)
+    ? nestedIssue
+    : isTopLevelIssuePayload(obj)
+      ? obj
+      : null;
+  if (!candidate) return null;
 
   const code = typeof candidate.code === "string" ? candidate.code : null;
   const message = typeof candidate.message === "string" ? candidate.message : null;
@@ -482,8 +491,8 @@ function parseIssuePayload(payload: unknown): UserFacingIssuePayload | null {
 
   const argsRaw = candidate.args;
   const args: Record<string, string> = {};
-  if (argsRaw && typeof argsRaw === "object") {
-    for (const [k, v] of Object.entries(argsRaw as Record<string, unknown>)) {
+  if (isPlainObject(argsRaw)) {
+    for (const [k, v] of Object.entries(argsRaw)) {
       if (typeof v === "string") {
         args[k] = v;
       } else if (v !== null && v !== undefined) {
@@ -500,6 +509,18 @@ function parseIssuePayload(payload: unknown): UserFacingIssuePayload | null {
     args,
     detail,
   };
+}
+
+function isTopLevelIssuePayload(payload: Record<string, unknown>): boolean {
+  const keys = Object.keys(payload);
+  if (keys.length === 0) return false;
+  if (keys.some((key) => !ISSUE_PAYLOAD_KEYS.has(key))) return false;
+  if (typeof payload.code !== "string") return false;
+  return (
+    typeof payload.message === "string" ||
+    typeof payload.detail === "string" ||
+    isPlainObject(payload.args)
+  );
 }
 
 export function getHealth(): Promise<Health> {

@@ -90,6 +90,7 @@ pub(crate) async fn app_update_auto_loop(
             update_runtime.clone(),
             db_path.clone(),
             &data_dir,
+            settings.ui_locale,
         )
         .await;
 
