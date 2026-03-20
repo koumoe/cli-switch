@@ -54,7 +54,7 @@ pub(in crate::server) async fn update_changelog(
 ) -> Result<impl IntoResponse, ApiError> {
     if q.version.trim().is_empty() {
         return Err(ApiError::bad_request(
-            "update_version_required",
+            "update.version_required",
             "version is required",
         ));
     }
@@ -103,7 +103,7 @@ pub(in crate::server) async fn update_ignore(
 ) -> Result<impl IntoResponse, ApiError> {
     if input.version.trim().is_empty() {
         return Err(ApiError::bad_request(
-            "update_version_required",
+            "update.version_required",
             "version is required",
         ));
     }

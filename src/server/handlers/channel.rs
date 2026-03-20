@@ -5,6 +5,7 @@ use axum::response::IntoResponse;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
+use crate::i18n::{UserFacingIssue, UserFacingIssuePayload, current_locale};
 use crate::proxy;
 use crate::server::AppState;
 use crate::server::error::{ApiError, map_storage_unit_no_content_err};
@@ -312,6 +313,9 @@ struct ChannelTestResponse {
     ok: bool,
     status: Option<u16>,
     latency_ms: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    issue: Option<UserFacingIssuePayload>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     error: Option<String>,
 }
 
@@ -373,22 +377,34 @@ pub(in crate::server) async fn test_channel(
                 ok,
                 status: Some(status),
                 latency_ms,
+                issue: None,
                 error: None,
             }))
         }
-        Ok(Err(e)) => Ok(Json(ChannelTestResponse {
-            reachable: false,
-            ok: false,
-            status: None,
-            latency_ms,
-            error: Some(e.to_string()),
-        })),
-        Err(_) => Ok(Json(ChannelTestResponse {
-            reachable: false,
-            ok: false,
-            status: None,
-            latency_ms,
-            error: Some("timeout".to_string()),
-        })),
+        Ok(Err(e)) => {
+            let locale = current_locale().unwrap_or_default();
+            let issue =
+                UserFacingIssue::new("channel_test_request_failed").with_detail(e.to_string());
+            Ok(Json(ChannelTestResponse {
+                reachable: false,
+                ok: false,
+                status: None,
+                latency_ms,
+                issue: Some(issue.to_payload(locale)),
+                error: Some(issue.legacy_error_text(locale)),
+            }))
+        }
+        Err(_) => {
+            let locale = current_locale().unwrap_or_default();
+            let issue = UserFacingIssue::new("channel_test_timeout");
+            Ok(Json(ChannelTestResponse {
+                reachable: false,
+                ok: false,
+                status: None,
+                latency_ms,
+                issue: Some(issue.to_payload(locale)),
+                error: Some(issue.legacy_error_text(locale)),
+            }))
+        }
     }
 }

@@ -18,17 +18,17 @@ pub(in crate::server) async fn open_in_browser(
     let url = input.url.trim();
     if url.is_empty() {
         return Err(ApiError::bad_request(
-            "system_url_required",
+            "system.url_required",
             "url is required",
         ));
     }
     let parsed = reqwest::Url::parse(url)
-        .map_err(|e| ApiError::bad_request("system_url_invalid", format!("Invalid url: {e}")))?;
+        .map_err(|e| ApiError::bad_request("system.url_invalid", format!("Invalid url: {e}")))?;
     match parsed.scheme() {
         "http" | "https" => {}
         other => {
             return Err(ApiError::bad_request(
-                "system_url_scheme_not_supported",
+                "system.url_scheme_not_supported",
                 format!("Only http/https is supported, scheme={other}"),
             ));
         }
@@ -73,7 +73,7 @@ pub(in crate::server) async fn pick_folder(
     {
         let _ = input;
         Err(ApiError::bad_request(
-            "system_dialog_not_supported",
+            "system.dialog_not_supported",
             "folder picker not supported",
         ))
     }

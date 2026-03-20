@@ -10,6 +10,7 @@ use std::ffi::{OsStr, OsString};
 use std::process::Stdio;
 
 use crate::events::{self, AppEvent};
+use crate::i18n::{AppLocale, UserFacingIssue, UserFacingIssuePayload, current_locale};
 use crate::storage;
 
 const GITHUB_OWNER: &str = "koumoe";
@@ -61,6 +62,7 @@ pub struct UpdateRuntime {
     pub download_percent: Option<u8>,
     pub download_total_bytes: Option<u64>,
     pub download_downloaded_bytes: u64,
+    pub issue: Option<UserFacingIssue>,
     pub error: Option<String>,
 }
 
@@ -70,6 +72,16 @@ impl UpdateRuntime {
         self.download_percent = None;
         self.download_total_bytes = None;
         self.download_downloaded_bytes = 0;
+    }
+
+    fn clear_issue(&mut self) {
+        self.issue = None;
+        self.error = None;
+    }
+
+    fn set_issue(&mut self, issue: UserFacingIssue, locale: AppLocale) {
+        self.error = Some(issue.legacy_error_text(locale));
+        self.issue = Some(issue);
     }
 }
 
@@ -83,10 +95,30 @@ pub struct UpdateStatus {
     pub update_available: bool,
     pub pending_version: Option<String>,
     pub download_percent: Option<u8>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub issue: Option<UserFacingIssuePayload>,
     pub error: Option<String>,
 }
 
+fn issue_payload(
+    issue: Option<&UserFacingIssue>,
+    locale: AppLocale,
+) -> Option<UserFacingIssuePayload> {
+    issue.map(|item| item.to_payload(locale))
+}
+
+fn legacy_error_text(
+    issue: Option<&UserFacingIssue>,
+    fallback: Option<&String>,
+    locale: AppLocale,
+) -> Option<String> {
+    issue
+        .map(|item| item.legacy_error_text(locale))
+        .or_else(|| fallback.cloned())
+}
+
 fn snapshot_status(rt: &UpdateRuntime, pending_version: Option<String>) -> UpdateStatus {
+    let locale = AppLocale::default();
     UpdateStatus {
         current_version: env!("CARGO_PKG_VERSION").to_string(),
         auto_update_enabled: false,
@@ -100,7 +132,8 @@ fn snapshot_status(rt: &UpdateRuntime, pending_version: Option<String>) -> Updat
         } else {
             None
         },
-        error: rt.error.clone(),
+        issue: issue_payload(rt.issue.as_ref(), locale),
+        error: legacy_error_text(rt.issue.as_ref(), rt.error.as_ref(), locale),
     }
 }
 
@@ -480,7 +513,7 @@ pub async fn check_latest(
     {
         let mut rt = runtime.lock().await;
         rt.stage = Stage::Checking;
-        rt.error = None;
+        rt.clear_issue();
         rt.reset_download_state();
     }
 
@@ -488,7 +521,7 @@ pub async fn check_latest(
     let mut latest_str: Option<String> = None;
     let mut available = false;
     let mut latest_ignored = false;
-    let mut err: Option<String> = None;
+    let mut issue: Option<UserFacingIssue> = None;
 
     match github_latest_release(client).await {
         Ok(release) => {
@@ -500,12 +533,15 @@ pub async fn check_latest(
                     available = lat > cur;
                 }
                 _ => {
-                    err = Some("版本号解析失败".to_string());
+                    issue = Some(
+                        UserFacingIssue::new("update.version_parse_failed")
+                            .with_arg("version", tag.clone()),
+                    );
                 }
             }
         }
         Err(e) => {
-            err = Some(e.to_string());
+            issue = Some(UserFacingIssue::new("update.check_failed").with_detail(e.to_string()));
         }
     }
 
@@ -516,12 +552,14 @@ pub async fn check_latest(
         rt.latest_version = latest_str.clone();
         rt.latest_ignored = latest_ignored;
         rt.update_available = available;
-        rt.error = err.clone();
-        if err.is_some() {
+        if let Some(issue) = issue {
+            rt.set_issue(issue, AppLocale::default());
             rt.stage = Stage::Error;
         } else if pending.is_some() {
+            rt.clear_issue();
             rt.stage = Stage::Ready;
         } else {
+            rt.clear_issue();
             rt.stage = Stage::Idle;
         }
         rt.reset_download_state();
@@ -553,6 +591,7 @@ pub async fn get_status(
     if pending.is_some() && rt.stage != Stage::Downloading {
         rt.stage = Stage::Ready;
     }
+    let locale = current_locale().unwrap_or_default();
 
     UpdateStatus {
         current_version: env!("CARGO_PKG_VERSION").to_string(),
@@ -567,7 +606,8 @@ pub async fn get_status(
         } else {
             None
         },
-        error: rt.error.clone(),
+        issue: issue_payload(rt.issue.as_ref(), locale),
+        error: legacy_error_text(rt.issue.as_ref(), rt.error.as_ref(), locale),
     }
 }
 
@@ -587,7 +627,7 @@ pub async fn spawn_download_latest(
             return false;
         }
         rt.stage = Stage::Checking;
-        rt.error = None;
+        rt.clear_issue();
         rt.reset_download_state();
     }
 
@@ -598,7 +638,10 @@ pub async fn spawn_download_latest(
             let pending_version = load_pending_update(&data_dir).map(|p| p.version);
             let mut rt = runtime.lock().await;
             rt.stage = Stage::Error;
-            rt.error = Some(e.to_string());
+            rt.set_issue(
+                UserFacingIssue::new("update.check_failed").with_detail(e.to_string()),
+                AppLocale::default(),
+            );
             rt.reset_download_state();
             publish_status(&rt, pending_version);
             return false;
@@ -618,11 +661,16 @@ pub async fn spawn_download_latest(
     if let Some(err) = version_err {
         tracing::warn!(err = %err, latest = %latest, "update download check failed: version parse");
         let mut rt = runtime.lock().await;
-        rt.latest_version = Some(latest);
+        rt.latest_version = Some(latest.clone());
         rt.latest_ignored = ignored_latest;
         rt.update_available = false;
         rt.stage = Stage::Error;
-        rt.error = Some(err);
+        rt.set_issue(
+            UserFacingIssue::new("update.version_parse_failed")
+                .with_arg("version", latest.clone())
+                .with_detail(err),
+            AppLocale::default(),
+        );
         rt.reset_download_state();
         publish_status(&rt, load_pending_update(&data_dir).map(|p| p.version));
         return false;
@@ -646,7 +694,7 @@ pub async fn spawn_download_latest(
         rt.latest_ignored = ignored_latest;
         rt.update_available = available;
         rt.stage = Stage::Ready;
-        rt.error = None;
+        rt.clear_issue();
         rt.reset_download_state();
         publish_status(&rt, Some(p.version.clone()));
         return false;
@@ -659,7 +707,7 @@ pub async fn spawn_download_latest(
         rt.latest_ignored = ignored_latest;
         rt.update_available = available;
         rt.stage = Stage::Ready;
-        rt.error = None;
+        rt.clear_issue();
         rt.reset_download_state();
         publish_status(&rt, pending.as_ref().map(|p| p.version.clone()));
         return false;
@@ -672,7 +720,7 @@ pub async fn spawn_download_latest(
         rt.latest_ignored = ignored_latest;
         rt.update_available = false;
         rt.stage = Stage::Idle;
-        rt.error = None;
+        rt.clear_issue();
         rt.reset_download_state();
         publish_status(&rt, load_pending_update(&data_dir).map(|p| p.version));
         return false;
@@ -686,7 +734,7 @@ pub async fn spawn_download_latest(
         rt.latest_ignored = true;
         rt.update_available = true;
         rt.stage = Stage::Idle;
-        rt.error = None;
+        rt.clear_issue();
         rt.reset_download_state();
         publish_status(&rt, pending_version);
         return false;
@@ -699,7 +747,11 @@ pub async fn spawn_download_latest(
         rt.latest_ignored = false;
         rt.update_available = true;
         rt.stage = Stage::Error;
-        rt.error = Some("未找到适配当前平台的 Release 资源".to_string());
+        rt.set_issue(
+            UserFacingIssue::new("update.asset_not_found")
+                .with_arg("platform", current_platform_key()),
+            AppLocale::default(),
+        );
         rt.reset_download_state();
         publish_status(&rt, load_pending_update(&data_dir).map(|p| p.version));
         return false;
@@ -712,7 +764,7 @@ pub async fn spawn_download_latest(
         rt.latest_ignored = false;
         rt.update_available = true;
         rt.stage = Stage::Downloading;
-        rt.error = None;
+        rt.clear_issue();
         rt.download_percent = Some(0);
         rt.download_total_bytes = None;
         rt.download_downloaded_bytes = 0;
@@ -726,7 +778,10 @@ pub async fn spawn_download_latest(
             let pending_version = load_pending_update(&data_dir).map(|p| p.version);
             let mut rt = runtime.lock().await;
             rt.stage = Stage::Error;
-            rt.error = Some(e.to_string());
+            rt.set_issue(
+                UserFacingIssue::new("update.download_failed").with_detail(e.to_string()),
+                AppLocale::default(),
+            );
             rt.reset_download_state();
             publish_status(&rt, pending_version);
         }
@@ -942,7 +997,7 @@ async fn download_latest_inner(
         rt.update_available = true;
         rt.stage = Stage::Ready;
         rt.reset_download_state();
-        rt.error = None;
+        rt.clear_issue();
         return Ok(());
     }
 
@@ -959,7 +1014,7 @@ async fn download_latest_inner(
         let mut rt = runtime.lock().await;
         rt.stage = Stage::Idle;
         rt.reset_download_state();
-        rt.error = None;
+        rt.clear_issue();
         return Ok(());
     }
 
@@ -1036,7 +1091,7 @@ async fn download_latest_inner(
     let mut rt = runtime.lock().await;
     rt.stage = Stage::Ready;
     rt.reset_download_state();
-    rt.error = None;
+    rt.clear_issue();
     publish_status(&rt, Some(latest.clone()));
     Ok(())
 }
