@@ -1,7 +1,9 @@
 use super::parse::extract_display_text;
 use super::security::redact_sensitive_text;
 use crate::chat_bridge::adapter::ParseMode;
+use crate::chat_bridge::i18n::{args, t, t_args};
 use crate::chat_bridge::projects::{AggregatedProject, display_project_index};
+use crate::i18n::AppLocale;
 use crate::storage::ChatPlatform;
 
 pub(in crate::chat_bridge) struct RenderedMessage {
@@ -15,12 +17,15 @@ struct SourceSegment {
     is_fenced_code: bool,
 }
 
-pub(in crate::chat_bridge) fn format_projects_list(items: &[AggregatedProject]) -> String {
+pub(in crate::chat_bridge) fn format_projects_list(
+    items: &[AggregatedProject],
+    locale: AppLocale,
+) -> String {
     if items.is_empty() {
-        return "没有发现可用项目。先在本机运行对应 CLI，或在设置里开启“允许新项目”后直接使用绝对路径。".to_string();
+        return t(locale, "project.none");
     }
 
-    let mut lines = vec!["📂 项目列表:".to_string()];
+    let mut lines = vec![t(locale, "project.list_title")];
     for (index, item) in items.iter().enumerate() {
         lines.push(format!(
             "[{}] {} ({})",
@@ -66,15 +71,16 @@ pub(super) fn render_chat_message_chunks(
     platform: ChatPlatform,
     content: &str,
     max_chars: usize,
+    locale: AppLocale,
 ) -> Vec<RenderedMessage> {
     match platform {
         ChatPlatform::Telegram => {
             let redacted = redact_sensitive_text(content);
-            render_telegram_message_chunks(&redacted, max_chars, None)
+            render_telegram_message_chunks(&redacted, max_chars, None, locale)
         }
         _ => {
             let redacted = redact_sensitive_text(content);
-            chunk_text(&redacted, max_chars.max(1))
+            chunk_text(&redacted, max_chars.max(1), locale)
                 .into_iter()
                 .map(|chunk| RenderedMessage {
                     content: chunk,
@@ -90,11 +96,12 @@ pub(super) fn render_labeled_chat_message_chunks(
     label: &str,
     body: &str,
     max_chars: usize,
+    locale: AppLocale,
 ) -> Vec<RenderedMessage> {
     let normalized_label = label.trim();
     let normalized_body = body.trim();
     if normalized_label.is_empty() {
-        return render_chat_message_chunks(platform, normalized_body, max_chars);
+        return render_chat_message_chunks(platform, normalized_body, max_chars, locale);
     }
     if normalized_body.is_empty() {
         return vec![render_chat_message(platform, normalized_label)];
@@ -103,11 +110,16 @@ pub(super) fn render_labeled_chat_message_chunks(
     match platform {
         ChatPlatform::Telegram => {
             let redacted_body = redact_sensitive_text(normalized_body);
-            render_telegram_message_chunks(&redacted_body, max_chars, Some(normalized_label))
+            render_telegram_message_chunks(
+                &redacted_body,
+                max_chars,
+                Some(normalized_label),
+                locale,
+            )
         }
         _ => {
             let redacted_body = redact_sensitive_text(normalized_body);
-            render_labeled_plain_text_chunks(normalized_label, &redacted_body, max_chars)
+            render_labeled_plain_text_chunks(normalized_label, &redacted_body, max_chars, locale)
                 .into_iter()
                 .map(|content| RenderedMessage {
                     content,
@@ -122,8 +134,9 @@ fn render_telegram_message_chunks(
     source: &str,
     max_chars: usize,
     title: Option<&str>,
+    locale: AppLocale,
 ) -> Vec<RenderedMessage> {
-    chunk_telegram_source_by_rendered_limit(source, max_chars.max(1), title)
+    chunk_telegram_source_by_rendered_limit(source, max_chars.max(1), title, locale)
         .into_iter()
         .map(|chunk| RenderedMessage {
             content: format_telegram_chunk(title, &chunk),
@@ -181,6 +194,7 @@ pub(super) fn compose_final_output(
     file_output: Option<&str>,
     stdout: &str,
     stderr: &str,
+    locale: AppLocale,
 ) -> String {
     let mut content = file_output
         .map(str::trim)
@@ -214,26 +228,26 @@ pub(super) fn compose_final_output(
     }
 
     if timed_out {
-        let timeout_text = "任务执行超时，进程已被强制终止。";
+        let timeout_text = t(locale, "turn.timeout");
         if content.trim().is_empty() {
-            return timeout_text.to_string();
+            return timeout_text;
         }
         content = format!("{timeout_text}\n\n{content}");
     }
 
     if !success && content.trim().is_empty() {
-        return "任务执行失败，但没有捕获到可展示的输出。".to_string();
+        return t(locale, "turn.failed_no_output");
     }
     if success && content.trim().is_empty() {
-        return "任务已完成，但 CLI 没有返回可展示的文本输出。".to_string();
+        return t(locale, "turn.success_no_output");
     }
     content
 }
 
-pub(super) fn chunk_text(text: &str, max_chars: usize) -> Vec<String> {
+pub(super) fn chunk_text(text: &str, max_chars: usize, locale: AppLocale) -> Vec<String> {
     let normalized = text.trim();
     if normalized.is_empty() {
-        return vec!["(空输出)".to_string()];
+        return vec![t(locale, "turn.empty_output")];
     }
     if normalized.chars().count() <= max_chars {
         return vec![normalized.to_string()];
@@ -332,13 +346,18 @@ fn split_long_fragment(text: &str, max_chars: usize) -> Vec<String> {
     fragments
 }
 
-fn render_labeled_plain_text_chunks(label: &str, body: &str, max_chars: usize) -> Vec<String> {
+fn render_labeled_plain_text_chunks(
+    label: &str,
+    body: &str,
+    max_chars: usize,
+    locale: AppLocale,
+) -> Vec<String> {
     let mut chunks = Vec::new();
     let mut remaining = body.trim();
     let mut index = 0usize;
 
     while !remaining.is_empty() {
-        let title = labeled_chunk_title(label, index);
+        let title = labeled_chunk_title(label, index, locale);
         let max_body_chars = max_chars
             .saturating_sub(title.chars().count())
             .saturating_sub(1)
@@ -352,11 +371,18 @@ fn render_labeled_plain_text_chunks(label: &str, body: &str, max_chars: usize) -
     chunks
 }
 
-fn labeled_chunk_title(label: &str, index: usize) -> String {
+fn labeled_chunk_title(label: &str, index: usize, locale: AppLocale) -> String {
     if index == 0 {
         label.to_string()
     } else {
-        format!("{label} (续 {})", index + 1)
+        t_args(
+            locale,
+            "turn.continued_label",
+            &args([
+                ("label", label.to_string()),
+                ("index", (index + 1).to_string()),
+            ]),
+        )
     }
 }
 
@@ -364,10 +390,11 @@ fn chunk_telegram_source_by_rendered_limit(
     content: &str,
     max_chars: usize,
     title: Option<&str>,
+    locale: AppLocale,
 ) -> Vec<String> {
     let normalized = content.trim();
     if normalized.is_empty() {
-        return vec!["(空输出)".to_string()];
+        return vec![t(locale, "turn.empty_output")];
     }
 
     let segments = split_telegram_source_segments(normalized);
@@ -398,7 +425,7 @@ fn chunk_telegram_source_by_rendered_limit(
         chunks.push(current.trim().to_string());
     }
     if chunks.is_empty() {
-        chunks.push("(空输出)".to_string());
+        chunks.push(t(locale, "turn.empty_output"));
     }
     chunks
 }
@@ -1009,6 +1036,7 @@ fn escape_html(text: &str) -> String {
 mod tests {
     use super::*;
     use crate::chat_bridge::adapter::ParseMode;
+    use crate::i18n::AppLocale;
     use crate::storage::ChatPlatform;
     use std::cell::Cell;
 
@@ -1034,7 +1062,7 @@ mod tests {
 
     #[test]
     fn chunk_text_prefers_paragraph_boundaries() {
-        let chunks = chunk_text("aaa\n\nbbb\n\nccc", 5);
+        let chunks = chunk_text("aaa\n\nbbb\n\nccc", 5, AppLocale::ZhCN);
         assert_eq!(chunks, vec!["aaa", "bbb", "ccc"]);
     }
 
@@ -1067,7 +1095,8 @@ mod tests {
     #[test]
     fn render_chat_message_chunks_respects_telegram_rendered_limit_for_escaped_text() {
         let input = format!("[#1|codex|demo]\n{}", "<>&\"".repeat(1400));
-        let chunks = render_chat_message_chunks(ChatPlatform::Telegram, &input, 320);
+        let chunks =
+            render_chat_message_chunks(ChatPlatform::Telegram, &input, 320, AppLocale::ZhCN);
         assert!(chunks.len() > 1);
         for chunk in chunks {
             assert_eq!(chunk.parse_mode, ParseMode::Html);
@@ -1078,7 +1107,7 @@ mod tests {
     #[test]
     fn render_chat_message_chunks_keeps_fenced_block_intact_when_possible() {
         let input = "[#1|codex|demo]\n开始\n```rust\nfn main() {}\nprintln!(\"ok\");\n```\n结束";
-        let chunks = render_chat_message_chunks(ChatPlatform::Telegram, input, 90);
+        let chunks = render_chat_message_chunks(ChatPlatform::Telegram, input, 90, AppLocale::ZhCN);
         assert!(chunks.iter().any(|chunk| {
             chunk.content.contains("<pre><code>fn main() {}")
                 && chunk.content.contains("println!(&quot;ok&quot;);")
@@ -1097,7 +1126,8 @@ mod tests {
             .collect::<Vec<_>>()
             .join("\n");
         let input = format!("```rust\n{code}\n```");
-        let chunks = render_chat_message_chunks(ChatPlatform::Telegram, &input, 280);
+        let chunks =
+            render_chat_message_chunks(ChatPlatform::Telegram, &input, 280, AppLocale::ZhCN);
         assert!(chunks.len() > 1);
         for chunk in chunks {
             assert!(chunk.content.chars().count() <= 280);
@@ -1110,7 +1140,13 @@ mod tests {
     fn render_labeled_chat_message_chunks_keeps_label_on_all_telegram_chunks() {
         let label = "[#1|codex|demo]";
         let body = "<>&\"".repeat(2_000);
-        let chunks = render_labeled_chat_message_chunks(ChatPlatform::Telegram, label, &body, 320);
+        let chunks = render_labeled_chat_message_chunks(
+            ChatPlatform::Telegram,
+            label,
+            &body,
+            320,
+            AppLocale::ZhCN,
+        );
         assert!(chunks.len() > 1);
         for chunk in chunks {
             assert_eq!(chunk.parse_mode, ParseMode::Html);
@@ -1128,7 +1164,13 @@ mod tests {
             .collect::<Vec<_>>()
             .join("\n");
         let body = format!("```rust\n{code}\n```");
-        let chunks = render_labeled_chat_message_chunks(ChatPlatform::Telegram, label, &body, 320);
+        let chunks = render_labeled_chat_message_chunks(
+            ChatPlatform::Telegram,
+            label,
+            &body,
+            320,
+            AppLocale::ZhCN,
+        );
         assert!(chunks.len() > 1);
         for chunk in chunks {
             assert_eq!(chunk.parse_mode, ParseMode::Html);
@@ -1147,12 +1189,18 @@ mod tests {
             .collect::<Vec<_>>()
             .join(" ");
 
-        let chunks = render_labeled_chat_message_chunks(ChatPlatform::Discord, label, &body, 32);
+        let chunks = render_labeled_chat_message_chunks(
+            ChatPlatform::Discord,
+            label,
+            &body,
+            32,
+            AppLocale::ZhCN,
+        );
 
         assert!(chunks.len() > 1);
         for (index, chunk) in chunks.iter().enumerate() {
             assert_eq!(chunk.parse_mode, ParseMode::PlainText);
-            let expected_title = labeled_chunk_title(label, index);
+            let expected_title = labeled_chunk_title(label, index, AppLocale::ZhCN);
             assert!(chunk.content.starts_with(&format!("{expected_title}\n")));
             assert!(chunk.content.chars().count() <= 32);
         }

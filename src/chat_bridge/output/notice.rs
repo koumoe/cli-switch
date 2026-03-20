@@ -1,8 +1,14 @@
 use serde_json::Value;
 
 use crate::chat_bridge::MAX_DISPLAY_JSON_DEPTH;
+use crate::chat_bridge::i18n::t;
+use crate::i18n::AppLocale;
 
-pub(super) fn build_safe_mode_notice(stdout: &str, stderr: &str) -> Option<String> {
+pub(super) fn build_safe_mode_notice(
+    stdout: &str,
+    stderr: &str,
+    locale: AppLocale,
+) -> Option<String> {
     let mut lines = Vec::new();
     collect_safe_mode_notice_lines(stdout, &mut lines);
     collect_safe_mode_notice_lines(stderr, &mut lines);
@@ -10,15 +16,17 @@ pub(super) fn build_safe_mode_notice(stdout: &str, stderr: &str) -> Option<Strin
         return None;
     }
 
-    let mut message = String::from("检测到 Safe 模式下有操作被跳过或被权限/沙盒限制：");
+    let mut message = t(locale, "notice.safe_mode_header");
     for line in lines.iter().take(4) {
         message.push_str("\n- ");
         message.push_str(line);
     }
     if lines.len() > 4 {
-        message.push_str("\n- ...(更多相关输出已省略)");
+        message.push_str("\n- ");
+        message.push_str(&t(locale, "notice.safe_mode_more"));
     }
-    message.push_str("\n如需执行，请使用 YOLO 模式重启会话，或到终端手动操作。");
+    message.push('\n');
+    message.push_str(&t(locale, "notice.safe_mode_footer"));
     Some(message)
 }
 
@@ -131,16 +139,43 @@ fn normalize_safe_mode_notice_line(raw: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::i18n::AppLocale;
 
     #[test]
     fn build_safe_mode_notice_collects_keyword_lines() {
         let stdout =
             r#"{"error":{"message":"Sandbox blocked while deleting src/config/prod.env"}}"#;
         let stderr = "Permission denied when removing secrets.env";
-        let notice = build_safe_mode_notice(stdout, stderr).expect("notice");
+        let notice = build_safe_mode_notice(stdout, stderr, AppLocale::ZhCN).expect("notice");
 
         assert!(notice.contains("Sandbox blocked while deleting src/config/prod.env"));
         assert!(notice.contains("Permission denied when removing secrets.env"));
-        assert!(notice.contains("YOLO"));
+        assert!(notice.contains("--yolo"));
+    }
+
+    #[test]
+    fn build_safe_mode_notice_matches_snapshot_zh_cn() {
+        let stdout =
+            r#"{"error":{"message":"Sandbox blocked while deleting src/config/prod.env"}}"#;
+        let stderr = "Permission denied when removing secrets.env";
+        let notice = build_safe_mode_notice(stdout, stderr, AppLocale::ZhCN).expect("notice");
+
+        assert_eq!(
+            notice,
+            "检测到安全模式拦截了部分操作：\n- Sandbox blocked while deleting src/config/prod.env\n- Permission denied when removing secrets.env\n如需允许写入等危险操作，请重新启动该会话并使用 --yolo。"
+        );
+    }
+
+    #[test]
+    fn build_safe_mode_notice_matches_snapshot_en_us() {
+        let stdout =
+            r#"{"error":{"message":"Sandbox blocked while deleting src/config/prod.env"}}"#;
+        let stderr = "Permission denied when removing secrets.env";
+        let notice = build_safe_mode_notice(stdout, stderr, AppLocale::EnUS).expect("notice");
+
+        assert_eq!(
+            notice,
+            "Safe mode blocked part of the operation:\n- Sandbox blocked while deleting src/config/prod.env\n- Permission denied when removing secrets.env\nIf you need write access or other risky actions, restart this session with --yolo."
+        );
     }
 }

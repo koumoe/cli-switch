@@ -5,6 +5,7 @@ use super::super::adapter::{
     Attachment, ChatAdapter, IncomingMessage, OutgoingMessage, SentMessage, StreamingMessage,
 };
 use super::super::cli::{self, cli_type_label};
+use super::super::i18n::{args, t, t_args};
 use super::super::router::format_session_label;
 use super::super::{
     ActiveTurnRegistration, ChatBridgeRuntime, MESSAGE_CHAR_LIMIT, STREAM_UPDATE_INTERVAL,
@@ -17,12 +18,10 @@ use super::format::{
 use super::notice::build_safe_mode_notice;
 use super::parse::append_display_chunks_from_raw;
 use super::redact_sensitive_text;
+use crate::i18n::AppLocale;
 use crate::storage;
 
 const LONG_OUTPUT_PREVIEW_CHARS: usize = 2_200;
-const PROCESSING_NOTICE_TEXT: &str = "正在输入中，请稍等……";
-const ATTACHMENT_NOTICE_FOOTER: &str = "\n\n完整输出已作为附件发送。";
-
 #[derive(Clone, Copy)]
 struct PlatformOutputPolicy {
     message_char_limit: usize,
@@ -54,6 +53,7 @@ pub(in crate::chat_bridge) struct StreamingReply {
     chat_id: String,
     reply_to: Option<String>,
     label: String,
+    locale: AppLocale,
     message: Option<SentMessage>,
     stream: Option<StreamingMessage>,
     last_sent: String,
@@ -66,8 +66,9 @@ impl StreamingReply {
         chat_id: String,
         reply_to: Option<String>,
         initial_label: String,
+        locale: AppLocale,
     ) -> Self {
-        Self::with_pending_message(adapter, chat_id, reply_to, initial_label, None)
+        Self::with_pending_message(adapter, chat_id, reply_to, initial_label, locale, None)
     }
 
     pub(in crate::chat_bridge) fn with_pending_message(
@@ -75,6 +76,7 @@ impl StreamingReply {
         chat_id: String,
         reply_to: Option<String>,
         initial_label: String,
+        locale: AppLocale,
         pending_message: Option<SentMessage>,
     ) -> Self {
         Self {
@@ -82,6 +84,7 @@ impl StreamingReply {
             chat_id,
             reply_to,
             label: initial_label,
+            locale,
             message: pending_message,
             stream: None,
             last_sent: String::new(),
@@ -170,9 +173,12 @@ impl StreamingReply {
 
     pub(in crate::chat_bridge) async fn finish(&mut self, body: &str) -> anyhow::Result<()> {
         if let Some(sent) = self.message.take() {
-            if let Some(content) =
-                build_single_labeled_content(self.adapter.platform(), &self.label, body)
-                && content == self.last_sent
+            if let Some(content) = build_single_labeled_content(
+                self.adapter.platform(),
+                &self.label,
+                body,
+                self.locale,
+            ) && content == self.last_sent
             {
                 self.message = Some(sent);
                 return Ok(());
@@ -183,6 +189,7 @@ impl StreamingReply {
                 &self.label,
                 body,
                 self.reply_to.as_deref(),
+                self.locale,
                 Some(&sent.message_id),
             )
             .await?;
@@ -241,12 +248,16 @@ impl ChatBridgeRuntime {
         mut invocation: cli::CliInvocation,
         use_streaming: bool,
         mut active_turn: ActiveTurnRegistration,
+        locale: AppLocale,
     ) -> anyhow::Result<TurnExecutionResult> {
         let label = format_session_label(session);
-        let mut child = invocation
-            .command
-            .spawn()
-            .with_context(|| format!("启动 {} 失败", cli_type_label(session.cli_type)))?;
+        let mut child = invocation.command.spawn().with_context(|| {
+            t_args(
+                locale,
+                "error.turn_spawn_failed",
+                &args([("cli_type", cli_type_label(session.cli_type).to_string())]),
+            )
+        })?;
         let stdout = child
             .stdout
             .take()
@@ -285,7 +296,9 @@ impl ChatBridgeRuntime {
         let mut pending_message = if cancelled {
             None
         } else {
-            match send_processing_notice(&adapter, &msg.chat_id, msg.message_id.as_deref()).await {
+            match send_processing_notice(&adapter, &msg.chat_id, msg.message_id.as_deref(), locale)
+                .await
+            {
                 Ok(sent) => Some(sent),
                 Err(err) => {
                     tracing::warn!(
@@ -304,6 +317,7 @@ impl ChatBridgeRuntime {
                 msg.chat_id.clone(),
                 msg.message_id.clone(),
                 label.clone(),
+                locale,
                 pending_message.take(),
             ))
         } else {
@@ -406,6 +420,7 @@ impl ChatBridgeRuntime {
             file_output.as_deref(),
             &stdout_buf,
             &stderr_buf,
+            locale,
         );
         if let Some(reply) = live_reply.as_mut() {
             reply.finish(&final_text).await?;
@@ -416,12 +431,13 @@ impl ChatBridgeRuntime {
                 &label,
                 &final_text,
                 msg.message_id.as_deref(),
+                locale,
             )
             .await?;
         }
 
         if matches!(session.permission_mode, storage::BridgePermissionMode::Safe)
-            && let Some(notice) = build_safe_mode_notice(&stdout_buf, &stderr_buf)
+            && let Some(notice) = build_safe_mode_notice(&stdout_buf, &stderr_buf, locale)
         {
             self.send_labeled_text(
                 adapter,
@@ -429,6 +445,7 @@ impl ChatBridgeRuntime {
                 &format!("⚠️ {label}"),
                 &notice,
                 msg.message_id.as_deref(),
+                locale,
             )
             .await?;
         }
@@ -445,8 +462,10 @@ impl ChatBridgeRuntime {
         chat_id: &str,
         text: &str,
         reply_to: Option<&str>,
+        locale: AppLocale,
     ) -> anyhow::Result<()> {
-        let _ = send_formatted_message(&adapter, chat_id, text, reply_to, Vec::new()).await?;
+        let _ =
+            send_formatted_message(&adapter, chat_id, text, reply_to, locale, Vec::new()).await?;
         Ok(())
     }
 
@@ -457,8 +476,9 @@ impl ChatBridgeRuntime {
         label: &str,
         text: &str,
         reply_to: Option<&str>,
+        locale: AppLocale,
     ) -> anyhow::Result<()> {
-        send_or_replace_labeled_text(&adapter, chat_id, label, text, reply_to, None).await
+        send_or_replace_labeled_text(&adapter, chat_id, label, text, reply_to, locale, None).await
     }
 }
 
@@ -466,12 +486,14 @@ async fn send_processing_notice(
     adapter: &Arc<dyn ChatAdapter>,
     chat_id: &str,
     reply_to: Option<&str>,
+    locale: AppLocale,
 ) -> anyhow::Result<SentMessage> {
     send_formatted_message(
         adapter,
         chat_id,
-        PROCESSING_NOTICE_TEXT,
+        &t(locale, "turn.processing"),
         reply_to,
+        locale,
         Vec::new(),
     )
     .await
@@ -498,14 +520,16 @@ async fn send_or_replace_labeled_text(
     label: &str,
     text: &str,
     reply_to: Option<&str>,
+    locale: AppLocale,
     replace_message_id: Option<&str>,
 ) -> anyhow::Result<()> {
-    if let Some(content) = build_single_labeled_content(adapter.platform(), label, text) {
+    if let Some(content) = build_single_labeled_content(adapter.platform(), label, text, locale) {
         if let Some(message_id) = replace_message_id {
             adapter.edit_message(chat_id, message_id, &content).await?;
         } else {
             let _ =
-                send_formatted_message(adapter, chat_id, &content, reply_to, Vec::new()).await?;
+                send_formatted_message(adapter, chat_id, &content, reply_to, locale, Vec::new())
+                    .await?;
         }
         return Ok(());
     }
@@ -516,7 +540,8 @@ async fn send_or_replace_labeled_text(
 
     if should_send_as_attachment(adapter.platform(), text) {
         let redacted = redact_sensitive_text(text);
-        let preview_message = build_attachment_preview(adapter.platform(), label, &redacted);
+        let preview_message =
+            build_attachment_preview(adapter.platform(), label, &redacted, locale);
         let file_name = output_attachment_filename(label);
         let rendered = render_redacted_chat_message(adapter.platform(), &preview_message);
         send_rendered_message(
@@ -539,6 +564,7 @@ async fn send_or_replace_labeled_text(
         label,
         text,
         message_char_limit(adapter.platform()),
+        locale,
     );
     for (index, rendered) in rendered_chunks.into_iter().enumerate() {
         let _ = send_rendered_message(
@@ -557,6 +583,7 @@ fn build_single_labeled_content(
     platform: storage::ChatPlatform,
     label: &str,
     text: &str,
+    locale: AppLocale,
 ) -> Option<String> {
     if should_send_as_attachment(platform, text) {
         return None;
@@ -567,7 +594,8 @@ fn build_single_labeled_content(
     } else {
         format!("{label}\n{trimmed}")
     };
-    (render_chat_message_chunks(platform, &content, message_char_limit(platform)).len() == 1)
+    (render_chat_message_chunks(platform, &content, message_char_limit(platform), locale).len()
+        == 1)
         .then_some(content)
 }
 
@@ -576,12 +604,14 @@ async fn send_formatted_message(
     chat_id: &str,
     content: &str,
     reply_to: Option<&str>,
+    locale: AppLocale,
     attachments: Vec<Attachment>,
 ) -> anyhow::Result<SentMessage> {
     let rendered_chunks = render_chat_message_chunks(
         adapter.platform(),
         content,
         message_char_limit(adapter.platform()),
+        locale,
     );
 
     let mut first_sent = None;
@@ -643,13 +673,23 @@ fn output_policy(platform: storage::ChatPlatform) -> PlatformOutputPolicy {
     }
 }
 
-fn build_attachment_preview(platform: storage::ChatPlatform, label: &str, text: &str) -> String {
+fn attachment_notice_footer(locale: AppLocale) -> String {
+    format!("\n\n{}", t(locale, "turn.attachment_footer"))
+}
+
+fn build_attachment_preview(
+    platform: storage::ChatPlatform,
+    label: &str,
+    text: &str,
+    locale: AppLocale,
+) -> String {
     let limit = message_char_limit(platform);
-    let fixed_chars = label.chars().count() + 1 + ATTACHMENT_NOTICE_FOOTER.chars().count();
+    let footer = attachment_notice_footer(locale);
+    let fixed_chars = label.chars().count() + 1 + footer.chars().count();
     let preview_budget = limit.saturating_sub(fixed_chars);
     let trimmed = text.trim();
     if preview_budget == 0 {
-        return format!("{label}{ATTACHMENT_NOTICE_FOOTER}");
+        return format!("{label}{footer}");
     }
 
     let total_chars = trimmed.chars().count();
@@ -668,7 +708,7 @@ fn build_attachment_preview(platform: storage::ChatPlatform, label: &str, text: 
         preview.push_str(ellipsis);
     }
 
-    format!("{label}\n{preview}{ATTACHMENT_NOTICE_FOOTER}")
+    format!("{label}\n{preview}{footer}")
 }
 
 fn output_attachment_filename(label: &str) -> String {
@@ -690,12 +730,18 @@ fn output_attachment_filename(label: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::i18n::AppLocale;
 
     #[test]
     fn attachment_preview_respects_platform_limit() {
         let label = "[#1|codex|demo]";
         let text = "a".repeat(20_000);
-        let preview = build_attachment_preview(storage::ChatPlatform::Discord, label, &text);
+        let preview = build_attachment_preview(
+            storage::ChatPlatform::Discord,
+            label,
+            &text,
+            AppLocale::ZhCN,
+        );
         assert!(preview.chars().count() <= message_char_limit(storage::ChatPlatform::Discord));
     }
 }

@@ -2,11 +2,14 @@ use std::sync::Arc;
 
 use super::ChatBridgeRuntime;
 use super::adapter::{ChatAdapter, IncomingMessage};
+use super::i18n::{args, t_args};
 use super::router::{Command, ParsedInput, parse_input};
+use crate::i18n::AppLocale;
 use crate::storage::{self, StorageError};
 
 impl ChatBridgeRuntime {
     pub(super) async fn handle_message(&self, adapter: Arc<dyn ChatAdapter>, msg: IncomingMessage) {
+        let fallback_locale = self.settings_snapshot().ui_locale;
         if let Err(err) = self
             .handle_message_inner(adapter.clone(), msg.clone())
             .await
@@ -18,13 +21,14 @@ impl ChatBridgeRuntime {
                 err = %format!("{err:#}"),
                 "chat bridge message handling failed"
             );
-            let user_text = super::render_user_error(&err);
+            let user_text = super::render_user_error(&err, fallback_locale);
             let _ = self
                 .send_text(
                     adapter,
                     &msg.chat_id,
                     &format!("❌ {user_text}"),
                     msg.message_id.as_deref(),
+                    fallback_locale,
                 )
                 .await;
         }
@@ -35,7 +39,7 @@ impl ChatBridgeRuntime {
         adapter: Arc<dyn ChatAdapter>,
         msg: IncomingMessage,
     ) -> anyhow::Result<()> {
-        let parsed = parse_input(&msg.text);
+        let settings_locale = self.settings_snapshot().ui_locale;
         let binding = storage::resolve_chat_binding(
             self.db_path.clone(),
             msg.platform,
@@ -44,12 +48,15 @@ impl ChatBridgeRuntime {
         .await?;
 
         let Some(binding) = binding else {
+            let parsed = parse_input(&msg.text, settings_locale);
             if let Ok(ParsedInput::Command(Command::Bind { token })) = parsed {
-                return self.handle_bind(adapter, msg, token).await;
+                return self.handle_bind(adapter, msg, token, settings_locale).await;
             }
             return Ok(());
         };
 
+        let locale = binding.locale();
+        let parsed = parse_input(&msg.text, locale);
         let parsed = match parsed {
             Ok(value) => value,
             Err(err) => {
@@ -58,6 +65,7 @@ impl ChatBridgeRuntime {
                     &msg.chat_id,
                     &format!("❌ {err}"),
                     msg.message_id.as_deref(),
+                    locale,
                 )
                 .await?;
                 return Ok(());
@@ -66,7 +74,7 @@ impl ChatBridgeRuntime {
 
         match parsed {
             ParsedInput::PlainText(text) => {
-                self.route_to_default(adapter, msg, binding.platform, text)
+                self.route_to_default(adapter, msg, binding.platform, text, locale)
                     .await?;
             }
             ParsedInput::Command(command) => {
@@ -74,13 +82,18 @@ impl ChatBridgeRuntime {
                     self.send_text(
                         adapter,
                         &msg.chat_id,
-                        &format!("当前 {} 账号已绑定，无需重复 /bind。", msg.platform.label()),
+                        &t_args(
+                            locale,
+                            "bind.already_bound",
+                            &args([("platform", msg.platform.label().to_string())]),
+                        ),
                         msg.message_id.as_deref(),
+                        locale,
                     )
                     .await?;
                     return Ok(());
                 }
-                self.handle_bound_command(adapter, msg, binding.platform, command)
+                self.handle_bound_command(adapter, msg, binding.platform, command, locale)
                     .await?;
             }
         }
@@ -93,6 +106,7 @@ impl ChatBridgeRuntime {
         adapter: Arc<dyn ChatAdapter>,
         msg: IncomingMessage,
         token: String,
+        locale: AppLocale,
     ) -> anyhow::Result<()> {
         let binding = storage::consume_pairing_token(
             self.db_path.clone(),
@@ -100,6 +114,7 @@ impl ChatBridgeRuntime {
             msg.platform,
             msg.sender_id.clone(),
             msg.sender_display_name.clone(),
+            locale.as_str().to_string(),
         )
         .await?;
         let name = binding
@@ -108,11 +123,16 @@ impl ChatBridgeRuntime {
         self.send_text(
             adapter,
             &msg.chat_id,
-            &format!(
-                "✅ 绑定成功\n平台: {}\n账号: {name}\n\n输入 /projects 查看项目列表\n输入 /help 查看所有命令",
-                binding.platform.label(),
+            &t_args(
+                locale,
+                "bind.success",
+                &args([
+                    ("platform", binding.platform.label().to_string()),
+                    ("account", name),
+                ]),
             ),
             msg.message_id.as_deref(),
+            locale,
         )
         .await?;
         Ok(())

@@ -3,7 +3,9 @@ use directories::UserDirs;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
+use crate::chat_bridge::i18n::{args, t_args};
 use crate::cli_tools::CliToolId;
+use crate::i18n::AppLocale;
 use crate::storage;
 
 const PROJECT_SELECTION_TTL_MS: i64 = 10 * 60 * 1000;
@@ -124,6 +126,7 @@ impl ProjectStore {
         key: &ProjectSelectionCacheKey,
         project_ref: &str,
         allow_new_projects: bool,
+        locale: AppLocale,
     ) -> anyhow::Result<AggregatedProject> {
         let reference = project_ref.trim();
         anyhow::ensure!(!reference.is_empty(), "project reference is required");
@@ -131,31 +134,40 @@ impl ProjectStore {
         if let Ok(index) = reference.parse::<usize>() {
             if index < PROJECT_SELECTION_DISPLAY_INDEX_START {
                 anyhow::bail!(
-                    "项目编号从 {} 开始，请先执行 /projects 查看可用项目。",
-                    PROJECT_SELECTION_DISPLAY_INDEX_START
+                    "{}",
+                    t_args(
+                        locale,
+                        "project.index_start",
+                        &args([("start", PROJECT_SELECTION_DISPLAY_INDEX_START.to_string())]),
+                    )
                 );
             }
             let cache = self.selection_cache.read().await;
             let Some(snapshot) = cache.get(key) else {
-                anyhow::bail!("当前聊天还没有可用的项目编号，请先执行 /projects");
+                anyhow::bail!("{}", t_args(locale, "project.index_missing", &args([])));
             };
             if snapshot.expires_at_ms < storage::now_ms() {
-                anyhow::bail!("项目编号已过期，请重新执行 /projects");
+                anyhow::bail!("{}", t_args(locale, "project.index_expired", &args([])));
             }
             let pos = index - PROJECT_SELECTION_DISPLAY_INDEX_START;
-            return snapshot
-                .items
-                .get(pos)
-                .cloned()
-                .ok_or_else(|| anyhow::anyhow!("项目编号不存在，请重新执行 /projects"));
+            return snapshot.items.get(pos).cloned().ok_or_else(|| {
+                anyhow::anyhow!("{}", t_args(locale, "project.index_not_found", &args([])))
+            });
         }
 
         if let Some(path) = normalize_explicit_project_path(reference) {
             let canonical = if allow_new_projects {
-                ensure_project_dir(&path)?
+                ensure_project_dir(&path, locale)?
             } else {
                 canonical_existing_dir(&path).ok_or_else(|| {
-                    anyhow::anyhow!("项目路径不存在或不是目录: {}", path.display())
+                    anyhow::anyhow!(
+                        "{}",
+                        t_args(
+                            locale,
+                            "project.path_not_found",
+                            &args([("path", path.display().to_string())]),
+                        )
+                    )
                 })?
             };
             let canonical_str = canonical.to_string_lossy().to_string();
@@ -168,9 +180,7 @@ impl ProjectStore {
             }
 
             if !allow_new_projects {
-                anyhow::bail!(
-                    "该路径不在已知项目列表中。请使用 /projects 查看可用项目，或在设置中开启“允许新项目”。"
-                );
+                anyhow::bail!("{}", t_args(locale, "project.path_unknown", &args([])));
             }
 
             let known =
@@ -190,9 +200,16 @@ impl ProjectStore {
             .filter(|item| item.display_name.to_lowercase() == lowered)
             .collect::<Vec<_>>();
         match matches.len() {
-            0 => anyhow::bail!("未找到项目：{reference}"),
+            0 => anyhow::bail!(
+                "{}",
+                t_args(
+                    locale,
+                    "project.not_found",
+                    &args([("reference", reference.to_string())]),
+                )
+            ),
             1 => Ok(matches.into_iter().next().unwrap_or_else(|| unreachable!())),
-            _ => anyhow::bail!("找到多个同名项目，请使用 /projects 的编号或绝对路径"),
+            _ => anyhow::bail!("{}", t_args(locale, "project.ambiguous", &args([]))),
         }
     }
 }
@@ -241,16 +258,37 @@ fn canonical_existing_dir(path: &Path) -> Option<PathBuf> {
     canonical.is_dir().then_some(canonical)
 }
 
-fn ensure_project_dir(path: &Path) -> anyhow::Result<PathBuf> {
+fn ensure_project_dir(path: &Path, locale: AppLocale) -> anyhow::Result<PathBuf> {
     if path.exists() {
-        return canonical_existing_dir(path)
-            .ok_or_else(|| anyhow::anyhow!("项目路径不是目录: {}", path.display()));
+        return canonical_existing_dir(path).ok_or_else(|| {
+            anyhow::anyhow!(
+                "{}",
+                t_args(
+                    locale,
+                    "project.path_not_dir",
+                    &args([("path", path.display().to_string())]),
+                )
+            )
+        });
     }
 
-    std::fs::create_dir_all(path)
-        .with_context(|| format!("创建项目目录失败: {}", path.display()))?;
-    canonical_existing_dir(path)
-        .ok_or_else(|| anyhow::anyhow!("项目目录创建后无法解析为有效目录: {}", path.display()))
+    std::fs::create_dir_all(path).with_context(|| {
+        t_args(
+            locale,
+            "project.path_create_failed",
+            &args([("path", path.display().to_string())]),
+        )
+    })?;
+    canonical_existing_dir(path).ok_or_else(|| {
+        anyhow::anyhow!(
+            "{}",
+            t_args(
+                locale,
+                "project.path_canonicalize_failed",
+                &args([("path", path.display().to_string())]),
+            )
+        )
+    })
 }
 
 #[cfg(test)]
@@ -296,6 +334,7 @@ mod tests {
                 },
                 &project_path.to_string_lossy(),
                 true,
+                AppLocale::ZhCN,
             )
             .await
             .expect("resolve project ref");
@@ -342,13 +381,13 @@ mod tests {
             .await;
 
         let project = store
-            .resolve_project_ref(db_path.clone(), &key, "1001", false)
+            .resolve_project_ref(db_path.clone(), &key, "1001", false, AppLocale::ZhCN)
             .await
             .expect("resolve display index");
         assert_eq!(project.display_name, "demo");
 
         let err = store
-            .resolve_project_ref(db_path.clone(), &key, "1", false)
+            .resolve_project_ref(db_path.clone(), &key, "1", false, AppLocale::ZhCN)
             .await
             .expect_err("legacy index should fail");
         assert!(err.to_string().contains("项目编号从 1001 开始"));
