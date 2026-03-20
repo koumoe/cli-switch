@@ -1,3 +1,22 @@
+## [0.38.0](https://github.com/koumoe/cli-switch/compare/v0.37.5...v0.38.0) (2026-03-20)
+
+### Features
+
+* add chat bridge core runtime ([3cf31bc](https://github.com/koumoe/cli-switch/commit/3cf31bc3b6beb4187069dee38fd9ee1ebd520cc3))
+* add chat bridge foundation dependencies and types ([63328cf](https://github.com/koumoe/cli-switch/commit/63328cfb913de396d52b9cb873aa633fb02aab80))
+* add chat bridge settings UI ([9615b5c](https://github.com/koumoe/cli-switch/commit/9615b5c97037a5b4b204cd1d10665d720f8cd9c3))
+* add chat bridge storage layer ([9e66a50](https://github.com/koumoe/cli-switch/commit/9e66a50fcb8cd6093253eafc9ea81f94f72bf586))
+* add chat bridge web API and server integration ([ae64612](https://github.com/koumoe/cli-switch/commit/ae64612cf0445ab5df9ef3475b71b4fdd7c45277))
+* complete chat bridge p2 platform integration ([79c1688](https://github.com/koumoe/cli-switch/commit/79c16889d23830ae27339d3c2012910f26575375))
+
+### Bug Fixes
+
+* chunk telegram output after formatting ([3ebc2b2](https://github.com/koumoe/cli-switch/commit/3ebc2b21b0b4cee79791061c0a044c0b7edd7860))
+* dedupe attachment captions and simplify discord reconnect ([7500ca3](https://github.com/koumoe/cli-switch/commit/7500ca3a577ba05f962ecf999d13e22ad9cdadfc))
+* preserve labels in telegram split messages ([f72ca51](https://github.com/koumoe/cli-switch/commit/f72ca51da95e0105f4b48faa9f8fa790d65c22fd))
+* satisfy clippy for chat chunk helpers ([f3a87e6](https://github.com/koumoe/cli-switch/commit/f3a87e6d4d2dcf745b7b3cf0b428648798e2676c))
+* support multi-user chat bindings per platform ([02bfd7f](https://github.com/koumoe/cli-switch/commit/02bfd7fe211b5602c12dc0988c3bc56651fb5f5d))
+* tighten chat bridge message chunking ([b769fa3](https://github.com/koumoe/cli-switch/commit/b769fa36e45d54715df37c86d9c9ace1b6fcf089))
 ## [0.37.5](https://github.com/koumoe/cli-switch/compare/v0.37.4...v0.37.5) (2026-03-13)
 
 ### Bug Fixes

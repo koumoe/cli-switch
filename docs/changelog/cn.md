@@ -1,3 +1,20 @@
+## [0.38.0](https://github.com/koumoe/cli-switch/compare/v0.37.5...v0.38.0) (2026-03-20)
+
+### 功能
+* 添加消息互联核心运行时 ([3cf31bc](https://github.com/koumoe/cli-switch/commit/3cf31bc3b6beb4187069dee38fd9ee1ebd520cc3))
+* 添加消息互联基础依赖和类型 ([63328cf](https://github.com/koumoe/cli-switch/commit/63328cfb913de396d52b9cb873aa633fb02aab80))
+* 添加消息互联设置界面 ([9615b5c](https://github.com/koumoe/cli-switch/commit/9615b5c97037a5b4b204cd1d10665d720f8cd9c3))
+* 添加消息互联数据存储层 ([9e66a50](https://github.com/koumoe/cli-switch/commit/9e66a50fcb8cd6093253eafc9ea81f94f72bf586))
+* 添加消息互联 Web API 及服务端集成 ([ae64612](https://github.com/koumoe/cli-switch/commit/ae64612cf0445ab5df9ef3475b71b4fdd7c45277))
+* 完成消息互联 P2 平台集成 ([79c1688](https://github.com/koumoe/cli-switch/commit/79c16889d23830ae27339d3c2012910f26575375))
+
+### 修复
+* 按格式化结果分片 Telegram 输出 ([3ebc2b2](https://github.com/koumoe/cli-switch/commit/3ebc2b21b0b4cee79791061c0a044c0b7edd7860))
+* 去重附件 caption 并收口 Discord 重连 ([7500ca3](https://github.com/koumoe/cli-switch/commit/7500ca3a577ba05f962ecf999d13e22ad9cdadfc))
+* 保留 Telegram 分片消息标签并修正渲染长度切分 ([f72ca51](https://github.com/koumoe/cli-switch/commit/f72ca51da95e0105f4b48faa9f8fa790d65c22fd))
+* 修复消息分片辅助逻辑的 clippy 问题 ([f3a87e6](https://github.com/koumoe/cli-switch/commit/f3a87e6d4d2dcf745b7b3cf0b428648798e2676c))
+* 支持平台内多用户聊天绑定 ([02bfd7f](https://github.com/koumoe/cli-switch/commit/02bfd7fe211b5602c12dc0988c3bc56651fb5f5d))
+* 修正 chat bridge 消息分片长度与冗余逻辑 ([b769fa3](https://github.com/koumoe/cli-switch/commit/b769fa36e45d54715df37c86d9c9ace1b6fcf089))
 ## [0.37.5](https://github.com/koumoe/cli-switch/compare/v0.37.4...v0.37.5) (2026-03-13)
 
 ### 修复
