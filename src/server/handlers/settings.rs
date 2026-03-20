@@ -4,6 +4,7 @@ use axum::response::IntoResponse;
 use serde::Deserialize;
 use std::sync::Arc;
 
+use crate::i18n::AppLocale;
 use crate::server::AppState;
 use crate::server::error::ApiError;
 use crate::{autostart, logging, storage};
@@ -24,6 +25,7 @@ pub(in crate::server) struct UpdateSettingsInput {
     auto_start_enabled: Option<bool>,
     auto_start_launch_mode: Option<storage::AutoStartLaunchMode>,
     server_lan_accessible: Option<bool>,
+    ui_locale: Option<AppLocale>,
     app_auto_update_enabled: Option<bool>,
     gemini_cli_auto_update_enabled: Option<bool>,
     claude_code_auto_update_enabled: Option<bool>,
@@ -69,6 +71,7 @@ pub(in crate::server) async fn update_settings(
             "server_lan_accessible",
             input.server_lan_accessible.is_some(),
         ),
+        ("ui_locale", input.ui_locale.is_some()),
         (
             "app_auto_update_enabled",
             input.app_auto_update_enabled.is_some(),
@@ -202,6 +205,7 @@ pub(in crate::server) async fn update_settings(
             auto_start_enabled,
             auto_start_launch_mode: input.auto_start_launch_mode,
             server_lan_accessible: input.server_lan_accessible,
+            ui_locale: input.ui_locale,
             app_auto_update_enabled: input.app_auto_update_enabled,
             gemini_cli_auto_update_enabled: input.gemini_cli_auto_update_enabled,
             claude_code_auto_update_enabled: input.claude_code_auto_update_enabled,

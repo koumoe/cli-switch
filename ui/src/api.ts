@@ -1,4 +1,5 @@
 import { ApiRequestError, extractErrorCode, extractErrorMessage } from "@/lib/error";
+import { getCurrentLocale, type Locale } from "@/lib/i18n";
 import { logger, type LogLevel } from "@/lib/logger";
 
 export type Protocol = "openai" | "anthropic" | "gemini";
@@ -16,6 +17,7 @@ export type CloseBehavior = "ask" | "minimize_to_tray" | "quit";
 export type AutoStartLaunchMode = "show_window" | "minimize_to_tray";
 
 export type AppSettings = {
+  ui_locale: Locale;
   pricing_auto_update_enabled: boolean;
   pricing_auto_update_interval_hours: number;
   close_behavior: CloseBehavior;
@@ -50,6 +52,7 @@ export type ChatBridgeBinding = {
   platform: ChatPlatform;
   platform_user_id: string;
   display_name: string | null;
+  preferred_locale?: Locale;
   bound_at_ms: number;
   is_active: boolean;
 };
@@ -149,6 +152,7 @@ export type ApplyCliToolsProxyConfigRequest = {
 export type CliToolProxyConfigApplyItem = {
   id: CliToolId;
   ok: boolean;
+  issue?: UserFacingIssuePayload | null;
   error?: string;
 };
 
@@ -166,7 +170,8 @@ export type InstallCliToolResponse = {
   tool: CliToolStatus;
   terminal_shim_ok: boolean;
   terminal_shim_dir: string | null;
-  terminal_shim_error: string | null;
+  terminal_shim_issue?: UserFacingIssuePayload | null;
+  terminal_shim_error?: string | null;
 };
 
 export type PickFolderInput = {
@@ -230,7 +235,8 @@ export type ChannelTestResponse = {
   ok: boolean;
   status: number | null;
   latency_ms: number;
-  error: string | null;
+  issue?: UserFacingIssuePayload | null;
+  error?: string | null;
 };
 
 export type Route = {
@@ -290,7 +296,15 @@ export type UpdateStatus = {
   update_available: boolean;
   pending_version: string | null;
   download_percent: number | null;
-  error: string | null;
+  issue?: UserFacingIssuePayload | null;
+  error?: string | null;
+};
+
+export type UserFacingIssuePayload = {
+  code: string;
+  message: string;
+  args: Record<string, string>;
+  detail: string | null;
 };
 
 export type UpdateCheck = {
@@ -396,10 +410,24 @@ export type StatsTrend = {
   items: TrendPoint[];
 };
 
+const ISSUE_PAYLOAD_KEYS = new Set(["code", "message", "args", "detail"]);
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
 async function http<T>(method: string, path: string, body?: unknown): Promise<T> {
+  const locale = getCurrentLocale();
+  const headers: Record<string, string> = {
+    "X-CliSwitch-Locale": locale,
+  };
+  if (body) {
+    headers["content-type"] = "application/json";
+  }
+
   const res = await fetch(path, {
     method,
-    headers: body ? { "content-type": "application/json" } : undefined,
+    headers,
     body: body ? JSON.stringify(body) : undefined
   });
 
@@ -413,11 +441,13 @@ async function http<T>(method: string, path: string, body?: unknown): Promise<T>
 
   let code: string | null = null;
   let msg: string | null = null;
+  let issue: UserFacingIssuePayload | null = null;
   if (trimmed.length > 0) {
     try {
       const parsed = JSON.parse(trimmed);
       code = extractErrorCode(parsed);
       msg = extractErrorMessage(parsed);
+      issue = parseIssuePayload(parsed);
       if (!msg) msg = trimmed;
     } catch {
       msg = trimmed;
@@ -436,10 +466,61 @@ async function http<T>(method: string, path: string, body?: unknown): Promise<T>
   throw new ApiRequestError({
     code,
     message: msg,
+    issue,
     status: res.status,
     method,
     path
   });
+}
+
+function parseIssuePayload(payload: unknown): UserFacingIssuePayload | null {
+  if (!isPlainObject(payload)) return null;
+
+  const obj = payload as Record<string, unknown>;
+  const nestedIssue = obj.issue;
+  const candidate = isPlainObject(nestedIssue)
+    ? nestedIssue
+    : isTopLevelIssuePayload(obj)
+      ? obj
+      : null;
+  if (!candidate) return null;
+
+  const code = typeof candidate.code === "string" ? candidate.code : null;
+  const message = typeof candidate.message === "string" ? candidate.message : null;
+  if (!code && !message) return null;
+
+  const argsRaw = candidate.args;
+  const args: Record<string, string> = {};
+  if (isPlainObject(argsRaw)) {
+    for (const [k, v] of Object.entries(argsRaw)) {
+      if (typeof v === "string") {
+        args[k] = v;
+      } else if (v !== null && v !== undefined) {
+        args[k] = String(v);
+      }
+    }
+  }
+
+  const detail = typeof candidate.detail === "string" ? candidate.detail : null;
+
+  return {
+    code: code ?? "unknown_error",
+    message: message ?? code ?? "unknown_error",
+    args,
+    detail,
+  };
+}
+
+function isTopLevelIssuePayload(payload: Record<string, unknown>): boolean {
+  const keys = Object.keys(payload);
+  if (keys.length === 0) return false;
+  if (keys.some((key) => !ISSUE_PAYLOAD_KEYS.has(key))) return false;
+  if (typeof payload.code !== "string") return false;
+  return (
+    typeof payload.message === "string" ||
+    typeof payload.detail === "string" ||
+    isPlainObject(payload.args)
+  );
 }
 
 export function getHealth(): Promise<Health> {

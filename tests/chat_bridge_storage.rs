@@ -2,6 +2,8 @@ use cliswitch::storage;
 use rusqlite::Connection;
 use std::path::{Path, PathBuf};
 
+const DEFAULT_BINDING_LOCALE: &str = "zh-CN";
+
 fn remove_sqlite_artifacts(path: &Path) {
     let _ = std::fs::remove_file(path);
     let _ = std::fs::remove_file(PathBuf::from(format!("{}-wal", path.display())));
@@ -52,6 +54,7 @@ async fn pairing_token_can_create_binding_and_list_it() {
         storage::ChatPlatform::Telegram,
         "tg-user-1".to_string(),
         Some("@koumoe".to_string()),
+        DEFAULT_BINDING_LOCALE.to_string(),
     )
     .await
     .unwrap();
@@ -94,6 +97,7 @@ async fn pairing_token_cannot_be_reused() {
         storage::ChatPlatform::Telegram,
         "tg-user-1".to_string(),
         Some("@koumoe".to_string()),
+        DEFAULT_BINDING_LOCALE.to_string(),
     )
     .await
     .unwrap();
@@ -104,6 +108,7 @@ async fn pairing_token_cannot_be_reused() {
         storage::ChatPlatform::Telegram,
         "tg-user-2".to_string(),
         Some("@other".to_string()),
+        DEFAULT_BINDING_LOCALE.to_string(),
     )
     .await
     .unwrap_err();
@@ -138,6 +143,7 @@ async fn pairing_token_is_limited_to_its_platform() {
         storage::ChatPlatform::Discord,
         "discord-user-1".to_string(),
         Some("koumoe#1234".to_string()),
+        DEFAULT_BINDING_LOCALE.to_string(),
     )
     .await
     .unwrap_err();
@@ -172,6 +178,7 @@ async fn deactivate_binding_hides_it_from_active_list() {
         storage::ChatPlatform::Telegram,
         "tg-user-1".to_string(),
         Some("@koumoe".to_string()),
+        DEFAULT_BINDING_LOCALE.to_string(),
     )
     .await
     .unwrap();
@@ -208,6 +215,7 @@ async fn inactive_binding_can_be_bound_again() {
         storage::ChatPlatform::Telegram,
         "tg-user-1".to_string(),
         Some("@koumoe".to_string()),
+        DEFAULT_BINDING_LOCALE.to_string(),
     )
     .await
     .unwrap();
@@ -232,6 +240,7 @@ async fn inactive_binding_can_be_bound_again() {
         storage::ChatPlatform::Telegram,
         "tg-user-1".to_string(),
         Some("@koumoe-rebound".to_string()),
+        DEFAULT_BINDING_LOCALE.to_string(),
     )
     .await
     .unwrap();
@@ -271,6 +280,7 @@ async fn active_binding_blocks_rebinding_same_platform_user() {
         storage::ChatPlatform::Telegram,
         "tg-user-1".to_string(),
         Some("@koumoe".to_string()),
+        DEFAULT_BINDING_LOCALE.to_string(),
     )
     .await
     .unwrap();
@@ -291,6 +301,7 @@ async fn active_binding_blocks_rebinding_same_platform_user() {
         storage::ChatPlatform::Telegram,
         "tg-user-1".to_string(),
         Some("@koumoe-again".to_string()),
+        DEFAULT_BINDING_LOCALE.to_string(),
     )
     .await
     .unwrap_err();
@@ -325,6 +336,7 @@ async fn active_binding_allows_multiple_users_on_same_platform() {
         storage::ChatPlatform::Telegram,
         "tg-user-1".to_string(),
         Some("@koumoe".to_string()),
+        DEFAULT_BINDING_LOCALE.to_string(),
     )
     .await
     .unwrap();
@@ -345,6 +357,7 @@ async fn active_binding_allows_multiple_users_on_same_platform() {
         storage::ChatPlatform::Telegram,
         "tg-user-2".to_string(),
         Some("@other".to_string()),
+        DEFAULT_BINDING_LOCALE.to_string(),
     )
     .await
     .unwrap();

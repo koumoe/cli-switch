@@ -1,18 +1,41 @@
-import React, { createContext, useCallback, useContext, useMemo, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 
-import enUS from "@/locales/en-US.json";
-import zhCN from "@/locales/zh-CN.json";
+import sharedEnUS from "@shared-locales/en-US.json";
+import sharedZhCN from "@shared-locales/zh-CN.json";
+import uiEnUS from "@/locales/ui/en-US.json";
+import uiZhCN from "@/locales/ui/zh-CN.json";
 
 export type Locale = "zh-CN" | "en-US";
 
 const STORAGE_KEY = "cliswitch-locale";
+let currentLocale: Locale = "zh-CN";
+let currentLocaleRevision = 0;
+
+function isMergeableRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function deepMergeMessages(base: unknown, overlay: unknown): unknown {
+  if (!isMergeableRecord(base) || !isMergeableRecord(overlay)) return overlay ?? base;
+
+  const out: Record<string, unknown> = { ...base };
+  for (const [key, value] of Object.entries(overlay)) {
+    const prev = out[key];
+    if (isMergeableRecord(prev) && isMergeableRecord(value)) {
+      out[key] = deepMergeMessages(prev, value);
+    } else {
+      out[key] = value;
+    }
+  }
+  return out;
+}
 
 const MESSAGES: Record<Locale, unknown> = {
-  "zh-CN": zhCN,
-  "en-US": enUS,
+  "zh-CN": deepMergeMessages(sharedZhCN, uiZhCN),
+  "en-US": deepMergeMessages(sharedEnUS, uiEnUS),
 };
 
-function normalizeLocale(input: string): Locale | null {
+export function normalizeLocale(input: string): Locale | null {
   const v = input.trim();
   if (!v) return null;
   const lower = v.toLowerCase();
@@ -21,7 +44,7 @@ function normalizeLocale(input: string): Locale | null {
   return null;
 }
 
-function detectSystemLocale(): Locale {
+export function detectSystemLocale(): Locale {
   if (typeof window === "undefined") return "zh-CN";
   const candidates = [navigator.language, ...(navigator.languages ?? [])].filter(Boolean);
   for (const c of candidates) {
@@ -31,11 +54,42 @@ function detectSystemLocale(): Locale {
   return "zh-CN";
 }
 
-function getInitialLocale(): Locale {
-  if (typeof window === "undefined") return "zh-CN";
+export function getStoredLocale(): Locale | null {
+  if (typeof window === "undefined") return null;
   const stored = localStorage.getItem(STORAGE_KEY);
-  const normalized = stored ? normalizeLocale(stored) : null;
-  return normalized ?? detectSystemLocale();
+  return stored ? normalizeLocale(stored) : null;
+}
+
+export function getInitialLocale(): Locale {
+  return getStoredLocale() ?? detectSystemLocale();
+}
+
+currentLocale = getInitialLocale();
+
+export function getCurrentLocale(): Locale {
+  return currentLocale;
+}
+
+function applyRuntimeLocale(
+  next: Locale,
+  opts?: {
+    persist?: boolean;
+    bumpRevision?: boolean;
+  }
+) {
+  currentLocale = next;
+  if (opts?.bumpRevision ?? true) {
+    currentLocaleRevision += 1;
+  }
+  if (opts?.persist ?? true) {
+    persistLocale(next);
+  }
+}
+
+export function persistLocale(next: Locale) {
+  if (typeof window !== "undefined") {
+    localStorage.setItem(STORAGE_KEY, next);
+  }
 }
 
 function getPathValue(obj: unknown, path: string): unknown {
@@ -79,13 +133,44 @@ type I18nContextValue = {
 const I18nContext = createContext<I18nContextValue | null>(null);
 
 export function I18nProvider({ children }: { children: React.ReactNode }) {
-  const [locale, setLocaleState] = useState<Locale>(() => getInitialLocale());
+  const [locale, setLocaleState] = useState<Locale>(() => currentLocale);
 
   const setLocale = useCallback((next: Locale) => {
+    applyRuntimeLocale(next);
     setLocaleState(next);
-    if (typeof window !== "undefined") {
-      localStorage.setItem(STORAGE_KEY, next);
-    }
+  }, []);
+
+  useEffect(() => {
+    currentLocale = locale;
+  }, [locale]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const bootstrapLocale = async () => {
+      const bootstrapRevision = currentLocaleRevision;
+      try {
+        const requestLocale = getCurrentLocale();
+        const res = await fetch("/api/settings", {
+          method: "GET",
+          headers: {
+            "X-CliSwitch-Locale": requestLocale,
+          },
+        });
+        if (!res.ok) return;
+        const payload = (await res.json()) as { ui_locale?: string };
+        const next = payload.ui_locale ? normalizeLocale(payload.ui_locale) : null;
+        if (!next || cancelled || currentLocaleRevision !== bootstrapRevision) return;
+        applyRuntimeLocale(next, { bumpRevision: false });
+        setLocaleState(next);
+      } catch {
+        // ignore: startup fallback locale is already available
+      }
+    };
+    void bootstrapLocale();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const t = useCallback(
@@ -111,4 +196,3 @@ export function useI18n() {
   if (!ctx) throw new Error("useI18n must be used within I18nProvider");
   return ctx;
 }
-

@@ -2,7 +2,9 @@ use std::sync::Arc;
 
 use super::ChatBridgeRuntime;
 use super::adapter::{ChatAdapter, IncomingMessage};
+use super::i18n::t;
 use super::router::{ResolveTargetResult, format_ambiguous_target, resolve_target};
+use crate::i18n::AppLocale;
 use crate::storage::{self, ChatPlatform};
 
 impl ChatBridgeRuntime {
@@ -12,6 +14,7 @@ impl ChatBridgeRuntime {
         msg: &IncomingMessage,
         platform: ChatPlatform,
         target: &str,
+        locale: AppLocale,
     ) -> anyhow::Result<Option<storage::BridgeSession>> {
         let sessions =
             storage::list_bridge_sessions_for_platform(self.db_path.clone(), platform, true)
@@ -22,8 +25,9 @@ impl ChatBridgeRuntime {
                 self.send_text(
                     adapter,
                     &msg.chat_id,
-                    &format_ambiguous_target(target, &items),
+                    &format_ambiguous_target(target, &items, locale),
                     msg.message_id.as_deref(),
+                    locale,
                 )
                 .await?;
                 Ok(None)
@@ -32,8 +36,9 @@ impl ChatBridgeRuntime {
                 self.send_text(
                     adapter,
                     &msg.chat_id,
-                    "未找到匹配的会话，使用 /sessions 查看可用会话。",
+                    &t(locale, "session.not_found"),
                     msg.message_id.as_deref(),
+                    locale,
                 )
                 .await?;
                 Ok(None)

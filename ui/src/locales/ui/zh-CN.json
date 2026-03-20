@@ -1,0 +1,758 @@
+{
+  "language": {
+    "zhCN": "简体中文",
+    "enUS": "English"
+  },
+  "nav": {
+    "overview": "概览",
+    "channels": "渠道管理",
+    "prompts": "项目管理",
+    "routes": "路由",
+    "monitor": "渠道统计",
+    "logs": "请求明细",
+    "settings": "设置"
+  },
+  "theme": {
+    "light": "浅色",
+    "dark": "深色",
+    "system": "跟随系统"
+  },
+  "status": {
+    "running": "服务运行中",
+    "offline": "离线",
+    "checking": "检测中..."
+  },
+  "sidebar": {
+    "expand": "展开侧边栏",
+    "collapse": "收起侧边栏"
+  },
+  "common": {
+    "loading": "加载中...",
+    "refresh": "刷新",
+    "cancel": "取消",
+    "ok": "知道了",
+    "save": "保存",
+    "delete": "删除",
+    "add": "添加",
+    "open": "打开",
+    "details": "详情",
+    "enabled": "启用",
+    "disabled": "禁用",
+    "free": "免费",
+    "actions": "操作",
+    "channel": "渠道",
+    "route": "路由",
+    "pagination": {
+      "total": "共 {{total}} 条",
+      "page": "第 {{page}} / {{totalPages}} 页",
+      "perPage": "每页",
+      "prev": "上一页",
+      "next": "下一页"
+    }
+  },
+  "prompts": {
+    "title": "项目管理",
+    "tabs": {
+      "codex": "Codex",
+      "claude": "Claude Code",
+      "gemini": "Gemini CLI"
+    },
+    "sidebar": {
+      "title": "类型",
+      "description": "全局提示词置顶，项目提示词按目录管理"
+    },
+    "global": {
+      "title": "全局提示词",
+      "description": "对 {{tool}} 统一生效的全局提示词文档"
+    },
+    "projects": {
+      "empty": "尚未从 {{tool}} 发现项目，请先在对应 CLI 中打开过项目后再回来编辑。",
+      "name": "项目名称",
+      "path": "项目路径"
+    },
+    "editor": {
+      "placeholder": "# 在这里编写 Markdown 提示词",
+      "empty": "当前还没有内容",
+      "readonly": "点击右上角“编辑”开始编写 Markdown 文档。",
+      "edit": "修改提示词",
+      "cancel": "取消编辑",
+      "save": "保存提示词",
+      "saved": "提示词已保存",
+      "saveFail": "保存提示词失败",
+      "loadFail": "加载提示词失败",
+      "unsavedConfirm": "当前有未保存修改，确认放弃吗？",
+      "unsavedDescription": "当前有未保存修改，确认放弃吗？",
+      "globalBadge": "全局",
+      "projectBadge": "项目",
+      "updatedAt": "最后更新：{{value}}",
+      "noSelection": "未选择提示词",
+      "noProjectHint": "请选择表格中的项目，或直接编辑全局提示词。",
+      "size": "内容大小：{{current}} / {{max}}"
+    },
+    "actions": {
+      "deleteDocument": "删除提示词文件",
+      "deleteProject": "删除项目"
+    },
+    "projectDeleteDialog": {
+      "title": "删除项目",
+      "description": "确定删除项目“{{name}}”吗？不会删除项目文件夹，只会清理 CLI session 发现记录。"
+    },
+    "documentDeleteDialog": {
+      "title": "删除提示词文件",
+      "description": "确定删除“{{name}}”当前提示词文件吗？此操作不可撤销。"
+    },
+    "toast": {
+      "documentDeleted": "提示词文件已删除",
+      "deleteDocumentFail": "删除提示词文件失败",
+      "projectDeleted": "已删除项目 {{name}}",
+      "deleteProjectFail": "删除项目失败",
+      "loadProjectsFail": "加载项目失败",
+      "loadDocumentFail": "加载提示词失败",
+      "documentSaved": "提示词已保存",
+      "saveDocumentFail": "保存提示词失败"
+    }
+  },
+  "overview": {
+    "title": "概览",
+    "cards": {
+      "todayRequests": "本月请求",
+      "totalTokens": "本月 Token",
+      "estimatedCost": "官方额度",
+      "avgLatency": "平均延迟",
+      "actualSpend": "预估费用"
+    },
+    "trend": {
+      "title": "本月请求趋势",
+      "empty": "暂无趋势数据"
+    },
+    "distribution": {
+      "title": "渠道使用分布",
+      "empty": "暂无请求数据",
+      "view": {
+        "percent": "百分比",
+        "usage": "用量"
+      }
+    },
+    "activeChannels": {
+      "title": "可用渠道",
+      "empty": "暂无可用渠道"
+    },
+    "toast": {
+      "loadFail": "加载失败"
+    }
+  },
+  "channels": {
+    "title": "渠道管理",
+    "new": "新建渠道",
+    "autoSort": {
+      "button": "按倍率排序",
+      "title": "自动排序",
+      "description": "根据倍率为 {{terminal}} 生成建议顺序",
+      "noChange": "当前顺序无需调整",
+      "apply": "确认应用",
+      "headers": {
+        "from": "原序",
+        "to": "新序",
+        "channel": "渠道",
+        "factor": "系数"
+      }
+    },
+    "tabs": {
+      "codex": "Codex",
+      "claude": "Claude",
+      "gemini": "Gemini"
+    },
+    "table": {
+      "name": "名称",
+      "terminal": "终端",
+      "priority": "优先级",
+      "realMultiplier": "实际倍率",
+      "baseUrl": "Base URL",
+      "status": "状态",
+      "checkin": "签到",
+      "empty": "暂无渠道，点击「新建渠道」添加"
+    },
+    "actions": {
+      "drag": "拖拽排序",
+      "checkin": "签到",
+      "checkinMissing": "未设置签到地址",
+      "test": "测试连接",
+      "edit": "编辑",
+      "delete": "删除",
+      "enable": "启用",
+      "disable": "禁用"
+    },
+    "status": {
+      "autoDisabled": "自动禁用：{{minutes}} 分"
+    },
+    "modal": {
+      "createTitle": "新建渠道",
+      "editTitle": "编辑渠道",
+      "description": "配置 API 渠道的连接信息",
+      "name": "名称",
+      "terminal": "终端",
+      "priority": "优先级（数值越大越优先）",
+      "rechargeCurrency": "充值货币",
+      "rechargeCurrencyOptions": {
+        "cny": "人民币（CNY）",
+        "usd": "美元（USD）"
+      },
+      "realMultiplier": "真实倍率",
+      "realMultiplierHint": "支持 0 表示免费渠道，最多 2 位小数",
+      "realMultiplierTooManyDecimals": "最多只能输入 2 位小数",
+      "baseUrl": "Base URL",
+      "checkinUrl": "签到地址",
+      "checkinUrlHint": "可选：设置后，12 点后会在列表显示红点提醒",
+      "apiKey": "API Key / Token",
+      "enabled": "启用"
+    },
+    "checkin": {
+      "status": {
+        "todo": "未签到",
+        "done": "已签到",
+        "none": "无签到"
+      },
+      "dialog": {
+        "title": "签到确认",
+        "description": "已打开 {{name}} 的签到页面，是否已完成签到？",
+        "notDone": "未完成",
+        "done": "已完成"
+      },
+      "toast": {
+        "done": "{{name}} 签到完成"
+      }
+    },
+    "deleteDialog": {
+      "title": "删除渠道",
+      "confirmWithName": "确定删除渠道 \"{{name}}\"？此操作不可恢复。",
+      "confirm": "确定删除该渠道？此操作不可恢复。"
+    },
+    "toast": {
+      "loadFail": "加载渠道失败",
+      "createOk": "渠道创建成功",
+      "updateOk": "渠道更新成功",
+      "actionFail": "操作失败",
+      "missingId": "缺少 ID",
+      "disabledOk": "已禁用 {{name}}",
+      "enabledOk": "已启用 {{name}}",
+      "deletedOk": "已删除 {{name}}",
+      "deleteFail": "删除失败",
+      "testFail": "测试失败",
+      "nameRequired": "名称不能为空",
+      "baseUrlRequired": "Base URL 不能为空",
+      "realMultiplierInvalid": "真实倍率必须是 >= 0 的数字，且最多 2 位小数",
+      "testReachableOkTitle": "{{name}} 连通正常",
+      "testReachableOkDesc": "状态: {{status}}, 延迟: {{latency}}ms",
+      "testReachableBadTitle": "{{name}} 可达但返回异常",
+      "testUnreachableTitle": "{{name}} 无法连接",
+      "testTimeout": "连接超时",
+      "reorderOk": "排序已保存",
+      "reorderFail": "保存排序失败"
+    }
+  },
+  "routes": {
+    "title": "路由",
+    "subtitle": "配置请求路由规则和渠道优先级",
+    "new": "新建路由",
+    "table": {
+      "name": "名称",
+      "terminal": "终端",
+      "modelMatch": "模型匹配",
+      "status": "状态",
+      "updatedAt": "更新时间",
+      "empty": "暂无路由，点击「新建路由」添加"
+    },
+    "actions": {
+      "channels": "渠道",
+      "edit": "编辑",
+      "delete": "删除"
+    },
+    "modal": {
+      "createTitle": "新建路由",
+      "editTitle": "编辑路由",
+      "description": "配置路由规则",
+      "name": "名称",
+      "terminal": "终端",
+      "modelMatchOptional": "模型匹配（可选）",
+      "modelMatchHint": "留空则匹配该终端入口的所有模型",
+      "enabled": "启用"
+    },
+    "deleteDialog": {
+      "title": "删除路由",
+      "confirmWithName": "确定删除路由 \"{{name}}\"？此操作不可恢复。",
+      "confirm": "确定删除该路由？此操作不可恢复。"
+    },
+    "manage": {
+      "title": "渠道优先级：{{name}}",
+      "description": "拖拽或使用按钮调整渠道优先级，从上到下依次尝试",
+      "assignedTitle": "已绑定渠道",
+      "assignedEmpty": "暂无绑定渠道",
+      "availableTitle": "可添加渠道",
+      "availableEmpty": "无可添加渠道"
+    },
+    "toast": {
+      "loadFail": "加载失败",
+      "createOk": "路由创建成功",
+      "updateOk": "路由更新成功",
+      "actionFail": "操作失败",
+      "saveFail": "保存失败",
+      "prioritySaved": "渠道优先级已保存",
+      "deletedOk": "已删除 {{name}}",
+      "deleteFail": "删除失败",
+      "nameRequired": "名称不能为空",
+      "missingId": "缺少 ID"
+    }
+  },
+  "monitor": {
+    "title": "渠道统计",
+    "range": {
+      "today": "今天",
+      "yesterday": "昨天",
+      "week": "本周",
+      "month": "本月",
+      "custom": "自定义",
+      "selectRange": "选择日期区间"
+    },
+    "cards": {
+      "totalRequests": "总请求",
+      "successRate": "成功率",
+      "failed": "失败数",
+      "estimatedCost": "官方额度",
+      "actualSpend": "预估费用"
+    },
+    "channelStats": {
+      "headers": {
+        "channel": "渠道",
+        "terminal": "终端",
+        "requests": "请求",
+        "success": "成功",
+        "failed": "失败",
+        "estimatedCost": "官方额度",
+        "actualSpend": "预估费用",
+        "avgLatency": "平均耗时"
+      }
+    },
+    "toast": {
+      "loadFail": "加载失败"
+    }
+  },
+  "logs": {
+    "title": "请求明细",
+    "filters": {
+      "all": "全部",
+      "dateRange": "日期区间",
+      "selectDateRange": "选择日期区间",
+      "terminal": "终端",
+      "channel": "渠道",
+      "model": "模型",
+      "modelPlaceholder": "模糊匹配",
+      "dimension": "请求 ID",
+      "dimensionPlaceholder": "请求 ID",
+      "status": "状态",
+      "success": "成功",
+      "failed": "失败",
+      "search": "查询",
+      "reset": "重置"
+    },
+    "headers": {
+      "time": "时间",
+      "terminal": "终端",
+      "channel": "渠道",
+      "model": "模型",
+      "timing": "耗时",
+      "tokens": "Token",
+      "cost": "官方额度",
+      "result": "状态"
+    },
+    "cell": {
+      "duration": "耗时",
+      "ttft": "首字",
+      "input": "输入",
+      "output": "输出",
+      "total": "总计",
+      "cacheRead": "缓存读",
+      "cacheWrite": "缓存写"
+    },
+    "details": {
+      "id": "ID",
+      "requestId": "请求 ID",
+      "routeId": "路由 ID",
+      "errorKind": "错误类型",
+      "errorDetail": "错误详情",
+      "estimatedSpend": "预估费用"
+    },
+    "empty": "暂无请求记录",
+    "toast": {
+      "loadFail": "加载失败"
+    }
+  },
+  "pricing": {
+    "onboarding": {
+      "title": "更新价格表",
+      "description": "首次使用建议先同步 llm-metadata 价格数据，用于计算日志金额与成本统计。",
+      "sync": "立即更新",
+      "syncing": "更新中...",
+      "skip": "稍后",
+      "syncOk": "价格表已更新",
+      "syncFail": "更新价格表失败"
+    }
+  },
+  "closePrompt": {
+    "title": "关闭 CliSwitch？",
+    "description": "你希望最小化到托盘继续运行，还是直接退出应用？",
+    "remember": "记住我的选择",
+    "rememberHint": "可在「设置」中随时修改",
+    "minimize": "最小化到托盘",
+    "quit": "退出应用"
+  },
+  "settings": {
+    "title": "设置",
+    "tabs": {
+      "appearance": "界面",
+      "channel": "渠道",
+      "application": "应用",
+      "chatBridge": "消息互联",
+      "update": "CLI",
+      "data": "数据",
+      "system": "系统"
+    },
+    "appearance": {
+      "title": "外观",
+      "subtitle": "自定义应用的视觉风格",
+      "theme": "主题",
+      "themeHint": "选择浅色、深色或跟随系统设置"
+    },
+    "language": {
+      "title": "语言",
+      "subtitle": "切换界面显示语言",
+      "label": "界面语言",
+      "saveFail": "保存界面语言失败"
+    },
+    "currency": {
+      "title": "货币单位",
+      "subtitle": "用于显示「预估费用」等金额单位（官方额度固定按官方 USD 计算）",
+      "label": "默认货币",
+      "options": {
+        "auto": "自动（跟随语言）",
+        "cny": "人民币（CNY）",
+        "usd": "美元（USD）"
+      }
+    },
+    "channelProtection": {
+      "title": "渠道保护",
+      "subtitle": "渠道连续失败时自动暂停使用",
+      "enable": "启用渠道保护",
+      "enableHint": "触发条件满足后将临时跳过该渠道",
+      "windowMinutes": "检测窗口",
+      "windowMinutesHint": "在此时间窗口内统计失败次数（分钟）",
+      "failureTimes": "失败阈值",
+      "failureTimesHint": "达到此次数后触发保护",
+      "pauseMinutes": "暂停时长",
+      "pauseMinutesHint": "暂停后自动恢复的时间（分钟）",
+      "invalid": "渠道保护参数不合法",
+      "saved": "设置已保存",
+      "saveFail": "保存失败"
+    },
+    "pricingData": {
+      "title": "定价数据",
+      "subtitle": "用于计算日志金额与成本统计",
+      "status": "同步状态",
+      "count": "模型数：{{count}}",
+      "lastSync": "上次同步：{{time}}",
+      "sync": "同步",
+      "syncOk": "定价数据同步成功",
+      "syncFail": "定价数据同步失败",
+      "autoUpdate": "自动更新",
+      "autoUpdateHint": "开启后按周期自动从 llm-metadata 同步",
+      "intervalHours": "更新周期（小时）",
+      "intervalHoursHint": "1~8760 小时",
+      "intervalInvalid": "更新周期不合法",
+      "saved": "设置已保存",
+      "saveFail": "保存失败"
+    },
+    "windowClose": {
+      "title": "窗口关闭",
+      "subtitle": "设置点击关闭按钮时的默认动作",
+      "behavior": "关闭时",
+      "behaviorHint": "可选：每次询问 / 最小化到托盘 / 直接退出",
+      "ask": "每次询问",
+      "minimize": "最小化到托盘",
+      "quit": "直接退出",
+      "saved": "设置已保存",
+      "saveFail": "保存失败"
+    },
+    "startup": {
+      "title": "开机自启动",
+      "subtitle": "登录系统后自动启动 CliSwitch",
+      "enable": "开机自启动",
+      "enableHint": "开启后会将 CliSwitch 添加到系统登录项",
+      "launchMode": "开机自启后",
+      "launchModeHint": "选择登录后自动启动时的窗口展示方式",
+      "launchShow": "展示主界面",
+      "launchMinimize": "缩到状态栏/托盘",
+      "launchSaved": "启动方式已保存",
+      "saved": "设置已保存",
+      "saveFail": "保存失败"
+    },
+    "cliTools": {
+      "title": "CLI 更新",
+      "subtitle": "管理 Gemini CLI / Claude Code / Codex 的安装与更新",
+      "refresh": "刷新",
+      "loadFail": "获取 CLI 状态失败",
+      "installedWithVersion": "已安装 · {{version}}",
+      "notInstalled": "未安装",
+      "install": "安装",
+      "update": "更新",
+      "installOk": "{{name}} 安装/更新成功",
+      "terminalReady": "终端命令已就绪（重启终端生效）",
+      "terminalSetupFailed": "终端命令配置失败：{{error}}",
+      "installFail": "{{name}} 安装/更新失败",
+      "autoEnable": "自动更新",
+      "saved": "设置已保存",
+      "saveFail": "保存失败",
+      "onboardingTitle": "安装 CLI 工具？",
+      "onboardingDesc": "首次打开时检测到部分 CLI 未安装，是否现在安装？（使用 npm 全局安装）",
+      "installAll": "一键安装",
+      "installing": "安装中...",
+      "later": "稍后"
+    },
+    "cliProxyConfig": {
+      "title": "CLI 代理配置",
+      "subtitle": "检查 Claude Code / Codex / Gemini CLI 是否已指向 CliSwitch，未配置项可直接写入",
+      "refresh": "刷新",
+      "loadFail": "获取配置状态失败",
+      "apply": "一键配置",
+      "applied": "配置已写入",
+      "appliedPartial": "部分配置写入失败",
+      "partialDesc": "失败工具：{{tools}}",
+      "applyFail": "写入配置失败",
+      "ok": "已配置",
+      "needsFix": "未配置",
+      "current": "当前",
+      "expected": "期望"
+    },
+    "update": {
+      "title": "CliSwitch 更新",
+      "subtitle": "检查并下载新版本（支持自动更新）",
+      "autoEnable": "开启自动更新",
+      "autoEnableHint": "开启后会定时检测并弹窗提示更新",
+      "status": "更新状态",
+      "latest": "已是最新版本",
+      "serverVersion": "服务器版本：v{{version}}",
+      "downloadingSuffix": " (下载中:{{percent}}%)",
+      "downloadingSuffixUnknown": " (下载中)",
+      "staging": "下载完成，正在准备更新...",
+      "ready": "新版已准备好：v{{version}}（请重启更新）",
+      "check": "检查更新",
+      "checkFail": "检查更新失败",
+      "uptodate": "已是最新版本",
+      "found": "发现新版本：v{{version}}",
+      "available": "有新版本：v{{version}}",
+      "ignoredSuffix": " (已忽略本次)",
+      "promptTitle": "发现新版本",
+      "promptDesc": "检测到新版本 v{{version}}，是否现在更新？",
+      "promptOverviewTitle": "本次更新",
+      "promptLoading": "正在加载更新内容...",
+      "promptLoadFail": "加载更新内容失败",
+      "updateNow": "立即更新",
+      "later": "稍后",
+      "ignore": "忽略本次",
+      "ignoredToast": "已忽略：v{{version}}",
+      "ignoreFail": "忽略失败",
+      "downloading": "已开始下载更新",
+      "downloadFail": "下载失败",
+      "saved": "设置已保存",
+      "saveFail": "保存失败",
+      "autoStarted": "已开始自动下载更新"
+    },
+    "storage": {
+      "title": "数据存储",
+      "subtitle": "应用数据和配置文件位置",
+      "dataDir": "数据目录",
+      "dataDirHint": "存放数据库、日志和配置文件",
+      "dbFile": "数据库文件",
+      "dbSize": "数据库大小",
+      "dbSizeFail": "获取数据库大小失败",
+      "openFail": "打开失败",
+      "openInDevTitle": "功能开发中",
+      "openInDevDesc": "打开文件夹功能将在后续版本中提供"
+    },
+    "logging": {
+      "title": "应用日志",
+      "subtitle": "管理应用运行日志和存储",
+      "level": "日志级别",
+      "levelHint": "记录此级别及以上的日志",
+      "retentionDays": "日志保留天数",
+      "retentionHint": "超过该天数的 .log 日志将自动清理",
+      "retentionInvalid": "保留天数必须在 1~3650 之间",
+      "levelNone": "无",
+      "levelDebug": "Debug",
+      "levelInfo": "Info",
+      "levelWarning": "Warning",
+      "levelError": "Error",
+      "saved": "日志设置已保存",
+      "saveFail": "保存失败",
+      "dir": "日志目录",
+      "clear": "清理",
+      "clearAll": "清理全部",
+      "clearLogs": "清理日志",
+      "clearLogsHint": "选择日期区间清理或清理全部日志文件",
+      "selectRange": "选择日期区间",
+      "confirmTitle": "确认清理日志",
+      "confirmDateRange": "将清理 {{range}} 的日志文件，是否继续？",
+      "confirmAll": "将清理全部日志文件，是否继续？",
+      "invalidDate": "请先选择日期区间",
+      "clearing": "清理中...",
+      "cleared": "清理完成",
+      "clearedDetail": "已删除 {{deleted}} 个，已清理 {{truncated}} 个",
+      "clearFail": "清理失败"
+    },
+    "maintenance": {
+      "databaseTitle": "数据库",
+      "databaseSubtitle": "查看大小并清理请求记录",
+      "logsSize": "日志大小",
+      "logsSizeFail": "获取日志大小失败",
+      "clearRecords": "清理记录",
+      "clearHint": "选择范围后进行清理",
+      "scopeAll": "全部",
+      "scopeErrors": "仅错误",
+      "scopeRange": "按时间",
+      "typeAll": "全部类型",
+      "typeErrors": "仅错误",
+      "timeAll": "全部",
+      "timeRange": "按时间"
+    },
+    "records": {
+      "title": "请求记录",
+      "subtitle": "管理请求记录和错误信息",
+      "clear": "清理",
+      "clearRecords": "按区间清理",
+      "clearRecordsHint": "选择日期区间清理请求记录",
+      "selectRange": "选择日期区间",
+      "quickActions": "快捷操作",
+      "quickActionsHint": "清理失败请求或全部记录，并自动压缩数据库",
+      "clearErrors": "仅清理错误",
+      "clearAll": "清理全部",
+      "confirmTitle": "确认清理",
+      "confirmDateRange": "将清理 {{range}} 的记录，是否继续？",
+      "confirmDateRangeErrors": "将清理 {{range}} 的错误记录，是否继续？",
+      "confirmErrors": "将清理所有错误记录，是否继续？",
+      "confirmAll": "将清理全部记录，是否继续？",
+      "invalidDate": "请先选择日期区间",
+      "clearing": "清理中...",
+      "cleared": "清理完成",
+      "clearedDetail": "已删除请求记录：{{count}} 条",
+      "clearedDetailErrors": "已删除失败请求记录：{{count}} 条",
+      "clearFail": "清理失败"
+    },
+    "serviceInfo": {
+      "title": "服务信息",
+      "subtitle": "CLI 工具应连接的服务地址",
+      "host": "主机名",
+      "hostHint": "CLI 连接的主机名 / IP 地址",
+      "port": "端口",
+      "portHint": "CLI 连接的端口号",
+      "lanAccessible": "局域网内可用",
+      "lanAccessibleHint": "允许局域网设备访问此服务",
+      "saved": "已保存",
+      "saveFail": "保存失败"
+    },
+    "chatBridge": {
+      "title": "消息互联",
+      "subtitle": "统一管理消息平台入口、配对绑定与聊天项目访问。",
+      "configTitle": "基础配置",
+      "configHint": "控制消息互联运行时与项目创建策略。",
+      "platformConfigTitle": "平台配置",
+      "platformConfigHint": "当前 Telegram / Discord 已接入运行时。WhatsApp 配置入口已预留，但后端能力尚未接入。",
+      "platformConfigLabel": "{{platform}} 配置",
+      "enable": "启用消息互联",
+      "enableHint": "关闭后会保留配置，但不会启动消息互联运行时。",
+      "telegramEnable": "启用 Telegram",
+      "telegramEnableHint": "允许 Telegram Bot 接入消息互联。",
+      "telegramConfigTitle": "Telegram 配置",
+      "telegramConfigHint": "管理 Telegram Bot Token、启用状态，以及 Telegram 侧的绑定入口。",
+      "telegramToken": "Telegram Bot Token",
+      "telegramTokenPlaceholder": "123456:ABC-DEF...",
+      "telegramTokenPlaceholderConfigured": "已配置，留空表示保持当前 Token",
+      "telegramTokenHint": "通过 @BotFather 创建 Bot 后获取。",
+      "telegramTokenHintConfigured": "当前不会回显已保存的 Token。留空保存会保持原值，输入新 Token 才会覆盖。",
+      "discordEnable": "启用 Discord",
+      "discordEnableHint": "允许 Discord Bot 接入消息互联。",
+      "discordConfigTitle": "Discord 配置",
+      "discordConfigHint": "管理 Discord Bot Token、启用状态，以及 Discord 侧的绑定入口。需在 Discord Developer Portal 为 Bot 开启 Message Content Intent。",
+      "discordToken": "Discord Bot Token",
+      "discordTokenPlaceholder": "MTEx...Q2F0",
+      "discordTokenPlaceholderConfigured": "已配置，留空表示保持当前 Token",
+      "discordTokenHint": "在 Discord Developer Portal 的 Bot 页面复制 Token。",
+      "discordTokenHintConfigured": "当前不会回显已保存的 Token。留空保存会保持原值，输入新 Token 才会覆盖。",
+      "allowNewProjects": "允许通过聊天添加新项目",
+      "allowNewProjectsHint": "开启后允许使用新路径，并会在目录不存在时自动创建目录。",
+      "saved": "消息互联设置已保存",
+      "saveFail": "保存消息互联设置失败",
+      "supportReady": "已接入",
+      "supportPending": "未接入",
+      "supportPendingHint": "{{platform}} 运行时尚未接入，当前仅保留配置入口与平台分组视图。",
+      "actions": {
+        "pairing": "配对 Token",
+        "bindings": "已绑定账号"
+      },
+      "platform": {
+        "telegram": "Telegram",
+        "discord": "Discord",
+        "whatsapp": "WhatsApp"
+      },
+      "pairing": {
+        "title": "配对 Token",
+        "subtitle": "生成一次性 Token，用于在 {{platform}} 聊天端执行 `/bind <token>` 完成绑定。",
+        "generate": "生成 Token",
+        "created": "配对 Token 已生成",
+        "createFail": "生成配对 Token 失败",
+        "platform": "目标平台",
+        "platformHint": "该 Token 只能在 {{platform}} 中使用，其他平台无法消费。",
+        "token": "当前 Token",
+        "tokenHint": "Token 只在这里明文展示一次，请尽快到聊天端完成绑定。",
+        "expiresAt": "过期时间",
+        "expiresHint": "默认 10 分钟失效，过期后需要重新生成。",
+        "empty": "尚未生成"
+      },
+      "bindings": {
+        "title": "已绑定账号",
+        "subtitle": "显示当前已完成绑定的聊天平台账号。",
+        "summary": "当前平台已绑定 {{count}} 个账号",
+        "loadFail": "获取绑定列表失败",
+        "empty": "暂无已绑定账号",
+        "emptyForPlatform": "{{platform}} 暂无已绑定账号",
+        "dialogTitle": "{{platform}} 已绑定账号",
+        "dialogSubtitle": "这里只显示 {{platform}} 平台下已完成绑定的账号。",
+        "unbindTitle": "解除绑定",
+        "unbindConfirm": "确定要解绑 {{name}}（{{platform}}）吗？解绑后需要重新生成配对 Token 才能再次绑定。",
+        "unbind": "解绑",
+        "unbindOk": "已解除绑定",
+        "unbindFail": "解除绑定失败"
+      }
+    },
+    "compatibility": {
+      "title": "兼容性",
+      "subtitle": "兼容不同客户端的特殊接口",
+      "mockCountTokens": "模拟 Anthropic count_tokens",
+      "mockCountTokensHint": "拦截 /v1/messages/count_tokens 并在本地估算 input_tokens",
+      "saved": "已保存",
+      "saveFail": "保存失败"
+    },
+    "about": {
+      "title": "关于",
+      "subtitle": "应用版本和系统信息",
+      "appName": "应用名称",
+      "version": "版本",
+      "backendStatus": "后端状态",
+      "description": "描述",
+      "descText": "通用 AI CLI 配置管理平台",
+      "intro": "CliSwitch 是一个本地多渠道 CLI 代理工具，用于管理和切换多个 AI API 服务。支持 Claude、Codex、Gemini 等终端入口，提供高可用性和自动故障转移。"
+    }
+  },
+  "update": {
+    "readyTitle": "更新已准备好",
+    "readyDesc": "新版 v{{version}} 已下载完成，请重启应用以完成更新。",
+    "quitToUpdate": "重启以更新"
+  }
+}

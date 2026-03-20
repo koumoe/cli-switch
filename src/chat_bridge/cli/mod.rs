@@ -6,6 +6,7 @@ use std::process::Stdio;
 use tokio::process::Command as TokioCommand;
 
 use crate::cli_tools::{CliExecEnv, CliToolId};
+use crate::i18n::AppLocale;
 use crate::storage::{self, AppSettings, BridgeSession};
 
 mod claude;
@@ -48,6 +49,7 @@ pub trait CliAdapter: Send + Sync {
         &self,
         _session: &BridgeSession,
         _settings: &AppSettings,
+        _locale: AppLocale,
     ) -> anyhow::Result<ValidateResult> {
         Ok(ValidateResult::Valid)
     }

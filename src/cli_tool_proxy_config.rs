@@ -5,6 +5,7 @@ use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 
 use crate::cli_tools::CliToolId;
+use crate::i18n::{AppLocale, UserFacingIssue, UserFacingIssuePayload};
 
 #[derive(Debug, Clone)]
 struct ProxyUrls {
@@ -86,6 +87,8 @@ pub struct CliToolProxyConfigStatusResponse {
 pub struct CliToolProxyConfigApplyItem {
     pub id: CliToolId,
     pub ok: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub issue: Option<UserFacingIssuePayload>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
 }
@@ -592,6 +595,7 @@ fn apply_gemini(urls: &ProxyUrls) -> anyhow::Result<()> {
 pub fn apply(
     listen_addr: SocketAddr,
     tools: &[CliToolId],
+    locale: AppLocale,
 ) -> anyhow::Result<CliToolProxyConfigApplyResponse> {
     let urls = ProxyUrls::from_listen_addr(listen_addr);
 
@@ -606,13 +610,20 @@ pub fn apply(
             Ok(()) => applied.push(CliToolProxyConfigApplyItem {
                 id: *id,
                 ok: true,
+                issue: None,
                 error: None,
             }),
-            Err(e) => applied.push(CliToolProxyConfigApplyItem {
-                id: *id,
-                ok: false,
-                error: Some(e.to_string()),
-            }),
+            Err(e) => {
+                let issue = UserFacingIssue::new("tools_proxy_config_apply_item_failed")
+                    .with_arg("tool", id.as_str())
+                    .with_detail(e.to_string());
+                applied.push(CliToolProxyConfigApplyItem {
+                    id: *id,
+                    ok: false,
+                    issue: Some(issue.to_payload(locale)),
+                    error: Some(issue.legacy_error_text(locale)),
+                });
+            }
         }
     }
 

@@ -35,7 +35,7 @@ import {
 import { PageHeader } from "@/components/PageHeader";
 import { useTheme, type Theme } from "@/lib/theme";
 import { type Locale, useI18n } from "@/lib/i18n";
-import { humanizeApiError } from "@/lib/error";
+import { humanizeApiError, humanizeIssue } from "@/lib/error";
 import { installCliToolWithToast } from "@/lib/cliToolInstaller";
 import { useCurrency, type CurrencyMode } from "@/lib/currency";
 import { setLogLevel } from "@/lib/logger";
@@ -378,6 +378,8 @@ export function SettingsPage() {
       : "";
   const updateStatusText = updateStatus?.pending_version
     ? t("settings.update.ready", { version: updateStatus.pending_version })
+    : updateStatus?.stage === "error"
+      ? humanizeIssue(updateStatus.issue, t) ?? updateStatus.error ?? t("settings.update.checkFail")
     : updateStatus?.stage === "staging"
       ? t("settings.update.staging")
     : updateStatus?.stage === "downloading"
@@ -954,7 +956,21 @@ export function SettingsPage() {
               <div className="flex items-center justify-between gap-4">
                 <div className="font-medium text-sm">{t("settings.language.label")}</div>
                 <div className="w-[220px]">
-                  <Select value={locale} onValueChange={(v) => setLocale(v as Locale)}>
+                  <Select
+                    value={locale}
+                    onValueChange={async (v) => {
+                      const nextLocale = v as Locale;
+                      try {
+                        const next = await updateSettings({ ui_locale: nextLocale });
+                        setAppSettings(next);
+                        setLocale(next.ui_locale);
+                      } catch (e) {
+                        toast.error(t("settings.language.saveFail"), {
+                          description: humanizeApiError(e, t),
+                        });
+                      }
+                    }}
+                  >
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
@@ -1460,7 +1476,7 @@ export function SettingsPage() {
                             toast.success(t("settings.cliProxyConfig.applied"));
                           } else {
                             toast.error(t("settings.cliProxyConfig.applyFail"), {
-                              description: applied?.error,
+                              description: humanizeIssue(applied?.issue, t) ?? applied?.error,
                             });
                           }
                         } catch (e) {

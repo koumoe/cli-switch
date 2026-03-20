@@ -4,6 +4,7 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
 
+use crate::i18n::AppLocale;
 use crate::logging::LogLevel;
 
 use super::{now_ms, with_conn};
@@ -14,6 +15,7 @@ const KEY_CLOSE_BEHAVIOR: &str = "close_behavior";
 const KEY_AUTO_START_ENABLED: &str = "auto_start_enabled";
 const KEY_AUTO_START_LAUNCH_MODE: &str = "auto_start_launch_mode";
 const KEY_SERVER_LAN_ACCESSIBLE: &str = "server_lan_accessible";
+const KEY_UI_LOCALE: &str = "ui_locale";
 const KEY_APP_AUTO_UPDATE_ENABLED: &str = "app_auto_update_enabled";
 const KEY_GEMINI_CLI_AUTO_UPDATE_ENABLED: &str = "gemini_cli_auto_update_enabled";
 const KEY_CLAUDE_CODE_AUTO_UPDATE_ENABLED: &str = "claude_code_auto_update_enabled";
@@ -76,6 +78,7 @@ pub struct AppSettings {
     pub auto_start_enabled: bool,
     pub auto_start_launch_mode: AutoStartLaunchMode,
     pub server_lan_accessible: bool,
+    pub ui_locale: AppLocale,
     pub app_auto_update_enabled: bool,
     pub gemini_cli_auto_update_enabled: bool,
     pub claude_code_auto_update_enabled: bool,
@@ -112,6 +115,7 @@ impl Default for AppSettings {
             auto_start_enabled: false,
             auto_start_launch_mode: AutoStartLaunchMode::ShowWindow,
             server_lan_accessible: false,
+            ui_locale: AppLocale::default(),
             app_auto_update_enabled: false,
             gemini_cli_auto_update_enabled: false,
             claude_code_auto_update_enabled: false,
@@ -146,6 +150,7 @@ pub struct AppSettingsPatch {
     pub auto_start_enabled: Option<bool>,
     pub auto_start_launch_mode: Option<AutoStartLaunchMode>,
     pub server_lan_accessible: Option<bool>,
+    pub ui_locale: Option<AppLocale>,
     pub app_auto_update_enabled: Option<bool>,
     pub gemini_cli_auto_update_enabled: Option<bool>,
     pub claude_code_auto_update_enabled: Option<bool>,
@@ -291,6 +296,9 @@ pub async fn get_app_settings(db_path: PathBuf) -> anyhow::Result<AppSettings> {
         if let Some(v) = get_setting(conn, KEY_SERVER_LAN_ACCESSIBLE)? {
             out.server_lan_accessible =
                 parse_bool_setting(KEY_SERVER_LAN_ACCESSIBLE, &v, &mut has_invalid_values);
+        }
+        if let Some(v) = get_setting(conn, KEY_UI_LOCALE)? {
+            out.ui_locale = AppLocale::parse_or_default(&v);
         }
         if let Some(v) = get_setting(conn, KEY_APP_AUTO_UPDATE_ENABLED)? {
             out.app_auto_update_enabled =
@@ -473,6 +481,9 @@ pub async fn update_app_settings(
                 if v { "true" } else { "false" },
                 updated_at_ms,
             )?;
+        }
+        if let Some(v) = patch.ui_locale {
+            set_setting(conn, KEY_UI_LOCALE, v.as_str(), updated_at_ms)?;
         }
         if let Some(v) = patch.app_auto_update_enabled {
             set_setting(

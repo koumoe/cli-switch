@@ -4,6 +4,11 @@ export function extractErrorMessage(payload: unknown): string | null {
 
   if (typeof payload === "object") {
     const obj = payload as any;
+    const issue = obj?.issue;
+    if (issue && typeof issue === "object") {
+      if (typeof issue.message === "string") return issue.message;
+      if (typeof issue.detail === "string") return issue.detail;
+    }
     const message = obj?.message;
     if (typeof message === "string") return message;
     const err = obj?.error;
@@ -24,6 +29,8 @@ export function extractErrorCode(payload: unknown): string | null {
   if (!payload) return null;
   if (typeof payload === "object") {
     const obj = payload as any;
+    const issue = obj?.issue;
+    if (issue && typeof issue === "object" && typeof issue.code === "string") return issue.code;
     const code = obj?.code;
     if (typeof code === "string") return code;
     const err = obj?.error;
@@ -35,6 +42,7 @@ export function extractErrorCode(payload: unknown): string | null {
 export class ApiRequestError extends Error {
   readonly code: string | null;
   readonly serverMessage: string | null;
+  readonly issue: UserFacingIssueLike | null;
   readonly status: number;
   readonly method: string;
   readonly path: string;
@@ -42,6 +50,7 @@ export class ApiRequestError extends Error {
   constructor(opts: {
     code: string | null;
     message: string | null;
+    issue?: UserFacingIssueLike | null;
     status: number;
     method: string;
     path: string;
@@ -50,6 +59,7 @@ export class ApiRequestError extends Error {
     this.name = "ApiRequestError";
     this.code = opts.code;
     this.serverMessage = opts.message;
+    this.issue = opts.issue ?? null;
     this.status = opts.status;
     this.method = opts.method;
     this.path = opts.path;
@@ -73,15 +83,44 @@ export function humanizeErrorText(s: string): string {
 
 type TFunction = (key: string, vars?: Record<string, string | number>) => string;
 
+export type UserFacingIssueLike = {
+  code?: string | null;
+  message?: string | null;
+  args?: Record<string, string> | null;
+  detail?: string | null;
+};
+
 function translateErrorCode(t: TFunction, code: string): string | null {
-  const key = `errors.${code}`;
-  const translated = t(key);
-  return translated === key ? null : translated;
+  const direct = t(code);
+  if (direct !== code) return direct;
+  const fallbackKey = `errors.${code}`;
+  const fallback = t(fallbackKey);
+  return fallback === fallbackKey ? null : fallback;
+}
+
+export function humanizeIssue(issue: UserFacingIssueLike | null | undefined, t: TFunction): string | null {
+  if (!issue) return null;
+  const args = issue.args ?? undefined;
+  if (issue.code) {
+    const direct = t(issue.code, args);
+    if (direct !== issue.code) return direct;
+    const fallbackKey = `errors.${issue.code}`;
+    const fallback = t(fallbackKey, args);
+    if (fallback !== fallbackKey) return fallback;
+  }
+  if (issue.message) return issue.message;
+  if (issue.detail) return issue.detail;
+  return null;
 }
 
 export function humanizeApiError(err: unknown, t: TFunction): string {
-  if (isApiRequestError(err) && err.code) {
-    return translateErrorCode(t, err.code) ?? err.serverMessage ?? err.message;
+  if (isApiRequestError(err)) {
+    const issueText = humanizeIssue(err.issue, t);
+    if (issueText) return issueText;
+    if (err.code) {
+      return translateErrorCode(t, err.code) ?? err.serverMessage ?? err.message;
+    }
+    return err.serverMessage ?? err.message;
   }
 
   if (err instanceof Error) {

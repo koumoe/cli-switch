@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 use crate::cli_tools::{CLI_TOOLS, CliToolId, CliToolInstallMethod};
+use crate::i18n::{UserFacingIssue, UserFacingIssuePayload, current_locale};
 use crate::nodejs;
 use crate::server::AppState;
 use crate::server::error::ApiError;
@@ -116,6 +117,9 @@ pub(crate) struct InstallCliToolResponse {
     pub(crate) tool: CliToolStatus,
     pub(crate) terminal_shim_ok: bool,
     pub(crate) terminal_shim_dir: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) terminal_shim_issue: Option<UserFacingIssuePayload>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) terminal_shim_error: Option<String>,
 }
 
@@ -180,6 +184,7 @@ pub(in crate::server) async fn install_cli_tool(
         node_path = Some(node_path1);
     }
 
+    let locale = current_locale().unwrap_or_default();
     let res = tokio::task::spawn_blocking(move || {
         let env = crate::cli_tools::CliExecEnv::new(npm_path.as_deref(), node_path.as_deref());
         let detected0 = crate::cli_tools::detect_cli_tool(&env, &data_dir, def);
@@ -265,6 +270,12 @@ pub(in crate::server) async fn install_cli_tool(
                 )
             };
 
+        let terminal_shim_issue = terminal_shim_error.as_ref().map(|detail| {
+            UserFacingIssue::new("tools_terminal_shim_setup_failed")
+                .with_arg("tool", def.id.as_str())
+                .with_detail(detail.clone())
+        });
+
         Ok(InstallCliToolResponse {
             ok: out.status.success(),
             exit_code: out.status.code(),
@@ -287,7 +298,12 @@ pub(in crate::server) async fn install_cli_tool(
             },
             terminal_shim_ok,
             terminal_shim_dir,
-            terminal_shim_error,
+            terminal_shim_issue: terminal_shim_issue
+                .as_ref()
+                .map(|issue| issue.to_payload(locale)),
+            terminal_shim_error: terminal_shim_issue
+                .as_ref()
+                .map(|issue| issue.legacy_error_text(locale)),
         })
     })
     .await;
@@ -329,6 +345,7 @@ pub(in crate::server) async fn cli_tools_proxy_config_apply(
     Json(input): Json<ApplyCliToolsProxyConfigRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
     let listen_addr = state.listen_addr;
+    let locale = current_locale().unwrap_or_default();
     let tools = input
         .tools
         .unwrap_or_else(|| vec![CliToolId::Claude, CliToolId::Codex, CliToolId::Gemini]);
@@ -336,7 +353,7 @@ pub(in crate::server) async fn cli_tools_proxy_config_apply(
     // Avoid holding references across the blocking boundary.
     let tools2 = tools.clone();
     let res = tokio::task::spawn_blocking(move || {
-        crate::cli_tool_proxy_config::apply(listen_addr, &tools2)
+        crate::cli_tool_proxy_config::apply(listen_addr, &tools2, locale)
     })
     .await;
 

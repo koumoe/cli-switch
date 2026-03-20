@@ -1,4 +1,5 @@
 use axum::Router;
+use axum::middleware::from_fn_with_state;
 use axum::routing::{any, delete, get, post, put};
 use http::Method;
 use std::net::SocketAddr;
@@ -12,6 +13,7 @@ use tower_http::trace::TraceLayer;
 use tower_http::trace::{DefaultOnFailure, DefaultOnResponse};
 
 use crate::events::AppEvent;
+use crate::i18n::locale_context_middleware;
 use crate::update;
 use crate::{chat_bridge, events, storage};
 
@@ -311,6 +313,7 @@ fn build_app(state: AppState) -> Router {
         .route("/v1/messages/{*path}", any(handlers::proxy_anthropic))
         .route("/v1beta/{*path}", any(handlers::proxy_gemini))
         .route("/v1/{*path}", any(handlers::proxy_openai))
+        .layer(from_fn_with_state(state.clone(), locale_context_middleware))
         .layer(trace_layer);
 
     let app = Router::new().merge(traced_api).with_state(state);
@@ -346,11 +349,15 @@ pub async fn serve_with_listener(
     let db_path = Arc::new(db_path);
 
     let settings0 = storage::get_app_settings((*db_path).clone()).await?;
+    let initial_update_locale = settings0.ui_locale;
     let channels0 = storage::list_channels((*db_path).clone()).await?;
     let (settings_cache, settings_cache_rx) = watch::channel(Arc::new(settings0));
     let (channels_cache, channels_cache_rx) = watch::channel(Arc::new(channels0));
 
-    let update_runtime = Arc::new(tokio::sync::Mutex::new(update::UpdateRuntime::default()));
+    let update_runtime = Arc::new(tokio::sync::Mutex::new(update::UpdateRuntime {
+        locale: initial_update_locale,
+        ..Default::default()
+    }));
     let state = AppState {
         listen_addr: addr,
         db_path: db_path.clone(),

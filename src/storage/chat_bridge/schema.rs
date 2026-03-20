@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS chat_bindings (
   platform TEXT NOT NULL,
   platform_user_id TEXT NOT NULL,
   display_name TEXT,
+  preferred_locale TEXT NOT NULL DEFAULT 'zh-CN',
   bound_at INTEGER NOT NULL,
   is_active INTEGER NOT NULL DEFAULT 1,
   UNIQUE(platform, platform_user_id)

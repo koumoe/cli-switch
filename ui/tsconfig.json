@@ -13,7 +13,8 @@
     "strict": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@shared-locales/*": ["../i18n/locales/shared/*"]
     }
   },
   "include": ["src"]

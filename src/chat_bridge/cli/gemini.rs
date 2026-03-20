@@ -7,7 +7,9 @@ use std::time::Duration;
 use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
 
+use crate::chat_bridge::i18n::{args, t, t_args};
 use crate::cli_tools::CliToolId;
+use crate::i18n::AppLocale;
 use crate::storage::{AppSettings, BridgePermissionMode, BridgeSession};
 
 use super::{CliAdapter, CliInvocation, ValidateResult, build_command, build_std_command};
@@ -84,6 +86,7 @@ impl CliAdapter for GeminiAdapter {
         &self,
         session: &BridgeSession,
         settings: &AppSettings,
+        locale: AppLocale,
     ) -> anyhow::Result<ValidateResult> {
         let Some(session_ref) = session.cli_session_ref.as_deref() else {
             return Ok(ValidateResult::Valid);
@@ -94,14 +97,18 @@ impl CliAdapter for GeminiAdapter {
                 Ok(stdout) => match parse_list_sessions_output(&stdout) {
                     Ok(items) => items,
                     Err(err) => {
-                        return Ok(ValidateResult::Invalid(format!(
-                            "gemini --list-sessions 输出无法安全解析：{err}"
+                        return Ok(ValidateResult::Invalid(t_args(
+                            locale,
+                            "error.gemini_list_sessions_parse_failed",
+                            &args([("detail", err.to_string())]),
                         )));
                     }
                 },
                 Err(err) => {
-                    return Ok(ValidateResult::Invalid(format!(
-                        "执行 gemini --list-sessions 失败：{err}"
+                    return Ok(ValidateResult::Invalid(t_args(
+                        locale,
+                        "error.gemini_list_sessions_failed",
+                        &args([("detail", err.to_string())]),
                     )));
                 }
             };
@@ -113,17 +120,17 @@ impl CliAdapter for GeminiAdapter {
             resolve_listed_gemini_session_ref(session_ref, &listed)
         };
         let Some(resolved_ref) = resolved_ref else {
-            return Ok(ValidateResult::Invalid(
-                "Gemini 当前项目下未找到对应会话，可能已被外部删除或当前 CLI 版本无法安全恢复。"
-                    .to_string(),
-            ));
+            return Ok(ValidateResult::Invalid(t(
+                locale,
+                "error.gemini_session_missing",
+            )));
         };
 
         if !listed.iter().any(|item| item.id == resolved_ref) {
-            return Ok(ValidateResult::Invalid(
-                "Gemini 本地历史里找到了候选 session_id，但当前项目的会话列表里没有它，可能已被外部删除。"
-                    .to_string(),
-            ));
+            return Ok(ValidateResult::Invalid(t(
+                locale,
+                "error.gemini_session_mismatch",
+            )));
         }
 
         Ok(if resolved_ref == session_ref {

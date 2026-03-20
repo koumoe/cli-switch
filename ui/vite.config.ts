@@ -71,6 +71,7 @@ export default defineConfig(() => {
     resolve: {
       alias: {
         "@": path.resolve(__dirname, "./src"),
+        "@shared-locales": path.resolve(__dirname, "../i18n/locales/shared"),
       },
     },
     build: {
@@ -135,6 +136,9 @@ export default defineConfig(() => {
       },
     },
     server: {
+      fs: {
+        allow: [path.resolve(__dirname, "..")],
+      },
       proxy: {
         "/api": {
           target: process.env.VITE_BACKEND_URL ?? "http://127.0.0.1:3210",

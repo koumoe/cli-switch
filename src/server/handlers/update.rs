@@ -6,6 +6,7 @@ use serde::Serialize;
 
 use crate::changelog;
 use crate::events::{self, AppEvent};
+use crate::i18n::current_locale;
 use crate::server::AppState;
 use crate::server::error::ApiError;
 use crate::{storage, update};
@@ -32,11 +33,13 @@ pub(in crate::server) async fn update_check(
 ) -> Result<impl IntoResponse, ApiError> {
     let data_dir = state.data_dir();
     let db_path = state.db_path();
+    let locale = current_locale().unwrap_or(state.settings_snapshot().ui_locale);
     let res = update::check_latest(
         &state.http_client,
         state.update_runtime.clone(),
         db_path,
         &data_dir,
+        locale,
     )
     .await;
     Ok(Json(res))
@@ -75,11 +78,13 @@ pub(in crate::server) async fn update_download(
     let settings = storage::get_app_settings(state.db_path()).await?;
     let data_dir = state.data_dir();
     let db_path = state.db_path();
+    let locale = current_locale().unwrap_or(settings.ui_locale);
     let started = update::spawn_download_latest(
         state.http_client.clone(),
         state.update_runtime.clone(),
         db_path.clone(),
         data_dir.clone(),
+        locale,
     )
     .await;
     let status = update::get_status(

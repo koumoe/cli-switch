@@ -1,6 +1,7 @@
 pub mod adapter;
 mod auth;
 pub mod cli;
+mod i18n;
 mod output;
 mod projects;
 mod resolver;
@@ -26,8 +27,10 @@ use self::cli::{
     LEGACY_GEMINI_UNTRACKED_SESSION_REF, ValidateResult, adapter_for, cli_type_label,
     permission_mode_label,
 };
+use self::i18n::{args, t, t_args};
 #[cfg(test)]
 use self::output::StreamingReply;
+use self::output::TurnProcessContext;
 #[cfg(test)]
 use self::output::extract_display_text;
 use self::output::format_projects_list;
@@ -36,6 +39,7 @@ use self::projects::AggregatedProject;
 use self::projects::ProjectStore;
 use self::router::{Command, format_session_label, format_sessions_list, help_text};
 use crate::cli_tools::CliToolId;
+use crate::i18n::{AppLocale, render_error};
 use crate::storage::{self, BridgeSessionStatus, ChatPlatform, StorageError};
 
 const STREAM_UPDATE_INTERVAL: Duration = Duration::from_millis(1200);
@@ -273,6 +277,7 @@ impl ChatBridgeRuntime {
         msg: IncomingMessage,
         platform: ChatPlatform,
         command: Command,
+        locale: AppLocale,
     ) -> anyhow::Result<()> {
         match command {
             Command::Projects => {
@@ -284,9 +289,15 @@ impl ChatBridgeRuntime {
                 self.project_store
                     .remember_snapshot(key, items.clone())
                     .await;
-                let content = format_projects_list(&items);
-                self.send_text(adapter, &msg.chat_id, &content, msg.message_id.as_deref())
-                    .await?;
+                let content = format_projects_list(&items, locale);
+                self.send_text(
+                    adapter,
+                    &msg.chat_id,
+                    &content,
+                    msg.message_id.as_deref(),
+                    locale,
+                )
+                .await?;
             }
             Command::Start {
                 tool,
@@ -303,6 +314,7 @@ impl ChatBridgeRuntime {
                         &key,
                         &project_ref,
                         settings.chat_bridge_allow_new_projects,
+                        locale,
                     )
                     .await?;
                 let session = storage::create_bridge_session(
@@ -319,29 +331,50 @@ impl ChatBridgeRuntime {
                     },
                 )
                 .await?;
-                let message = format!(
-                    "✅ {} 会话已启动\n{}\n路径: {}\n模式: {}\n⭐ 默认",
-                    cli_type_label(tool),
-                    format_session_label(&session),
-                    session.working_dir,
-                    permission_mode_label(permission_mode)
+                let message = t_args(
+                    locale,
+                    "session.started",
+                    &args([
+                        ("cli_type", cli_type_label(tool).to_string()),
+                        ("label", format_session_label(&session)),
+                        ("path", session.working_dir.clone()),
+                        ("mode", permission_mode_label(permission_mode).to_string()),
+                    ]),
                 );
-                self.send_text(adapter, &msg.chat_id, &message, msg.message_id.as_deref())
-                    .await?;
+                self.send_text(
+                    adapter,
+                    &msg.chat_id,
+                    &message,
+                    msg.message_id.as_deref(),
+                    locale,
+                )
+                .await?;
             }
             Command::Chat { target, message } => {
                 let Some(session) = self
-                    .resolve_active_session_or_reply(adapter.clone(), &msg, platform, &target)
+                    .resolve_active_session_or_reply(
+                        adapter.clone(),
+                        &msg,
+                        platform,
+                        &target,
+                        locale,
+                    )
                     .await?
                 else {
                     return Ok(());
                 };
-                self.run_turn_for_session(adapter, msg, session, message)
+                self.run_turn_for_session(adapter, msg, session, message, locale)
                     .await?;
             }
             Command::Switch { target } => {
                 let Some(session) = self
-                    .resolve_active_session_or_reply(adapter.clone(), &msg, platform, &target)
+                    .resolve_active_session_or_reply(
+                        adapter.clone(),
+                        &msg,
+                        platform,
+                        &target,
+                        locale,
+                    )
                     .await?
                 else {
                     return Ok(());
@@ -355,8 +388,13 @@ impl ChatBridgeRuntime {
                 self.send_text(
                     adapter,
                     &msg.chat_id,
-                    &format!("✅ 默认会话已切换到 {}", format_session_label(&session)),
+                    &t_args(
+                        locale,
+                        "session.default_switched",
+                        &args([("label", format_session_label(&session))]),
+                    ),
                     msg.message_id.as_deref(),
+                    locale,
                 )
                 .await?;
             }
@@ -367,13 +405,25 @@ impl ChatBridgeRuntime {
                     true,
                 )
                 .await?;
-                let content = format_sessions_list(&sessions, storage::now_ms());
-                self.send_text(adapter, &msg.chat_id, &content, msg.message_id.as_deref())
-                    .await?;
+                let content = format_sessions_list(&sessions, storage::now_ms(), locale);
+                self.send_text(
+                    adapter,
+                    &msg.chat_id,
+                    &content,
+                    msg.message_id.as_deref(),
+                    locale,
+                )
+                .await?;
             }
             Command::Stop { target } => {
                 let Some(session) = self
-                    .resolve_active_session_or_reply(adapter.clone(), &msg, platform, &target)
+                    .resolve_active_session_or_reply(
+                        adapter.clone(),
+                        &msg,
+                        platform,
+                        &target,
+                        locale,
+                    )
                     .await?
                 else {
                     return Ok(());
@@ -385,14 +435,20 @@ impl ChatBridgeRuntime {
                     adapter,
                     &msg.chat_id,
                     &if cancelled {
-                        format!(
-                            "✅ 已停止 {}，并已取消当前任务",
-                            format_session_label(&stopped)
+                        t_args(
+                            locale,
+                            "session.stopped_with_cancel",
+                            &args([("label", format_session_label(&stopped))]),
                         )
                     } else {
-                        format!("✅ 已停止 {}", format_session_label(&stopped))
+                        t_args(
+                            locale,
+                            "session.stopped",
+                            &args([("label", format_session_label(&stopped))]),
+                        )
                     },
                     msg.message_id.as_deref(),
+                    locale,
                 )
                 .await?;
             }
@@ -416,20 +472,70 @@ impl ChatBridgeRuntime {
                     adapter,
                     &msg.chat_id,
                     &if cancelled > 0 {
-                        format!("✅ 已停止 {count} 个会话，并取消了 {cancelled} 个运行中的任务")
+                        t_args(
+                            locale,
+                            "session.stop_all_with_cancel",
+                            &args([
+                                ("count", count.to_string()),
+                                ("cancelled", cancelled.to_string()),
+                            ]),
+                        )
                     } else {
-                        format!("✅ 已停止 {count} 个会话")
+                        t_args(
+                            locale,
+                            "session.stop_all",
+                            &args([("count", count.to_string())]),
+                        )
                     },
                     msg.message_id.as_deref(),
+                    locale,
                 )
                 .await?;
+            }
+            Command::Lang { locale: next } => {
+                if let Some(next) = next {
+                    let next_locale = AppLocale::parse_or_default(&next);
+                    storage::update_chat_binding_locale(
+                        self.db_path.clone(),
+                        platform,
+                        msg.sender_id.clone(),
+                        next_locale.as_str().to_string(),
+                    )
+                    .await?;
+                    self.send_text(
+                        adapter,
+                        &msg.chat_id,
+                        &t_args(
+                            next_locale,
+                            "lang.updated",
+                            &args([("locale", next_locale.as_str().to_string())]),
+                        ),
+                        msg.message_id.as_deref(),
+                        next_locale,
+                    )
+                    .await?;
+                } else {
+                    self.send_text(
+                        adapter,
+                        &msg.chat_id,
+                        &t_args(
+                            locale,
+                            "lang.current",
+                            &args([("locale", locale.as_str().to_string())]),
+                        ),
+                        msg.message_id.as_deref(),
+                        locale,
+                    )
+                    .await?;
+                }
             }
             Command::Help => {
                 self.send_text(
                     adapter,
                     &msg.chat_id,
-                    &help_text(),
+                    &help_text(locale),
                     msg.message_id.as_deref(),
+                    locale,
                 )
                 .await?;
             }
@@ -443,8 +549,9 @@ impl ChatBridgeRuntime {
                 self.send_text(
                     adapter,
                     &msg.chat_id,
-                    "当前账号已经绑定。如需重新绑定，请先在设置中解绑后再生成新的配对 Token。",
+                    &t(locale, "bind.rebind_required"),
                     msg.message_id.as_deref(),
+                    locale,
                 )
                 .await?;
             }
@@ -459,6 +566,7 @@ impl ChatBridgeRuntime {
         msg: IncomingMessage,
         platform: ChatPlatform,
         text: String,
+        locale: AppLocale,
     ) -> anyhow::Result<()> {
         let session =
             storage::get_default_bridge_session_for_platform(self.db_path.clone(), platform)
@@ -467,14 +575,16 @@ impl ChatBridgeRuntime {
             self.send_text(
                 adapter,
                 &msg.chat_id,
-                "还没有启动任何代理，使用 /codex、/claude 或 /gemini 启动一个。",
+                &t(locale, "session.no_default"),
                 msg.message_id.as_deref(),
+                locale,
             )
             .await?;
             return Ok(());
         };
 
-        self.run_turn_for_session(adapter, msg, session, text).await
+        self.run_turn_for_session(adapter, msg, session, text, locale)
+            .await
     }
 
     async fn run_turn_for_session(
@@ -483,16 +593,19 @@ impl ChatBridgeRuntime {
         msg: IncomingMessage,
         session: storage::BridgeSession,
         input: String,
+        locale: AppLocale,
     ) -> anyhow::Result<()> {
         if !self.try_mark_busy(session.id).await {
             self.send_text(
                 adapter,
                 &msg.chat_id,
-                &format!(
-                    "{} 当前已有任务在运行，请稍后再试。",
-                    format_session_label(&session)
+                &t_args(
+                    locale,
+                    "session.busy",
+                    &args([("label", format_session_label(&session))]),
                 ),
                 msg.message_id.as_deref(),
+                locale,
             )
             .await?;
             return Ok(());
@@ -500,7 +613,14 @@ impl ChatBridgeRuntime {
 
         let active_turn = self.register_active_turn(session.id).await;
         let result = self
-            .run_turn_for_session_inner(adapter.clone(), &msg, session.clone(), input, active_turn)
+            .run_turn_for_session_inner(
+                adapter.clone(),
+                &msg,
+                session.clone(),
+                input,
+                active_turn,
+                locale,
+            )
             .await;
         self.unregister_active_turn(session.id).await;
         self.clear_busy(session.id).await;
@@ -514,6 +634,7 @@ impl ChatBridgeRuntime {
         mut session: storage::BridgeSession,
         input: String,
         active_turn: ActiveTurnRegistration,
+        locale: AppLocale,
     ) -> anyhow::Result<()> {
         let settings = self.settings_snapshot();
         let active_session_count = storage::count_active_bridge_sessions_for_platform(
@@ -549,7 +670,7 @@ impl ChatBridgeRuntime {
 
         if resume_existing {
             match cli_adapter
-                .validate_session_ref(&session, settings.as_ref())
+                .validate_session_ref(&session, settings.as_ref(), locale)
                 .await?
             {
                 ValidateResult::Valid => {}
@@ -564,6 +685,7 @@ impl ChatBridgeRuntime {
                         &msg.chat_id,
                         &format!("❌ {reason}"),
                         msg.message_id.as_deref(),
+                        locale,
                     )
                     .await?;
                     return Ok(());
@@ -571,7 +693,9 @@ impl ChatBridgeRuntime {
             }
         }
 
-        let prompt = self.build_turn_prompt(&session, msg, &input).await?;
+        let prompt = self
+            .build_turn_prompt(&session, msg, &input, locale)
+            .await?;
 
         let invocation = cli_adapter.build_invocation(
             &prompt,
@@ -583,11 +707,14 @@ impl ChatBridgeRuntime {
 
         let execution = self
             .execute_turn_process(
-                adapter.clone(),
-                msg,
+                TurnProcessContext {
+                    adapter: adapter.clone(),
+                    msg,
+                    use_streaming,
+                    locale,
+                },
                 &session,
                 invocation,
-                use_streaming,
                 active_turn,
             )
             .await;
@@ -645,6 +772,7 @@ impl ChatBridgeRuntime {
         session: &storage::BridgeSession,
         msg: &IncomingMessage,
         input: &str,
+        locale: AppLocale,
     ) -> anyhow::Result<String> {
         if !msg.has_attachments() {
             return Ok(input.to_string());
@@ -656,20 +784,24 @@ impl ChatBridgeRuntime {
         }
 
         let mut lines = vec![
-            format!("以下输入来自 {} 聊天桥接。", msg.platform.label()),
+            t_args(
+                locale,
+                "turn.bridge_input_header",
+                &args([("platform", msg.platform.label().to_string())]),
+            ),
             String::new(),
         ];
 
         let trimmed = input.trim();
         if trimmed.is_empty() {
-            lines.push("用户本轮没有额外文本，只发送了附件。".to_string());
+            lines.push(t(locale, "turn.attachments_only_notice"));
         } else {
-            lines.push("用户文本：".to_string());
+            lines.push(t(locale, "turn.user_text_label"));
             lines.push(trimmed.to_string());
         }
 
         lines.push(String::new());
-        lines.push("附件：".to_string());
+        lines.push(t(locale, "turn.attachments_label"));
         let normalized_user_text = normalized_prompt_text(trimmed);
         for (index, item) in materialized.iter().enumerate() {
             let caption = item
@@ -691,10 +823,7 @@ impl ChatBridgeRuntime {
         }
 
         lines.push(String::new());
-        lines.push(
-            "请将这些附件视为本轮用户输入的一部分；如果你支持读取这些本地文件，请直接读取并处理。"
-                .to_string(),
-        );
+        lines.push(t(locale, "turn.attachments_instruction"));
 
         Ok(lines.join("\n"))
     }
@@ -1024,25 +1153,45 @@ fn normalized_prompt_text(text: &str) -> String {
         .to_lowercase()
 }
 
-fn render_user_error(err: &anyhow::Error) -> String {
+fn render_user_error(err: &anyhow::Error, locale: AppLocale) -> String {
     match err.downcast_ref::<StorageError>() {
-        Some(StorageError::ChatPairingTokenInvalid) => "配对 Token 无效".to_string(),
-        Some(StorageError::ChatPairingTokenExpired) => "配对 Token 已过期".to_string(),
-        Some(StorageError::ChatPairingTokenUsed) => "配对 Token 已被使用".to_string(),
+        Some(StorageError::ChatPairingTokenInvalid) => t(locale, "error.pairing_token_invalid"),
+        Some(StorageError::ChatPairingTokenExpired) => t(locale, "error.pairing_token_expired"),
+        Some(StorageError::ChatPairingTokenUsed) => t(locale, "error.pairing_token_used"),
         Some(StorageError::ChatPairingTokenPlatformMismatch {
             expected_platform,
             actual_platform,
-        }) => format!("该配对 Token 仅能用于 {expected_platform}，当前消息来自 {actual_platform}"),
-        Some(StorageError::ChatBindingAlreadyExists { .. }) => {
-            "当前平台已绑定其他账号，请先在设置中解绑后再重新绑定".to_string()
-        }
-        Some(StorageError::ChatSessionAliasExists { alias, .. }) => {
-            format!("会话别名已存在：{alias}")
-        }
-        Some(StorageError::ChatSessionNotFound { session_id }) => {
-            format!("会话不存在：#{session_id}")
-        }
-        Some(StorageError::ChatProjectPathNotFound { path }) => format!("项目路径不存在：{path}"),
+        }) => t_args(
+            locale,
+            "error.pairing_token_platform_mismatch",
+            &args([
+                ("expected_platform", expected_platform.clone()),
+                ("actual_platform", actual_platform.clone()),
+            ]),
+        ),
+        Some(StorageError::ChatBindingAlreadyExists { .. }) => t(locale, "error.binding_exists"),
+        Some(StorageError::ChatBindingNotFound { .. })
+        | Some(StorageError::ChatBindingIdentityNotFound { .. }) => render_error(
+            locale,
+            "chat_bridge_binding_not_found",
+            &std::collections::BTreeMap::new(),
+            "Chat binding not found",
+        ),
+        Some(StorageError::ChatSessionAliasExists { alias, .. }) => t_args(
+            locale,
+            "error.session_alias_exists",
+            &args([("alias", alias.clone())]),
+        ),
+        Some(StorageError::ChatSessionNotFound { session_id }) => t_args(
+            locale,
+            "error.session_not_found",
+            &args([("session_id", session_id.to_string())]),
+        ),
+        Some(StorageError::ChatProjectPathNotFound { path }) => t_args(
+            locale,
+            "error.project_path_not_found",
+            &args([("path", path.clone())]),
+        ),
         _ => err.to_string(),
     }
 }
@@ -1060,11 +1209,14 @@ mod tests {
 
     #[test]
     fn format_projects_list_uses_bracketed_index_and_path_only() {
-        let rendered = format_projects_list(&[AggregatedProject {
-            path: "/tmp/demo".to_string(),
-            display_name: "DemoProject".to_string(),
-            updated_at_ms: 0,
-        }]);
+        let rendered = format_projects_list(
+            &[AggregatedProject {
+                path: "/tmp/demo".to_string(),
+                display_name: "DemoProject".to_string(),
+                updated_at_ms: 0,
+            }],
+            AppLocale::ZhCN,
+        );
 
         assert!(rendered.contains("[1001] DemoProject (/tmp/demo)"));
         assert!(!rendered.contains("claude"));
@@ -1250,6 +1402,7 @@ mod tests {
             "chat-1".to_string(),
             Some("reply-1".to_string()),
             "label".to_string(),
+            AppLocale::ZhCN,
         );
 
         reply.update("partial one").await.expect("draft update");
@@ -1275,6 +1428,7 @@ mod tests {
             "chat-1".to_string(),
             Some("reply-1".to_string()),
             "label".to_string(),
+            AppLocale::ZhCN,
         );
 
         reply.update("partial one").await.expect("send");
@@ -1300,6 +1454,7 @@ mod tests {
             "chat-1".to_string(),
             Some("reply-1".to_string()),
             "label".to_string(),
+            AppLocale::ZhCN,
         );
 
         reply.update("same answer").await.expect("send");

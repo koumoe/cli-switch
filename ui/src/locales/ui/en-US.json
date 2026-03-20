@@ -1,0 +1,758 @@
+{
+  "language": {
+    "zhCN": "Chinese (Simplified)",
+    "enUS": "English"
+  },
+  "nav": {
+    "overview": "Overview",
+    "channels": "Channel Management",
+    "prompts": "Project Management",
+    "routes": "Routes",
+    "monitor": "Channel Statistics",
+    "logs": "Request Details",
+    "settings": "Settings"
+  },
+  "theme": {
+    "light": "Light",
+    "dark": "Dark",
+    "system": "System"
+  },
+  "status": {
+    "running": "Service Running",
+    "offline": "Offline",
+    "checking": "Checking..."
+  },
+  "sidebar": {
+    "expand": "Expand sidebar",
+    "collapse": "Collapse sidebar"
+  },
+  "common": {
+    "loading": "Loading...",
+    "refresh": "Refresh",
+    "cancel": "Cancel",
+    "ok": "OK",
+    "save": "Save",
+    "delete": "Delete",
+    "add": "Add",
+    "open": "Open",
+    "details": "Details",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "free": "Free",
+    "actions": "Actions",
+    "channel": "Channel",
+    "route": "Route",
+    "pagination": {
+      "total": "{{total}} total",
+      "page": "Page {{page}} / {{totalPages}}",
+      "perPage": "per page",
+      "prev": "Previous",
+      "next": "Next"
+    }
+  },
+  "prompts": {
+    "title": "Project Management",
+    "tabs": {
+      "codex": "Codex",
+      "claude": "Claude Code",
+      "gemini": "Gemini CLI"
+    },
+    "sidebar": {
+      "title": "Type",
+      "description": "Global prompt stays on top, project prompts are managed by folder"
+    },
+    "global": {
+      "title": "Global Prompt",
+      "description": "Shared markdown prompt document applied to {{tool}}"
+    },
+    "projects": {
+      "empty": "No projects discovered from {{tool}} yet. Open a project in that CLI first, then come back to edit it.",
+      "name": "Project Name",
+      "path": "Project Path"
+    },
+    "editor": {
+      "placeholder": "# Write your Markdown prompt here",
+      "empty": "No content yet",
+      "readonly": "Click “Edit” in the top-right corner to start writing the Markdown document.",
+      "edit": "Edit Prompt",
+      "cancel": "Cancel Editing",
+      "save": "Save Prompt",
+      "saved": "Prompt saved",
+      "saveFail": "Failed to save prompt",
+      "loadFail": "Failed to load prompt",
+      "unsavedConfirm": "You have unsaved changes. Discard them?",
+      "unsavedDescription": "You have unsaved changes. Discard them?",
+      "globalBadge": "Global",
+      "projectBadge": "Project",
+      "updatedAt": "Updated: {{value}}",
+      "noSelection": "No prompt selected",
+      "noProjectHint": "Select a project in the table, or edit the global prompt directly.",
+      "size": "Size: {{current}} / {{max}}"
+    },
+    "actions": {
+      "deleteDocument": "Delete Prompt File",
+      "deleteProject": "Delete Project"
+    },
+    "projectDeleteDialog": {
+      "title": "Delete Project",
+      "description": "Delete project \"{{name}}\"? This keeps the project folder and only removes CLI session discovery records."
+    },
+    "documentDeleteDialog": {
+      "title": "Delete Prompt File",
+      "description": "Delete the current prompt file for \"{{name}}\"? This cannot be undone."
+    },
+    "toast": {
+      "documentDeleted": "Prompt file deleted",
+      "deleteDocumentFail": "Failed to delete prompt file",
+      "projectDeleted": "Deleted project {{name}}",
+      "deleteProjectFail": "Failed to delete project",
+      "loadProjectsFail": "Failed to load projects",
+      "loadDocumentFail": "Failed to load prompt",
+      "documentSaved": "Prompt saved",
+      "saveDocumentFail": "Failed to save prompt"
+    }
+  },
+  "overview": {
+    "title": "Overview",
+    "cards": {
+      "todayRequests": "This Month Requests",
+      "totalTokens": "This Month Tokens",
+      "estimatedCost": "Official Credits",
+      "avgLatency": "Avg Latency",
+      "actualSpend": "Estimated Cost"
+    },
+    "trend": {
+      "title": "This Month Request Trend",
+      "empty": "No trend data"
+    },
+    "distribution": {
+      "title": "Channel Usage",
+      "empty": "No request data",
+      "view": {
+        "percent": "Percent",
+        "usage": "Usage"
+      }
+    },
+    "activeChannels": {
+      "title": "Available Channels",
+      "empty": "No available channels"
+    },
+    "toast": {
+      "loadFail": "Failed to load"
+    }
+  },
+  "channels": {
+    "title": "Channel Management",
+    "new": "New Channel",
+    "autoSort": {
+      "button": "Sort by multiplier",
+      "title": "Auto sort",
+      "description": "Generate a suggested order for {{terminal}} based on multipliers",
+      "noChange": "No changes needed for current order",
+      "apply": "Apply",
+      "headers": {
+        "from": "From",
+        "to": "To",
+        "channel": "Channel",
+        "factor": "Factor"
+      }
+    },
+    "tabs": {
+      "codex": "Codex",
+      "claude": "Claude",
+      "gemini": "Gemini"
+    },
+    "table": {
+      "name": "Name",
+      "terminal": "Terminal",
+      "priority": "Priority",
+      "realMultiplier": "Multiplier",
+      "baseUrl": "Base URL",
+      "status": "Status",
+      "checkin": "Check-in",
+      "empty": "No channels. Click 'New Channel' to add one."
+    },
+    "actions": {
+      "drag": "Drag to reorder",
+      "checkin": "Check-in",
+      "checkinMissing": "No check-in URL",
+      "test": "Test Connection",
+      "edit": "Edit",
+      "delete": "Delete",
+      "enable": "Enable",
+      "disable": "Disable"
+    },
+    "status": {
+      "autoDisabled": "Auto disabled: {{minutes}}m"
+    },
+    "modal": {
+      "createTitle": "New Channel",
+      "editTitle": "Edit Channel",
+      "description": "Configure API channel connection details",
+      "name": "Name",
+      "terminal": "Terminal",
+      "priority": "Priority (higher wins)",
+      "rechargeCurrency": "Recharge currency",
+      "rechargeCurrencyOptions": {
+        "cny": "CNY (RMB)",
+        "usd": "USD"
+      },
+      "realMultiplier": "Real multiplier",
+      "realMultiplierHint": "0 means free channel; up to 2 decimals",
+      "realMultiplierTooManyDecimals": "Up to 2 decimal places",
+      "baseUrl": "Base URL",
+      "checkinUrl": "Check-in URL",
+      "checkinUrlHint": "Optional: after 12:00, a red dot appears until you confirm completion",
+      "apiKey": "API Key / Token",
+      "enabled": "Enabled"
+    },
+    "checkin": {
+      "status": {
+        "todo": "Not checked in",
+        "done": "Checked in",
+        "none": "No check-in"
+      },
+      "dialog": {
+        "title": "Check-in",
+        "description": "Opened the check-in page for {{name}}. Have you completed it?",
+        "notDone": "Not yet",
+        "done": "Done"
+      },
+      "toast": {
+        "done": "{{name}} check-in completed"
+      }
+    },
+    "deleteDialog": {
+      "title": "Delete Channel",
+      "confirmWithName": "Delete channel \"{{name}}\"? This action cannot be undone.",
+      "confirm": "Delete this channel? This action cannot be undone."
+    },
+    "toast": {
+      "loadFail": "Failed to load channels",
+      "createOk": "Channel created",
+      "updateOk": "Channel updated",
+      "actionFail": "Operation failed",
+      "missingId": "Missing ID",
+      "disabledOk": "Disabled {{name}}",
+      "enabledOk": "Enabled {{name}}",
+      "deletedOk": "Deleted {{name}}",
+      "deleteFail": "Delete failed",
+      "testFail": "Test failed",
+      "nameRequired": "Name is required",
+      "baseUrlRequired": "Base URL is required",
+      "realMultiplierInvalid": "Real multiplier must be a finite number >= 0 with up to 2 decimals",
+      "testReachableOkTitle": "{{name}} is reachable",
+      "testReachableOkDesc": "Status: {{status}}, Latency: {{latency}}ms",
+      "testReachableBadTitle": "{{name}} reachable but returned an error",
+      "testUnreachableTitle": "Cannot reach {{name}}",
+      "testTimeout": "Connection timed out",
+      "reorderOk": "Order saved",
+      "reorderFail": "Failed to save order"
+    }
+  },
+  "routes": {
+    "title": "Routes",
+    "subtitle": "Configure routing rules and channel priority",
+    "new": "New Route",
+    "table": {
+      "name": "Name",
+      "terminal": "Terminal",
+      "modelMatch": "Model Match",
+      "status": "Status",
+      "updatedAt": "Updated At",
+      "empty": "No routes. Click 'New Route' to add one."
+    },
+    "actions": {
+      "channels": "Channels",
+      "edit": "Edit",
+      "delete": "Delete"
+    },
+    "modal": {
+      "createTitle": "New Route",
+      "editTitle": "Edit Route",
+      "description": "Configure routing rules",
+      "name": "Name",
+      "terminal": "Terminal",
+      "modelMatchOptional": "Model match (optional)",
+      "modelMatchHint": "Leave empty to match all models for this terminal",
+      "enabled": "Enabled"
+    },
+    "deleteDialog": {
+      "title": "Delete Route",
+      "confirmWithName": "Delete route \"{{name}}\"? This action cannot be undone.",
+      "confirm": "Delete this route? This action cannot be undone."
+    },
+    "manage": {
+      "title": "Channel Priority: {{name}}",
+      "description": "Reorder channels to set priority (top to bottom)",
+      "assignedTitle": "Assigned Channels",
+      "assignedEmpty": "No assigned channels",
+      "availableTitle": "Available Channels",
+      "availableEmpty": "No channels to add"
+    },
+    "toast": {
+      "loadFail": "Failed to load",
+      "createOk": "Route created",
+      "updateOk": "Route updated",
+      "actionFail": "Operation failed",
+      "saveFail": "Save failed",
+      "prioritySaved": "Channel priority saved",
+      "deletedOk": "Deleted {{name}}",
+      "deleteFail": "Delete failed",
+      "nameRequired": "Name is required",
+      "missingId": "Missing ID"
+    }
+  },
+  "monitor": {
+    "title": "Channel Statistics",
+    "range": {
+      "today": "Today",
+      "yesterday": "Yesterday",
+      "week": "This Week",
+      "month": "This Month",
+      "custom": "Custom",
+      "selectRange": "Select date range"
+    },
+    "cards": {
+      "totalRequests": "Total Requests",
+      "successRate": "Success Rate",
+      "failed": "Failures",
+      "estimatedCost": "Official Credits",
+      "actualSpend": "Estimated Cost"
+    },
+    "channelStats": {
+      "headers": {
+        "channel": "Channel",
+        "terminal": "Terminal",
+        "requests": "Requests",
+        "success": "Success",
+        "failed": "Failed",
+        "estimatedCost": "Official Credits",
+        "actualSpend": "Estimated Cost",
+        "avgLatency": "Avg Duration"
+      }
+    },
+    "toast": {
+      "loadFail": "Failed to load"
+    }
+  },
+  "logs": {
+    "title": "Request Details",
+    "filters": {
+      "all": "All",
+      "dateRange": "Date range",
+      "selectDateRange": "Select date range",
+      "terminal": "Terminal",
+      "channel": "Channel",
+      "model": "Model",
+      "modelPlaceholder": "Fuzzy match",
+      "dimension": "Request ID",
+      "dimensionPlaceholder": "Request ID",
+      "status": "Status",
+      "success": "Success",
+      "failed": "Failed",
+      "search": "Search",
+      "reset": "Reset"
+    },
+    "headers": {
+      "time": "Time",
+      "terminal": "Terminal",
+      "channel": "Channel",
+      "model": "Model",
+      "timing": "Timing",
+      "tokens": "Tokens",
+      "cost": "Official Credits",
+      "result": "Result"
+    },
+    "cell": {
+      "duration": "Duration",
+      "ttft": "TTFT",
+      "input": "In",
+      "output": "Out",
+      "total": "Total",
+      "cacheRead": "Cache read",
+      "cacheWrite": "Cache write"
+    },
+    "details": {
+      "id": "ID",
+      "requestId": "Request ID",
+      "routeId": "Route ID",
+      "errorKind": "Error Kind",
+      "errorDetail": "Error Detail",
+      "estimatedSpend": "Estimated Cost"
+    },
+    "empty": "No request records",
+    "toast": {
+      "loadFail": "Failed to load"
+    }
+  },
+  "pricing": {
+    "onboarding": {
+      "title": "Sync pricing",
+      "description": "Sync model pricing from llm-metadata to enable per-log cost calculation and cost stats.",
+      "sync": "Sync now",
+      "syncing": "Syncing...",
+      "skip": "Later",
+      "syncOk": "Pricing synced",
+      "syncFail": "Failed to sync pricing"
+    }
+  },
+  "closePrompt": {
+    "title": "Close CliSwitch?",
+    "description": "Minimize to tray and keep running, or quit the app?",
+    "remember": "Remember my choice",
+    "rememberHint": "You can change this in Settings",
+    "minimize": "Minimize to tray",
+    "quit": "Quit"
+  },
+  "settings": {
+    "title": "Settings",
+    "tabs": {
+      "appearance": "Appearance",
+      "channel": "Channel",
+      "application": "App",
+      "chatBridge": "Messaging",
+      "update": "CLI",
+      "data": "Data",
+      "system": "System"
+    },
+    "appearance": {
+      "title": "Appearance",
+      "subtitle": "Customize the look and feel",
+      "theme": "Theme",
+      "themeHint": "Choose light, dark, or follow system"
+    },
+    "language": {
+      "title": "Language",
+      "subtitle": "Switch UI language",
+      "label": "UI language",
+      "saveFail": "Failed to save UI language"
+    },
+    "currency": {
+      "title": "Currency",
+      "subtitle": "Used for displaying values like Estimated Cost (Official Credits are always calculated in official USD)",
+      "label": "Default currency",
+      "options": {
+        "auto": "Auto (follow language)",
+        "cny": "CNY (RMB)",
+        "usd": "USD"
+      }
+    },
+    "channelProtection": {
+      "title": "Channel Protection",
+      "subtitle": "Automatically pause channels after repeated failures",
+      "enable": "Enable channel protection",
+      "enableHint": "When triggered, the channel will be skipped temporarily",
+      "windowMinutes": "Detection window",
+      "windowMinutesHint": "Count failures within this time window (minutes)",
+      "failureTimes": "Failure threshold",
+      "failureTimesHint": "Trigger protection after this many failures",
+      "pauseMinutes": "Pause duration",
+      "pauseMinutesHint": "Auto-resume after this period (minutes)",
+      "invalid": "Invalid channel protection parameters",
+      "saved": "Saved",
+      "saveFail": "Save failed"
+    },
+    "pricingData": {
+      "title": "Pricing Data",
+      "subtitle": "Used for per-log cost calculation and cost stats",
+      "status": "Sync status",
+      "count": "Models: {{count}}",
+      "lastSync": "Last sync: {{time}}",
+      "sync": "Sync",
+      "syncOk": "Pricing synced",
+      "syncFail": "Failed to sync pricing",
+      "autoUpdate": "Auto update",
+      "autoUpdateHint": "When enabled, periodically sync pricing from llm-metadata",
+      "intervalHours": "Interval (hours)",
+      "intervalHoursHint": "1–8760 hours",
+      "intervalInvalid": "Invalid interval",
+      "saved": "Saved",
+      "saveFail": "Save failed"
+    },
+    "windowClose": {
+      "title": "Window Close",
+      "subtitle": "Choose what happens when you click the window close button",
+      "behavior": "On close",
+      "behaviorHint": "Ask every time / Minimize to tray / Quit",
+      "ask": "Ask every time",
+      "minimize": "Minimize to tray",
+      "quit": "Quit",
+      "saved": "Saved",
+      "saveFail": "Save failed"
+    },
+    "startup": {
+      "title": "Launch on Startup",
+      "subtitle": "Start CliSwitch automatically after you log in",
+      "enable": "Launch on startup",
+      "enableHint": "Adds CliSwitch to your system login items",
+      "launchMode": "After launch",
+      "launchModeHint": "Choose how the window appears when auto-started",
+      "launchShow": "Show main window",
+      "launchMinimize": "Minimize to tray",
+      "launchSaved": "Launch mode saved",
+      "saved": "Saved",
+      "saveFail": "Save failed"
+    },
+    "cliTools": {
+      "title": "CLI Tools",
+      "subtitle": "Install and update Gemini CLI / Claude Code / Codex",
+      "refresh": "Refresh",
+      "loadFail": "Failed to load CLI status",
+      "installedWithVersion": "Installed · {{version}}",
+      "notInstalled": "Not installed",
+      "install": "Install",
+      "update": "Update",
+      "installOk": "{{name}} installed/updated",
+      "terminalReady": "Terminal command is ready (restart your terminal to apply).",
+      "terminalSetupFailed": "Terminal command setup failed: {{error}}",
+      "installFail": "Failed to install/update {{name}}",
+      "autoEnable": "Auto update",
+      "saved": "Saved",
+      "saveFail": "Save failed",
+      "onboardingTitle": "Install CLI tools?",
+      "onboardingDesc": "On first launch, some CLI tools were not found. Install now? (npm global install)",
+      "installAll": "Install all",
+      "installing": "Installing...",
+      "later": "Later"
+    },
+    "cliProxyConfig": {
+      "title": "CLI Proxy Config",
+      "subtitle": "Check whether Claude Code / Codex / Gemini CLI are pointing to CliSwitch, and apply missing items directly",
+      "refresh": "Refresh",
+      "loadFail": "Failed to load config status",
+      "apply": "Apply",
+      "applied": "Config written",
+      "appliedPartial": "Some configs failed",
+      "partialDesc": "Failed tools: {{tools}}",
+      "applyFail": "Failed to write config",
+      "ok": "Configured",
+      "needsFix": "Not configured",
+      "current": "Current",
+      "expected": "Expected"
+    },
+    "update": {
+      "title": "CliSwitch Update",
+      "subtitle": "Check and download new versions (supports auto update)",
+      "autoEnable": "Enable auto update",
+      "autoEnableHint": "When enabled, periodically checks for updates and shows a prompt",
+      "status": "Update status",
+      "latest": "Up to date",
+      "serverVersion": "Server version: v{{version}}",
+      "downloadingSuffix": " (Downloading: {{percent}}%)",
+      "downloadingSuffixUnknown": " (Downloading)",
+      "staging": "Download complete, preparing update...",
+      "ready": "Update ready: v{{version}} (restart to apply)",
+      "check": "Check for updates",
+      "checkFail": "Update check failed",
+      "uptodate": "You're up to date",
+      "found": "New version found: v{{version}}",
+      "available": "New version available: v{{version}}",
+      "ignoredSuffix": " (Ignored this version)",
+      "promptTitle": "Update available",
+      "promptDesc": "A new version v{{version}} is available. Update now?",
+      "promptOverviewTitle": "What's new",
+      "promptLoading": "Loading release notes...",
+      "promptLoadFail": "Failed to load release notes",
+      "updateNow": "Update now",
+      "later": "Later",
+      "ignore": "Ignore this version",
+      "ignoredToast": "Ignored: v{{version}}",
+      "ignoreFail": "Ignore failed",
+      "downloading": "Update download started",
+      "downloadFail": "Download failed",
+      "saved": "Saved",
+      "saveFail": "Save failed",
+      "autoStarted": "Auto download started"
+    },
+    "storage": {
+      "title": "Storage",
+      "subtitle": "App data and config file locations",
+      "dataDir": "Data directory",
+      "dataDirHint": "Stores database, logs, and config files",
+      "dbFile": "Database file",
+      "dbSize": "Database size",
+      "dbSizeFail": "Failed to load database size",
+      "openFail": "Failed to open",
+      "openInDevTitle": "In development",
+      "openInDevDesc": "Open-folder support will be available in a future version"
+    },
+    "logging": {
+      "title": "App Logs",
+      "subtitle": "Manage application logs and storage",
+      "level": "Log level",
+      "levelHint": "Record logs at this level and above",
+      "retentionDays": "Log retention (days)",
+      "retentionHint": "Logs older than this will be cleaned up automatically",
+      "retentionInvalid": "Retention days must be between 1 and 3650",
+      "levelNone": "None",
+      "levelDebug": "Debug",
+      "levelInfo": "Info",
+      "levelWarning": "Warning",
+      "levelError": "Error",
+      "saved": "Log settings saved",
+      "saveFail": "Save failed",
+      "dir": "Log directory",
+      "clear": "Clear",
+      "clearAll": "Clear all",
+      "clearLogs": "Clear logs",
+      "clearLogsHint": "Select date range to clear or clear all log files",
+      "selectRange": "Select date range",
+      "confirmTitle": "Confirm log cleanup",
+      "confirmDateRange": "This will clear log files for {{range}}. Continue?",
+      "confirmAll": "This will clear all log files. Continue?",
+      "invalidDate": "Please select a date range first",
+      "clearing": "Clearing...",
+      "cleared": "Cleared",
+      "clearedDetail": "Deleted: {{deleted}}, truncated: {{truncated}}",
+      "clearFail": "Clear failed"
+    },
+    "maintenance": {
+      "databaseTitle": "Database",
+      "databaseSubtitle": "View size and clear request records",
+      "logsSize": "Log size",
+      "logsSizeFail": "Failed to get log size",
+      "clearRecords": "Clear records",
+      "clearHint": "Choose a scope then clear",
+      "scopeAll": "All",
+      "scopeErrors": "Errors only",
+      "scopeRange": "By time",
+      "typeAll": "All types",
+      "typeErrors": "Errors only",
+      "timeAll": "All",
+      "timeRange": "By time"
+    },
+    "records": {
+      "title": "Request Records",
+      "subtitle": "Manage request records and error logs",
+      "clear": "Clear",
+      "clearRecords": "Clear by range",
+      "clearRecordsHint": "Select date range to clear request records",
+      "selectRange": "Select date range",
+      "quickActions": "Quick actions",
+      "quickActionsHint": "Clear errors or all records, and vacuum the database",
+      "clearErrors": "Clear errors only",
+      "clearAll": "Clear all",
+      "confirmTitle": "Confirm clear",
+      "confirmDateRange": "This will clear records for {{range}}. Continue?",
+      "confirmDateRangeErrors": "This will clear error records for {{range}}. Continue?",
+      "confirmErrors": "This will clear all error records. Continue?",
+      "confirmAll": "This will clear all records. Continue?",
+      "invalidDate": "Please select a date range first",
+      "clearing": "Clearing...",
+      "cleared": "Cleared",
+      "clearedDetail": "Deleted request records: {{count}}",
+      "clearedDetailErrors": "Deleted failed request records: {{count}}",
+      "clearFail": "Clear failed"
+    },
+    "serviceInfo": {
+      "title": "Service Info",
+      "subtitle": "Service address for CLI tools to connect",
+      "host": "Hostname",
+      "hostHint": "Hostname / IP address for CLI connection",
+      "port": "Port",
+      "portHint": "Port number for CLI connection",
+      "lanAccessible": "LAN accessible",
+      "lanAccessibleHint": "Allow devices in your LAN to access this service",
+      "saved": "Saved",
+      "saveFail": "Save failed"
+    },
+    "chatBridge": {
+      "title": "Messaging",
+      "subtitle": "Manage messaging entrypoints, pairing, and chat-side project access in one place.",
+      "configTitle": "Base Config",
+      "configHint": "Controls the messaging runtime and how chat-created projects are handled.",
+      "platformConfigTitle": "Platform Config",
+      "platformConfigHint": "Telegram and Discord are wired into the runtime today. The WhatsApp tab is still reserved for future backend support.",
+      "platformConfigLabel": "{{platform}} Config",
+      "enable": "Enable Messaging",
+      "enableHint": "Keeps settings when off, but disables the messaging runtime.",
+      "telegramEnable": "Enable Telegram",
+      "telegramEnableHint": "Allow a Telegram bot to connect to Messaging.",
+      "telegramConfigTitle": "Telegram Config",
+      "telegramConfigHint": "Manage the Telegram bot token, runtime toggle, and Telegram-side binding entrypoints.",
+      "telegramToken": "Telegram Bot Token",
+      "telegramTokenPlaceholder": "123456:ABC-DEF...",
+      "telegramTokenPlaceholderConfigured": "Configured. Leave blank to keep the current token",
+      "telegramTokenHint": "Create a bot with @BotFather to get the token.",
+      "telegramTokenHintConfigured": "The saved token is no longer echoed back to the UI. Leaving this blank keeps the current value; enter a new token to replace it.",
+      "discordEnable": "Enable Discord",
+      "discordEnableHint": "Allow a Discord bot to connect to Messaging.",
+      "discordConfigTitle": "Discord Config",
+      "discordConfigHint": "Manage the Discord bot token, runtime toggle, and Discord-side binding entrypoints. Enable Message Content Intent for the bot in Discord Developer Portal.",
+      "discordToken": "Discord Bot Token",
+      "discordTokenPlaceholder": "MTEx...Q2F0",
+      "discordTokenPlaceholderConfigured": "Configured. Leave blank to keep the current token",
+      "discordTokenHint": "Copy the token from the Bot page in Discord Developer Portal.",
+      "discordTokenHintConfigured": "The saved token is no longer echoed back to the UI. Leaving this blank keeps the current value; enter a new token to replace it.",
+      "allowNewProjects": "Allow new projects from chat",
+      "allowNewProjectsHint": "When enabled, new paths are allowed and missing directories will be created automatically.",
+      "saved": "Messaging settings saved",
+      "saveFail": "Failed to save Messaging settings",
+      "supportReady": "Ready",
+      "supportPending": "Not Connected",
+      "supportPendingHint": "{{platform}} runtime is not wired in yet. This tab is reserved for future platform-specific configuration and filtered binding views.",
+      "actions": {
+        "pairing": "Pairing Token",
+        "bindings": "Bound Accounts"
+      },
+      "platform": {
+        "telegram": "Telegram",
+        "discord": "Discord",
+        "whatsapp": "WhatsApp"
+      },
+      "pairing": {
+        "title": "Pairing Token",
+        "subtitle": "Generate a one-time token for `/bind <token>` on {{platform}}.",
+        "generate": "Generate Token",
+        "created": "Pairing token created",
+        "createFail": "Failed to create pairing token",
+        "platform": "Target Platform",
+        "platformHint": "This token can only be used on {{platform}}.",
+        "token": "Current Token",
+        "tokenHint": "The plain token is shown only once here. Use it in chat promptly.",
+        "expiresAt": "Expires At",
+        "expiresHint": "Tokens expire after 10 minutes by default.",
+        "empty": "Not generated yet"
+      },
+      "bindings": {
+        "title": "Bound Accounts",
+        "subtitle": "Shows chat platform accounts that have completed binding.",
+        "summary": "{{count}} bound accounts on this platform",
+        "loadFail": "Failed to load bindings",
+        "empty": "No bound accounts yet",
+        "emptyForPlatform": "No bound accounts on {{platform}} yet",
+        "dialogTitle": "{{platform}} Bound Accounts",
+        "dialogSubtitle": "Only accounts bound on {{platform}} are shown here.",
+        "unbindTitle": "Unbind Account",
+        "unbindConfirm": "Are you sure you want to unbind {{name}} ({{platform}})? A new pairing token will be required to bind again.",
+        "unbind": "Unbind",
+        "unbindOk": "Account unbound",
+        "unbindFail": "Failed to unbind account"
+      }
+    },
+    "compatibility": {
+      "title": "Compatibility",
+      "subtitle": "Special endpoints for client compatibility",
+      "mockCountTokens": "Mock Anthropic count_tokens",
+      "mockCountTokensHint": "Intercept /v1/messages/count_tokens and estimate input_tokens locally",
+      "saved": "Saved",
+      "saveFail": "Save failed"
+    },
+    "about": {
+      "title": "About",
+      "subtitle": "App version and system info",
+      "appName": "App name",
+      "version": "Version",
+      "backendStatus": "Backend status",
+      "description": "Description",
+      "descText": "Universal AI CLI configuration manager",
+      "intro": "CliSwitch is a local multi-channel CLI proxy to manage and switch between multiple AI API services. It supports Claude, Codex, Gemini, and more, with high availability and automatic failover."
+    }
+  },
+  "update": {
+    "readyTitle": "Update Ready",
+    "readyDesc": "Version v{{version}} has been downloaded. Restart the app to apply the update.",
+    "quitToUpdate": "Restart to update"
+  }
+}

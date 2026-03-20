@@ -2,13 +2,19 @@ use axum::Json;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use serde::Serialize;
+use std::collections::BTreeMap;
 
+use crate::i18n::{current_locale, render_optional};
 use crate::proxy::ProxyError;
 
 #[derive(Serialize)]
 pub(crate) struct ErrorBody {
     pub(crate) code: String,
     pub(crate) message: String,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub(crate) args: BTreeMap<String, String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) detail: Option<String>,
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -66,27 +72,37 @@ impl ApiError {
 
 impl IntoResponse for ApiError {
     fn into_response(self) -> axum::response::Response {
-        let (status, code, message) = match &self {
+        let locale = current_locale();
+        let (status, code, fallback_message, detail) = match &self {
             ApiError::BadRequest { code, message } => (
                 StatusCode::BAD_REQUEST,
                 (*code).to_string(),
                 message.clone(),
+                Some(message.clone()),
             ),
-            ApiError::NotFound { code, message } => {
-                (StatusCode::NOT_FOUND, (*code).to_string(), message.clone())
-            }
-            ApiError::Conflict { code, message } => {
-                (StatusCode::CONFLICT, (*code).to_string(), message.clone())
-            }
+            ApiError::NotFound { code, message } => (
+                StatusCode::NOT_FOUND,
+                (*code).to_string(),
+                message.clone(),
+                Some(message.clone()),
+            ),
+            ApiError::Conflict { code, message } => (
+                StatusCode::CONFLICT,
+                (*code).to_string(),
+                message.clone(),
+                Some(message.clone()),
+            ),
             ApiError::BadGateway { code, message } => (
                 StatusCode::BAD_GATEWAY,
                 (*code).to_string(),
                 message.clone(),
+                None,
             ),
             ApiError::Unavailable { code, message } => (
                 StatusCode::SERVICE_UNAVAILABLE,
                 (*code).to_string(),
                 message.clone(),
+                None,
             ),
             ApiError::Internal(err) => {
                 tracing::error!(err = %err, "api internal error");
@@ -94,10 +110,31 @@ impl IntoResponse for ApiError {
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "internal_error".to_string(),
                     "Internal error".to_string(),
+                    None,
                 )
             }
         };
-        (status, Json(ErrorBody { code, message })).into_response()
+        let translated_message =
+            render_optional(locale.unwrap_or_default(), &code, &BTreeMap::new())
+                .or_else(|| {
+                    render_optional(
+                        locale.unwrap_or_default(),
+                        &format!("errors.{code}"),
+                        &BTreeMap::new(),
+                    )
+                })
+                .unwrap_or(fallback_message);
+        let detail = detail.filter(|value| value.trim() != translated_message.trim());
+        (
+            status,
+            Json(ErrorBody {
+                code,
+                message: translated_message,
+                args: BTreeMap::new(),
+                detail,
+            }),
+        )
+            .into_response()
     }
 }
 
