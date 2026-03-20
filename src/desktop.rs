@@ -1,9 +1,11 @@
 use anyhow::Context as _;
+use std::collections::BTreeMap;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::time::Duration;
 
 use cliswitch::events::AppEvent;
-use cliswitch::{events, server, storage, update};
+use cliswitch::i18n::AppLocale;
+use cliswitch::{events, i18n, server, storage, update};
 use muda::{Menu, MenuEvent, MenuId, MenuItem, PredefinedMenuItem, Submenu};
 use rusqlite::params;
 use serde::Serialize;
@@ -118,28 +120,42 @@ impl DesktopLocale {
         DesktopLocale::ZhCN
     }
 
-    fn edit_menu_title(self) -> &'static str {
+    fn from_app_locale(locale: AppLocale) -> Self {
+        match locale {
+            AppLocale::ZhCN => DesktopLocale::ZhCN,
+            AppLocale::EnUS => DesktopLocale::EnUS,
+        }
+    }
+
+    fn as_app_locale(self) -> AppLocale {
+        match self {
+            DesktopLocale::ZhCN => AppLocale::ZhCN,
+            DesktopLocale::EnUS => AppLocale::EnUS,
+        }
+    }
+
+    fn fallback_edit_menu_title(self) -> &'static str {
         match self {
             DesktopLocale::ZhCN => "编辑",
             DesktopLocale::EnUS => "Edit",
         }
     }
 
-    fn tray_show(self) -> &'static str {
+    fn fallback_tray_show(self) -> &'static str {
         match self {
             DesktopLocale::ZhCN => "显示窗口",
             DesktopLocale::EnUS => "Show Window",
         }
     }
 
-    fn tray_hide(self) -> &'static str {
+    fn fallback_tray_hide(self) -> &'static str {
         match self {
             DesktopLocale::ZhCN => "隐藏窗口",
             DesktopLocale::EnUS => "Hide Window",
         }
     }
 
-    fn tray_quit(self) -> &'static str {
+    fn fallback_tray_quit(self) -> &'static str {
         match self {
             DesktopLocale::ZhCN => "退出",
             DesktopLocale::EnUS => "Quit",
@@ -147,11 +163,36 @@ impl DesktopLocale {
     }
 }
 
+fn desktop_text(locale: DesktopLocale, key: &str, fallback: &str) -> String {
+    i18n::render_optional(
+        locale.as_app_locale(),
+        key,
+        &BTreeMap::<String, String>::new(),
+    )
+    .unwrap_or_else(|| fallback.to_string())
+}
+
 fn apply_desktop_locale(locale: DesktopLocale, menus: LocalizableMenus<'_>) {
-    menus.edit_menu.set_text(locale.edit_menu_title());
-    menus.tray_show.set_text(locale.tray_show());
-    menus.tray_hide.set_text(locale.tray_hide());
-    menus.tray_quit.set_text(locale.tray_quit());
+    menus.edit_menu.set_text(&desktop_text(
+        locale,
+        "desktop.editMenuTitle",
+        locale.fallback_edit_menu_title(),
+    ));
+    menus.tray_show.set_text(&desktop_text(
+        locale,
+        "desktop.tray.show",
+        locale.fallback_tray_show(),
+    ));
+    menus.tray_hide.set_text(&desktop_text(
+        locale,
+        "desktop.tray.hide",
+        locale.fallback_tray_hide(),
+    ));
+    menus.tray_quit.set_text(&desktop_text(
+        locale,
+        "desktop.tray.quit",
+        locale.fallback_tray_quit(),
+    ));
 }
 
 #[derive(Clone, Copy)]
@@ -540,8 +581,18 @@ pub async fn run(
 
     // 创建菜单
     let menu = Menu::new();
-    let initial_locale = DesktopLocale::detect();
-    let edit_menu = Submenu::new(initial_locale.edit_menu_title(), true);
+    let initial_locale = settings
+        .as_ref()
+        .map(|s| DesktopLocale::from_app_locale(s.ui_locale))
+        .unwrap_or_else(DesktopLocale::detect);
+    let edit_menu = Submenu::new(
+        &desktop_text(
+            initial_locale,
+            "desktop.editMenuTitle",
+            initial_locale.fallback_edit_menu_title(),
+        ),
+        true,
+    );
     edit_menu
         .append_items(&[
             &PredefinedMenuItem::undo(None),
@@ -600,9 +651,36 @@ pub async fn run(
     let window = window_builder.build(&event_loop).context("创建窗口失败")?;
 
     let tray_menu = Menu::new();
-    let tray_show = MenuItem::with_id("tray_show", initial_locale.tray_show(), true, None);
-    let tray_hide = MenuItem::with_id("tray_hide", initial_locale.tray_hide(), true, None);
-    let tray_quit = MenuItem::with_id("tray_quit", initial_locale.tray_quit(), true, None);
+    let tray_show = MenuItem::with_id(
+        "tray_show",
+        &desktop_text(
+            initial_locale,
+            "desktop.tray.show",
+            initial_locale.fallback_tray_show(),
+        ),
+        true,
+        None,
+    );
+    let tray_hide = MenuItem::with_id(
+        "tray_hide",
+        &desktop_text(
+            initial_locale,
+            "desktop.tray.hide",
+            initial_locale.fallback_tray_hide(),
+        ),
+        true,
+        None,
+    );
+    let tray_quit = MenuItem::with_id(
+        "tray_quit",
+        &desktop_text(
+            initial_locale,
+            "desktop.tray.quit",
+            initial_locale.fallback_tray_quit(),
+        ),
+        true,
+        None,
+    );
     tray_menu
         .append_items(&[
             &tray_show,
