@@ -48,6 +48,13 @@ pub(in crate::chat_bridge) struct TurnExecutionResult {
     pub(in crate::chat_bridge) stdout: String,
 }
 
+pub(in crate::chat_bridge) struct TurnProcessContext<'a> {
+    pub adapter: Arc<dyn ChatAdapter>,
+    pub msg: &'a IncomingMessage,
+    pub use_streaming: bool,
+    pub locale: AppLocale,
+}
+
 pub(in crate::chat_bridge) struct StreamingReply {
     adapter: Arc<dyn ChatAdapter>,
     chat_id: String,
@@ -242,14 +249,17 @@ impl StreamingReply {
 impl ChatBridgeRuntime {
     pub(in crate::chat_bridge) async fn execute_turn_process(
         &self,
-        adapter: Arc<dyn ChatAdapter>,
-        msg: &IncomingMessage,
+        ctx: TurnProcessContext<'_>,
         session: &storage::BridgeSession,
         mut invocation: cli::CliInvocation,
-        use_streaming: bool,
         mut active_turn: ActiveTurnRegistration,
-        locale: AppLocale,
     ) -> anyhow::Result<TurnExecutionResult> {
+        let TurnProcessContext {
+            adapter,
+            msg,
+            use_streaming,
+            locale,
+        } = ctx;
         let label = format_session_label(session);
         let mut child = invocation.command.spawn().with_context(|| {
             t_args(

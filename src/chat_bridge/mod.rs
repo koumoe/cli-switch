@@ -30,6 +30,7 @@ use self::cli::{
 use self::i18n::{args, t, t_args};
 #[cfg(test)]
 use self::output::StreamingReply;
+use self::output::TurnProcessContext;
 #[cfg(test)]
 use self::output::extract_display_text;
 use self::output::format_projects_list;
@@ -706,13 +707,15 @@ impl ChatBridgeRuntime {
 
         let execution = self
             .execute_turn_process(
-                adapter.clone(),
-                msg,
+                TurnProcessContext {
+                    adapter: adapter.clone(),
+                    msg,
+                    use_streaming,
+                    locale,
+                },
                 &session,
                 invocation,
-                use_streaming,
                 active_turn,
-                locale,
             )
             .await;
 
