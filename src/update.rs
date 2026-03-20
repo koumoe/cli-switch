@@ -52,7 +52,7 @@ impl Stage {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct UpdateRuntime {
     pub locale: AppLocale,
     pub stage: Stage,
@@ -65,24 +65,6 @@ pub struct UpdateRuntime {
     pub download_downloaded_bytes: u64,
     pub issue: Option<UserFacingIssue>,
     pub error: Option<String>,
-}
-
-impl Default for UpdateRuntime {
-    fn default() -> Self {
-        Self {
-            locale: AppLocale::default(),
-            stage: Stage::default(),
-            latest_version: None,
-            latest_ignored: false,
-            update_available: false,
-            downloading_version: None,
-            download_percent: None,
-            download_total_bytes: None,
-            download_downloaded_bytes: 0,
-            issue: None,
-            error: None,
-        }
-    }
 }
 
 impl UpdateRuntime {
