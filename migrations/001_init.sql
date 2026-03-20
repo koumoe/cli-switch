@@ -101,31 +101,3 @@ CREATE TABLE IF NOT EXISTS ignored_updates (
   version TEXT PRIMARY KEY,
   ignored_at_ms INTEGER NOT NULL
 );
-
-CREATE TABLE IF NOT EXISTS prompt_projects (
-  id TEXT PRIMARY KEY,
-  name TEXT NOT NULL,
-  path TEXT NOT NULL UNIQUE,
-  created_at_ms INTEGER NOT NULL,
-  updated_at_ms INTEGER NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS prompt_documents (
-  id TEXT PRIMARY KEY,
-  tool TEXT NOT NULL CHECK(tool IN ('gemini','claude','codex')),
-  scope TEXT NOT NULL CHECK(scope IN ('global','project')),
-  scope_key TEXT NOT NULL,
-  project_id TEXT NULL,
-  content_md TEXT NOT NULL,
-  created_at_ms INTEGER NOT NULL,
-  updated_at_ms INTEGER NOT NULL
-);
-
-CREATE UNIQUE INDEX IF NOT EXISTS idx_prompt_documents_tool_scope_key
-ON prompt_documents(tool, scope_key);
-
-CREATE INDEX IF NOT EXISTS idx_prompt_projects_name
-ON prompt_projects(name, updated_at_ms DESC);
-
-CREATE INDEX IF NOT EXISTS idx_prompt_documents_project_id
-ON prompt_documents(project_id, updated_at_ms DESC);

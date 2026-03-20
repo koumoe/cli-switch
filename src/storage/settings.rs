@@ -27,6 +27,12 @@ const KEY_AUTO_DISABLE_DISABLE_MINUTES: &str = "auto_disable_disable_minutes";
 const KEY_ANTHROPIC_COUNT_TOKENS_MOCK_ENABLED: &str = "anthropic_count_tokens_mock_enabled";
 const KEY_LOG_LEVEL: &str = "log_level";
 const KEY_LOG_RETENTION_DAYS: &str = "log_retention_days";
+const KEY_CHAT_BRIDGE_ENABLED: &str = "chat_bridge_enabled";
+const KEY_CHAT_BRIDGE_TELEGRAM_ENABLED: &str = "chat_bridge_telegram_enabled";
+const KEY_CHAT_BRIDGE_TELEGRAM_BOT_TOKEN: &str = "chat_bridge_telegram_bot_token";
+const KEY_CHAT_BRIDGE_DISCORD_ENABLED: &str = "chat_bridge_discord_enabled";
+const KEY_CHAT_BRIDGE_DISCORD_BOT_TOKEN: &str = "chat_bridge_discord_bot_token";
+const KEY_CHAT_BRIDGE_ALLOW_NEW_PROJECTS: &str = "chat_bridge_allow_new_projects";
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -83,6 +89,16 @@ pub struct AppSettings {
     pub anthropic_count_tokens_mock_enabled: bool,
     pub log_level: LogLevel,
     pub log_retention_days: i64,
+    pub chat_bridge_enabled: bool,
+    pub chat_bridge_telegram_enabled: bool,
+    #[serde(skip_serializing)]
+    pub chat_bridge_telegram_bot_token: Option<String>,
+    pub chat_bridge_telegram_bot_token_configured: bool,
+    pub chat_bridge_discord_enabled: bool,
+    #[serde(skip_serializing)]
+    pub chat_bridge_discord_bot_token: Option<String>,
+    pub chat_bridge_discord_bot_token_configured: bool,
+    pub chat_bridge_allow_new_projects: bool,
     #[serde(default)]
     pub has_invalid_values: bool,
 }
@@ -109,6 +125,14 @@ impl Default for AppSettings {
             anthropic_count_tokens_mock_enabled: false,
             log_level: LogLevel::Warning,
             log_retention_days: 30,
+            chat_bridge_enabled: false,
+            chat_bridge_telegram_enabled: false,
+            chat_bridge_telegram_bot_token: None,
+            chat_bridge_telegram_bot_token_configured: false,
+            chat_bridge_discord_enabled: false,
+            chat_bridge_discord_bot_token: None,
+            chat_bridge_discord_bot_token_configured: false,
+            chat_bridge_allow_new_projects: false,
             has_invalid_values: false,
         }
     }
@@ -135,6 +159,12 @@ pub struct AppSettingsPatch {
     pub anthropic_count_tokens_mock_enabled: Option<bool>,
     pub log_level: Option<LogLevel>,
     pub log_retention_days: Option<i64>,
+    pub chat_bridge_enabled: Option<bool>,
+    pub chat_bridge_telegram_enabled: Option<bool>,
+    pub chat_bridge_telegram_bot_token: Option<String>,
+    pub chat_bridge_discord_enabled: Option<bool>,
+    pub chat_bridge_discord_bot_token: Option<String>,
+    pub chat_bridge_allow_new_projects: Option<bool>,
 }
 
 fn get_setting(conn: &Connection, key: &str) -> rusqlite::Result<Option<String>> {
@@ -348,6 +378,50 @@ pub async fn get_app_settings(db_path: PathBuf) -> anyhow::Result<AppSettings> {
         {
             out.log_retention_days = n;
         }
+        if let Some(v) = get_setting(conn, KEY_CHAT_BRIDGE_ENABLED)? {
+            out.chat_bridge_enabled =
+                parse_bool_setting(KEY_CHAT_BRIDGE_ENABLED, &v, &mut has_invalid_values);
+        }
+        if let Some(v) = get_setting(conn, KEY_CHAT_BRIDGE_TELEGRAM_ENABLED)? {
+            out.chat_bridge_telegram_enabled = parse_bool_setting(
+                KEY_CHAT_BRIDGE_TELEGRAM_ENABLED,
+                &v,
+                &mut has_invalid_values,
+            );
+        }
+        if let Some(v) = get_setting(conn, KEY_CHAT_BRIDGE_TELEGRAM_BOT_TOKEN)? {
+            let s = v.trim();
+            if !s.is_empty() {
+                out.chat_bridge_telegram_bot_token = Some(s.to_string());
+            }
+        }
+        out.chat_bridge_telegram_bot_token_configured = out
+            .chat_bridge_telegram_bot_token
+            .as_deref()
+            .map(str::trim)
+            .is_some_and(|value| !value.is_empty());
+        if let Some(v) = get_setting(conn, KEY_CHAT_BRIDGE_DISCORD_ENABLED)? {
+            out.chat_bridge_discord_enabled =
+                parse_bool_setting(KEY_CHAT_BRIDGE_DISCORD_ENABLED, &v, &mut has_invalid_values);
+        }
+        if let Some(v) = get_setting(conn, KEY_CHAT_BRIDGE_DISCORD_BOT_TOKEN)? {
+            let s = v.trim();
+            if !s.is_empty() {
+                out.chat_bridge_discord_bot_token = Some(s.to_string());
+            }
+        }
+        out.chat_bridge_discord_bot_token_configured = out
+            .chat_bridge_discord_bot_token
+            .as_deref()
+            .map(str::trim)
+            .is_some_and(|value| !value.is_empty());
+        if let Some(v) = get_setting(conn, KEY_CHAT_BRIDGE_ALLOW_NEW_PROJECTS)? {
+            out.chat_bridge_allow_new_projects = parse_bool_setting(
+                KEY_CHAT_BRIDGE_ALLOW_NEW_PROJECTS,
+                &v,
+                &mut has_invalid_values,
+            );
+        }
 
         out.has_invalid_values = has_invalid_values;
         Ok(out)
@@ -483,6 +557,54 @@ pub async fn update_app_settings(
         }
         if let Some(v) = patch.log_retention_days {
             set_setting(conn, KEY_LOG_RETENTION_DAYS, &v.to_string(), updated_at_ms)?;
+        }
+        if let Some(v) = patch.chat_bridge_enabled {
+            set_setting(
+                conn,
+                KEY_CHAT_BRIDGE_ENABLED,
+                if v { "true" } else { "false" },
+                updated_at_ms,
+            )?;
+        }
+        if let Some(v) = patch.chat_bridge_telegram_enabled {
+            set_setting(
+                conn,
+                KEY_CHAT_BRIDGE_TELEGRAM_ENABLED,
+                if v { "true" } else { "false" },
+                updated_at_ms,
+            )?;
+        }
+        if let Some(v) = patch.chat_bridge_telegram_bot_token {
+            set_setting(
+                conn,
+                KEY_CHAT_BRIDGE_TELEGRAM_BOT_TOKEN,
+                v.trim(),
+                updated_at_ms,
+            )?;
+        }
+        if let Some(v) = patch.chat_bridge_discord_enabled {
+            set_setting(
+                conn,
+                KEY_CHAT_BRIDGE_DISCORD_ENABLED,
+                if v { "true" } else { "false" },
+                updated_at_ms,
+            )?;
+        }
+        if let Some(v) = patch.chat_bridge_discord_bot_token {
+            set_setting(
+                conn,
+                KEY_CHAT_BRIDGE_DISCORD_BOT_TOKEN,
+                v.trim(),
+                updated_at_ms,
+            )?;
+        }
+        if let Some(v) = patch.chat_bridge_allow_new_projects {
+            set_setting(
+                conn,
+                KEY_CHAT_BRIDGE_ALLOW_NEW_PROJECTS,
+                if v { "true" } else { "false" },
+                updated_at_ms,
+            )?;
         }
         Ok(())
     })

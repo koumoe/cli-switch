@@ -24,6 +24,16 @@ pub enum CliToolId {
     Codex,
 }
 
+impl CliToolId {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            CliToolId::Gemini => "gemini",
+            CliToolId::Claude => "claude",
+            CliToolId::Codex => "codex",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, Serialize)]
 pub struct CliToolDef {
     pub id: CliToolId,

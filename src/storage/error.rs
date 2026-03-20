@@ -27,6 +27,41 @@ pub enum StorageError {
         max_bytes: usize,
     },
 
+    #[error("chat pairing token invalid")]
+    ChatPairingTokenInvalid,
+
+    #[error("chat pairing token expired")]
+    ChatPairingTokenExpired,
+
+    #[error("chat pairing token already used")]
+    ChatPairingTokenUsed,
+
+    #[error(
+        "chat pairing token platform mismatch: expected={expected_platform} actual={actual_platform}"
+    )]
+    ChatPairingTokenPlatformMismatch {
+        expected_platform: String,
+        actual_platform: String,
+    },
+
+    #[error("chat binding already exists: platform={platform} sender={platform_user_id}")]
+    ChatBindingAlreadyExists {
+        platform: String,
+        platform_user_id: String,
+    },
+
+    #[error("chat binding not found: {binding_id}")]
+    ChatBindingNotFound { binding_id: i64 },
+
+    #[error("chat session not found: {session_id}")]
+    ChatSessionNotFound { session_id: i64 },
+
+    #[error("chat session alias already exists: platform={platform} alias={alias}")]
+    ChatSessionAliasExists { platform: String, alias: String },
+
+    #[error("chat project path not found: {path}")]
+    ChatProjectPathNotFound { path: String },
+
     #[error(
         "prompt document version conflict: expected={expected_updated_at_ms:?} current={current_updated_at_ms:?}"
     )]

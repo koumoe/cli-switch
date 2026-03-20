@@ -63,6 +63,19 @@ struct LoggingRuntime {
 
 static LOGGING: OnceLock<LoggingRuntime> = OnceLock::new();
 
+fn build_default_env_filter(level: LogLevel) -> EnvFilter {
+    let filter = EnvFilter::new(level.to_env_filter_directive());
+    if level == LogLevel::None {
+        filter
+    } else {
+        filter.add_directive(
+            "hyper_util::client::legacy::pool=info"
+                .parse()
+                .expect("valid tracing directive"),
+        )
+    }
+}
+
 fn today_local() -> Date {
     OffsetDateTime::now_local()
         .unwrap_or_else(|_| OffsetDateTime::now_utc())
@@ -139,10 +152,7 @@ pub fn init(data_dir: &Path, settings_level: LogLevel) -> anyhow::Result<()> {
 
     let (env_filter, locked_by_env) = match std::env::var("CLISWITCH_LOG") {
         Ok(v) if !v.trim().is_empty() => (EnvFilter::new(v), true),
-        _ => (
-            EnvFilter::new(settings_level.to_env_filter_directive()),
-            false,
-        ),
+        _ => (build_default_env_filter(settings_level), false),
     };
 
     let (filter_layer, filter_handle) = reload::Layer::new(env_filter);
@@ -195,7 +205,7 @@ pub fn set_level(level: LogLevel) -> anyhow::Result<()> {
         return Ok(());
     }
     rt.filter_handle
-        .reload(EnvFilter::new(level.to_env_filter_directive()))
+        .reload(build_default_env_filter(level))
         .context("更新日志级别失败")?;
     Ok(())
 }

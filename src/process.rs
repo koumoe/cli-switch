@@ -109,7 +109,7 @@ pub(crate) fn command_output_with_timeout(
     })
 }
 
-fn kill_process_tree_best_effort(pid: u32) {
+pub(crate) fn kill_process_tree_best_effort(pid: u32) {
     if pid == 0 {
         return;
     }
