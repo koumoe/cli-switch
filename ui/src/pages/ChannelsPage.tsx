@@ -41,7 +41,7 @@ import {
 } from "@/components/ui";
 import { PageHeader } from "@/components/PageHeader";
 import { useI18n } from "@/lib/i18n";
-import { humanizeApiError } from "@/lib/error";
+import { humanizeApiError, humanizeIssue } from "@/lib/error";
 import { useCurrency } from "@/lib/currency";
 import {
   listChannels,
@@ -431,7 +431,7 @@ export function ChannelsPage() {
         });
       } else {
         toast.error(t("channels.toast.testUnreachableTitle", { name: c.name }), {
-          description: r.error ?? t("channels.toast.testTimeout"),
+          description: humanizeIssue(r.issue, t) ?? r.error ?? t("channels.toast.testTimeout"),
         });
       }
     } catch (e) {

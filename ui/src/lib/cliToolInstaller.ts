@@ -1,5 +1,5 @@
 import { installCliTool, type CliToolStatus, type InstallCliToolResponse } from "@/api";
-import { humanizeApiError } from "@/lib/error";
+import { humanizeApiError, humanizeIssue } from "@/lib/error";
 import { toast } from "sonner";
 
 type Translator = (key: string, vars?: Record<string, string | number>) => string;
@@ -18,9 +18,10 @@ export async function installCliToolWithToast(opts: {
       toast.success(t("settings.cliTools.installOk", { name: tool.name }), {
         description: res.terminal_shim_ok
           ? t("settings.cliTools.terminalReady")
-          : res.terminal_shim_error
-            ? t("settings.cliTools.terminalSetupFailed", { error: res.terminal_shim_error })
-            : undefined,
+          : humanizeIssue(res.terminal_shim_issue, t)
+            ?? (res.terminal_shim_error
+              ? t("settings.cliTools.terminalSetupFailed", { error: res.terminal_shim_error })
+              : undefined)
       });
     } else {
       toast.error(t("settings.cliTools.installFail", { name: tool.name }), {
@@ -36,4 +37,3 @@ export async function installCliToolWithToast(opts: {
     return null;
   }
 }
-
