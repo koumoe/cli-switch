@@ -5,6 +5,7 @@ use rusqlite::{OptionalExtension as _, params};
 use std::path::PathBuf;
 
 use super::*;
+use crate::i18n::AppLocale;
 
 const PAIRING_TOKEN_SCAN_LIMIT: i64 = 256;
 const PAIRING_TOKEN_HINT_LEN: usize = 8;
@@ -25,6 +26,7 @@ struct RawChatBinding {
     platform: String,
     platform_user_id: String,
     display_name: Option<String>,
+    preferred_locale: String,
     bound_at_ms: i64,
     is_active: bool,
 }
@@ -56,6 +58,9 @@ fn build_binding(raw: RawChatBinding) -> anyhow::Result<ChatBridgeBinding> {
         platform: ChatPlatform::parse(&raw.platform)?,
         platform_user_id: raw.platform_user_id,
         display_name: raw.display_name,
+        preferred_locale: AppLocale::parse_or_default(&raw.preferred_locale)
+            .as_str()
+            .to_string(),
         bound_at_ms: raw.bound_at_ms,
         is_active: raw.is_active,
     })
@@ -169,6 +174,7 @@ pub async fn consume_pairing_token(
     platform: ChatPlatform,
     platform_user_id: String,
     display_name: Option<String>,
+    preferred_locale: String,
 ) -> anyhow::Result<ChatBridgeBinding> {
     let token = token.trim().to_string();
     let platform_user_id = platform_user_id.trim().to_string();
@@ -180,6 +186,9 @@ pub async fn consume_pairing_token(
         !platform_user_id.is_empty(),
         "platform_user_id is required to bind chat bridge"
     );
+    let preferred_locale = AppLocale::parse_or_default(&preferred_locale)
+        .as_str()
+        .to_string();
 
     with_conn(db_path, move |conn| {
         let tx = conn
@@ -262,23 +271,29 @@ pub async fn consume_pairing_token(
             tx.execute(
                 r#"
                 UPDATE chat_bindings
-                SET display_name = ?2, bound_at = ?3, is_active = 1
+                SET display_name = ?2, preferred_locale = ?3, bound_at = ?4, is_active = 1
                 WHERE id = ?1
                 "#,
-                params![binding_id, display_name.as_deref(), now],
+                params![
+                    binding_id,
+                    display_name.as_deref(),
+                    preferred_locale.as_str(),
+                    now
+                ],
             )?;
             binding_id
         } else {
             tx.execute(
                 r#"
                 INSERT INTO chat_bindings (
-                  platform, platform_user_id, display_name, bound_at, is_active
-                ) VALUES (?1, ?2, ?3, ?4, 1)
+                  platform, platform_user_id, display_name, preferred_locale, bound_at, is_active
+                ) VALUES (?1, ?2, ?3, ?4, ?5, 1)
                 "#,
                 params![
                     platform.as_str(),
                     platform_user_id.as_str(),
                     display_name.as_deref(),
+                    preferred_locale.as_str(),
                     now,
                 ],
             )?;
@@ -309,6 +324,7 @@ pub async fn consume_pairing_token(
             platform,
             platform_user_id,
             display_name,
+            preferred_locale,
             bound_at_ms: now,
             is_active: true,
         })
@@ -325,6 +341,7 @@ pub async fn list_chat_bindings(db_path: PathBuf) -> anyhow::Result<Vec<ChatBrid
               platform,
               platform_user_id,
               display_name,
+              preferred_locale,
               bound_at,
               is_active
             FROM chat_bindings
@@ -338,8 +355,9 @@ pub async fn list_chat_bindings(db_path: PathBuf) -> anyhow::Result<Vec<ChatBrid
                 platform: row.get(1)?,
                 platform_user_id: row.get(2)?,
                 display_name: row.get(3)?,
-                bound_at_ms: row.get(4)?,
-                is_active: row.get::<_, i64>(5)? != 0,
+                preferred_locale: row.get(4)?,
+                bound_at_ms: row.get(5)?,
+                is_active: row.get::<_, i64>(6)? != 0,
             })
         })?;
         rows.collect::<rusqlite::Result<Vec<_>>>()?
@@ -387,6 +405,7 @@ pub async fn resolve_chat_binding(
                   platform,
                   platform_user_id,
                   display_name,
+                  preferred_locale,
                   bound_at,
                   is_active
                 FROM chat_bindings
@@ -399,13 +418,44 @@ pub async fn resolve_chat_binding(
                         platform: row.get(1)?,
                         platform_user_id: row.get(2)?,
                         display_name: row.get(3)?,
-                        bound_at_ms: row.get(4)?,
-                        is_active: row.get::<_, i64>(5)? != 0,
+                        preferred_locale: row.get(4)?,
+                        bound_at_ms: row.get(5)?,
+                        is_active: row.get::<_, i64>(6)? != 0,
                     })
                 },
             )
             .optional()?;
         raw.map(build_binding).transpose()
+    })
+    .await
+}
+
+pub async fn update_chat_binding_locale(
+    db_path: PathBuf,
+    platform: ChatPlatform,
+    platform_user_id: String,
+    preferred_locale: String,
+) -> anyhow::Result<()> {
+    let preferred_locale = AppLocale::parse_or_default(&preferred_locale)
+        .as_str()
+        .to_string();
+    with_conn(db_path, move |conn| {
+        let updated = conn.execute(
+            r#"
+            UPDATE chat_bindings
+            SET preferred_locale = ?3
+            WHERE platform = ?1 AND platform_user_id = ?2 AND is_active = 1
+            "#,
+            params![
+                platform.as_str(),
+                platform_user_id.trim(),
+                preferred_locale.as_str()
+            ],
+        )?;
+        if updated == 0 {
+            return Err(StorageError::ChatBindingNotFound { binding_id: 0 }.into());
+        }
+        Ok(())
     })
     .await
 }

@@ -7,6 +7,7 @@ pub(super) fn ensure_chat_bridge_tables(conn: &Connection) -> anyhow::Result<()>
     conn.execute_batch(CHAT_BRIDGE_SCHEMA_SQL)
         .with_context(|| "创建消息互联基础表失败")?;
     migrate_chat_bindings_unique_key(conn)?;
+    ensure_chat_bindings_preferred_locale_column(conn)?;
     Ok(())
 }
 
@@ -37,6 +38,7 @@ fn migrate_chat_bindings_unique_key(conn: &Connection) -> anyhow::Result<()> {
           platform TEXT NOT NULL,
           platform_user_id TEXT NOT NULL,
           display_name TEXT,
+          preferred_locale TEXT NOT NULL DEFAULT 'zh-CN',
           bound_at INTEGER NOT NULL,
           is_active INTEGER NOT NULL DEFAULT 1,
           UNIQUE(platform, platform_user_id)
@@ -47,6 +49,7 @@ fn migrate_chat_bindings_unique_key(conn: &Connection) -> anyhow::Result<()> {
           platform,
           platform_user_id,
           display_name,
+          preferred_locale,
           bound_at,
           is_active
         )
@@ -55,6 +58,7 @@ fn migrate_chat_bindings_unique_key(conn: &Connection) -> anyhow::Result<()> {
           platform,
           platform_user_id,
           display_name,
+          'zh-CN',
           bound_at,
           is_active
         FROM (
@@ -108,4 +112,20 @@ fn has_chat_bindings_composite_unique(conn: &Connection) -> anyhow::Result<bool>
     }
 
     Ok(false)
+}
+
+fn ensure_chat_bindings_preferred_locale_column(conn: &Connection) -> anyhow::Result<()> {
+    let mut stmt = conn.prepare("PRAGMA table_info('chat_bindings')")?;
+    let rows = stmt.query_map([], |row| row.get::<_, String>(1))?;
+    for row in rows {
+        if row? == "preferred_locale" {
+            return Ok(());
+        }
+    }
+
+    conn.execute_batch(
+        "ALTER TABLE chat_bindings ADD COLUMN preferred_locale TEXT NOT NULL DEFAULT 'zh-CN';",
+    )
+    .with_context(|| "add chat_bindings.preferred_locale failed")?;
+    Ok(())
 }

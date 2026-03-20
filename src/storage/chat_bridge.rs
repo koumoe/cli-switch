@@ -7,9 +7,11 @@ pub(super) use super::{StorageError, now_ms, with_conn};
 pub(super) use crate::cli_tools::CliToolId;
 use serde::{Deserialize, Serialize};
 
+use crate::i18n::AppLocale;
+
 pub use bindings::{
     consume_pairing_token, create_pairing_token, deactivate_chat_binding, list_chat_bindings,
-    resolve_chat_binding,
+    resolve_chat_binding, update_chat_binding_locale,
 };
 pub use projects::{list_bridge_known_projects, upsert_bridge_known_project};
 pub(in crate::storage) use schema::ensure_chat_bridge_schema;
@@ -119,8 +121,15 @@ pub struct ChatBridgeBinding {
     pub platform: ChatPlatform,
     pub platform_user_id: String,
     pub display_name: Option<String>,
+    pub preferred_locale: String,
     pub bound_at_ms: i64,
     pub is_active: bool,
+}
+
+impl ChatBridgeBinding {
+    pub fn locale(&self) -> AppLocale {
+        AppLocale::parse_or_default(&self.preferred_locale)
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]

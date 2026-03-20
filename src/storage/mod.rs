@@ -36,7 +36,7 @@ pub use chat_bridge::{
     list_bridge_known_projects, list_bridge_sessions_for_platform, list_chat_bindings,
     resolve_chat_binding, set_default_bridge_session_for_platform,
     stop_all_bridge_sessions_for_platform, stop_bridge_session, update_bridge_session,
-    upsert_bridge_known_project,
+    update_chat_binding_locale, upsert_bridge_known_project,
 };
 pub use checkin::{
     ChannelCheckinsToday, complete_channel_checkin_today, get_channel_checkins_today,
