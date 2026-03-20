@@ -5,6 +5,7 @@ pub mod chat_bridge;
 pub mod cli_tool_proxy_config;
 pub mod cli_tools;
 pub mod events;
+pub mod i18n;
 pub mod log_files;
 pub mod logging;
 pub mod nodejs;
