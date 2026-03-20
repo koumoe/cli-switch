@@ -1,3 +1,18 @@
+## [0.39.0](https://github.com/koumoe/cli-switch/compare/v0.38.0...v0.39.0) (2026-03-20)
+
+### 功能
+* 新增 HTTP locale 上下文与结构化错误体 ([36ffc54](https://github.com/koumoe/cli-switch/commit/36ffc5458831dc37938a7882117963e5e2820c66))
+* 为 chat_bindings 新增 preferred_locale 列 ([a03f011](https://github.com/koumoe/cli-switch/commit/a03f011085886183bf88d6386a01791b8fa3029c))
+* 新增后端 i18n 基础设施：AppLocale、Translator 与结构化 issue ([898b207](https://github.com/koumoe/cli-switch/commit/898b20713cbda4ffc45438a97b6ce7749b0c7783))
+* 将 ui_locale 纳入应用设置 ([75bb22e](https://github.com/koumoe/cli-switch/commit/75bb22e985b9470f01cfb98a58b7116008fb7477))
+* 前端接入 shared+ui 双层词条与 settings 语言同步 ([0bbfb8b](https://github.com/koumoe/cli-switch/commit/0bbfb8b3be5f4d7177623b3df1226226a86b2be4))
+* 将 Chat Bridge 全部文案迁移至共享 i18n ([fa26967](https://github.com/koumoe/cli-switch/commit/fa269672560d2c03e4c8ec85834febc2b24cb0db))
+* Desktop 托盘与菜单接入共享 translator ([cd5c7f9](https://github.com/koumoe/cli-switch/commit/cd5c7f9e52ea584e9a9d3cd2955b54cd94f958b4))
+
+### 修复
+* 修复 Chat Bridge dispatch 参数过多导致 CI 失败 ([450efcb](https://github.com/koumoe/cli-switch/commit/450efcbd3eb64955304d952a314a237a28edef45))
+* 修复国际化遗留问题 ([2750617](https://github.com/koumoe/cli-switch/commit/27506173fc3aae1c78495662c38feeafc34cfeee))
+* 修复更新运行时的 clippy 校验 ([81b1c47](https://github.com/koumoe/cli-switch/commit/81b1c47e28e7baf3517f0b10e4918483c7b58e36))
 ## [0.38.0](https://github.com/koumoe/cli-switch/compare/v0.37.5...v0.38.0) (2026-03-20)
 
 ### 功能

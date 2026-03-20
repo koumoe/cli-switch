@@ -1,3 +1,20 @@
+## [0.39.0](https://github.com/koumoe/cli-switch/compare/v0.38.0...v0.39.0) (2026-03-20)
+
+### Features
+
+* add HTTP locale context and structured error ([36ffc54](https://github.com/koumoe/cli-switch/commit/36ffc5458831dc37938a7882117963e5e2820c66))
+* add preferred_locale to chat_bindings ([a03f011](https://github.com/koumoe/cli-switch/commit/a03f011085886183bf88d6386a01791b8fa3029c))
+* add shared i18n foundation with AppLocale, Translator and structured issue ([898b207](https://github.com/koumoe/cli-switch/commit/898b20713cbda4ffc45438a97b6ce7749b0c7783))
+* add ui_locale to app_settings ([75bb22e](https://github.com/koumoe/cli-switch/commit/75bb22e985b9470f01cfb98a58b7116008fb7477))
+* frontend shared+ui two-layer locale with settings sync ([0bbfb8b](https://github.com/koumoe/cli-switch/commit/0bbfb8b3be5f4d7177623b3df1226226a86b2be4))
+* migrate all chat bridge text to shared i18n ([fa26967](https://github.com/koumoe/cli-switch/commit/fa269672560d2c03e4c8ec85834febc2b24cb0db))
+* use shared translator for desktop tray and menu ([cd5c7f9](https://github.com/koumoe/cli-switch/commit/cd5c7f9e52ea584e9a9d3cd2955b54cd94f958b4))
+
+### Bug Fixes
+
+* reduce chat bridge dispatch args for CI ([450efcb](https://github.com/koumoe/cli-switch/commit/450efcbd3eb64955304d952a314a237a28edef45))
+* resolve remaining i18n regressions ([2750617](https://github.com/koumoe/cli-switch/commit/27506173fc3aae1c78495662c38feeafc34cfeee))
+* satisfy clippy for update runtime ([81b1c47](https://github.com/koumoe/cli-switch/commit/81b1c47e28e7baf3517f0b10e4918483c7b58e36))
 ## [0.38.0](https://github.com/koumoe/cli-switch/compare/v0.37.5...v0.38.0) (2026-03-20)
 
 ### Features
