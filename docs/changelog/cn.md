@@ -1,3 +1,10 @@
+## [0.39.1](https://github.com/koumoe/cli-switch/compare/v0.39.0...v0.39.1) (2026-03-21)
+
+### 修复
+* 明确语言设置文案 ([d07f8ca](https://github.com/koumoe/cli-switch/commit/d07f8caa7a3c013e718f61d3a4480a79b6632f16))
+* 移除重复的 /lang 命令 ([3289593](https://github.com/koumoe/cli-switch/commit/32895938fcdb9110349e264f60dcaacf5edb4c22))
+* 清理聊天绑定语言残留状态 ([5b07bb4](https://github.com/koumoe/cli-switch/commit/5b07bb40ae08d88a2f7aa4f2e5e1293718d491aa))
+* 统一聊天桥语言设置 ([41ee3fa](https://github.com/koumoe/cli-switch/commit/41ee3fa9a8287d650bb7f98ce688b609ff9584fb))
 ## [0.39.0](https://github.com/koumoe/cli-switch/compare/v0.38.0...v0.39.0) (2026-03-20)
 
 ### 功能
