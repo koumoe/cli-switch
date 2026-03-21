@@ -192,12 +192,10 @@ impl ManagedBridgeTask {
 pub async fn run_supervisor(
     db_path: PathBuf,
     http_client: reqwest::Client,
-    settings_tx: watch::Sender<Arc<storage::AppSettings>>,
     mut settings_rx: watch::Receiver<Arc<storage::AppSettings>>,
 ) {
     let runtime = ChatBridgeRuntime {
         db_path,
-        settings_tx,
         settings_rx: settings_rx.clone(),
         project_store: Arc::new(ProjectStore::new()),
         busy_sessions: Arc::new(Mutex::new(HashSet::new())),
@@ -262,7 +260,6 @@ pub async fn run_supervisor(
 #[derive(Clone)]
 struct ChatBridgeRuntime {
     db_path: PathBuf,
-    settings_tx: watch::Sender<Arc<storage::AppSettings>>,
     settings_rx: watch::Receiver<Arc<storage::AppSettings>>,
     project_store: Arc<ProjectStore>,
     busy_sessions: Arc<Mutex<HashSet<i64>>>,
@@ -494,45 +491,6 @@ impl ChatBridgeRuntime {
                     locale,
                 )
                 .await?;
-            }
-            Command::Lang { locale: next } => {
-                if let Some(next) = next {
-                    let next_locale = AppLocale::parse_or_default(&next);
-                    let updated_settings = storage::update_app_settings(
-                        self.db_path.clone(),
-                        storage::AppSettingsPatch {
-                            ui_locale: Some(next_locale),
-                            ..Default::default()
-                        },
-                    )
-                    .await?;
-                    let _ = self.settings_tx.send(Arc::new(updated_settings.clone()));
-                    self.send_text(
-                        adapter,
-                        &msg.chat_id,
-                        &t_args(
-                            updated_settings.ui_locale,
-                            "lang.updated",
-                            &args([("locale", updated_settings.ui_locale.as_str().to_string())]),
-                        ),
-                        msg.message_id.as_deref(),
-                        updated_settings.ui_locale,
-                    )
-                    .await?;
-                } else {
-                    self.send_text(
-                        adapter,
-                        &msg.chat_id,
-                        &t_args(
-                            locale,
-                            "lang.current",
-                            &args([("locale", locale.as_str().to_string())]),
-                        ),
-                        msg.message_id.as_deref(),
-                        locale,
-                    )
-                    .await?;
-                }
             }
             Command::Help => {
                 self.send_text(
@@ -1257,10 +1215,9 @@ mod tests {
         let settings = storage::get_app_settings(db_path.to_path_buf())
             .await
             .expect("load app settings");
-        let (settings_tx, settings_rx) = watch::channel(Arc::new(settings));
+        let (_settings_tx, settings_rx) = watch::channel(Arc::new(settings));
         ChatBridgeRuntime {
             db_path: db_path.to_path_buf(),
-            settings_tx,
             settings_rx,
             project_store: Arc::new(ProjectStore::new()),
             busy_sessions: Arc::new(Mutex::new(HashSet::new())),
@@ -1571,52 +1528,6 @@ mod tests {
         assert_eq!(
             adapter.calls(),
             vec![format!("send:{}", help_text(AppLocale::EnUS))]
-        );
-        remove_sqlite_artifacts(&db_path);
-    }
-
-    #[tokio::test]
-    async fn lang_command_updates_global_ui_locale_and_binding_snapshot() {
-        let db_path = temp_db_path();
-        remove_sqlite_artifacts(&db_path);
-        storage::init_db(&db_path).expect("init db");
-        bind_test_user(
-            &db_path,
-            ChatPlatform::Telegram,
-            "tg-user-1",
-            AppLocale::ZhCN,
-        )
-        .await;
-
-        let runtime = test_runtime(&db_path).await;
-        let adapter = FakeAdapter::new(false);
-        runtime
-            .handle_message(
-                Arc::new(adapter.clone()),
-                test_message(ChatPlatform::Telegram, "tg-user-1", "/lang en"),
-            )
-            .await;
-
-        let settings = storage::get_app_settings(db_path.clone())
-            .await
-            .expect("reload app settings");
-        let bindings = storage::list_chat_bindings(db_path.clone())
-            .await
-            .expect("reload chat bindings");
-
-        assert_eq!(settings.ui_locale, AppLocale::EnUS);
-        assert_eq!(bindings.len(), 1);
-        assert_eq!(bindings[0].preferred_locale, AppLocale::EnUS.as_str());
-        assert_eq!(
-            adapter.calls(),
-            vec![format!(
-                "send:{}",
-                t_args(
-                    AppLocale::EnUS,
-                    "lang.updated",
-                    &args([("locale", AppLocale::EnUS.as_str().to_string())]),
-                )
-            )]
         );
         remove_sqlite_artifacts(&db_path);
     }

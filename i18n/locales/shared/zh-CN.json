@@ -116,14 +116,13 @@
     "cmd": {
       "bind_usage": "用法：/bind <配对码>",
       "chat_usage": "用法：/chat <会话> <消息>",
-      "lang_usage": "用法：/lang [zh|en]",
       "start_usage": "用法：/{{tool}} <项目> [别名] [--yolo]",
       "stop_usage": "用法：/stop <会话|all>",
       "switch_usage": "用法：/switch <会话>",
       "unknown": "未知命令：/{{command}}"
     },
     "help": {
-      "full": "可用命令：\n/bind <配对码>\n/projects\n/codex <项目> [别名] [--yolo]\n/claude <项目> [别名] [--yolo]\n/gemini <项目> [别名] [--yolo]\n/chat <会话> <消息>\n/switch <会话>\n/sessions\n/stop <会话|all>\n/lang [zh|en]\n/help"
+      "full": "可用命令：\n/bind <配对码>\n/projects\n/codex <项目> [别名] [--yolo]\n/claude <项目> [别名] [--yolo]\n/gemini <项目> [别名] [--yolo]\n/chat <会话> <消息>\n/switch <会话>\n/sessions\n/stop <会话|all>\n/help"
     },
     "session": {
       "ambiguous_hint": "请改用会话 ID、别名或更完整的项目名。",
@@ -156,10 +155,6 @@
       "already_bound": "当前 {{platform}} 账号已经绑定，请直接使用 /help 查看命令。",
       "rebind_required": "当前账号已绑定，如需重新绑定请先在设置中解除绑定。",
       "success": "绑定成功：{{platform}} / {{account}}"
-    },
-    "lang": {
-      "current": "当前语言：{{locale}}",
-      "updated": "语言已切换为：{{locale}}"
     },
     "project": {
       "ambiguous": "匹配到多个同名项目，请改用编号或完整路径。",

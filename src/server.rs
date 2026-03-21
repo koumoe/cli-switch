@@ -372,7 +372,6 @@ pub async fn serve_with_listener(
 
     tracing::info!(addr = %addr, open_browser, "backend server starting");
 
-    let chat_bridge_settings_tx = state.settings_cache.clone();
     let chat_bridge_settings_rx = state.settings_cache_rx.clone();
     let app = build_app(state);
 
@@ -435,7 +434,6 @@ pub async fn serve_with_listener(
     bg.spawn(chat_bridge::run_supervisor(
         (*db_path).clone(),
         http_client.clone(),
-        chat_bridge_settings_tx,
         chat_bridge_settings_rx,
     ));
 

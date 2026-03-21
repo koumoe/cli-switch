@@ -35,9 +35,6 @@ pub enum Command {
         target: String,
     },
     StopAll,
-    Lang {
-        locale: Option<String>,
-    },
     Help,
 }
 
@@ -91,19 +88,6 @@ pub fn parse_input(text: &str, locale: AppLocale) -> anyhow::Result<ParsedInput>
             anyhow::ensure!(!rest.is_empty(), "{}", t(locale, "cmd.switch_usage"));
             Command::Switch {
                 target: rest.to_string(),
-            }
-        }
-        "lang" => {
-            if rest.is_empty() {
-                Command::Lang { locale: None }
-            } else {
-                let raw = rest.to_ascii_lowercase();
-                anyhow::ensure!(
-                    raw == "zh" || raw == "en" || raw == "zh-cn" || raw == "en-us",
-                    "{}",
-                    t(locale, "cmd.lang_usage")
-                );
-                Command::Lang { locale: Some(raw) }
             }
         }
         "sessions" => Command::Sessions,
@@ -436,7 +420,7 @@ mod tests {
     fn help_text_matches_snapshot_zh_cn() {
         assert_eq!(
             help_text(AppLocale::ZhCN),
-            "可用命令：\n/bind <配对码>\n/projects\n/codex <项目> [别名] [--yolo]\n/claude <项目> [别名] [--yolo]\n/gemini <项目> [别名] [--yolo]\n/chat <会话> <消息>\n/switch <会话>\n/sessions\n/stop <会话|all>\n/lang [zh|en]\n/help"
+            "可用命令：\n/bind <配对码>\n/projects\n/codex <项目> [别名] [--yolo]\n/claude <项目> [别名] [--yolo]\n/gemini <项目> [别名] [--yolo]\n/chat <会话> <消息>\n/switch <会话>\n/sessions\n/stop <会话|all>\n/help"
         );
     }
 
@@ -444,8 +428,14 @@ mod tests {
     fn help_text_matches_snapshot_en_us() {
         assert_eq!(
             help_text(AppLocale::EnUS),
-            "Available commands:\n/bind <pairing-token>\n/projects\n/codex <project> [alias] [--yolo]\n/claude <project> [alias] [--yolo]\n/gemini <project> [alias] [--yolo]\n/chat <session> <message>\n/switch <session>\n/sessions\n/stop <session|all>\n/lang [zh|en]\n/help"
+            "Available commands:\n/bind <pairing-token>\n/projects\n/codex <project> [alias] [--yolo]\n/claude <project> [alias] [--yolo]\n/gemini <project> [alias] [--yolo]\n/chat <session> <message>\n/switch <session>\n/sessions\n/stop <session|all>\n/help"
         );
+    }
+
+    #[test]
+    fn removed_lang_command_is_reported_as_unknown() {
+        let err = parse_input("/lang en", AppLocale::ZhCN).expect_err("lang should be removed");
+        assert_eq!(err.to_string(), "未知命令：/lang");
     }
 
     #[test]
