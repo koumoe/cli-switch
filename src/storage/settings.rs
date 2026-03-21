@@ -484,6 +484,14 @@ pub async fn update_app_settings(
         }
         if let Some(v) = patch.ui_locale {
             set_setting(conn, KEY_UI_LOCALE, v.as_str(), updated_at_ms)?;
+            conn.execute(
+                r#"
+                UPDATE chat_bindings
+                SET preferred_locale = ?1
+                WHERE is_active = 1
+                "#,
+                params![v.as_str()],
+            )?;
         }
         if let Some(v) = patch.app_auto_update_enabled {
             set_setting(
