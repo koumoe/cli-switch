@@ -1133,8 +1133,7 @@ fn render_user_error(err: &anyhow::Error, locale: AppLocale) -> String {
             ]),
         ),
         Some(StorageError::ChatBindingAlreadyExists { .. }) => t(locale, "error.binding_exists"),
-        Some(StorageError::ChatBindingNotFound { .. })
-        | Some(StorageError::ChatBindingIdentityNotFound { .. }) => render_error(
+        Some(StorageError::ChatBindingNotFound { .. }) => render_error(
             locale,
             "chat_bridge_binding_not_found",
             &std::collections::BTreeMap::new(),

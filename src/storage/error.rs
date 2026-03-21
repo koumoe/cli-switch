@@ -53,12 +53,6 @@ pub enum StorageError {
     #[error("chat binding not found: {binding_id}")]
     ChatBindingNotFound { binding_id: i64 },
 
-    #[error("chat binding not found: platform={platform} sender={platform_user_id}")]
-    ChatBindingIdentityNotFound {
-        platform: String,
-        platform_user_id: String,
-    },
-
     #[error("chat session not found: {session_id}")]
     ChatSessionNotFound { session_id: i64 },
 

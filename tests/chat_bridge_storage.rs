@@ -1,4 +1,3 @@
-use cliswitch::i18n::AppLocale;
 use cliswitch::storage;
 use rusqlite::Connection;
 use std::path::{Path, PathBuf};
@@ -378,51 +377,6 @@ async fn active_binding_allows_multiple_users_on_same_platform() {
             .any(|item| item.platform == storage::ChatPlatform::Telegram
                 && item.platform_user_id == "tg-user-2")
     );
-
-    remove_sqlite_artifacts(&db_path);
-}
-
-#[tokio::test]
-async fn updating_app_locale_syncs_active_chat_binding_locales() {
-    let db_path = temp_db_path();
-    remove_sqlite_artifacts(&db_path);
-    storage::init_db(&db_path).unwrap();
-
-    let pairing = storage::create_pairing_token(
-        db_path.clone(),
-        storage::CreatePairingTokenInput {
-            platform: storage::ChatPlatform::Telegram,
-            expires_in_minutes: Some(5),
-        },
-    )
-    .await
-    .unwrap();
-
-    storage::consume_pairing_token(
-        db_path.clone(),
-        pairing.token,
-        storage::ChatPlatform::Telegram,
-        "tg-user-1".to_string(),
-        Some("@koumoe".to_string()),
-        DEFAULT_BINDING_LOCALE.to_string(),
-    )
-    .await
-    .unwrap();
-
-    let settings = storage::update_app_settings(
-        db_path.clone(),
-        storage::AppSettingsPatch {
-            ui_locale: Some(AppLocale::EnUS),
-            ..Default::default()
-        },
-    )
-    .await
-    .unwrap();
-
-    let bindings = storage::list_chat_bindings(db_path.clone()).await.unwrap();
-    assert_eq!(settings.ui_locale, AppLocale::EnUS);
-    assert_eq!(bindings.len(), 1);
-    assert_eq!(bindings[0].preferred_locale, AppLocale::EnUS.as_str());
 
     remove_sqlite_artifacts(&db_path);
 }

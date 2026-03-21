@@ -32,10 +32,10 @@ fn map_chat_bridge_storage_error(err: &anyhow::Error) -> Option<ApiError> {
             "chat_bridge_binding_exists",
             "Chat binding already exists",
         )),
-        Some(storage::StorageError::ChatBindingNotFound { .. })
-        | Some(storage::StorageError::ChatBindingIdentityNotFound { .. }) => Some(
-            ApiError::not_found("chat_bridge_binding_not_found", "Chat binding not found"),
-        ),
+        Some(storage::StorageError::ChatBindingNotFound { .. }) => Some(ApiError::not_found(
+            "chat_bridge_binding_not_found",
+            "Chat binding not found",
+        )),
         _ => None,
     }
 }
