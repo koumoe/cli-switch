@@ -424,9 +424,9 @@
     },
     "language": {
       "title": "语言",
-      "subtitle": "切换界面显示语言",
-      "label": "界面语言",
-      "saveFail": "保存界面语言失败"
+      "subtitle": "切换应用语言，界面与聊天命令输出共用",
+      "label": "应用语言",
+      "saveFail": "保存应用语言失败"
     },
     "currency": {
       "title": "货币单位",

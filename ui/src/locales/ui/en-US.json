@@ -424,9 +424,9 @@
     },
     "language": {
       "title": "Language",
-      "subtitle": "Switch UI language",
-      "label": "UI language",
-      "saveFail": "Failed to save UI language"
+      "subtitle": "Switch the app language used by both UI and chat commands",
+      "label": "App language",
+      "saveFail": "Failed to save app language"
     },
     "currency": {
       "title": "Currency",
