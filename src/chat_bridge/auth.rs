@@ -55,7 +55,7 @@ impl ChatBridgeRuntime {
             return Ok(());
         };
 
-        let locale = binding.locale();
+        let locale = settings_locale;
         let parsed = parse_input(&msg.text, locale);
         let parsed = match parsed {
             Ok(value) => value,

@@ -116,14 +116,13 @@
     "cmd": {
       "bind_usage": "Usage: /bind <pairing-token>",
       "chat_usage": "Usage: /chat <session> <message>",
-      "lang_usage": "Usage: /lang [zh|en]",
       "start_usage": "Usage: /{{tool}} <project> [alias] [--yolo]",
       "stop_usage": "Usage: /stop <session|all>",
       "switch_usage": "Usage: /switch <session>",
       "unknown": "Unknown command: /{{command}}"
     },
     "help": {
-      "full": "Available commands:\n/bind <pairing-token>\n/projects\n/codex <project> [alias] [--yolo]\n/claude <project> [alias] [--yolo]\n/gemini <project> [alias] [--yolo]\n/chat <session> <message>\n/switch <session>\n/sessions\n/stop <session|all>\n/lang [zh|en]\n/help"
+      "full": "Available commands:\n/bind <pairing-token>\n/projects\n/codex <project> [alias] [--yolo]\n/claude <project> [alias] [--yolo]\n/gemini <project> [alias] [--yolo]\n/chat <session> <message>\n/switch <session>\n/sessions\n/stop <session|all>\n/help"
     },
     "session": {
       "ambiguous_hint": "Try the session ID, alias, or a more specific project name.",
@@ -156,10 +155,6 @@
       "already_bound": "This {{platform}} account is already bound. Use /help to see the available commands.",
       "rebind_required": "This account is already bound. Unbind it in settings before binding again.",
       "success": "Bound successfully: {{platform}} / {{account}}"
-    },
-    "lang": {
-      "current": "Current language: {{locale}}",
-      "updated": "Language updated to: {{locale}}"
     },
     "project": {
       "ambiguous": "Multiple projects match that name. Use the numeric index or a full path instead.",

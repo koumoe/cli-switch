@@ -492,43 +492,6 @@ impl ChatBridgeRuntime {
                 )
                 .await?;
             }
-            Command::Lang { locale: next } => {
-                if let Some(next) = next {
-                    let next_locale = AppLocale::parse_or_default(&next);
-                    storage::update_chat_binding_locale(
-                        self.db_path.clone(),
-                        platform,
-                        msg.sender_id.clone(),
-                        next_locale.as_str().to_string(),
-                    )
-                    .await?;
-                    self.send_text(
-                        adapter,
-                        &msg.chat_id,
-                        &t_args(
-                            next_locale,
-                            "lang.updated",
-                            &args([("locale", next_locale.as_str().to_string())]),
-                        ),
-                        msg.message_id.as_deref(),
-                        next_locale,
-                    )
-                    .await?;
-                } else {
-                    self.send_text(
-                        adapter,
-                        &msg.chat_id,
-                        &t_args(
-                            locale,
-                            "lang.current",
-                            &args([("locale", locale.as_str().to_string())]),
-                        ),
-                        msg.message_id.as_deref(),
-                        locale,
-                    )
-                    .await?;
-                }
-            }
             Command::Help => {
                 self.send_text(
                     adapter,
@@ -1170,8 +1133,7 @@ fn render_user_error(err: &anyhow::Error, locale: AppLocale) -> String {
             ]),
         ),
         Some(StorageError::ChatBindingAlreadyExists { .. }) => t(locale, "error.binding_exists"),
-        Some(StorageError::ChatBindingNotFound { .. })
-        | Some(StorageError::ChatBindingIdentityNotFound { .. }) => render_error(
+        Some(StorageError::ChatBindingNotFound { .. }) => render_error(
             locale,
             "chat_bridge_binding_not_found",
             &std::collections::BTreeMap::new(),
@@ -1205,6 +1167,74 @@ mod tests {
     struct FakeAdapter {
         native_streaming: bool,
         calls: StdArc<StdMutex<Vec<String>>>,
+    }
+
+    fn temp_db_path() -> PathBuf {
+        std::env::temp_dir().join(format!(
+            "cliswitch-chat-bridge-runtime-test-{}.sqlite",
+            uuid::Uuid::new_v4()
+        ))
+    }
+
+    fn remove_sqlite_artifacts(path: &Path) {
+        let _ = std::fs::remove_file(path);
+        let _ = std::fs::remove_file(PathBuf::from(format!("{}-wal", path.display())));
+        let _ = std::fs::remove_file(PathBuf::from(format!("{}-shm", path.display())));
+    }
+
+    async fn bind_test_user(
+        db_path: &Path,
+        platform: ChatPlatform,
+        platform_user_id: &str,
+        locale: AppLocale,
+    ) {
+        let pairing = storage::create_pairing_token(
+            db_path.to_path_buf(),
+            storage::CreatePairingTokenInput {
+                platform,
+                expires_in_minutes: Some(5),
+            },
+        )
+        .await
+        .expect("create pairing token");
+
+        storage::consume_pairing_token(
+            db_path.to_path_buf(),
+            pairing.token,
+            platform,
+            platform_user_id.to_string(),
+            Some("@koumoe".to_string()),
+            locale.as_str().to_string(),
+        )
+        .await
+        .expect("consume pairing token");
+    }
+
+    async fn test_runtime(db_path: &Path) -> ChatBridgeRuntime {
+        let settings = storage::get_app_settings(db_path.to_path_buf())
+            .await
+            .expect("load app settings");
+        let (_settings_tx, settings_rx) = watch::channel(Arc::new(settings));
+        ChatBridgeRuntime {
+            db_path: db_path.to_path_buf(),
+            settings_rx,
+            project_store: Arc::new(ProjectStore::new()),
+            busy_sessions: Arc::new(Mutex::new(HashSet::new())),
+            active_turns: Arc::new(Mutex::new(HashMap::new())),
+        }
+    }
+
+    fn test_message(platform: ChatPlatform, sender_id: &str, text: &str) -> IncomingMessage {
+        IncomingMessage {
+            platform,
+            sender_id: sender_id.to_string(),
+            sender_display_name: Some("@koumoe".to_string()),
+            chat_id: "chat-1".to_string(),
+            text: text.to_string(),
+            attachments: Vec::new(),
+            message_id: None,
+            timestamp_ms: storage::now_ms(),
+        }
     }
 
     #[test]
@@ -1461,5 +1491,43 @@ mod tests {
         reply.finish("same answer").await.expect("finish");
 
         assert_eq!(adapter.calls(), vec!["send:label\nsame answer".to_string()]);
+    }
+
+    #[tokio::test]
+    async fn help_uses_global_ui_locale_even_if_binding_locale_is_zh_cn() {
+        let db_path = temp_db_path();
+        remove_sqlite_artifacts(&db_path);
+        storage::init_db(&db_path).expect("init db");
+        bind_test_user(
+            &db_path,
+            ChatPlatform::Telegram,
+            "tg-user-1",
+            AppLocale::ZhCN,
+        )
+        .await;
+        storage::update_app_settings(
+            db_path.clone(),
+            storage::AppSettingsPatch {
+                ui_locale: Some(AppLocale::EnUS),
+                ..Default::default()
+            },
+        )
+        .await
+        .expect("update app locale");
+
+        let runtime = test_runtime(&db_path).await;
+        let adapter = FakeAdapter::new(false);
+        runtime
+            .handle_message(
+                Arc::new(adapter.clone()),
+                test_message(ChatPlatform::Telegram, "tg-user-1", "/help"),
+            )
+            .await;
+
+        assert_eq!(
+            adapter.calls(),
+            vec![format!("send:{}", help_text(AppLocale::EnUS))]
+        );
+        remove_sqlite_artifacts(&db_path);
     }
 }

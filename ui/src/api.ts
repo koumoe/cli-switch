@@ -52,7 +52,6 @@ export type ChatBridgeBinding = {
   platform: ChatPlatform;
   platform_user_id: string;
   display_name: string | null;
-  preferred_locale?: Locale;
   bound_at_ms: number;
   is_active: boolean;
 };
