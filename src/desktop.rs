@@ -133,22 +133,22 @@ fn desktop_text(locale: AppLocale, key: &str, fallback: &str) -> String {
 }
 
 fn apply_desktop_locale(locale: AppLocale, menus: LocalizableMenus<'_>) {
-    menus.edit_menu.set_text(&desktop_text(
+    menus.edit_menu.set_text(desktop_text(
         locale,
         "desktop.editMenuTitle",
         fallback_edit_menu_title(locale),
     ));
-    menus.tray_show.set_text(&desktop_text(
+    menus.tray_show.set_text(desktop_text(
         locale,
         "desktop.tray.show",
         fallback_tray_show(locale),
     ));
-    menus.tray_hide.set_text(&desktop_text(
+    menus.tray_hide.set_text(desktop_text(
         locale,
         "desktop.tray.hide",
         fallback_tray_hide(locale),
     ));
-    menus.tray_quit.set_text(&desktop_text(
+    menus.tray_quit.set_text(desktop_text(
         locale,
         "desktop.tray.quit",
         fallback_tray_quit(locale),
@@ -546,7 +546,7 @@ pub async fn run(
         .map(|s| s.ui_locale)
         .unwrap_or_else(detect_desktop_locale);
     let edit_menu = Submenu::new(
-        &desktop_text(
+        desktop_text(
             initial_locale,
             "desktop.editMenuTitle",
             fallback_edit_menu_title(initial_locale),
@@ -613,7 +613,7 @@ pub async fn run(
     let tray_menu = Menu::new();
     let tray_show = MenuItem::with_id(
         "tray_show",
-        &desktop_text(
+        desktop_text(
             initial_locale,
             "desktop.tray.show",
             fallback_tray_show(initial_locale),
@@ -623,7 +623,7 @@ pub async fn run(
     );
     let tray_hide = MenuItem::with_id(
         "tray_hide",
-        &desktop_text(
+        desktop_text(
             initial_locale,
             "desktop.tray.hide",
             fallback_tray_hide(initial_locale),
@@ -633,7 +633,7 @@ pub async fn run(
     );
     let tray_quit = MenuItem::with_id(
         "tray_quit",
-        &desktop_text(
+        desktop_text(
             initial_locale,
             "desktop.tray.quit",
             fallback_tray_quit(initial_locale),
