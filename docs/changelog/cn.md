@@ -1,3 +1,8 @@
+## [0.39.2](https://github.com/koumoe/cli-switch/compare/v0.39.1...v0.39.2) (2026-03-22)
+
+### 修复
+* 前端移除旧 error 兼容回退 ([d1e0738](https://github.com/koumoe/cli-switch/commit/d1e07383b108648330ebfc530f8b0e7078c6f9c4))
+* 后端移除旧 error 兼容字段 ([4e43094](https://github.com/koumoe/cli-switch/commit/4e43094e304723856a4ae287a05e8bc1ff7739b9))
 ## [0.39.1](https://github.com/koumoe/cli-switch/compare/v0.39.0...v0.39.1) (2026-03-21)
 
 ### 修复
