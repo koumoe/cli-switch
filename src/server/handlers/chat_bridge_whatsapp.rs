@@ -65,16 +65,15 @@ pub(in crate::server) async fn whatsapp_cloud_webhook_receive(
         return StatusCode::NOT_FOUND;
     }
 
-    if let Some(app_secret) = settings
+    if settings
         .chat_bridge_whatsapp_app_secret
         .as_deref()
         .map(str::trim)
         .filter(|v| !v.is_empty())
+        .is_some_and(|app_secret| !verify_signature(&headers, &body, app_secret))
     {
-        if !verify_signature(&headers, &body, app_secret) {
-            tracing::warn!("whatsapp webhook signature verification failed");
-            return StatusCode::UNAUTHORIZED;
-        }
+        tracing::warn!("whatsapp webhook signature verification failed");
+        return StatusCode::UNAUTHORIZED;
     }
 
     let tx = match state.whatsapp_webhook_tx.as_ref() {

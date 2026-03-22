@@ -17,6 +17,30 @@ const WHATSAPP_GRAPH_API_VERSION: &str = "v20.0";
 const WHATSAPP_GRAPH_API_BASE: &str = "https://graph.facebook.com";
 const WHATSAPP_REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
 
+#[derive(Serialize)]
+struct ReplyContext<'a> {
+    message_id: &'a str,
+}
+
+#[derive(Deserialize)]
+struct SendResponseMessage {
+    id: String,
+}
+
+#[derive(Deserialize)]
+struct SendResponse {
+    messages: Option<Vec<SendResponseMessage>>,
+}
+
+impl SendResponse {
+    fn into_message_id(self) -> String {
+        self.messages
+            .and_then(|items| items.into_iter().next())
+            .map(|item| item.id)
+            .unwrap_or_else(|| "unknown".to_string())
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct WhatsAppWebhookMessage {
     pub from: String,
@@ -184,11 +208,6 @@ impl WhatsAppAdapter {
         content: &str,
     ) -> anyhow::Result<SentMessage> {
         #[derive(Serialize)]
-        struct Context<'a> {
-            message_id: &'a str,
-        }
-
-        #[derive(Serialize)]
         struct TextBody<'a> {
             body: &'a str,
             preview_url: bool,
@@ -199,20 +218,10 @@ impl WhatsAppAdapter {
             messaging_product: &'static str,
             to: &'a str,
             #[serde(skip_serializing_if = "Option::is_none")]
-            context: Option<Context<'a>>,
+            context: Option<ReplyContext<'a>>,
             #[serde(rename = "type")]
             kind: &'static str,
             text: TextBody<'a>,
-        }
-
-        #[derive(Deserialize)]
-        struct SendResponseMessage {
-            id: String,
-        }
-
-        #[derive(Deserialize)]
-        struct SendResponse {
-            messages: Option<Vec<SendResponseMessage>>,
         }
 
         let resp: SendResponse = self
@@ -221,7 +230,7 @@ impl WhatsAppAdapter {
                 &SendTextRequest {
                     messaging_product: "whatsapp",
                     to,
-                    context: reply_to.map(|id| Context { message_id: id }),
+                    context: reply_to.map(|id| ReplyContext { message_id: id }),
                     kind: "text",
                     text: TextBody {
                         body: content,
@@ -231,13 +240,9 @@ impl WhatsAppAdapter {
             )
             .await?;
 
-        let message_id = resp
-            .messages
-            .as_ref()
-            .and_then(|items| items.first())
-            .map(|m| m.id.clone())
-            .unwrap_or_else(|| "unknown".to_string());
-        Ok(SentMessage { message_id })
+        Ok(SentMessage {
+            message_id: resp.into_message_id(),
+        })
     }
 
     async fn upload_media(&self, attachment: &Attachment) -> anyhow::Result<String> {
@@ -271,11 +276,6 @@ impl WhatsAppAdapter {
         caption: Option<&str>,
     ) -> anyhow::Result<SentMessage> {
         #[derive(Serialize)]
-        struct Context<'a> {
-            message_id: &'a str,
-        }
-
-        #[derive(Serialize)]
         struct Document<'a> {
             id: &'a str,
             #[serde(skip_serializing_if = "Option::is_none")]
@@ -289,20 +289,10 @@ impl WhatsAppAdapter {
             messaging_product: &'static str,
             to: &'a str,
             #[serde(skip_serializing_if = "Option::is_none")]
-            context: Option<Context<'a>>,
+            context: Option<ReplyContext<'a>>,
             #[serde(rename = "type")]
             kind: &'static str,
             document: Document<'a>,
-        }
-
-        #[derive(Deserialize)]
-        struct SendResponseMessage {
-            id: String,
-        }
-
-        #[derive(Deserialize)]
-        struct SendResponse {
-            messages: Option<Vec<SendResponseMessage>>,
         }
 
         let resp: SendResponse = self
@@ -311,7 +301,7 @@ impl WhatsAppAdapter {
                 &SendRequest {
                     messaging_product: "whatsapp",
                     to,
-                    context: reply_to.map(|id| Context { message_id: id }),
+                    context: reply_to.map(|id| ReplyContext { message_id: id }),
                     kind: "document",
                     document: Document {
                         id: media_id,
@@ -322,13 +312,9 @@ impl WhatsAppAdapter {
             )
             .await?;
 
-        let message_id = resp
-            .messages
-            .as_ref()
-            .and_then(|items| items.first())
-            .map(|m| m.id.clone())
-            .unwrap_or_else(|| "unknown".to_string());
-        Ok(SentMessage { message_id })
+        Ok(SentMessage {
+            message_id: resp.into_message_id(),
+        })
     }
 
     async fn send_image_message(
@@ -338,11 +324,6 @@ impl WhatsAppAdapter {
         media_id: &str,
         caption: Option<&str>,
     ) -> anyhow::Result<SentMessage> {
-        #[derive(Serialize)]
-        struct Context<'a> {
-            message_id: &'a str,
-        }
-
         #[derive(Serialize)]
         struct Image<'a> {
             id: &'a str,
@@ -355,20 +336,10 @@ impl WhatsAppAdapter {
             messaging_product: &'static str,
             to: &'a str,
             #[serde(skip_serializing_if = "Option::is_none")]
-            context: Option<Context<'a>>,
+            context: Option<ReplyContext<'a>>,
             #[serde(rename = "type")]
             kind: &'static str,
             image: Image<'a>,
-        }
-
-        #[derive(Deserialize)]
-        struct SendResponseMessage {
-            id: String,
-        }
-
-        #[derive(Deserialize)]
-        struct SendResponse {
-            messages: Option<Vec<SendResponseMessage>>,
         }
 
         let resp: SendResponse = self
@@ -377,7 +348,7 @@ impl WhatsAppAdapter {
                 &SendRequest {
                     messaging_product: "whatsapp",
                     to,
-                    context: reply_to.map(|id| Context { message_id: id }),
+                    context: reply_to.map(|id| ReplyContext { message_id: id }),
                     kind: "image",
                     image: Image {
                         id: media_id,
@@ -387,13 +358,9 @@ impl WhatsAppAdapter {
             )
             .await?;
 
-        let message_id = resp
-            .messages
-            .as_ref()
-            .and_then(|items| items.first())
-            .map(|m| m.id.clone())
-            .unwrap_or_else(|| "unknown".to_string());
-        Ok(SentMessage { message_id })
+        Ok(SentMessage {
+            message_id: resp.into_message_id(),
+        })
     }
 
     async fn download_media(&self, media_id: &str) -> anyhow::Result<Arc<[u8]>> {
@@ -528,15 +495,11 @@ fn infer_attachment_filename(item: &WhatsAppWebhookAttachment, message_id: &str)
         IncomingAttachmentKind::Image => "image",
         IncomingAttachmentKind::File => "file",
     };
-    let sid = short_id(message_id);
+    let sid = crate::chat_bridge::short_id(message_id);
     match (base, inferred_ext) {
         (Some(name), Some(ext)) => format!("{name}.{ext}"),
         (Some(name), None) => name,
         (None, Some(ext)) => format!("{stem}-{sid}.{ext}"),
         (None, None) => format!("{stem}-{sid}"),
     }
-}
-
-fn short_id(raw: &str) -> &str {
-    raw.get(..8).unwrap_or(raw)
 }

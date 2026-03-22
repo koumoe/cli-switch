@@ -691,19 +691,19 @@ impl ChatBridgeRuntime {
                 let tool_statuses =
                     detect_cli_tool_statuses(settings.as_ref(), self.data_dir()).await?;
                 let update_status = events::last_update_status();
-                let content = format_status_report(
+                let content = format_status_report(StatusReportContext {
                     now_ms,
-                    settings.as_ref(),
-                    &channels,
-                    &routes,
-                    &tool_statuses,
+                    settings: settings.as_ref(),
+                    channels: &channels,
+                    routes: &routes,
+                    tool_statuses: &tool_statuses,
                     telegram_sessions,
                     discord_sessions,
                     whatsapp_sessions,
-                    pricing,
-                    update_status.as_ref(),
+                    pricing: &pricing,
+                    update_status: update_status.as_ref(),
                     locale,
-                );
+                });
                 self.send_text(
                     adapter,
                     &msg.chat_id,
@@ -1479,19 +1479,35 @@ fn format_costs_report(
     lines.join("\n")
 }
 
-fn format_status_report(
+struct StatusReportContext<'a> {
     now_ms: i64,
-    settings: &storage::AppSettings,
-    channels: &[storage::Channel],
-    routes: &[storage::Route],
-    tool_statuses: &[CliToolSnapshot],
+    settings: &'a storage::AppSettings,
+    channels: &'a [storage::Channel],
+    routes: &'a [storage::Route],
+    tool_statuses: &'a [CliToolSnapshot],
     telegram_sessions: i64,
     discord_sessions: i64,
     whatsapp_sessions: i64,
-    pricing: storage::PricingStatus,
-    update_status: Option<&crate::update::UpdateStatus>,
+    pricing: &'a storage::PricingStatus,
+    update_status: Option<&'a crate::update::UpdateStatus>,
     locale: AppLocale,
-) -> String {
+}
+
+fn format_status_report(ctx: StatusReportContext<'_>) -> String {
+    let StatusReportContext {
+        now_ms,
+        settings,
+        channels,
+        routes,
+        tool_statuses,
+        telegram_sessions,
+        discord_sessions,
+        whatsapp_sessions,
+        pricing,
+        update_status,
+        locale,
+    } = ctx;
+
     let auto_disabled = channels
         .iter()
         .filter(|item| storage::channel_is_auto_disabled(item, now_ms))
