@@ -315,8 +315,6 @@ struct ChannelTestResponse {
     latency_ms: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
     issue: Option<UserFacingIssuePayload>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    error: Option<String>,
 }
 
 fn build_models_url(mut url: reqwest::Url, protocol: storage::Protocol) -> reqwest::Url {
@@ -378,7 +376,6 @@ pub(in crate::server) async fn test_channel(
                 status: Some(status),
                 latency_ms,
                 issue: None,
-                error: None,
             }))
         }
         Ok(Err(e)) => {
@@ -391,7 +388,6 @@ pub(in crate::server) async fn test_channel(
                 status: None,
                 latency_ms,
                 issue: Some(issue.to_payload(locale)),
-                error: Some(issue.legacy_error_text(locale)),
             }))
         }
         Err(_) => {
@@ -403,7 +399,6 @@ pub(in crate::server) async fn test_channel(
                 status: None,
                 latency_ms,
                 issue: Some(issue.to_payload(locale)),
-                error: Some(issue.legacy_error_text(locale)),
             }))
         }
     }

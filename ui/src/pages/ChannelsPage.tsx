@@ -431,7 +431,7 @@ export function ChannelsPage() {
         });
       } else {
         toast.error(t("channels.toast.testUnreachableTitle", { name: c.name }), {
-          description: humanizeIssue(r.issue, t) ?? r.error ?? t("channels.toast.testTimeout"),
+          description: humanizeIssue(r.issue, t) ?? t("channels.toast.testTimeout"),
         });
       }
     } catch (e) {

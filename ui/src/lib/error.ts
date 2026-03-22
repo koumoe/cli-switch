@@ -98,8 +98,8 @@ function translateErrorCode(t: TFunction, code: string): string | null {
   return fallback === fallbackKey ? null : fallback;
 }
 
-export function humanizeIssue(issue: UserFacingIssueLike | null | undefined, t: TFunction): string | null {
-  if (!issue) return null;
+export function humanizeIssue(issue: UserFacingIssueLike | null | undefined, t: TFunction): string | undefined {
+  if (!issue) return undefined;
   const args = issue.args ?? undefined;
   if (issue.code) {
     const direct = t(issue.code, args);
@@ -110,7 +110,7 @@ export function humanizeIssue(issue: UserFacingIssueLike | null | undefined, t: 
   }
   if (issue.message) return issue.message;
   if (issue.detail) return issue.detail;
-  return null;
+  return undefined;
 }
 
 export function humanizeApiError(err: unknown, t: TFunction): string {

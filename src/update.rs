@@ -64,7 +64,6 @@ pub struct UpdateRuntime {
     pub download_total_bytes: Option<u64>,
     pub download_downloaded_bytes: u64,
     pub issue: Option<UserFacingIssue>,
-    pub error: Option<String>,
 }
 
 impl UpdateRuntime {
@@ -77,11 +76,9 @@ impl UpdateRuntime {
 
     fn clear_issue(&mut self) {
         self.issue = None;
-        self.error = None;
     }
 
     fn set_issue(&mut self, issue: UserFacingIssue) {
-        self.error = Some(issue.legacy_error_text(self.locale));
         self.issue = Some(issue);
     }
 }
@@ -98,7 +95,6 @@ pub struct UpdateStatus {
     pub download_percent: Option<u8>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub issue: Option<UserFacingIssuePayload>,
-    pub error: Option<String>,
 }
 
 fn issue_payload(
@@ -106,16 +102,6 @@ fn issue_payload(
     locale: AppLocale,
 ) -> Option<UserFacingIssuePayload> {
     issue.map(|item| item.to_payload(locale))
-}
-
-fn legacy_error_text(
-    issue: Option<&UserFacingIssue>,
-    fallback: Option<&String>,
-    locale: AppLocale,
-) -> Option<String> {
-    issue
-        .map(|item| item.legacy_error_text(locale))
-        .or_else(|| fallback.cloned())
 }
 
 fn snapshot_status(rt: &UpdateRuntime, pending_version: Option<String>) -> UpdateStatus {
@@ -134,7 +120,6 @@ fn snapshot_status(rt: &UpdateRuntime, pending_version: Option<String>) -> Updat
             None
         },
         issue: issue_payload(rt.issue.as_ref(), locale),
-        error: legacy_error_text(rt.issue.as_ref(), rt.error.as_ref(), locale),
     }
 }
 
@@ -615,7 +600,6 @@ pub async fn get_status(
             None
         },
         issue: issue_payload(rt.issue.as_ref(), locale),
-        error: legacy_error_text(rt.issue.as_ref(), rt.error.as_ref(), locale),
     }
 }
 

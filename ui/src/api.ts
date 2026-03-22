@@ -152,7 +152,6 @@ export type CliToolProxyConfigApplyItem = {
   id: CliToolId;
   ok: boolean;
   issue?: UserFacingIssuePayload | null;
-  error?: string;
 };
 
 export type CliToolProxyConfigApplyResponse = {
@@ -170,7 +169,6 @@ export type InstallCliToolResponse = {
   terminal_shim_ok: boolean;
   terminal_shim_dir: string | null;
   terminal_shim_issue?: UserFacingIssuePayload | null;
-  terminal_shim_error?: string | null;
 };
 
 export type PickFolderInput = {
@@ -235,7 +233,6 @@ export type ChannelTestResponse = {
   status: number | null;
   latency_ms: number;
   issue?: UserFacingIssuePayload | null;
-  error?: string | null;
 };
 
 export type Route = {
@@ -296,7 +293,6 @@ export type UpdateStatus = {
   pending_version: string | null;
   download_percent: number | null;
   issue?: UserFacingIssuePayload | null;
-  error?: string | null;
 };
 
 export type UserFacingIssuePayload = {

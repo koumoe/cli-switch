@@ -89,8 +89,6 @@ pub struct CliToolProxyConfigApplyItem {
     pub ok: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub issue: Option<UserFacingIssuePayload>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub error: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -611,7 +609,6 @@ pub fn apply(
                 id: *id,
                 ok: true,
                 issue: None,
-                error: None,
             }),
             Err(e) => {
                 let issue = UserFacingIssue::new("tools_proxy_config_apply_item_failed")
@@ -621,7 +618,6 @@ pub fn apply(
                     id: *id,
                     ok: false,
                     issue: Some(issue.to_payload(locale)),
-                    error: Some(issue.legacy_error_text(locale)),
                 });
             }
         }

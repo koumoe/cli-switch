@@ -379,7 +379,7 @@ export function SettingsPage() {
   const updateStatusText = updateStatus?.pending_version
     ? t("settings.update.ready", { version: updateStatus.pending_version })
     : updateStatus?.stage === "error"
-      ? humanizeIssue(updateStatus.issue, t) ?? updateStatus.error ?? t("settings.update.checkFail")
+      ? humanizeIssue(updateStatus.issue, t) ?? t("settings.update.checkFail")
     : updateStatus?.stage === "staging"
       ? t("settings.update.staging")
     : updateStatus?.stage === "downloading"
@@ -1476,7 +1476,7 @@ export function SettingsPage() {
                             toast.success(t("settings.cliProxyConfig.applied"));
                           } else {
                             toast.error(t("settings.cliProxyConfig.applyFail"), {
-                              description: humanizeIssue(applied?.issue, t) ?? applied?.error,
+                              description: humanizeIssue(applied?.issue, t),
                             });
                           }
                         } catch (e) {

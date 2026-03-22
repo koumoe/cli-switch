@@ -164,3 +164,84 @@ fn backend_error_codes_have_translations() {
         "missing shared locale entries for backend error codes: {missing:?}"
     );
 }
+
+#[test]
+fn structured_issue_surfaces_do_not_reintroduce_legacy_error_fields() {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let rust_type_guards = [
+        (
+            "src/update.rs",
+            r#"pub\s+struct\s+UpdateStatus\s*\{(?s:.*?)\berror\s*:"#,
+        ),
+        (
+            "src/server/handlers/channel.rs",
+            r#"struct\s+ChannelTestResponse\s*\{(?s:.*?)\berror\s*:"#,
+        ),
+        (
+            "src/server/handlers/tools.rs",
+            r#"struct\s+InstallCliToolResponse\s*\{(?s:.*?)terminal_shim_error\s*:"#,
+        ),
+        (
+            "src/cli_tool_proxy_config.rs",
+            r#"pub\s+struct\s+CliToolProxyConfigApplyItem\s*\{(?s:.*?)\berror\s*:"#,
+        ),
+    ];
+
+    for (path, pattern) in rust_type_guards {
+        let raw = fs::read_to_string(root.join(path))
+            .unwrap_or_else(|err| panic!("read source {path:?} failed: {err}"));
+        let re =
+            Regex::new(pattern).unwrap_or_else(|err| panic!("invalid regex {pattern:?}: {err}"));
+        assert!(
+            !re.is_match(&raw),
+            "legacy compatibility field matched forbidden pattern {pattern:?} in {path}"
+        );
+    }
+
+    let ts_type_guards = [
+        (
+            "ui/src/api.ts",
+            r#"export\s+type\s+UpdateStatus\s*=\s*\{(?s:.*?)\berror\?\s*:"#,
+        ),
+        (
+            "ui/src/api.ts",
+            r#"export\s+type\s+ChannelTestResponse\s*=\s*\{(?s:.*?)\berror\?\s*:"#,
+        ),
+        (
+            "ui/src/api.ts",
+            r#"export\s+type\s+CliToolProxyConfigApplyItem\s*=\s*\{(?s:.*?)\berror\?\s*:"#,
+        ),
+        (
+            "ui/src/api.ts",
+            r#"export\s+type\s+InstallCliToolResponse\s*=\s*\{(?s:.*?)terminal_shim_error\?\s*:"#,
+        ),
+    ];
+
+    for (path, pattern) in ts_type_guards {
+        let raw = fs::read_to_string(root.join(path))
+            .unwrap_or_else(|err| panic!("read source {path:?} failed: {err}"));
+        let re =
+            Regex::new(pattern).unwrap_or_else(|err| panic!("invalid regex {pattern:?}: {err}"));
+        assert!(
+            !re.is_match(&raw),
+            "legacy UI compatibility field matched forbidden pattern {pattern:?} in {path}"
+        );
+    }
+
+    let legacy_tokens = [
+        ("src/update.rs", "legacy_error_text("),
+        ("ui/src/pages/SettingsPage.tsx", "updateStatus.error"),
+        ("ui/src/pages/SettingsPage.tsx", "applied?.error"),
+        ("ui/src/pages/ChannelsPage.tsx", "r.error"),
+        ("ui/src/lib/cliToolInstaller.ts", "terminal_shim_error"),
+    ];
+
+    for (path, token) in legacy_tokens {
+        let raw = fs::read_to_string(root.join(path))
+            .unwrap_or_else(|err| panic!("read source {path:?} failed: {err}"));
+        assert!(
+            !raw.contains(token),
+            "legacy compatibility token {token:?} unexpectedly present in {path}"
+        );
+    }
+}
