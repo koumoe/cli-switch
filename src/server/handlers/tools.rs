@@ -119,8 +119,6 @@ pub(crate) struct InstallCliToolResponse {
     pub(crate) terminal_shim_dir: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) terminal_shim_issue: Option<UserFacingIssuePayload>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) terminal_shim_error: Option<String>,
 }
 
 pub(in crate::server) async fn install_cli_tool(
@@ -234,7 +232,7 @@ pub(in crate::server) async fn install_cli_tool(
         let detected = crate::cli_tools::detect_cli_tool(&env, &data_dir, def);
         let tool_path = detected.install_path.clone();
 
-        let (terminal_shim_ok, terminal_shim_dir, terminal_shim_error) =
+        let (terminal_shim_ok, terminal_shim_dir, terminal_shim_detail) =
             if let Some(tool_path) = tool_path.as_ref() {
                 let node_bin_dir = env.node_bin_dir();
                 let npm_global_bin_dir =
@@ -270,7 +268,7 @@ pub(in crate::server) async fn install_cli_tool(
                 )
             };
 
-        let terminal_shim_issue = terminal_shim_error.as_ref().map(|detail| {
+        let terminal_shim_issue = terminal_shim_detail.as_ref().map(|detail| {
             UserFacingIssue::new("tools_terminal_shim_setup_failed")
                 .with_arg("tool", def.id.as_str())
                 .with_detail(detail.clone())
@@ -301,9 +299,6 @@ pub(in crate::server) async fn install_cli_tool(
             terminal_shim_issue: terminal_shim_issue
                 .as_ref()
                 .map(|issue| issue.to_payload(locale)),
-            terminal_shim_error: terminal_shim_issue
-                .as_ref()
-                .map(|issue| issue.legacy_error_text(locale)),
         })
     })
     .await;
