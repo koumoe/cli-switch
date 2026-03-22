@@ -43,10 +43,6 @@ pub(in crate::server) struct UpdateSettingsInput {
     chat_bridge_discord_enabled: Option<bool>,
     chat_bridge_discord_bot_token: Option<String>,
     chat_bridge_whatsapp_enabled: Option<bool>,
-    chat_bridge_whatsapp_phone_number_id: Option<String>,
-    chat_bridge_whatsapp_access_token: Option<String>,
-    chat_bridge_whatsapp_app_secret: Option<String>,
-    chat_bridge_whatsapp_verify_token: Option<String>,
     chat_bridge_allow_new_projects: Option<bool>,
 }
 
@@ -132,22 +128,6 @@ pub(in crate::server) async fn update_settings(
         (
             "chat_bridge_whatsapp_enabled",
             input.chat_bridge_whatsapp_enabled.is_some(),
-        ),
-        (
-            "chat_bridge_whatsapp_phone_number_id",
-            input.chat_bridge_whatsapp_phone_number_id.is_some(),
-        ),
-        (
-            "chat_bridge_whatsapp_access_token",
-            input.chat_bridge_whatsapp_access_token.is_some(),
-        ),
-        (
-            "chat_bridge_whatsapp_app_secret",
-            input.chat_bridge_whatsapp_app_secret.is_some(),
-        ),
-        (
-            "chat_bridge_whatsapp_verify_token",
-            input.chat_bridge_whatsapp_verify_token.is_some(),
         ),
         (
             "chat_bridge_allow_new_projects",
@@ -248,10 +228,6 @@ pub(in crate::server) async fn update_settings(
             chat_bridge_discord_enabled: input.chat_bridge_discord_enabled,
             chat_bridge_discord_bot_token: input.chat_bridge_discord_bot_token,
             chat_bridge_whatsapp_enabled: input.chat_bridge_whatsapp_enabled,
-            chat_bridge_whatsapp_phone_number_id: input.chat_bridge_whatsapp_phone_number_id,
-            chat_bridge_whatsapp_access_token: input.chat_bridge_whatsapp_access_token,
-            chat_bridge_whatsapp_app_secret: input.chat_bridge_whatsapp_app_secret,
-            chat_bridge_whatsapp_verify_token: input.chat_bridge_whatsapp_verify_token,
             chat_bridge_allow_new_projects: input.chat_bridge_allow_new_projects,
             ..Default::default()
         },

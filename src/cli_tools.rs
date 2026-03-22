@@ -760,6 +760,11 @@ impl CliExecEnv {
         find_executable_in_path(name).or_else(|| find_executable_in_dirs(name, &self.extra_dirs))
     }
 
+    pub fn command_for(&self, program: &str) -> Option<std::process::Command> {
+        let program_path = self.find_executable(program)?;
+        Some(self.cmd(program_path))
+    }
+
     fn cmd(&self, program_path: PathBuf) -> std::process::Command {
         // On Windows, npm is commonly a .cmd shim. CreateProcess can't execute it directly,
         // so we route through `cmd /C`.

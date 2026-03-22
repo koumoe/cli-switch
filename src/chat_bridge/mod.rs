@@ -6,6 +6,7 @@ mod output;
 mod projects;
 mod resolver;
 mod router;
+pub(crate) mod whatsapp_web;
 
 use anyhow::Context as _;
 use std::collections::{HashMap, HashSet};
@@ -19,7 +20,6 @@ use tokio::sync::{Mutex, mpsc, watch};
 
 use self::adapter::discord::DiscordAdapter;
 use self::adapter::telegram::TelegramAdapter;
-use self::adapter::whatsapp::{WhatsAppAdapter, WhatsAppWebhookMessage};
 use self::adapter::{ChatAdapter, IncomingAttachmentKind, IncomingMessage};
 #[cfg(test)]
 use self::adapter::{OutgoingMessage, SentMessage, StreamingMessage};
@@ -40,6 +40,10 @@ use self::projects::AggregatedProject;
 use self::projects::ProjectStore;
 use self::router::{
     Command, StatsRange as CommandStatsRange, format_session_label, format_sessions_list, help_text,
+};
+use crate::chat_bridge::whatsapp_web::{
+    WhatsAppWebControl, WhatsAppWebState, WhatsAppWebStatus, logout_by_clearing_auth_state,
+    run_whatsapp_web_bridge,
 };
 use crate::cli_tools::{
     CLI_TOOLS, CliExecEnv, CliToolId, detect_cli_tool, normalize_version_string,
@@ -202,12 +206,13 @@ pub async fn run_supervisor(
     http_client: reqwest::Client,
     mut settings_rx: watch::Receiver<Arc<storage::AppSettings>>,
     channels_cache: Option<watch::Sender<Arc<Vec<storage::Channel>>>>,
-    whatsapp_inbound_rx: Option<mpsc::Receiver<WhatsAppWebhookMessage>>,
+    mut whatsapp_control_rx: mpsc::Receiver<WhatsAppWebControl>,
+    whatsapp_status_tx: watch::Sender<WhatsAppWebStatus>,
 ) {
-    let whatsapp_inbound_rx = whatsapp_inbound_rx.map(|rx| Arc::new(Mutex::new(rx)));
     let runtime = ChatBridgeRuntime {
         db_path,
         settings_rx: settings_rx.clone(),
+        whatsapp_status_rx: whatsapp_status_tx.subscribe(),
         channels_cache,
         project_store: Arc::new(ProjectStore::new()),
         busy_sessions: Arc::new(Mutex::new(HashSet::new())),
@@ -217,16 +222,13 @@ pub async fn run_supervisor(
     let mut telegram_task = ManagedBridgeTask::new("telegram");
     let mut discord_task = ManagedBridgeTask::new("discord");
     let mut whatsapp_task = ManagedBridgeTask::new("whatsapp");
+    let mut whatsapp_nonce: u64 = 0;
 
     loop {
         let telegram_token = desired_telegram_token(settings_rx.borrow().as_ref());
         let discord_token = desired_discord_token(settings_rx.borrow().as_ref());
-        let whatsapp_config = whatsapp_inbound_rx
-            .as_ref()
-            .and_then(|_| desired_whatsapp_config(settings_rx.borrow().as_ref()));
-        let whatsapp_key = whatsapp_config
-            .as_ref()
-            .map(|cfg| format!("{}:{}", cfg.phone_number_id, cfg.access_token));
+        let whatsapp_enabled = desired_whatsapp_enabled(settings_rx.borrow().as_ref());
+        let whatsapp_key = whatsapp_enabled.then_some(format!("whatsapp-web:{whatsapp_nonce}"));
 
         telegram_task.sync_token(telegram_token.as_deref());
         discord_task.sync_token(discord_token.as_deref());
@@ -252,54 +254,70 @@ pub async fn run_supervisor(
             });
         }
 
-        if let (Some(config), Some(inbound_rx), Some(key)) = (
-            whatsapp_config.clone(),
-            whatsapp_inbound_rx.clone(),
-            whatsapp_key.clone(),
-        ) {
+        if let Some(key) = whatsapp_key.clone() {
             let runtime = runtime.clone();
             let client = http_client.clone();
+            let status_tx = whatsapp_status_tx.clone();
             whatsapp_task.spawn_if_needed(Some(key), move |_token| {
                 tokio::spawn(async move {
-                    run_whatsapp_bridge(runtime, client, config, inbound_rx).await;
+                    run_whatsapp_web_bridge(runtime, client, status_tx).await;
                 })
             });
+        } else {
+            let _ = whatsapp_status_tx.send(WhatsAppWebStatus::disabled());
         }
 
         let telegram_running = telegram_task.is_running();
         let discord_running = discord_task.is_running();
         let whatsapp_running = whatsapp_task.is_running();
-        if telegram_running || discord_running || whatsapp_running {
-            tokio::select! {
-                changed = settings_rx.changed() => {
-                    if changed.is_err() {
-                        break;
-                    }
-                }
-                exit = telegram_task.wait_for_exit(), if telegram_running => {
-                    telegram_task.handle_exit(exit).await;
-                }
-                exit = discord_task.wait_for_exit(), if discord_running => {
-                    discord_task.handle_exit(exit).await;
-                }
-                exit = whatsapp_task.wait_for_exit(), if whatsapp_running => {
-                    whatsapp_task.handle_exit(exit).await;
+        tokio::select! {
+            changed = settings_rx.changed() => {
+                if changed.is_err() {
+                    break;
                 }
             }
-        } else if settings_rx.changed().await.is_err() {
-            break;
+            cmd = whatsapp_control_rx.recv() => {
+                let Some(cmd) = cmd else {
+                    // channel closed, ignore
+                    continue;
+                };
+                match cmd {
+                    WhatsAppWebControl::StartLogin => {
+                        if whatsapp_enabled {
+                            whatsapp_nonce = whatsapp_nonce.wrapping_add(1);
+                        }
+                    }
+                    WhatsAppWebControl::Logout => {
+                        if let Err(err) = logout_by_clearing_auth_state(&runtime.data_dir()) {
+                            tracing::warn!(err = %err, "clear whatsapp auth state failed");
+                        }
+                        whatsapp_nonce = whatsapp_nonce.wrapping_add(1);
+                    }
+                }
+            }
+            exit = telegram_task.wait_for_exit(), if telegram_running => {
+                telegram_task.handle_exit(exit).await;
+            }
+            exit = discord_task.wait_for_exit(), if discord_running => {
+                discord_task.handle_exit(exit).await;
+            }
+            exit = whatsapp_task.wait_for_exit(), if whatsapp_running => {
+                whatsapp_task.handle_exit(exit).await;
+            }
         }
     }
 
     telegram_task.abort_and_join().await;
     discord_task.abort_and_join().await;
     whatsapp_task.abort_and_join().await;
+    let _ = whatsapp_status_tx.send(WhatsAppWebStatus::disabled());
 }
 
 #[derive(Clone)]
 struct ChatBridgeRuntime {
     db_path: PathBuf,
     settings_rx: watch::Receiver<Arc<storage::AppSettings>>,
+    whatsapp_status_rx: watch::Receiver<WhatsAppWebStatus>,
     channels_cache: Option<watch::Sender<Arc<Vec<storage::Channel>>>>,
     project_store: Arc<ProjectStore>,
     busy_sessions: Arc<Mutex<HashSet<i64>>>,
@@ -688,6 +706,10 @@ impl ChatBridgeRuntime {
                     ChatPlatform::WhatsApp,
                 )
                 .await?;
+                let mut whatsapp_status = self.whatsapp_status_rx.borrow().clone();
+                if !desired_whatsapp_enabled(settings.as_ref()) {
+                    whatsapp_status = WhatsAppWebStatus::disabled();
+                }
                 let tool_statuses =
                     detect_cli_tool_statuses(settings.as_ref(), self.data_dir()).await?;
                 let update_status = events::last_update_status();
@@ -700,6 +722,7 @@ impl ChatBridgeRuntime {
                     telegram_sessions,
                     discord_sessions,
                     whatsapp_sessions,
+                    whatsapp_status: &whatsapp_status,
                     pricing: &pricing,
                     update_status: update_status.as_ref(),
                     locale,
@@ -1488,6 +1511,7 @@ struct StatusReportContext<'a> {
     telegram_sessions: i64,
     discord_sessions: i64,
     whatsapp_sessions: i64,
+    whatsapp_status: &'a WhatsAppWebStatus,
     pricing: &'a storage::PricingStatus,
     update_status: Option<&'a crate::update::UpdateStatus>,
     locale: AppLocale,
@@ -1503,6 +1527,7 @@ fn format_status_report(ctx: StatusReportContext<'_>) -> String {
         telegram_sessions,
         discord_sessions,
         whatsapp_sessions,
+        whatsapp_status,
         pricing,
         update_status,
         locale,
@@ -1546,16 +1571,14 @@ fn format_status_report(ctx: StatusReportContext<'_>) -> String {
         discord_sessions
     ));
     lines.push(format!(
-        "- WhatsApp: {} / phone_number_id={} / access_token={} / {}={}",
+        "- WhatsApp: {} / state={} / connected={} / me={} / {}={}",
         enabled_label(settings.chat_bridge_whatsapp_enabled, locale),
-        configured_label(
-            settings.chat_bridge_whatsapp_phone_number_id_configured,
-            locale
-        ),
-        configured_label(
-            settings.chat_bridge_whatsapp_access_token_configured,
-            locale
-        ),
+        whatsapp_web_state_label(whatsapp_status.state, locale),
+        configured_label(whatsapp_status.connected, locale),
+        whatsapp_status
+            .me
+            .clone()
+            .unwrap_or_else(|| t(locale, "status.unknown_label")),
         t(locale, "status.active_sessions_label"),
         whatsapp_sessions
     ));
@@ -1705,6 +1728,25 @@ fn configured_label(configured: bool, locale: AppLocale) -> String {
         t(locale, "status.configured")
     } else {
         t(locale, "status.missing")
+    }
+}
+
+fn whatsapp_web_state_label(state: WhatsAppWebState, locale: AppLocale) -> &'static str {
+    match locale {
+        AppLocale::ZhCN => match state {
+            WhatsAppWebState::Disabled => "已禁用",
+            WhatsAppWebState::Starting => "启动中",
+            WhatsAppWebState::AwaitingQr => "等待扫码",
+            WhatsAppWebState::Connected => "已连接",
+            WhatsAppWebState::Error => "异常",
+        },
+        AppLocale::EnUS => match state {
+            WhatsAppWebState::Disabled => "disabled",
+            WhatsAppWebState::Starting => "starting",
+            WhatsAppWebState::AwaitingQr => "awaiting_qr",
+            WhatsAppWebState::Connected => "connected",
+            WhatsAppWebState::Error => "error",
+        },
     }
 }
 
@@ -1953,37 +1995,6 @@ async fn run_discord_bridge(runtime: ChatBridgeRuntime, client: reqwest::Client,
     }
 }
 
-#[derive(Clone)]
-struct WhatsAppSenderConfig {
-    phone_number_id: String,
-    access_token: String,
-}
-
-async fn run_whatsapp_bridge(
-    runtime: ChatBridgeRuntime,
-    client: reqwest::Client,
-    config: WhatsAppSenderConfig,
-    inbound_rx: Arc<Mutex<mpsc::Receiver<WhatsAppWebhookMessage>>>,
-) {
-    let adapter = WhatsAppAdapter::new(client, config.phone_number_id, config.access_token);
-    let mut rx = inbound_rx.lock().await;
-    while let Some(event) = rx.recv().await {
-        let runtime = runtime.clone();
-        let adapter_instance = adapter.clone();
-        tokio::spawn(async move {
-            match adapter_instance.webhook_message_to_incoming(event).await {
-                Ok(message) => {
-                    let sender: Arc<dyn ChatAdapter> = Arc::new(adapter_instance.clone());
-                    runtime.handle_message(sender, message).await;
-                }
-                Err(err) => {
-                    tracing::warn!(err = %err, "convert whatsapp webhook message failed");
-                }
-            }
-        });
-    }
-}
-
 fn exponential_backoff_delay(failures: u32, base: Duration, max: Duration) -> Duration {
     let exponent = failures.saturating_sub(1).min(10);
     let factor = 1u32 << exponent;
@@ -2034,25 +2045,8 @@ fn desired_discord_token(settings: &storage::AppSettings) -> Option<String> {
     (!token.is_empty()).then_some(token.to_string())
 }
 
-fn desired_whatsapp_config(settings: &storage::AppSettings) -> Option<WhatsAppSenderConfig> {
-    if !settings.chat_bridge_enabled || !settings.chat_bridge_whatsapp_enabled {
-        return None;
-    }
-    let phone_number_id = settings
-        .chat_bridge_whatsapp_phone_number_id
-        .as_deref()?
-        .trim();
-    let access_token = settings
-        .chat_bridge_whatsapp_access_token
-        .as_deref()?
-        .trim();
-    if phone_number_id.is_empty() || access_token.is_empty() {
-        return None;
-    }
-    Some(WhatsAppSenderConfig {
-        phone_number_id: phone_number_id.to_string(),
-        access_token: access_token.to_string(),
-    })
+fn desired_whatsapp_enabled(settings: &storage::AppSettings) -> bool {
+    settings.chat_bridge_enabled && settings.chat_bridge_whatsapp_enabled
 }
 
 fn incoming_attachment_filename(
@@ -2216,9 +2210,12 @@ mod tests {
             .await
             .expect("load app settings");
         let (_settings_tx, settings_rx) = watch::channel(Arc::new(settings));
+        let (_whatsapp_status_tx, whatsapp_status_rx) =
+            watch::channel(WhatsAppWebStatus::disabled());
         ChatBridgeRuntime {
             db_path: db_path.to_path_buf(),
             settings_rx,
+            whatsapp_status_rx,
             channels_cache: None,
             project_store: Arc::new(ProjectStore::new()),
             busy_sessions: Arc::new(Mutex::new(HashSet::new())),

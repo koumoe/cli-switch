@@ -22,7 +22,7 @@ pub(super) use chat_bridge::{
     create_chat_bridge_pairing_token, deactivate_chat_bridge_binding, list_chat_bridge_bindings,
 };
 pub(super) use chat_bridge_whatsapp::{
-    whatsapp_cloud_webhook_receive, whatsapp_cloud_webhook_verify,
+    get_chat_bridge_whatsapp_status, logout_chat_bridge_whatsapp, start_chat_bridge_whatsapp_login,
 };
 pub(super) use health::health;
 pub(super) use maintenance::{db_size, frontend_log_ingest, logs_clear, logs_size, records_clear};
