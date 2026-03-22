@@ -28,6 +28,7 @@ struct PlatformOutputPolicy {
     attachment_threshold: Option<usize>,
 }
 
+#[allow(dead_code)]
 const DEFAULT_OUTPUT_POLICY: PlatformOutputPolicy = PlatformOutputPolicy {
     message_char_limit: MESSAGE_CHAR_LIMIT,
     attachment_threshold: None,
@@ -40,6 +41,13 @@ const TELEGRAM_OUTPUT_POLICY: PlatformOutputPolicy = PlatformOutputPolicy {
 
 const DISCORD_OUTPUT_POLICY: PlatformOutputPolicy = PlatformOutputPolicy {
     message_char_limit: 1900,
+    attachment_threshold: Some(6_000),
+};
+
+const WHATSAPP_OUTPUT_POLICY: PlatformOutputPolicy = PlatformOutputPolicy {
+    // WhatsApp Cloud API text limit is tight enough that we should prefer attachments for longer
+    // terminal outputs instead of spamming multiple messages.
+    message_char_limit: 3600,
     attachment_threshold: Some(6_000),
 };
 
@@ -679,7 +687,7 @@ fn output_policy(platform: storage::ChatPlatform) -> PlatformOutputPolicy {
     match platform {
         storage::ChatPlatform::Telegram => TELEGRAM_OUTPUT_POLICY,
         storage::ChatPlatform::Discord => DISCORD_OUTPUT_POLICY,
-        storage::ChatPlatform::WhatsApp => DEFAULT_OUTPUT_POLICY,
+        storage::ChatPlatform::WhatsApp => WHATSAPP_OUTPUT_POLICY,
     }
 }
 

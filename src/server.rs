@@ -5,7 +5,7 @@ use http::Method;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tokio::sync::watch;
+use tokio::sync::{mpsc, watch};
 
 #[cfg(not(feature = "embed-ui"))]
 use tower_http::services::ServeDir;
@@ -49,6 +49,10 @@ fn request_endpoint_template(method: &Method, path: &str) -> Option<&'static str
         ("DELETE", "/api/prompts/document") => Some("/api/prompts/document"),
         ("POST", "/api/tools/config/apply") => Some("/api/tools/config/apply"),
         ("POST", "/api/chat_bridge/pairing_tokens") => Some("/api/chat_bridge/pairing_tokens"),
+        ("GET", "/api/chat_bridge/whatsapp/webhook") => Some("/api/chat_bridge/whatsapp/webhook"),
+        ("POST", "/api/chat_bridge/whatsapp/webhook") => Some("/api/chat_bridge/whatsapp/webhook"),
+        ("GET", "/webhook/whatsapp-cloud") => Some("/webhook/whatsapp-cloud"),
+        ("POST", "/webhook/whatsapp-cloud") => Some("/webhook/whatsapp-cloud"),
         ("GET", "/api/channels") => Some("/api/channels"),
         ("POST", "/api/channels") => Some("/api/channels"),
         ("POST", "/api/channels/reorder") => Some("/api/channels/reorder"),
@@ -121,6 +125,10 @@ fn request_purpose(method: &Method, path: &str) -> &'static str {
         ("POST", "/api/tools/config/apply") => "handlers::cli_tools_proxy_config_apply",
         ("GET", "/api/chat_bridge/bindings") => "handlers::list_chat_bridge_bindings",
         ("POST", "/api/chat_bridge/pairing_tokens") => "handlers::create_chat_bridge_pairing_token",
+        ("GET", "/api/chat_bridge/whatsapp/webhook") => "handlers::whatsapp_cloud_webhook_verify",
+        ("POST", "/api/chat_bridge/whatsapp/webhook") => "handlers::whatsapp_cloud_webhook_receive",
+        ("GET", "/webhook/whatsapp-cloud") => "handlers::whatsapp_cloud_webhook_verify",
+        ("POST", "/webhook/whatsapp-cloud") => "handlers::whatsapp_cloud_webhook_receive",
         ("GET", "/api/prompts/projects") => "handlers::list_prompt_projects",
         ("DELETE", "/api/prompts/projects") => "handlers::delete_prompt_project",
         ("GET", "/api/prompts/document") => "handlers::get_prompt_document",
@@ -251,6 +259,16 @@ fn build_app(state: AppState) -> Router {
             post(handlers::create_chat_bridge_pairing_token),
         )
         .route(
+            "/api/chat_bridge/whatsapp/webhook",
+            get(handlers::whatsapp_cloud_webhook_verify)
+                .post(handlers::whatsapp_cloud_webhook_receive),
+        )
+        .route(
+            "/webhook/whatsapp-cloud",
+            get(handlers::whatsapp_cloud_webhook_verify)
+                .post(handlers::whatsapp_cloud_webhook_receive),
+        )
+        .route(
             "/api/prompts/projects",
             get(handlers::list_prompt_projects).delete(handlers::delete_prompt_project),
         )
@@ -353,6 +371,7 @@ pub async fn serve_with_listener(
     let channels0 = storage::list_channels((*db_path).clone()).await?;
     let (settings_cache, settings_cache_rx) = watch::channel(Arc::new(settings0));
     let (channels_cache, channels_cache_rx) = watch::channel(Arc::new(channels0));
+    let (whatsapp_webhook_tx, whatsapp_webhook_rx) = mpsc::channel(256);
 
     let update_runtime = Arc::new(tokio::sync::Mutex::new(update::UpdateRuntime {
         locale: initial_update_locale,
@@ -368,11 +387,13 @@ pub async fn serve_with_listener(
         channels_cache,
         channels_cache_rx,
         update_runtime: update_runtime.clone(),
+        whatsapp_webhook_tx: Some(whatsapp_webhook_tx),
     };
 
     tracing::info!(addr = %addr, open_browser, "backend server starting");
 
     let chat_bridge_settings_rx = state.settings_cache_rx.clone();
+    let chat_bridge_channels_cache = state.channels_cache.clone();
     let app = build_app(state);
 
     let mut bg = tokio::task::JoinSet::<()>::new();
@@ -435,6 +456,8 @@ pub async fn serve_with_listener(
         (*db_path).clone(),
         http_client.clone(),
         chat_bridge_settings_rx,
+        Some(chat_bridge_channels_cache),
+        Some(whatsapp_webhook_rx),
     ));
 
     if open_browser {
