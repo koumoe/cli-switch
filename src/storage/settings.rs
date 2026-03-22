@@ -34,6 +34,11 @@ const KEY_CHAT_BRIDGE_TELEGRAM_ENABLED: &str = "chat_bridge_telegram_enabled";
 const KEY_CHAT_BRIDGE_TELEGRAM_BOT_TOKEN: &str = "chat_bridge_telegram_bot_token";
 const KEY_CHAT_BRIDGE_DISCORD_ENABLED: &str = "chat_bridge_discord_enabled";
 const KEY_CHAT_BRIDGE_DISCORD_BOT_TOKEN: &str = "chat_bridge_discord_bot_token";
+const KEY_CHAT_BRIDGE_WHATSAPP_ENABLED: &str = "chat_bridge_whatsapp_enabled";
+const KEY_CHAT_BRIDGE_WHATSAPP_PHONE_NUMBER_ID: &str = "chat_bridge_whatsapp_phone_number_id";
+const KEY_CHAT_BRIDGE_WHATSAPP_ACCESS_TOKEN: &str = "chat_bridge_whatsapp_access_token";
+const KEY_CHAT_BRIDGE_WHATSAPP_APP_SECRET: &str = "chat_bridge_whatsapp_app_secret";
+const KEY_CHAT_BRIDGE_WHATSAPP_VERIFY_TOKEN: &str = "chat_bridge_whatsapp_verify_token";
 const KEY_CHAT_BRIDGE_ALLOW_NEW_PROJECTS: &str = "chat_bridge_allow_new_projects";
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -101,6 +106,18 @@ pub struct AppSettings {
     #[serde(skip_serializing)]
     pub chat_bridge_discord_bot_token: Option<String>,
     pub chat_bridge_discord_bot_token_configured: bool,
+    pub chat_bridge_whatsapp_enabled: bool,
+    pub chat_bridge_whatsapp_phone_number_id: Option<String>,
+    pub chat_bridge_whatsapp_phone_number_id_configured: bool,
+    #[serde(skip_serializing)]
+    pub chat_bridge_whatsapp_access_token: Option<String>,
+    pub chat_bridge_whatsapp_access_token_configured: bool,
+    #[serde(skip_serializing)]
+    pub chat_bridge_whatsapp_app_secret: Option<String>,
+    pub chat_bridge_whatsapp_app_secret_configured: bool,
+    #[serde(skip_serializing)]
+    pub chat_bridge_whatsapp_verify_token: Option<String>,
+    pub chat_bridge_whatsapp_verify_token_configured: bool,
     pub chat_bridge_allow_new_projects: bool,
     #[serde(default)]
     pub has_invalid_values: bool,
@@ -136,6 +153,15 @@ impl Default for AppSettings {
             chat_bridge_discord_enabled: false,
             chat_bridge_discord_bot_token: None,
             chat_bridge_discord_bot_token_configured: false,
+            chat_bridge_whatsapp_enabled: false,
+            chat_bridge_whatsapp_phone_number_id: None,
+            chat_bridge_whatsapp_phone_number_id_configured: false,
+            chat_bridge_whatsapp_access_token: None,
+            chat_bridge_whatsapp_access_token_configured: false,
+            chat_bridge_whatsapp_app_secret: None,
+            chat_bridge_whatsapp_app_secret_configured: false,
+            chat_bridge_whatsapp_verify_token: None,
+            chat_bridge_whatsapp_verify_token_configured: false,
             chat_bridge_allow_new_projects: false,
             has_invalid_values: false,
         }
@@ -169,6 +195,11 @@ pub struct AppSettingsPatch {
     pub chat_bridge_telegram_bot_token: Option<String>,
     pub chat_bridge_discord_enabled: Option<bool>,
     pub chat_bridge_discord_bot_token: Option<String>,
+    pub chat_bridge_whatsapp_enabled: Option<bool>,
+    pub chat_bridge_whatsapp_phone_number_id: Option<String>,
+    pub chat_bridge_whatsapp_access_token: Option<String>,
+    pub chat_bridge_whatsapp_app_secret: Option<String>,
+    pub chat_bridge_whatsapp_verify_token: Option<String>,
     pub chat_bridge_allow_new_projects: Option<bool>,
 }
 
@@ -423,6 +454,57 @@ pub async fn get_app_settings(db_path: PathBuf) -> anyhow::Result<AppSettings> {
             .as_deref()
             .map(str::trim)
             .is_some_and(|value| !value.is_empty());
+        if let Some(v) = get_setting(conn, KEY_CHAT_BRIDGE_WHATSAPP_ENABLED)? {
+            out.chat_bridge_whatsapp_enabled = parse_bool_setting(
+                KEY_CHAT_BRIDGE_WHATSAPP_ENABLED,
+                &v,
+                &mut has_invalid_values,
+            );
+        }
+        if let Some(v) = get_setting(conn, KEY_CHAT_BRIDGE_WHATSAPP_PHONE_NUMBER_ID)? {
+            let s = v.trim();
+            if !s.is_empty() {
+                out.chat_bridge_whatsapp_phone_number_id = Some(s.to_string());
+            }
+        }
+        out.chat_bridge_whatsapp_phone_number_id_configured = out
+            .chat_bridge_whatsapp_phone_number_id
+            .as_deref()
+            .map(str::trim)
+            .is_some_and(|value| !value.is_empty());
+        if let Some(v) = get_setting(conn, KEY_CHAT_BRIDGE_WHATSAPP_ACCESS_TOKEN)? {
+            let s = v.trim();
+            if !s.is_empty() {
+                out.chat_bridge_whatsapp_access_token = Some(s.to_string());
+            }
+        }
+        out.chat_bridge_whatsapp_access_token_configured = out
+            .chat_bridge_whatsapp_access_token
+            .as_deref()
+            .map(str::trim)
+            .is_some_and(|value| !value.is_empty());
+        if let Some(v) = get_setting(conn, KEY_CHAT_BRIDGE_WHATSAPP_APP_SECRET)? {
+            let s = v.trim();
+            if !s.is_empty() {
+                out.chat_bridge_whatsapp_app_secret = Some(s.to_string());
+            }
+        }
+        out.chat_bridge_whatsapp_app_secret_configured = out
+            .chat_bridge_whatsapp_app_secret
+            .as_deref()
+            .map(str::trim)
+            .is_some_and(|value| !value.is_empty());
+        if let Some(v) = get_setting(conn, KEY_CHAT_BRIDGE_WHATSAPP_VERIFY_TOKEN)? {
+            let s = v.trim();
+            if !s.is_empty() {
+                out.chat_bridge_whatsapp_verify_token = Some(s.to_string());
+            }
+        }
+        out.chat_bridge_whatsapp_verify_token_configured = out
+            .chat_bridge_whatsapp_verify_token
+            .as_deref()
+            .map(str::trim)
+            .is_some_and(|value| !value.is_empty());
         if let Some(v) = get_setting(conn, KEY_CHAT_BRIDGE_ALLOW_NEW_PROJECTS)? {
             out.chat_bridge_allow_new_projects = parse_bool_setting(
                 KEY_CHAT_BRIDGE_ALLOW_NEW_PROJECTS,
@@ -605,6 +687,46 @@ pub async fn update_app_settings(
             set_setting(
                 conn,
                 KEY_CHAT_BRIDGE_DISCORD_BOT_TOKEN,
+                v.trim(),
+                updated_at_ms,
+            )?;
+        }
+        if let Some(v) = patch.chat_bridge_whatsapp_enabled {
+            set_setting(
+                conn,
+                KEY_CHAT_BRIDGE_WHATSAPP_ENABLED,
+                if v { "true" } else { "false" },
+                updated_at_ms,
+            )?;
+        }
+        if let Some(v) = patch.chat_bridge_whatsapp_phone_number_id {
+            set_setting(
+                conn,
+                KEY_CHAT_BRIDGE_WHATSAPP_PHONE_NUMBER_ID,
+                v.trim(),
+                updated_at_ms,
+            )?;
+        }
+        if let Some(v) = patch.chat_bridge_whatsapp_access_token {
+            set_setting(
+                conn,
+                KEY_CHAT_BRIDGE_WHATSAPP_ACCESS_TOKEN,
+                v.trim(),
+                updated_at_ms,
+            )?;
+        }
+        if let Some(v) = patch.chat_bridge_whatsapp_app_secret {
+            set_setting(
+                conn,
+                KEY_CHAT_BRIDGE_WHATSAPP_APP_SECRET,
+                v.trim(),
+                updated_at_ms,
+            )?;
+        }
+        if let Some(v) = patch.chat_bridge_whatsapp_verify_token {
+            set_setting(
+                conn,
+                KEY_CHAT_BRIDGE_WHATSAPP_VERIFY_TOKEN,
                 v.trim(),
                 updated_at_ms,
             )?;

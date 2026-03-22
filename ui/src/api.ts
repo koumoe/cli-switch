@@ -42,6 +42,15 @@ export type AppSettings = {
   chat_bridge_discord_enabled: boolean;
   chat_bridge_discord_bot_token?: string | null;
   chat_bridge_discord_bot_token_configured: boolean;
+  chat_bridge_whatsapp_enabled: boolean;
+  chat_bridge_whatsapp_phone_number_id?: string | null;
+  chat_bridge_whatsapp_phone_number_id_configured: boolean;
+  chat_bridge_whatsapp_access_token?: string | null;
+  chat_bridge_whatsapp_access_token_configured: boolean;
+  chat_bridge_whatsapp_app_secret?: string | null;
+  chat_bridge_whatsapp_app_secret_configured: boolean;
+  chat_bridge_whatsapp_verify_token?: string | null;
+  chat_bridge_whatsapp_verify_token_configured: boolean;
   chat_bridge_allow_new_projects: boolean;
 };
 

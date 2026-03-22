@@ -17,6 +17,12 @@ pub enum Command {
         token: String,
     },
     Projects,
+    Channels,
+    ChannelSetEnabled {
+        target: String,
+        enabled: bool,
+    },
+    Routes,
     Start {
         tool: CliToolId,
         project_ref: String,
@@ -35,6 +41,13 @@ pub enum Command {
         target: String,
     },
     StopAll,
+    Usage {
+        range: StatsRange,
+    },
+    Costs {
+        range: StatsRange,
+    },
+    Status,
     Help,
 }
 
@@ -43,6 +56,26 @@ pub enum ResolveTargetResult {
     Exact(BridgeSession),
     Ambiguous(Vec<BridgeSession>),
     NotFound,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StatsRange {
+    Today,
+    Yesterday,
+    Week,
+    Month,
+}
+
+impl StatsRange {
+    fn parse(raw: &str) -> Option<Self> {
+        match raw.trim().to_ascii_lowercase().as_str() {
+            "today" => Some(StatsRange::Today),
+            "yesterday" => Some(StatsRange::Yesterday),
+            "week" => Some(StatsRange::Week),
+            "month" => Some(StatsRange::Month),
+            _ => None,
+        }
+    }
 }
 
 pub fn parse_input(text: &str, locale: AppLocale) -> anyhow::Result<ParsedInput> {
@@ -70,6 +103,8 @@ pub fn parse_input(text: &str, locale: AppLocale) -> anyhow::Result<ParsedInput>
             }
         }
         "projects" => Command::Projects,
+        "channels" => parse_channels_command(rest, locale)?,
+        "routes" => Command::Routes,
         "codex" => parse_start_command(CliToolId::Codex, rest, locale)?,
         "claude" => parse_start_command(CliToolId::Claude, rest, locale)?,
         "gemini" => parse_start_command(CliToolId::Gemini, rest, locale)?,
@@ -101,6 +136,13 @@ pub fn parse_input(text: &str, locale: AppLocale) -> anyhow::Result<ParsedInput>
                 }
             }
         }
+        "usage" => Command::Usage {
+            range: parse_stats_range(rest, locale, "cmd.usage_usage")?,
+        },
+        "costs" => Command::Costs {
+            range: parse_stats_range(rest, locale, "cmd.costs_usage")?,
+        },
+        "status" => Command::Status,
         "help" | "start" => Command::Help,
         other => anyhow::bail!(
             "{}",
@@ -265,6 +307,50 @@ pub fn help_text(locale: AppLocale) -> String {
     t(locale, "help.full")
 }
 
+fn parse_channels_command(rest: &str, locale: AppLocale) -> anyhow::Result<Command> {
+    let trimmed = rest.trim();
+    if trimmed.is_empty() {
+        return Ok(Command::Channels);
+    }
+
+    let usage = t(locale, "cmd.channels_usage");
+    let mut segments = trimmed.splitn(2, char::is_whitespace);
+    let action = segments
+        .next()
+        .unwrap_or_default()
+        .trim()
+        .to_ascii_lowercase();
+    let target = segments.next().unwrap_or("").trim();
+    anyhow::ensure!(!target.is_empty(), "{}", usage);
+
+    match action.as_str() {
+        "enable" => Ok(Command::ChannelSetEnabled {
+            target: target.to_string(),
+            enabled: true,
+        }),
+        "disable" => Ok(Command::ChannelSetEnabled {
+            target: target.to_string(),
+            enabled: false,
+        }),
+        _ => anyhow::bail!("{}", usage),
+    }
+}
+
+fn parse_stats_range(rest: &str, locale: AppLocale, usage_key: &str) -> anyhow::Result<StatsRange> {
+    let trimmed = rest.trim();
+    if trimmed.is_empty() {
+        return Ok(StatsRange::Today);
+    }
+
+    let usage = t(locale, usage_key);
+    let mut tokens = trimmed.split_whitespace();
+    let first = tokens.next().unwrap_or_default();
+    if tokens.next().is_some() {
+        anyhow::bail!("{}", usage);
+    }
+    StatsRange::parse(first).ok_or_else(|| anyhow::anyhow!("{}", usage))
+}
+
 fn parse_start_command(tool: CliToolId, rest: &str, locale: AppLocale) -> anyhow::Result<Command> {
     let usage = t_args(
         locale,
@@ -393,6 +479,30 @@ mod tests {
     }
 
     #[test]
+    fn parse_channels_enable_command() {
+        let parsed =
+            parse_input("/channels enable openai-main", AppLocale::ZhCN).expect("parse command");
+        match parsed {
+            ParsedInput::Command(Command::ChannelSetEnabled { target, enabled }) => {
+                assert_eq!(target, "openai-main");
+                assert!(enabled);
+            }
+            other => panic!("unexpected parse result: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_usage_command_supports_optional_range() {
+        let parsed = parse_input("/usage week", AppLocale::ZhCN).expect("parse command");
+        match parsed {
+            ParsedInput::Command(Command::Usage { range }) => {
+                assert_eq!(range, StatsRange::Week);
+            }
+            other => panic!("unexpected parse result: {other:?}"),
+        }
+    }
+
+    #[test]
     fn resolve_target_prefers_exact_alias_match() {
         let sessions = vec![
             sample_session(1, Some("alpha"), "api-server", CliToolId::Claude),
@@ -420,7 +530,7 @@ mod tests {
     fn help_text_matches_snapshot_zh_cn() {
         assert_eq!(
             help_text(AppLocale::ZhCN),
-            "可用命令：\n/bind <配对码>\n/projects\n/codex <项目> [别名] [--yolo]\n/claude <项目> [别名] [--yolo]\n/gemini <项目> [别名] [--yolo]\n/chat <会话> <消息>\n/switch <会话>\n/sessions\n/stop <会话|all>\n/help"
+            "可用命令：\n/bind <配对码>\n/projects\n/channels\n/channels enable <渠道>\n/channels disable <渠道>\n/routes\n/codex <项目> [别名] [--yolo]\n/claude <项目> [别名] [--yolo]\n/gemini <项目> [别名] [--yolo]\n/chat <会话> <消息>\n/switch <会话>\n/sessions\n/stop <会话|all>\n/usage [today|yesterday|week|month]\n/costs [today|yesterday|week|month]\n/status\n/help"
         );
     }
 
@@ -428,7 +538,7 @@ mod tests {
     fn help_text_matches_snapshot_en_us() {
         assert_eq!(
             help_text(AppLocale::EnUS),
-            "Available commands:\n/bind <pairing-token>\n/projects\n/codex <project> [alias] [--yolo]\n/claude <project> [alias] [--yolo]\n/gemini <project> [alias] [--yolo]\n/chat <session> <message>\n/switch <session>\n/sessions\n/stop <session|all>\n/help"
+            "Available commands:\n/bind <pairing-token>\n/projects\n/channels\n/channels enable <channel>\n/channels disable <channel>\n/routes\n/codex <project> [alias] [--yolo]\n/claude <project> [alias] [--yolo]\n/gemini <project> [alias] [--yolo]\n/chat <session> <message>\n/switch <session>\n/sessions\n/stop <session|all>\n/usage [today|yesterday|week|month]\n/costs [today|yesterday|week|month]\n/status\n/help"
         );
     }
 

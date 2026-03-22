@@ -2,7 +2,7 @@ use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use tokio::sync::watch;
+use tokio::sync::{mpsc, watch};
 
 use crate::storage;
 use crate::update;
@@ -18,6 +18,8 @@ pub struct AppState {
     pub channels_cache: watch::Sender<Arc<Vec<storage::Channel>>>,
     pub channels_cache_rx: watch::Receiver<Arc<Vec<storage::Channel>>>,
     pub update_runtime: Arc<tokio::sync::Mutex<update::UpdateRuntime>>,
+    pub whatsapp_webhook_tx:
+        Option<mpsc::Sender<crate::chat_bridge::adapter::whatsapp::WhatsAppWebhookMessage>>,
 }
 
 impl AppState {

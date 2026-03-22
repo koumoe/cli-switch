@@ -19,6 +19,7 @@ use tokio::sync::{Mutex, mpsc, watch};
 
 use self::adapter::discord::DiscordAdapter;
 use self::adapter::telegram::TelegramAdapter;
+use self::adapter::whatsapp::{WhatsAppAdapter, WhatsAppWebhookMessage};
 use self::adapter::{ChatAdapter, IncomingAttachmentKind, IncomingMessage};
 #[cfg(test)]
 use self::adapter::{OutgoingMessage, SentMessage, StreamingMessage};
@@ -37,14 +38,21 @@ use self::output::format_projects_list;
 #[cfg(test)]
 use self::projects::AggregatedProject;
 use self::projects::ProjectStore;
-use self::router::{Command, format_session_label, format_sessions_list, help_text};
-use crate::cli_tools::CliToolId;
+use self::router::{
+    Command, StatsRange as CommandStatsRange, format_session_label, format_sessions_list, help_text,
+};
+use crate::cli_tools::{
+    CLI_TOOLS, CliExecEnv, CliToolId, detect_cli_tool, normalize_version_string,
+    try_get_cmd_version_at,
+};
+use crate::events;
 use crate::i18n::{AppLocale, render_error};
 use crate::storage::{self, BridgeSessionStatus, ChatPlatform, StorageError};
 
 const STREAM_UPDATE_INTERVAL: Duration = Duration::from_millis(1200);
 const TYPING_INTERVAL: Duration = Duration::from_secs(4);
 const TURN_EXECUTION_TIMEOUT: Duration = Duration::from_secs(10 * 60);
+#[allow(dead_code)]
 const MESSAGE_CHAR_LIMIT: usize = 3900;
 const MAX_DISPLAY_JSON_DEPTH: usize = 24;
 
@@ -193,10 +201,14 @@ pub async fn run_supervisor(
     db_path: PathBuf,
     http_client: reqwest::Client,
     mut settings_rx: watch::Receiver<Arc<storage::AppSettings>>,
+    channels_cache: Option<watch::Sender<Arc<Vec<storage::Channel>>>>,
+    whatsapp_inbound_rx: Option<mpsc::Receiver<WhatsAppWebhookMessage>>,
 ) {
+    let whatsapp_inbound_rx = whatsapp_inbound_rx.map(|rx| Arc::new(Mutex::new(rx)));
     let runtime = ChatBridgeRuntime {
         db_path,
         settings_rx: settings_rx.clone(),
+        channels_cache,
         project_store: Arc::new(ProjectStore::new()),
         busy_sessions: Arc::new(Mutex::new(HashSet::new())),
         active_turns: Arc::new(Mutex::new(HashMap::new())),
@@ -204,13 +216,21 @@ pub async fn run_supervisor(
 
     let mut telegram_task = ManagedBridgeTask::new("telegram");
     let mut discord_task = ManagedBridgeTask::new("discord");
+    let mut whatsapp_task = ManagedBridgeTask::new("whatsapp");
 
     loop {
         let telegram_token = desired_telegram_token(settings_rx.borrow().as_ref());
         let discord_token = desired_discord_token(settings_rx.borrow().as_ref());
+        let whatsapp_config = whatsapp_inbound_rx
+            .as_ref()
+            .and_then(|_| desired_whatsapp_config(settings_rx.borrow().as_ref()));
+        let whatsapp_key = whatsapp_config
+            .as_ref()
+            .map(|cfg| format!("{}:{}", cfg.phone_number_id, cfg.access_token));
 
         telegram_task.sync_token(telegram_token.as_deref());
         discord_task.sync_token(discord_token.as_deref());
+        whatsapp_task.sync_token(whatsapp_key.as_deref());
 
         if telegram_token.is_some() {
             let runtime = runtime.clone();
@@ -232,9 +252,24 @@ pub async fn run_supervisor(
             });
         }
 
+        if let (Some(config), Some(inbound_rx), Some(key)) = (
+            whatsapp_config.clone(),
+            whatsapp_inbound_rx.clone(),
+            whatsapp_key.clone(),
+        ) {
+            let runtime = runtime.clone();
+            let client = http_client.clone();
+            whatsapp_task.spawn_if_needed(Some(key), move |_token| {
+                tokio::spawn(async move {
+                    run_whatsapp_bridge(runtime, client, config, inbound_rx).await;
+                })
+            });
+        }
+
         let telegram_running = telegram_task.is_running();
         let discord_running = discord_task.is_running();
-        if telegram_running || discord_running {
+        let whatsapp_running = whatsapp_task.is_running();
+        if telegram_running || discord_running || whatsapp_running {
             tokio::select! {
                 changed = settings_rx.changed() => {
                     if changed.is_err() {
@@ -247,6 +282,9 @@ pub async fn run_supervisor(
                 exit = discord_task.wait_for_exit(), if discord_running => {
                     discord_task.handle_exit(exit).await;
                 }
+                exit = whatsapp_task.wait_for_exit(), if whatsapp_running => {
+                    whatsapp_task.handle_exit(exit).await;
+                }
             }
         } else if settings_rx.changed().await.is_err() {
             break;
@@ -255,20 +293,42 @@ pub async fn run_supervisor(
 
     telegram_task.abort_and_join().await;
     discord_task.abort_and_join().await;
+    whatsapp_task.abort_and_join().await;
 }
 
 #[derive(Clone)]
 struct ChatBridgeRuntime {
     db_path: PathBuf,
     settings_rx: watch::Receiver<Arc<storage::AppSettings>>,
+    channels_cache: Option<watch::Sender<Arc<Vec<storage::Channel>>>>,
     project_store: Arc<ProjectStore>,
     busy_sessions: Arc<Mutex<HashSet<i64>>>,
     active_turns: Arc<Mutex<HashMap<i64, ActiveTurnHandle>>>,
 }
 
+#[derive(Debug, Clone)]
+struct CliToolSnapshot {
+    name: &'static str,
+    installed: bool,
+    version: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+enum ResolveChannelTargetResult {
+    Exact(storage::Channel),
+    Ambiguous(Vec<storage::Channel>),
+    NotFound,
+}
+
 impl ChatBridgeRuntime {
     fn settings_snapshot(&self) -> Arc<storage::AppSettings> {
         self.settings_rx.borrow().clone()
+    }
+
+    fn publish_channels_cache(&self, channels: Vec<storage::Channel>) {
+        if let Some(cache) = self.channels_cache.as_ref() {
+            let _ = cache.send(Arc::new(channels));
+        }
     }
 
     async fn handle_bound_command(
@@ -290,6 +350,87 @@ impl ChatBridgeRuntime {
                     .remember_snapshot(key, items.clone())
                     .await;
                 let content = format_projects_list(&items, locale);
+                self.send_text(
+                    adapter,
+                    &msg.chat_id,
+                    &content,
+                    msg.message_id.as_deref(),
+                    locale,
+                )
+                .await?;
+            }
+            Command::Channels => {
+                let channels = storage::list_channels(self.db_path.clone()).await?;
+                self.publish_channels_cache(channels.clone());
+                let content = format_channels_list(&channels, storage::now_ms(), locale);
+                self.send_text(
+                    adapter,
+                    &msg.chat_id,
+                    &content,
+                    msg.message_id.as_deref(),
+                    locale,
+                )
+                .await?;
+            }
+            Command::ChannelSetEnabled { target, enabled } => {
+                let channels = storage::list_channels(self.db_path.clone()).await?;
+                let Some(channel) = self
+                    .resolve_channel_or_reply(adapter.clone(), &msg, &target, &channels, locale)
+                    .await?
+                else {
+                    return Ok(());
+                };
+                storage::set_channel_enabled(self.db_path.clone(), channel.id.clone(), enabled)
+                    .await?;
+                let channels = storage::list_channels(self.db_path.clone()).await?;
+                self.publish_channels_cache(channels.clone());
+                let updated = channels
+                    .into_iter()
+                    .find(|item| item.id == channel.id)
+                    .unwrap_or(channel);
+                let message = if enabled {
+                    t_args(
+                        locale,
+                        "channel.enabled",
+                        &args([("name", updated.name.clone())]),
+                    )
+                } else {
+                    t_args(
+                        locale,
+                        "channel.disabled",
+                        &args([("name", updated.name.clone())]),
+                    )
+                };
+                self.send_text(
+                    adapter,
+                    &msg.chat_id,
+                    &message,
+                    msg.message_id.as_deref(),
+                    locale,
+                )
+                .await?;
+            }
+            Command::Routes => {
+                let routes = storage::list_routes(self.db_path.clone()).await?;
+                let channels = storage::list_channels(self.db_path.clone()).await?;
+                let channel_names = channels
+                    .iter()
+                    .map(|item| (item.id.clone(), item.name.clone()))
+                    .collect::<HashMap<_, _>>();
+                let mut route_channels = HashMap::<String, Vec<storage::RouteChannel>>::new();
+                for route in &routes {
+                    let items =
+                        storage::list_route_channels(self.db_path.clone(), route.id.clone())
+                            .await?;
+                    route_channels.insert(route.id.clone(), items);
+                }
+                let content = format_routes_list(
+                    &routes,
+                    &route_channels,
+                    &channel_names,
+                    storage::now_ms(),
+                    locale,
+                );
                 self.send_text(
                     adapter,
                     &msg.chat_id,
@@ -487,6 +628,86 @@ impl ChatBridgeRuntime {
                             &args([("count", count.to_string())]),
                         )
                     },
+                    msg.message_id.as_deref(),
+                    locale,
+                )
+                .await?;
+            }
+            Command::Usage { range } => {
+                let (start_ms, end_ms) = stats_window_ms(range);
+                let summary =
+                    storage::stats_summary(self.db_path.clone(), start_ms, end_ms).await?;
+                let channel_stats =
+                    storage::stats_channels(self.db_path.clone(), start_ms, end_ms).await?;
+                let content = format_usage_report(range, &summary, &channel_stats, locale);
+                self.send_text(
+                    adapter,
+                    &msg.chat_id,
+                    &content,
+                    msg.message_id.as_deref(),
+                    locale,
+                )
+                .await?;
+            }
+            Command::Costs { range } => {
+                let (start_ms, end_ms) = stats_window_ms(range);
+                let summary =
+                    storage::stats_summary(self.db_path.clone(), start_ms, end_ms).await?;
+                let channel_stats =
+                    storage::stats_channels(self.db_path.clone(), start_ms, end_ms).await?;
+                let pricing = storage::pricing_status(self.db_path.clone()).await?;
+                let content =
+                    format_costs_report(range, &summary, &channel_stats, &pricing, locale);
+                self.send_text(
+                    adapter,
+                    &msg.chat_id,
+                    &content,
+                    msg.message_id.as_deref(),
+                    locale,
+                )
+                .await?;
+            }
+            Command::Status => {
+                let now_ms = storage::now_ms();
+                let settings = self.settings_snapshot();
+                let channels = storage::list_channels(self.db_path.clone()).await?;
+                let routes = storage::list_routes(self.db_path.clone()).await?;
+                let pricing = storage::pricing_status(self.db_path.clone()).await?;
+                let telegram_sessions = storage::count_active_bridge_sessions_for_platform(
+                    self.db_path.clone(),
+                    ChatPlatform::Telegram,
+                )
+                .await?;
+                let discord_sessions = storage::count_active_bridge_sessions_for_platform(
+                    self.db_path.clone(),
+                    ChatPlatform::Discord,
+                )
+                .await?;
+                let whatsapp_sessions = storage::count_active_bridge_sessions_for_platform(
+                    self.db_path.clone(),
+                    ChatPlatform::WhatsApp,
+                )
+                .await?;
+                let tool_statuses =
+                    detect_cli_tool_statuses(settings.as_ref(), self.data_dir()).await?;
+                let update_status = events::last_update_status();
+                let content = format_status_report(StatusReportContext {
+                    now_ms,
+                    settings: settings.as_ref(),
+                    channels: &channels,
+                    routes: &routes,
+                    tool_statuses: &tool_statuses,
+                    telegram_sessions,
+                    discord_sessions,
+                    whatsapp_sessions,
+                    pricing: &pricing,
+                    update_status: update_status.as_ref(),
+                    locale,
+                });
+                self.send_text(
+                    adapter,
+                    &msg.chat_id,
+                    &content,
                     msg.message_id.as_deref(),
                     locale,
                 )
@@ -837,6 +1058,45 @@ impl ChatBridgeRuntime {
             .unwrap_or_else(|| PathBuf::from("."))
     }
 
+    async fn resolve_channel_or_reply(
+        &self,
+        adapter: Arc<dyn ChatAdapter>,
+        msg: &IncomingMessage,
+        target: &str,
+        channels: &[storage::Channel],
+        locale: AppLocale,
+    ) -> anyhow::Result<Option<storage::Channel>> {
+        match resolve_channel_target(channels, target) {
+            ResolveChannelTargetResult::Exact(channel) => Ok(Some(channel)),
+            ResolveChannelTargetResult::Ambiguous(items) => {
+                self.send_text(
+                    adapter,
+                    &msg.chat_id,
+                    &format_ambiguous_channel_target(target, &items, locale),
+                    msg.message_id.as_deref(),
+                    locale,
+                )
+                .await?;
+                Ok(None)
+            }
+            ResolveChannelTargetResult::NotFound => {
+                self.send_text(
+                    adapter,
+                    &msg.chat_id,
+                    &t_args(
+                        locale,
+                        "channel.not_found",
+                        &args([("target", target.to_string())]),
+                    ),
+                    msg.message_id.as_deref(),
+                    locale,
+                )
+                .await?;
+                Ok(None)
+            }
+        }
+    }
+
     async fn register_active_turn(&self, session_id: i64) -> ActiveTurnRegistration {
         let (cancel_tx, cancel_rx) = watch::channel(false);
         let child_pid = Arc::new(AtomicU32::new(0));
@@ -883,6 +1143,693 @@ impl ChatBridgeRuntime {
     async fn clear_busy(&self, session_id: i64) {
         self.busy_sessions.lock().await.remove(&session_id);
     }
+}
+
+fn resolve_channel_target(
+    channels: &[storage::Channel],
+    target: &str,
+) -> ResolveChannelTargetResult {
+    let trimmed = target.trim();
+    if trimmed.is_empty() {
+        return ResolveChannelTargetResult::NotFound;
+    }
+
+    if let Some(channel) = channels.iter().find(|item| item.id == trimmed) {
+        return ResolveChannelTargetResult::Exact(channel.clone());
+    }
+
+    let lowered = trimmed.to_ascii_lowercase();
+    let by_name = channels
+        .iter()
+        .filter(|item| item.name.to_ascii_lowercase() == lowered)
+        .cloned()
+        .collect::<Vec<_>>();
+    if by_name.len() == 1 {
+        return ResolveChannelTargetResult::Exact(
+            by_name.into_iter().next().unwrap_or_else(|| unreachable!()),
+        );
+    }
+    if by_name.len() > 1 {
+        return ResolveChannelTargetResult::Ambiguous(by_name);
+    }
+
+    let by_id_prefix = channels
+        .iter()
+        .filter(|item| item.id.to_ascii_lowercase().starts_with(&lowered))
+        .cloned()
+        .collect::<Vec<_>>();
+    match by_id_prefix.len() {
+        0 => ResolveChannelTargetResult::NotFound,
+        1 => ResolveChannelTargetResult::Exact(
+            by_id_prefix
+                .into_iter()
+                .next()
+                .unwrap_or_else(|| unreachable!()),
+        ),
+        _ => ResolveChannelTargetResult::Ambiguous(by_id_prefix),
+    }
+}
+
+fn format_ambiguous_channel_target(
+    target: &str,
+    items: &[storage::Channel],
+    locale: AppLocale,
+) -> String {
+    let mut lines = vec![t_args(
+        locale,
+        "channel.ambiguous_title",
+        &args([("target", target.to_string())]),
+    )];
+    for item in items {
+        lines.push(format!(
+            "- {} [{}] ({})",
+            item.name,
+            item.protocol.as_str(),
+            short_id(&item.id)
+        ));
+    }
+    lines.push(t(locale, "channel.ambiguous_hint"));
+    lines.join("\n")
+}
+
+fn format_channels_list(channels: &[storage::Channel], now_ms: i64, locale: AppLocale) -> String {
+    if channels.is_empty() {
+        return t(locale, "channel.none");
+    }
+
+    let mut lines = vec![t(locale, "channel.list_title")];
+    for channel in channels {
+        lines.push(format!(
+            "{} [{}]  {}",
+            channel.name,
+            channel.protocol.as_str(),
+            channel_status_label(channel, now_ms, locale),
+        ));
+        lines.push(format!(
+            "    {}: {}",
+            t(locale, "channel.id_label"),
+            channel.id
+        ));
+        lines.push(format!(
+            "    {}: {}",
+            t(locale, "channel.priority_label"),
+            channel.priority
+        ));
+        lines.push(format!(
+            "    {}: {}",
+            t(locale, "channel.base_url_label"),
+            channel.base_url
+        ));
+        if storage::channel_is_auto_disabled(channel, now_ms) {
+            lines.push(format!(
+                "    {}: {}",
+                t(locale, "channel.auto_disabled_until_label"),
+                format_local_timestamp_with_relative(
+                    now_ms,
+                    channel.auto_disabled_until_ms,
+                    locale
+                )
+            ));
+        }
+    }
+
+    lines.join("\n")
+}
+
+fn format_routes_list(
+    routes: &[storage::Route],
+    route_channels: &HashMap<String, Vec<storage::RouteChannel>>,
+    channel_names: &HashMap<String, String>,
+    now_ms: i64,
+    locale: AppLocale,
+) -> String {
+    if routes.is_empty() {
+        return t(locale, "route.none");
+    }
+
+    let mut lines = vec![t(locale, "route.list_title")];
+    for route in routes {
+        let match_model = route
+            .match_model
+            .as_deref()
+            .filter(|value| !value.trim().is_empty())
+            .map(ToOwned::to_owned)
+            .unwrap_or_else(|| t(locale, "route.match_all"));
+        lines.push(format!(
+            "{} [{}]  {}",
+            route.name,
+            route.protocol.as_str(),
+            route_enabled_label(route.enabled, locale),
+        ));
+        lines.push(format!("    {}: {}", t(locale, "route.id_label"), route.id));
+        lines.push(format!(
+            "    {}: {}",
+            t(locale, "route.match_model_label"),
+            match_model
+        ));
+
+        let items = route_channels.get(&route.id).cloned().unwrap_or_default();
+        if items.is_empty() {
+            lines.push(format!(
+                "    {}: {}",
+                t(locale, "route.channels_label"),
+                t(locale, "route.channels_empty")
+            ));
+            continue;
+        }
+
+        lines.push(format!("    {}:", t(locale, "route.channels_label")));
+        for item in items {
+            let name = channel_names
+                .get(&item.channel_id)
+                .cloned()
+                .unwrap_or_else(|| item.channel_id.clone());
+            let mut line = format!(
+                "    {}. {} ({})",
+                item.priority + 1,
+                name,
+                short_id(&item.channel_id)
+            );
+            if let Some(until_ms) = item.cooldown_until_ms.filter(|value| *value > now_ms) {
+                line.push_str(&format!(
+                    "  {} {}",
+                    t(locale, "route.cooldown_until_label"),
+                    format_local_timestamp_with_relative(now_ms, until_ms, locale)
+                ));
+            }
+            lines.push(line);
+        }
+    }
+
+    lines.join("\n")
+}
+
+fn format_usage_report(
+    range: CommandStatsRange,
+    summary: &storage::StatsSummary,
+    channel_stats: &[storage::ChannelStats],
+    locale: AppLocale,
+) -> String {
+    let mut lines = vec![t(locale, "stats.usage_title")];
+    lines.push(format!(
+        "{}: {}",
+        t(locale, "stats.range_label"),
+        stats_range_label(range, locale)
+    ));
+    lines.push(format!(
+        "{}: {}",
+        t(locale, "stats.requests_label"),
+        summary.requests
+    ));
+    lines.push(format!(
+        "{}: {}",
+        t(locale, "stats.success_label"),
+        summary.success
+    ));
+    lines.push(format!(
+        "{}: {}",
+        t(locale, "stats.failed_label"),
+        summary.failed
+    ));
+    lines.push(format!(
+        "{}: {}",
+        t(locale, "stats.avg_latency_label"),
+        format_avg_latency(summary.avg_latency_ms)
+    ));
+    lines.push(format!(
+        "{}: {}",
+        t(locale, "stats.prompt_tokens_label"),
+        summary.prompt_tokens
+    ));
+    lines.push(format!(
+        "{}: {}",
+        t(locale, "stats.completion_tokens_label"),
+        summary.completion_tokens
+    ));
+    lines.push(format!(
+        "{}: {}",
+        t(locale, "stats.total_tokens_label"),
+        summary.total_tokens
+    ));
+    lines.push(format!(
+        "{}: {}",
+        t(locale, "stats.estimated_cost_label"),
+        format_cost_usd(summary.estimated_cost_usd.as_deref())
+    ));
+    lines.push(String::new());
+    lines.push(t(locale, "stats.by_channel_label"));
+
+    let active_channels = channel_stats
+        .iter()
+        .filter(|item| item.requests > 0)
+        .collect::<Vec<_>>();
+    if active_channels.is_empty() {
+        lines.push(t(locale, "stats.by_channel_empty"));
+        return lines.join("\n");
+    }
+
+    for item in active_channels {
+        lines.push(format!(
+            "- {} [{}]  {}={}  {}={}  {}={}  {}={}  {}={}",
+            item.name,
+            item.protocol.as_str(),
+            t(locale, "stats.requests_label"),
+            item.requests,
+            t(locale, "stats.success_label"),
+            item.success,
+            t(locale, "stats.failed_label"),
+            item.failed,
+            t(locale, "stats.total_tokens_label"),
+            item.total_tokens,
+            t(locale, "stats.estimated_cost_short_label"),
+            format_cost_usd(item.estimated_cost_usd.as_deref())
+        ));
+    }
+
+    lines.join("\n")
+}
+
+fn format_costs_report(
+    range: CommandStatsRange,
+    summary: &storage::StatsSummary,
+    channel_stats: &[storage::ChannelStats],
+    pricing: &storage::PricingStatus,
+    locale: AppLocale,
+) -> String {
+    let mut lines = vec![t(locale, "stats.costs_title")];
+    lines.push(format!(
+        "{}: {}",
+        t(locale, "stats.range_label"),
+        stats_range_label(range, locale)
+    ));
+    lines.push(format!(
+        "{}: {}",
+        t(locale, "stats.estimated_cost_label"),
+        format_cost_usd(summary.estimated_cost_usd.as_deref())
+    ));
+    lines.push(format!(
+        "{}: {}",
+        t(locale, "stats.total_tokens_label"),
+        summary.total_tokens
+    ));
+    lines.push(format!(
+        "{}: {}",
+        t(locale, "stats.pricing_models_label"),
+        pricing.count
+    ));
+    lines.push(format!(
+        "{}: {}",
+        t(locale, "stats.last_sync_label"),
+        pricing
+            .last_sync_ms
+            .map(|value| format_local_timestamp_with_relative(storage::now_ms(), value, locale))
+            .unwrap_or_else(|| t(locale, "stats.not_synced"))
+    ));
+
+    if pricing.count == 0 {
+        lines.push(t(locale, "stats.pricing_missing_hint"));
+    }
+
+    lines.push(String::new());
+    lines.push(t(locale, "stats.by_channel_label"));
+
+    let active_channels = channel_stats
+        .iter()
+        .filter(|item| item.requests > 0)
+        .collect::<Vec<_>>();
+    if active_channels.is_empty() {
+        lines.push(t(locale, "stats.by_channel_empty"));
+        return lines.join("\n");
+    }
+
+    for item in active_channels {
+        lines.push(format!(
+            "- {} [{}]  {}={}  {}={}  {}={}",
+            item.name,
+            item.protocol.as_str(),
+            t(locale, "stats.estimated_cost_short_label"),
+            format_cost_usd(item.estimated_cost_usd.as_deref()),
+            t(locale, "stats.requests_label"),
+            item.requests,
+            t(locale, "stats.total_tokens_label"),
+            item.total_tokens
+        ));
+    }
+
+    lines.join("\n")
+}
+
+struct StatusReportContext<'a> {
+    now_ms: i64,
+    settings: &'a storage::AppSettings,
+    channels: &'a [storage::Channel],
+    routes: &'a [storage::Route],
+    tool_statuses: &'a [CliToolSnapshot],
+    telegram_sessions: i64,
+    discord_sessions: i64,
+    whatsapp_sessions: i64,
+    pricing: &'a storage::PricingStatus,
+    update_status: Option<&'a crate::update::UpdateStatus>,
+    locale: AppLocale,
+}
+
+fn format_status_report(ctx: StatusReportContext<'_>) -> String {
+    let StatusReportContext {
+        now_ms,
+        settings,
+        channels,
+        routes,
+        tool_statuses,
+        telegram_sessions,
+        discord_sessions,
+        whatsapp_sessions,
+        pricing,
+        update_status,
+        locale,
+    } = ctx;
+
+    let auto_disabled = channels
+        .iter()
+        .filter(|item| storage::channel_is_auto_disabled(item, now_ms))
+        .count();
+    let enabled_channels = channels.iter().filter(|item| item.enabled).count();
+    let enabled_routes = routes.iter().filter(|item| item.enabled).count();
+
+    let mut lines = vec![t(locale, "status.title")];
+    lines.push(format!(
+        "{}: {}",
+        t(locale, "status.generated_at_label"),
+        format_local_timestamp_ms(now_ms)
+    ));
+    lines.push(format!(
+        "{}: {}",
+        t(locale, "status.version_label"),
+        env!("CARGO_PKG_VERSION")
+    ));
+    lines.push(format!(
+        "{}: {}",
+        t(locale, "status.chat_bridge_label"),
+        enabled_label(settings.chat_bridge_enabled, locale)
+    ));
+    lines.push(format!(
+        "- Telegram: {} / {} / {}={}",
+        enabled_label(settings.chat_bridge_telegram_enabled, locale),
+        token_configured_label(settings.chat_bridge_telegram_bot_token_configured, locale),
+        t(locale, "status.active_sessions_label"),
+        telegram_sessions
+    ));
+    lines.push(format!(
+        "- Discord: {} / {} / {}={}",
+        enabled_label(settings.chat_bridge_discord_enabled, locale),
+        token_configured_label(settings.chat_bridge_discord_bot_token_configured, locale),
+        t(locale, "status.active_sessions_label"),
+        discord_sessions
+    ));
+    lines.push(format!(
+        "- WhatsApp: {} / phone_number_id={} / access_token={} / {}={}",
+        enabled_label(settings.chat_bridge_whatsapp_enabled, locale),
+        configured_label(
+            settings.chat_bridge_whatsapp_phone_number_id_configured,
+            locale
+        ),
+        configured_label(
+            settings.chat_bridge_whatsapp_access_token_configured,
+            locale
+        ),
+        t(locale, "status.active_sessions_label"),
+        whatsapp_sessions
+    ));
+    lines.push(format!(
+        "{}: {}={}  {}={}  {}={}",
+        t(locale, "status.channels_label"),
+        t(locale, "status.total_label"),
+        channels.len(),
+        t(locale, "status.enabled_label"),
+        enabled_channels,
+        t(locale, "status.auto_disabled_label"),
+        auto_disabled
+    ));
+    lines.push(format!(
+        "{}: {}={}  {}={}",
+        t(locale, "status.routes_label"),
+        t(locale, "status.total_label"),
+        routes.len(),
+        t(locale, "status.enabled_label"),
+        enabled_routes
+    ));
+    lines.push(format!(
+        "{}: {}={}  {}={}",
+        t(locale, "status.pricing_label"),
+        t(locale, "status.models_label"),
+        pricing.count,
+        t(locale, "status.last_sync_label"),
+        pricing
+            .last_sync_ms
+            .map(|value| format_local_timestamp_with_relative(now_ms, value, locale))
+            .unwrap_or_else(|| t(locale, "status.unknown_label"))
+    ));
+    lines.push(t(locale, "status.cli_tools_label"));
+    for item in tool_statuses {
+        lines.push(format!(
+            "- {}: {}",
+            item.name,
+            if item.installed {
+                item.version
+                    .as_deref()
+                    .map(|value| format!("{} ({value})", t(locale, "status.installed_label")))
+                    .unwrap_or_else(|| t(locale, "status.installed_label"))
+            } else {
+                t(locale, "status.missing_label")
+            }
+        ));
+    }
+
+    let update_line = match update_status {
+        Some(status) => {
+            let latest = status.latest_version.as_deref().unwrap_or("-");
+            format!(
+                "{}: stage={}  latest={}  update_available={}",
+                t(locale, "status.update_label"),
+                status.stage,
+                latest,
+                if status.update_available {
+                    t(locale, "status.yes_label")
+                } else {
+                    t(locale, "status.no_label")
+                }
+            )
+        }
+        None => format!(
+            "{}: {}",
+            t(locale, "status.update_label"),
+            t(locale, "status.unknown_label")
+        ),
+    };
+    lines.push(update_line);
+
+    lines.join("\n")
+}
+
+async fn detect_cli_tool_statuses(
+    settings: &storage::AppSettings,
+    data_dir: PathBuf,
+) -> anyhow::Result<Vec<CliToolSnapshot>> {
+    let npm_path = settings.cli_tools_npm_path.clone();
+    let node_path = settings.cli_tools_node_path.clone();
+    tokio::task::spawn_blocking(move || {
+        let env = CliExecEnv::new(npm_path.as_deref(), node_path.as_deref());
+        let mut out = Vec::new();
+        for def in CLI_TOOLS {
+            let mut detected = detect_cli_tool(&env, &data_dir, def);
+            if let Ok(shim_path) = crate::terminal::cli_tool_shim_path(def.bin)
+                && shim_path.is_file()
+            {
+                let shim_version = try_get_cmd_version_at(&shim_path);
+                if shim_version.is_some() {
+                    if !detected.installed {
+                        detected.installed = true;
+                    }
+                    if detected.version.is_none() {
+                        detected.version = shim_version.as_deref().map(normalize_version_string);
+                    }
+                }
+            }
+            out.push(CliToolSnapshot {
+                name: def.name,
+                installed: detected.installed,
+                version: detected.version,
+            });
+        }
+        Ok(out)
+    })
+    .await
+    .context("wait cli tool status task failed")?
+}
+
+fn channel_status_label(channel: &storage::Channel, now_ms: i64, locale: AppLocale) -> String {
+    if !channel.enabled {
+        return t(locale, "channel.status_disabled");
+    }
+    if storage::channel_is_auto_disabled(channel, now_ms) {
+        return t(locale, "channel.status_auto_disabled");
+    }
+    t(locale, "channel.status_enabled")
+}
+
+fn route_enabled_label(enabled: bool, locale: AppLocale) -> String {
+    if enabled {
+        t(locale, "route.status_enabled")
+    } else {
+        t(locale, "route.status_disabled")
+    }
+}
+
+fn enabled_label(enabled: bool, locale: AppLocale) -> String {
+    if enabled {
+        t(locale, "status.enabled_state")
+    } else {
+        t(locale, "status.disabled_state")
+    }
+}
+
+fn token_configured_label(configured: bool, locale: AppLocale) -> String {
+    if configured {
+        t(locale, "status.token_configured")
+    } else {
+        t(locale, "status.token_missing")
+    }
+}
+
+fn configured_label(configured: bool, locale: AppLocale) -> String {
+    if configured {
+        t(locale, "status.configured")
+    } else {
+        t(locale, "status.missing")
+    }
+}
+
+fn stats_range_label(range: CommandStatsRange, locale: AppLocale) -> String {
+    match range {
+        CommandStatsRange::Today => t(locale, "stats.range_today"),
+        CommandStatsRange::Yesterday => t(locale, "stats.range_yesterday"),
+        CommandStatsRange::Week => t(locale, "stats.range_week"),
+        CommandStatsRange::Month => t(locale, "stats.range_month"),
+    }
+}
+
+fn stats_window_ms(range: CommandStatsRange) -> (i64, Option<i64>) {
+    let now = time::OffsetDateTime::now_utc();
+    let offset = time::UtcOffset::current_local_offset().unwrap_or(time::UtcOffset::UTC);
+    let local = now.to_offset(offset);
+
+    let start_local = match range {
+        CommandStatsRange::Today => local.replace_time(time::Time::MIDNIGHT),
+        CommandStatsRange::Yesterday => {
+            (local - time::Duration::days(1)).replace_time(time::Time::MIDNIGHT)
+        }
+        CommandStatsRange::Week => {
+            let d = local.date();
+            let days_since_monday = i64::from(d.weekday().number_from_monday().saturating_sub(1));
+            let first = d - time::Duration::days(days_since_monday);
+            local.replace_date(first).replace_time(time::Time::MIDNIGHT)
+        }
+        CommandStatsRange::Month => {
+            let d = local.date();
+            let first = time::Date::from_calendar_date(d.year(), d.month(), 1).unwrap_or(d);
+            local.replace_date(first).replace_time(time::Time::MIDNIGHT)
+        }
+    };
+
+    let start_ms = i64::try_from(
+        start_local
+            .to_offset(time::UtcOffset::UTC)
+            .unix_timestamp_nanos()
+            / 1_000_000,
+    )
+    .unwrap_or(0);
+    let end_ms = match range {
+        CommandStatsRange::Yesterday => {
+            let start_today_local = local.replace_time(time::Time::MIDNIGHT);
+            let start_today_ms = i64::try_from(
+                start_today_local
+                    .to_offset(time::UtcOffset::UTC)
+                    .unix_timestamp_nanos()
+                    / 1_000_000,
+            )
+            .unwrap_or(0);
+            Some(start_today_ms.saturating_sub(1))
+        }
+        CommandStatsRange::Today | CommandStatsRange::Week | CommandStatsRange::Month => None,
+    };
+    (start_ms, end_ms)
+}
+
+fn format_avg_latency(value: Option<f64>) -> String {
+    value
+        .filter(|v| v.is_finite())
+        .map(|v| format!("{v:.0} ms"))
+        .unwrap_or_else(|| "-".to_string())
+}
+
+fn format_cost_usd(value: Option<&str>) -> String {
+    value
+        .map(|item| format!("${item}"))
+        .unwrap_or_else(|| "-".to_string())
+}
+
+fn format_local_timestamp_with_relative(now_ms: i64, at_ms: i64, locale: AppLocale) -> String {
+    format!(
+        "{} ({})",
+        format_local_timestamp_ms(at_ms),
+        format_relative_time_label(now_ms, at_ms, locale)
+    )
+}
+
+fn format_relative_time_label(now_ms: i64, at_ms: i64, locale: AppLocale) -> String {
+    let diff_ms = now_ms.saturating_sub(at_ms).max(0);
+    let minutes = diff_ms / 60_000;
+    if minutes <= 0 {
+        return t(locale, "time.just_now");
+    }
+    if minutes < 60 {
+        return t_args(
+            locale,
+            "time.minutes_ago",
+            &args([("minutes", minutes.to_string())]),
+        );
+    }
+    let hours = minutes / 60;
+    if hours < 24 {
+        return t_args(
+            locale,
+            "time.hours_ago",
+            &args([("hours", hours.to_string())]),
+        );
+    }
+    let days = hours / 24;
+    t_args(locale, "time.days_ago", &args([("days", days.to_string())]))
+}
+
+fn format_local_timestamp_ms(ms: i64) -> String {
+    let nanos = i128::from(ms).saturating_mul(1_000_000);
+    let Ok(dt) = time::OffsetDateTime::from_unix_timestamp_nanos(nanos) else {
+        return ms.to_string();
+    };
+    let offset = time::UtcOffset::current_local_offset().unwrap_or(time::UtcOffset::UTC);
+    let local = dt.to_offset(offset);
+    format!(
+        "{:04}-{:02}-{:02} {:02}:{:02}:{:02}",
+        local.year(),
+        u8::from(local.month()),
+        local.day(),
+        local.hour(),
+        local.minute(),
+        local.second()
+    )
+}
+
+fn short_id(raw: &str) -> &str {
+    raw.get(..8).unwrap_or(raw)
 }
 
 #[derive(Clone, Copy)]
@@ -1006,6 +1953,37 @@ async fn run_discord_bridge(runtime: ChatBridgeRuntime, client: reqwest::Client,
     }
 }
 
+#[derive(Clone)]
+struct WhatsAppSenderConfig {
+    phone_number_id: String,
+    access_token: String,
+}
+
+async fn run_whatsapp_bridge(
+    runtime: ChatBridgeRuntime,
+    client: reqwest::Client,
+    config: WhatsAppSenderConfig,
+    inbound_rx: Arc<Mutex<mpsc::Receiver<WhatsAppWebhookMessage>>>,
+) {
+    let adapter = WhatsAppAdapter::new(client, config.phone_number_id, config.access_token);
+    let mut rx = inbound_rx.lock().await;
+    while let Some(event) = rx.recv().await {
+        let runtime = runtime.clone();
+        let adapter_instance = adapter.clone();
+        tokio::spawn(async move {
+            match adapter_instance.webhook_message_to_incoming(event).await {
+                Ok(message) => {
+                    let sender: Arc<dyn ChatAdapter> = Arc::new(adapter_instance.clone());
+                    runtime.handle_message(sender, message).await;
+                }
+                Err(err) => {
+                    tracing::warn!(err = %err, "convert whatsapp webhook message failed");
+                }
+            }
+        });
+    }
+}
+
 fn exponential_backoff_delay(failures: u32, base: Duration, max: Duration) -> Duration {
     let exponent = failures.saturating_sub(1).min(10);
     let factor = 1u32 << exponent;
@@ -1054,6 +2032,27 @@ fn desired_discord_token(settings: &storage::AppSettings) -> Option<String> {
     }
     let token = settings.chat_bridge_discord_bot_token.as_deref()?.trim();
     (!token.is_empty()).then_some(token.to_string())
+}
+
+fn desired_whatsapp_config(settings: &storage::AppSettings) -> Option<WhatsAppSenderConfig> {
+    if !settings.chat_bridge_enabled || !settings.chat_bridge_whatsapp_enabled {
+        return None;
+    }
+    let phone_number_id = settings
+        .chat_bridge_whatsapp_phone_number_id
+        .as_deref()?
+        .trim();
+    let access_token = settings
+        .chat_bridge_whatsapp_access_token
+        .as_deref()?
+        .trim();
+    if phone_number_id.is_empty() || access_token.is_empty() {
+        return None;
+    }
+    Some(WhatsAppSenderConfig {
+        phone_number_id: phone_number_id.to_string(),
+        access_token: access_token.to_string(),
+    })
 }
 
 fn incoming_attachment_filename(
@@ -1163,6 +2162,8 @@ mod tests {
     use super::*;
     use std::sync::{Arc as StdArc, Mutex as StdMutex};
 
+    use crate::storage::Protocol;
+
     #[derive(Clone)]
     struct FakeAdapter {
         native_streaming: bool,
@@ -1218,10 +2219,35 @@ mod tests {
         ChatBridgeRuntime {
             db_path: db_path.to_path_buf(),
             settings_rx,
+            channels_cache: None,
             project_store: Arc::new(ProjectStore::new()),
             busy_sessions: Arc::new(Mutex::new(HashSet::new())),
             active_turns: Arc::new(Mutex::new(HashMap::new())),
         }
+    }
+
+    async fn create_test_channel(
+        db_path: &Path,
+        name: &str,
+        protocol: Protocol,
+    ) -> storage::Channel {
+        storage::create_channel(
+            db_path.to_path_buf(),
+            storage::CreateChannel {
+                name: name.to_string(),
+                protocol,
+                base_url: "https://example.com/v1".to_string(),
+                auth_type: None,
+                auth_ref: "env:TEST_KEY".to_string(),
+                checkin_url: None,
+                priority: 10,
+                recharge_currency: None,
+                real_multiplier: None,
+                enabled: true,
+            },
+        )
+        .await
+        .expect("create test channel")
     }
 
     fn test_message(platform: ChatPlatform, sender_id: &str, text: &str) -> IncomingMessage {
@@ -1528,6 +2554,144 @@ mod tests {
             adapter.calls(),
             vec![format!("send:{}", help_text(AppLocale::EnUS))]
         );
+        remove_sqlite_artifacts(&db_path);
+    }
+
+    #[tokio::test]
+    async fn channels_disable_command_updates_channel_state() {
+        let db_path = temp_db_path();
+        remove_sqlite_artifacts(&db_path);
+        storage::init_db(&db_path).expect("init db");
+        bind_test_user(
+            &db_path,
+            ChatPlatform::Telegram,
+            "tg-user-2",
+            AppLocale::ZhCN,
+        )
+        .await;
+        let channel = create_test_channel(&db_path, "openai-main", Protocol::Openai).await;
+
+        let runtime = test_runtime(&db_path).await;
+        let adapter = FakeAdapter::new(false);
+        runtime
+            .handle_message(
+                Arc::new(adapter.clone()),
+                test_message(
+                    ChatPlatform::Telegram,
+                    "tg-user-2",
+                    "/channels disable openai-main",
+                ),
+            )
+            .await;
+
+        let updated = storage::get_channel(db_path.clone(), channel.id)
+            .await
+            .expect("get channel")
+            .expect("channel exists");
+        assert!(!updated.enabled);
+        assert_eq!(
+            adapter.calls(),
+            vec!["send:已禁用渠道 openai-main。".to_string()]
+        );
+        remove_sqlite_artifacts(&db_path);
+    }
+
+    #[tokio::test]
+    async fn routes_command_lists_bound_channels() {
+        let db_path = temp_db_path();
+        remove_sqlite_artifacts(&db_path);
+        storage::init_db(&db_path).expect("init db");
+        bind_test_user(
+            &db_path,
+            ChatPlatform::Telegram,
+            "tg-user-3",
+            AppLocale::ZhCN,
+        )
+        .await;
+        let channel = create_test_channel(&db_path, "openai-main", Protocol::Openai).await;
+        let route = storage::create_route(
+            db_path.clone(),
+            storage::CreateRoute {
+                name: "default".to_string(),
+                protocol: Protocol::Openai,
+                match_model: Some("gpt-4o".to_string()),
+                enabled: true,
+            },
+        )
+        .await
+        .expect("create route");
+        storage::set_route_channels(db_path.clone(), route.id, vec![channel.id])
+            .await
+            .expect("set route channels");
+
+        let runtime = test_runtime(&db_path).await;
+        let adapter = FakeAdapter::new(false);
+        runtime
+            .handle_message(
+                Arc::new(adapter.clone()),
+                test_message(ChatPlatform::Telegram, "tg-user-3", "/routes"),
+            )
+            .await;
+
+        let output = adapter.calls().join("\n");
+        assert!(output.contains("路由配置："), "{output}");
+        assert!(output.contains("default [openai]"), "{output}");
+        assert!(output.contains("openai-main"), "{output}");
+        remove_sqlite_artifacts(&db_path);
+    }
+
+    #[tokio::test]
+    async fn usage_command_reports_today_summary() {
+        let db_path = temp_db_path();
+        remove_sqlite_artifacts(&db_path);
+        storage::init_db(&db_path).expect("init db");
+        bind_test_user(
+            &db_path,
+            ChatPlatform::Telegram,
+            "tg-user-4",
+            AppLocale::ZhCN,
+        )
+        .await;
+        let channel = create_test_channel(&db_path, "openai-main", Protocol::Openai).await;
+        storage::insert_usage_event(
+            db_path.clone(),
+            storage::CreateUsageEvent {
+                request_id: None,
+                ts_ms: storage::now_ms(),
+                protocol: Protocol::Openai,
+                route_id: None,
+                channel_id: channel.id,
+                model: Some("gpt-4o".to_string()),
+                success: true,
+                http_status: Some(200),
+                error_kind: None,
+                error_detail: None,
+                latency_ms: 120,
+                ttft_ms: Some(30),
+                prompt_tokens: Some(10),
+                completion_tokens: Some(5),
+                total_tokens: Some(15),
+                cache_read_tokens: None,
+                cache_write_tokens: None,
+                estimated_cost_usd: Some("0.12".to_string()),
+            },
+        )
+        .await
+        .expect("insert usage event");
+
+        let runtime = test_runtime(&db_path).await;
+        let adapter = FakeAdapter::new(false);
+        runtime
+            .handle_message(
+                Arc::new(adapter.clone()),
+                test_message(ChatPlatform::Telegram, "tg-user-4", "/usage"),
+            )
+            .await;
+
+        let output = adapter.calls().join("\n");
+        assert!(output.contains("用量统计："), "{output}");
+        assert!(output.contains("请求数: 1"), "{output}");
+        assert!(output.contains("预估成本: $0.12"), "{output}");
         remove_sqlite_artifacts(&db_path);
     }
 }

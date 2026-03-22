@@ -103,6 +103,10 @@ export function SettingsPage() {
   const [chatBridgeUnbinding, setChatBridgeUnbinding] = useState(false);
   const [chatBridgeTelegramTokenDraft, setChatBridgeTelegramTokenDraft] = useState("");
   const [chatBridgeDiscordTokenDraft, setChatBridgeDiscordTokenDraft] = useState("");
+  const [chatBridgeWhatsAppPhoneNumberIdDraft, setChatBridgeWhatsAppPhoneNumberIdDraft] = useState("");
+  const [chatBridgeWhatsAppAccessTokenDraft, setChatBridgeWhatsAppAccessTokenDraft] = useState("");
+  const [chatBridgeWhatsAppAppSecretDraft, setChatBridgeWhatsAppAppSecretDraft] = useState("");
+  const [chatBridgeWhatsAppVerifyTokenDraft, setChatBridgeWhatsAppVerifyTokenDraft] = useState("");
   const [chatBridgePlatformTab, setChatBridgePlatformTab] = useState<ChatPlatform>("telegram");
   const [chatBridgePairingDialogOpen, setChatBridgePairingDialogOpen] = useState(false);
   const [chatBridgeBindingsDialogPlatform, setChatBridgeBindingsDialogPlatform] = useState<ChatPlatform | null>(null);
@@ -258,6 +262,37 @@ export function SettingsPage() {
     }
   }
 
+  async function saveWhatsAppConfig() {
+    if (!appSettings) return;
+    setChatBridgeSaving(true);
+    try {
+      const patch: Partial<AppSettings> = {
+        chat_bridge_whatsapp_enabled: appSettings.chat_bridge_whatsapp_enabled,
+        chat_bridge_whatsapp_phone_number_id: chatBridgeWhatsAppPhoneNumberIdDraft,
+      };
+      if (chatBridgeWhatsAppAccessTokenDraft.trim().length > 0) {
+        patch.chat_bridge_whatsapp_access_token = chatBridgeWhatsAppAccessTokenDraft;
+      }
+      if (chatBridgeWhatsAppAppSecretDraft.trim().length > 0) {
+        patch.chat_bridge_whatsapp_app_secret = chatBridgeWhatsAppAppSecretDraft;
+      }
+      if (chatBridgeWhatsAppVerifyTokenDraft.trim().length > 0) {
+        patch.chat_bridge_whatsapp_verify_token = chatBridgeWhatsAppVerifyTokenDraft;
+      }
+      const next = await updateSettings(patch);
+      setAppSettings(next);
+      setChatBridgeWhatsAppAccessTokenDraft("");
+      setChatBridgeWhatsAppAppSecretDraft("");
+      setChatBridgeWhatsAppVerifyTokenDraft("");
+      setChatBridgeWhatsAppPhoneNumberIdDraft(next.chat_bridge_whatsapp_phone_number_id ?? "");
+      toast.success(t("settings.chatBridge.saved"));
+    } catch (e) {
+      toast.error(t("settings.chatBridge.saveFail"), { description: humanizeApiError(e, t) });
+    } finally {
+      setChatBridgeSaving(false);
+    }
+  }
+
   async function generateChatBridgePairingToken() {
     setChatBridgePairingCreating(true);
     try {
@@ -298,6 +333,10 @@ export function SettingsPage() {
         setAppSettings(s);
         setChatBridgeTelegramTokenDraft("");
         setChatBridgeDiscordTokenDraft("");
+        setChatBridgeWhatsAppPhoneNumberIdDraft(s.chat_bridge_whatsapp_phone_number_id ?? "");
+        setChatBridgeWhatsAppAccessTokenDraft("");
+        setChatBridgeWhatsAppAppSecretDraft("");
+        setChatBridgeWhatsAppVerifyTokenDraft("");
         setLogRetentionDraft(String(s.log_retention_days ?? ""));
         setLogLevel(s.log_level);
       })
@@ -672,21 +711,103 @@ export function SettingsPage() {
             </TabsContent>
 
             <TabsContent value="whatsapp" className="mt-4">
-              <div className="rounded-lg border border-dashed p-4 space-y-4">
+              <div className="rounded-lg border p-4 space-y-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="space-y-1">
-                    <div className="font-medium text-sm">
-                      {t("settings.chatBridge.platformConfigLabel", {
-                        platform: t("settings.chatBridge.platform.whatsapp"),
-                      })}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      {t("settings.chatBridge.supportPendingHint", {
-                        platform: t("settings.chatBridge.platform.whatsapp"),
-                      })}
-                    </div>
+                    <div className="font-medium text-sm">{t("settings.chatBridge.whatsappConfigTitle")}</div>
+                    <div className="text-xs text-muted-foreground">{t("settings.chatBridge.whatsappConfigHint")}</div>
                   </div>
-                  <Badge variant="secondary">{t("settings.chatBridge.supportPending")}</Badge>
+                  <Badge variant="secondary">{t("settings.chatBridge.supportReady")}</Badge>
+                </div>
+
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <div className="font-medium text-sm">{t("settings.chatBridge.whatsappEnable")}</div>
+                    <div className="text-xs text-muted-foreground">{t("settings.chatBridge.whatsappEnableHint")}</div>
+                  </div>
+                  <Switch
+                    checked={appSettings?.chat_bridge_whatsapp_enabled ?? false}
+                    onCheckedChange={(v) => {
+                      setAppSettings((prev) => (prev ? { ...prev, chat_bridge_whatsapp_enabled: v } : prev));
+                    }}
+                    disabled={!appSettings || chatBridgeSaving}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">{t("settings.chatBridge.whatsappPhoneNumberId")}</label>
+                  <Input
+                    value={chatBridgeWhatsAppPhoneNumberIdDraft}
+                    onChange={(e) => {
+                      setChatBridgeWhatsAppPhoneNumberIdDraft(e.target.value);
+                    }}
+                    placeholder={t("settings.chatBridge.whatsappPhoneNumberIdPlaceholder")}
+                    disabled={!appSettings || chatBridgeSaving}
+                  />
+                  <p className="text-xs text-muted-foreground">{t("settings.chatBridge.whatsappPhoneNumberIdHint")}</p>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">{t("settings.chatBridge.whatsappAccessToken")}</label>
+                  <Input
+                    type="password"
+                    autoComplete="new-password"
+                    value={chatBridgeWhatsAppAccessTokenDraft}
+                    onChange={(e) => {
+                      setChatBridgeWhatsAppAccessTokenDraft(e.target.value);
+                    }}
+                    placeholder={appSettings?.chat_bridge_whatsapp_access_token_configured
+                      ? t("settings.chatBridge.whatsappAccessTokenPlaceholderConfigured")
+                      : t("settings.chatBridge.whatsappAccessTokenPlaceholder")}
+                    disabled={!appSettings || chatBridgeSaving}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {appSettings?.chat_bridge_whatsapp_access_token_configured
+                      ? t("settings.chatBridge.whatsappAccessTokenHintConfigured")
+                      : t("settings.chatBridge.whatsappAccessTokenHint")}
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">{t("settings.chatBridge.whatsappAppSecret")}</label>
+                  <Input
+                    type="password"
+                    autoComplete="new-password"
+                    value={chatBridgeWhatsAppAppSecretDraft}
+                    onChange={(e) => {
+                      setChatBridgeWhatsAppAppSecretDraft(e.target.value);
+                    }}
+                    placeholder={appSettings?.chat_bridge_whatsapp_app_secret_configured
+                      ? t("settings.chatBridge.whatsappAppSecretPlaceholderConfigured")
+                      : t("settings.chatBridge.whatsappAppSecretPlaceholder")}
+                    disabled={!appSettings || chatBridgeSaving}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {appSettings?.chat_bridge_whatsapp_app_secret_configured
+                      ? t("settings.chatBridge.whatsappAppSecretHintConfigured")
+                      : t("settings.chatBridge.whatsappAppSecretHint")}
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">{t("settings.chatBridge.whatsappVerifyToken")}</label>
+                  <Input
+                    type="password"
+                    autoComplete="new-password"
+                    value={chatBridgeWhatsAppVerifyTokenDraft}
+                    onChange={(e) => {
+                      setChatBridgeWhatsAppVerifyTokenDraft(e.target.value);
+                    }}
+                    placeholder={appSettings?.chat_bridge_whatsapp_verify_token_configured
+                      ? t("settings.chatBridge.whatsappVerifyTokenPlaceholderConfigured")
+                      : t("settings.chatBridge.whatsappVerifyTokenPlaceholder")}
+                    disabled={!appSettings || chatBridgeSaving}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {appSettings?.chat_bridge_whatsapp_verify_token_configured
+                      ? t("settings.chatBridge.whatsappVerifyTokenHintConfigured")
+                      : t("settings.chatBridge.whatsappVerifyTokenHint")}
+                  </p>
                 </div>
 
                 <div className="flex items-center justify-between gap-4 rounded-lg border bg-muted/30 px-3 py-3">
@@ -696,12 +817,31 @@ export function SettingsPage() {
                       {t("settings.chatBridge.bindings.summary", { count: chatBridgeBindingsByPlatform.whatsapp.length })}
                     </div>
                   </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => openChatBridgePairing("whatsapp")}
+                    >
+                      {t("settings.chatBridge.actions.pairing")}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => openChatBridgeBindings("whatsapp")}
+                    >
+                      {t("settings.chatBridge.actions.bindings")}
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="flex justify-end">
                   <Button
                     size="sm"
-                    variant="outline"
-                    onClick={() => openChatBridgeBindings("whatsapp")}
+                    disabled={!appSettings || chatBridgeSaving}
+                    onClick={() => void saveWhatsAppConfig()}
                   >
-                    {t("settings.chatBridge.actions.bindings")}
+                    {t("common.save")}
                   </Button>
                 </div>
               </div>
