@@ -1,3 +1,11 @@
+## [0.40.0](https://github.com/koumoe/cli-switch/compare/v0.39.2...v0.40.0) (2026-03-22)
+
+### 功能
+* 添加 Chat Bridge P3 管理能力与 WhatsApp 支持 ([75020bb](https://github.com/koumoe/cli-switch/commit/75020bb9948d54776a1ea3960250c37e1f4c6648))
+
+### 修复
+* 修复 desktop 菜单文本的多余借用 ([ca02119](https://github.com/koumoe/cli-switch/commit/ca021196946dad3ecbbf26f58e9b3752b69f4a8e))
+* 修复 status report 与 WhatsApp 的 clippy 警告 ([cdec07c](https://github.com/koumoe/cli-switch/commit/cdec07cc2126c02d08ec847389181f12b9a6390d))
 ## [0.39.2](https://github.com/koumoe/cli-switch/compare/v0.39.1...v0.39.2) (2026-03-22)
 
 ### 修复
