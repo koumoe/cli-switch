@@ -18,7 +18,7 @@ export async function installCliToolWithToast(opts: {
       toast.success(t("settings.cliTools.installOk", { name: tool.name }), {
         description: res.terminal_shim_ok
           ? t("settings.cliTools.terminalReady")
-          : humanizeIssue(res.terminal_shim_issue, t) ?? undefined
+          : humanizeIssue(res.terminal_shim_issue, t)
       });
     } else {
       toast.error(t("settings.cliTools.installFail", { name: tool.name }), {

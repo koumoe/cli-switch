@@ -1476,7 +1476,7 @@ export function SettingsPage() {
                             toast.success(t("settings.cliProxyConfig.applied"));
                           } else {
                             toast.error(t("settings.cliProxyConfig.applyFail"), {
-                              description: humanizeIssue(applied?.issue, t) ?? undefined,
+                              description: humanizeIssue(applied?.issue, t),
                             });
                           }
                         } catch (e) {
