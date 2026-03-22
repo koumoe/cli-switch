@@ -43,18 +43,26 @@ export type AppSettings = {
   chat_bridge_discord_bot_token?: string | null;
   chat_bridge_discord_bot_token_configured: boolean;
   chat_bridge_whatsapp_enabled: boolean;
-  chat_bridge_whatsapp_phone_number_id?: string | null;
-  chat_bridge_whatsapp_phone_number_id_configured: boolean;
-  chat_bridge_whatsapp_access_token?: string | null;
-  chat_bridge_whatsapp_access_token_configured: boolean;
-  chat_bridge_whatsapp_app_secret?: string | null;
-  chat_bridge_whatsapp_app_secret_configured: boolean;
-  chat_bridge_whatsapp_verify_token?: string | null;
-  chat_bridge_whatsapp_verify_token_configured: boolean;
   chat_bridge_allow_new_projects: boolean;
 };
 
 export type ChatPlatform = "telegram" | "discord" | "whatsapp";
+
+export type ChatBridgeWhatsAppStatusState =
+  | "disabled"
+  | "starting"
+  | "awaiting_qr"
+  | "connected"
+  | "error";
+
+export type ChatBridgeWhatsAppStatus = {
+  state: ChatBridgeWhatsAppStatusState;
+  connected: boolean;
+  me?: string | null;
+  qr?: string | null;
+  qr_svg?: string | null;
+  last_error?: string | null;
+};
 
 export type ChatBridgeBinding = {
   id: number;
@@ -553,6 +561,18 @@ export function createChatBridgePairingToken(
   input: CreateChatBridgePairingTokenInput
 ): Promise<ChatBridgePairingToken> {
   return http<ChatBridgePairingToken>("POST", "/api/chat_bridge/pairing_tokens", input);
+}
+
+export function getChatBridgeWhatsAppStatus(): Promise<ChatBridgeWhatsAppStatus> {
+  return http<ChatBridgeWhatsAppStatus>("GET", "/api/chat_bridge/whatsapp/status");
+}
+
+export function startChatBridgeWhatsAppLogin(): Promise<void> {
+  return http<void>("POST", "/api/chat_bridge/whatsapp/login", {});
+}
+
+export function logoutChatBridgeWhatsApp(): Promise<void> {
+  return http<void>("POST", "/api/chat_bridge/whatsapp/logout", {});
 }
 
 export function getCliToolsStatus(): Promise<CliToolsStatus> {
