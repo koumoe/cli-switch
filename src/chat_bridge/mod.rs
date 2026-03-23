@@ -2403,6 +2403,11 @@ mod tests {
             Ok(())
         }
 
+        async fn delete_message(&self, _chat_id: &str, message_id: &str) -> anyhow::Result<()> {
+            self.record(format!("delete:{message_id}"));
+            Ok(())
+        }
+
         async fn begin_streaming_message(
             &self,
             msg: OutgoingMessage,
@@ -2514,6 +2519,97 @@ mod tests {
         reply.finish("same answer").await.expect("finish");
 
         assert_eq!(adapter.calls(), vec!["send:label\nsame answer".to_string()]);
+    }
+
+    #[tokio::test]
+    async fn streaming_reply_keeps_pending_notice_until_native_streaming_finishes() {
+        let adapter = FakeAdapter::new(true);
+        let adapter_trait: Arc<dyn ChatAdapter> = Arc::new(adapter.clone());
+        let mut reply = StreamingReply::with_pending_message(
+            adapter_trait,
+            "chat-1".to_string(),
+            Some("reply-1".to_string()),
+            "label".to_string(),
+            AppLocale::ZhCN,
+            Some(SentMessage {
+                message_id: "pending-message".to_string(),
+            }),
+        );
+
+        reply.update("partial one").await.expect("draft update");
+        reply.update("partial two").await.expect("draft update");
+        reply.finish("final answer").await.expect("draft finish");
+
+        assert_eq!(
+            adapter.calls(),
+            vec![
+                "draft:label\npartial one".to_string(),
+                "draft-update:label\npartial two".to_string(),
+                "draft-finish:label\nfinal answer".to_string(),
+                "delete:pending-message".to_string(),
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn streaming_reply_keeps_pending_notice_until_send_edit_finishes() {
+        let adapter = FakeAdapter::new(false);
+        let adapter_trait: Arc<dyn ChatAdapter> = Arc::new(adapter.clone());
+        let mut reply = StreamingReply::with_pending_message(
+            adapter_trait,
+            "chat-1".to_string(),
+            Some("reply-1".to_string()),
+            "label".to_string(),
+            AppLocale::ZhCN,
+            Some(SentMessage {
+                message_id: "pending-message".to_string(),
+            }),
+        );
+
+        reply.update("partial one").await.expect("send");
+        reply.update("partial two").await.expect("edit");
+        reply.finish("final answer").await.expect("finish");
+
+        assert_eq!(
+            adapter.calls(),
+            vec![
+                "send:label\npartial one".to_string(),
+                "edit:label\npartial two".to_string(),
+                "edit:label\nfinal answer".to_string(),
+                "delete:pending-message".to_string(),
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn clearing_progress_removes_partial_output_and_pending_notice() {
+        let adapter = FakeAdapter::new(false);
+        let adapter_trait: Arc<dyn ChatAdapter> = Arc::new(adapter.clone());
+        let mut reply = StreamingReply::with_pending_message(
+            adapter_trait,
+            "chat-1".to_string(),
+            Some("reply-1".to_string()),
+            "label".to_string(),
+            AppLocale::ZhCN,
+            Some(SentMessage {
+                message_id: "pending-message".to_string(),
+            }),
+        );
+
+        reply.update("partial one").await.expect("send");
+        reply
+            .clear_progress_message()
+            .await
+            .expect("clear progress");
+
+        assert_eq!(
+            adapter.calls(),
+            vec![
+                "send:label\npartial one".to_string(),
+                "delete:sent-message".to_string(),
+                "delete:pending-message".to_string(),
+            ]
+        );
     }
 
     #[tokio::test]
