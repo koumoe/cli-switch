@@ -3,7 +3,7 @@ use base64::Engine as _;
 use image::{ImageBuffer, Luma};
 use qrcode::QrCode;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::{Mutex, mpsc, watch};
@@ -12,15 +12,17 @@ use super::adapter::{
     Attachment, ChatAdapter, IncomingAttachment, IncomingAttachmentKind, OutgoingMessage,
     SentMessage,
 };
+use wacore_binary::jid::SERVER_JID;
+use wacore_binary::node::NodeContent;
 use whatsapp_rust::bot::Bot;
 use whatsapp_rust::download::{Downloadable, MediaType};
 use whatsapp_rust::proto_helpers::{self, MessageExt as _};
+use whatsapp_rust::request::InfoQuery;
 use whatsapp_rust::store::SqliteStore;
 use whatsapp_rust::types::events::{ConnectFailureReason, Event};
 use whatsapp_rust::types::message::MessageInfo;
 use whatsapp_rust::{Client, Jid, TokioRuntime, waproto::whatsapp as wa};
 use whatsapp_rust_tokio_transport::TokioWebSocketTransportFactory;
-use whatsapp_rust_ureq_http_client::UreqHttpClient;
 
 const STORE_FILE_NAME: &str = "session.sqlite3";
 const LOGOUT_MARKER_FILE_NAME: &str = "pending-logout";
@@ -95,6 +97,11 @@ pub enum WhatsAppWebControl {
 }
 
 #[derive(Debug, Clone)]
+pub enum WhatsAppBridgeCommand {
+    Logout,
+}
+
+#[derive(Debug, Clone)]
 struct CachedMessage {
     info: MessageInfo,
     message: Box<wa::Message>,
@@ -108,6 +115,7 @@ struct RecentMessageCache {
 
 impl RecentMessageCache {
     fn insert(&mut self, id: String, message: CachedMessage) {
+        self.order.retain(|existing| existing != &id);
         self.entries.insert(id.clone(), message);
         self.order.push_back(id);
         while self.order.len() > RECENT_LIMIT {
@@ -122,10 +130,38 @@ impl RecentMessageCache {
     }
 }
 
+#[derive(Debug, Default)]
+struct RecentIdCache {
+    entries: HashSet<String>,
+    order: VecDeque<String>,
+}
+
+impl RecentIdCache {
+    fn insert(&mut self, id: String) {
+        if self.entries.insert(id.clone()) {
+            self.order.push_back(id);
+        }
+        while self.order.len() > RECENT_LIMIT {
+            if let Some(oldest) = self.order.pop_front() {
+                self.entries.remove(&oldest);
+            }
+        }
+    }
+
+    fn take(&mut self, id: &str) -> bool {
+        if !self.entries.remove(id) {
+            return false;
+        }
+        self.order.retain(|existing| existing != id);
+        true
+    }
+}
+
 #[derive(Clone)]
 pub(crate) struct WhatsAppWebAdapter {
     client: Arc<Client>,
     recent_messages: Arc<Mutex<RecentMessageCache>>,
+    sent_message_ids: Arc<Mutex<RecentIdCache>>,
 }
 
 impl WhatsAppWebAdapter {
@@ -133,6 +169,7 @@ impl WhatsAppWebAdapter {
         Self {
             client,
             recent_messages: Arc::new(Mutex::new(RecentMessageCache::default())),
+            sent_message_ids: Arc::new(Mutex::new(RecentIdCache::default())),
         }
     }
 
@@ -164,6 +201,16 @@ impl WhatsAppWebAdapter {
             cached.message.as_ref(),
         ))
     }
+
+    async fn remember_sent_message_id(&self, id: &str) {
+        let mut guard = self.sent_message_ids.lock().await;
+        guard.insert(id.to_string());
+    }
+
+    async fn take_sent_message_id(&self, id: &str) -> bool {
+        let mut guard = self.sent_message_ids.lock().await;
+        guard.take(id)
+    }
 }
 
 #[async_trait::async_trait]
@@ -188,6 +235,7 @@ impl ChatAdapter for WhatsAppWebAdapter {
                 .send_message(chat_id.clone(), outgoing)
                 .await
                 .context("send whatsapp text message failed")?;
+            self.remember_sent_message_id(&message_id).await;
             first_message_id = Some(message_id);
         }
 
@@ -206,6 +254,7 @@ impl ChatAdapter for WhatsAppWebAdapter {
                 .with_context(|| {
                     format!("send whatsapp attachment failed: {}", attachment.filename)
                 })?;
+            self.remember_sent_message_id(&message_id).await;
             if first_message_id.is_none() {
                 first_message_id = Some(message_id);
             }
@@ -238,6 +287,7 @@ impl ChatAdapter for WhatsAppWebAdapter {
             .edit_message(chat_id, message_id.to_string(), message)
             .await
             .with_context(|| format!("edit whatsapp message failed: {message_id}"))?;
+        self.remember_sent_message_id(message_id).await;
         Ok(())
     }
 
@@ -270,6 +320,24 @@ fn whatsapp_logout_marker_path(data_dir: &Path) -> PathBuf {
     whatsapp_base_dir(data_dir).join(LOGOUT_MARKER_FILE_NAME)
 }
 
+fn clear_local_auth_state(data_dir: &Path) -> anyhow::Result<()> {
+    let base_dir = whatsapp_base_dir(data_dir);
+    if base_dir.exists() {
+        std::fs::remove_dir_all(&base_dir)
+            .with_context(|| format!("remove whatsapp base dir failed: {}", base_dir.display()))?;
+        return Ok(());
+    }
+
+    let marker = whatsapp_logout_marker_path(data_dir);
+    if marker.is_file() {
+        std::fs::remove_file(&marker).with_context(|| {
+            format!("remove whatsapp logout marker failed: {}", marker.display())
+        })?;
+    }
+
+    Ok(())
+}
+
 pub(crate) fn logout_by_clearing_auth_state(data_dir: &Path) -> anyhow::Result<()> {
     let base_dir = whatsapp_base_dir(data_dir);
     std::fs::create_dir_all(&base_dir)
@@ -285,11 +353,106 @@ fn apply_pending_logout(data_dir: &Path) -> anyhow::Result<()> {
         return Ok(());
     }
 
-    let base_dir = whatsapp_base_dir(data_dir);
-    if base_dir.exists() {
-        std::fs::remove_dir_all(&base_dir)
-            .with_context(|| format!("remove whatsapp base dir failed: {}", base_dir.display()))?;
+    clear_local_auth_state(data_dir)
+}
+
+#[derive(Clone)]
+struct ReqwestHttpClient {
+    async_client: reqwest::Client,
+    blocking_client: reqwest::blocking::Client,
+}
+
+impl ReqwestHttpClient {
+    fn new(async_client: reqwest::Client) -> anyhow::Result<Self> {
+        let blocking_client = reqwest::blocking::Client::builder()
+            .build()
+            .context("build blocking reqwest client for whatsapp failed")?;
+        Ok(Self {
+            async_client,
+            blocking_client,
+        })
     }
+}
+
+#[async_trait::async_trait]
+impl whatsapp_rust::http::HttpClient for ReqwestHttpClient {
+    async fn execute(
+        &self,
+        request: whatsapp_rust::http::HttpRequest,
+    ) -> anyhow::Result<whatsapp_rust::http::HttpResponse> {
+        let mut builder = match request.method.as_str() {
+            "GET" => self.async_client.get(&request.url),
+            "POST" => self.async_client.post(&request.url),
+            method => anyhow::bail!("unsupported HTTP method: {method}"),
+        };
+
+        for (key, value) in &request.headers {
+            builder = builder.header(key, value);
+        }
+        if let Some(body) = request.body {
+            builder = builder.body(body);
+        }
+
+        let response = builder.send().await?;
+        let status_code = response.status().as_u16();
+        let body = response.bytes().await?.to_vec();
+        Ok(whatsapp_rust::http::HttpResponse { status_code, body })
+    }
+
+    fn execute_streaming(
+        &self,
+        request: whatsapp_rust::http::HttpRequest,
+    ) -> anyhow::Result<wacore::net::StreamingHttpResponse> {
+        let mut builder = match request.method.as_str() {
+            "GET" => self.blocking_client.get(&request.url),
+            "POST" => self.blocking_client.post(&request.url),
+            method => anyhow::bail!("unsupported HTTP method: {method}"),
+        };
+
+        for (key, value) in &request.headers {
+            builder = builder.header(key, value);
+        }
+        if let Some(body) = request.body {
+            builder = builder.body(body);
+        }
+
+        let response = builder.send()?;
+        let status_code = response.status().as_u16();
+        Ok(wacore::net::StreamingHttpResponse {
+            status_code,
+            body: Box::new(response),
+        })
+    }
+}
+
+fn logout_target_jid(pn: Option<Jid>, lid: Option<Jid>) -> Option<Jid> {
+    pn.filter(|jid| jid.device != 0)
+        .or_else(|| lid.filter(|jid| jid.device != 0))
+}
+
+async fn logout_active_session(client: &Client) -> anyhow::Result<()> {
+    let Some(target_jid) = logout_target_jid(client.get_pn().await, client.get_lid().await) else {
+        return Ok(());
+    };
+
+    let query = InfoQuery::set(
+        "md",
+        Jid::new("", SERVER_JID),
+        Some(NodeContent::Nodes(vec![
+            whatsapp_rust::NodeBuilder::new("remove-companion-device")
+                .attrs([
+                    ("jid", target_jid.to_string()),
+                    ("reason", "user_initiated".to_string()),
+                ])
+                .build(),
+        ])),
+    )
+    .with_timeout(std::time::Duration::from_secs(15));
+
+    client
+        .send_iq(query)
+        .await
+        .context("send whatsapp remove-companion-device IQ failed")?;
     Ok(())
 }
 
@@ -331,8 +494,9 @@ pub(crate) fn qr_image_data_uri(raw: &str) -> anyhow::Result<String> {
 
 pub(super) async fn run_whatsapp_web_bridge(
     runtime: super::ChatBridgeRuntime,
-    _http_client: reqwest::Client,
+    http_client: reqwest::Client,
     status_tx: watch::Sender<WhatsAppWebStatus>,
+    mut control_rx: mpsc::UnboundedReceiver<WhatsAppBridgeCommand>,
 ) {
     let _ = status_tx.send(WhatsAppWebStatus::starting());
 
@@ -361,11 +525,19 @@ pub(super) async fn run_whatsapp_web_bridge(
         }
     };
 
+    let http_client = match ReqwestHttpClient::new(http_client) {
+        Ok(client) => client,
+        Err(err) => {
+            let _ = status_tx.send(WhatsAppWebStatus::error(err.to_string()));
+            return;
+        }
+    };
+
     let (event_tx, mut event_rx) = mpsc::unbounded_channel::<Event>();
     let mut bot = match Bot::builder()
         .with_backend(store)
         .with_transport_factory(TokioWebSocketTransportFactory::new())
-        .with_http_client(UreqHttpClient::new())
+        .with_http_client(http_client)
         .with_runtime(TokioRuntime)
         .with_push_name("CliSwitch")
         .with_device_props(
@@ -405,6 +577,7 @@ pub(super) async fn run_whatsapp_web_bridge(
         }
     };
     tokio::pin!(bot_handle);
+    let mut logout_requested = false;
 
     loop {
         tokio::select! {
@@ -414,6 +587,24 @@ pub(super) async fn run_whatsapp_web_bridge(
                 };
                 handle_runtime_event(event, &runtime, &adapter, &client, &status_tx).await;
             }
+            cmd = control_rx.recv() => {
+                let Some(cmd) = cmd else {
+                    continue;
+                };
+                match cmd {
+                    WhatsAppBridgeCommand::Logout => {
+                        logout_requested = true;
+                        if let Err(err) = logout_active_session(&client).await {
+                            tracing::warn!(err = %err, "whatsapp active logout failed");
+                        }
+                        client.disconnect().await;
+                        if let Err(err) = (&mut bot_handle).await {
+                            tracing::warn!(err = %err, "whatsapp runtime task failed during logout");
+                        }
+                        break;
+                    }
+                }
+            }
             result = &mut bot_handle => {
                 if let Err(err) = result {
                     tracing::warn!(err = %err, "whatsapp runtime task failed");
@@ -421,6 +612,16 @@ pub(super) async fn run_whatsapp_web_bridge(
                 break;
             }
         }
+    }
+
+    if logout_requested {
+        if let Err(err) = clear_local_auth_state(&data_dir) {
+            if let Err(mark_err) = logout_by_clearing_auth_state(&data_dir) {
+                tracing::warn!(err = %mark_err, "mark whatsapp logout pending failed");
+            }
+            let _ = status_tx.send(WhatsAppWebStatus::error(err.to_string()));
+        }
+        return;
     }
 
     let _ = status_tx.send(WhatsAppWebStatus::error("whatsapp bridge stopped"));
@@ -456,6 +657,7 @@ async fn handle_runtime_event(
         }
         Event::Disconnected(_) => {
             let mut current = status_tx.borrow().clone();
+            // whatsapp-rust keeps its own reconnect loop; this only reflects transient state.
             current.state = WhatsAppWebState::Starting;
             current.connected = false;
             current.qr = None;
@@ -485,7 +687,8 @@ async fn handle_runtime_event(
             )));
         }
         Event::Message(message, info) => {
-            if info.source.is_from_me
+            if adapter.take_sent_message_id(&info.id).await
+                || info.source.is_from_me
                 || (info.source.chat.server == "broadcast" && info.source.chat.user == "status")
                 || info.source.chat.server == "newsletter"
             {
@@ -582,11 +785,25 @@ fn build_text_message(content: &str, context_info: Option<wa::ContextInfo>) -> w
     }
 }
 
+fn ensure_attachment_size_within_limit(attachment: &Attachment) -> anyhow::Result<()> {
+    let size = u64::try_from(attachment.data.len()).unwrap_or(u64::MAX);
+    if size > MAX_ATTACHMENT_BYTES {
+        anyhow::bail!(
+            "whatsapp attachment too large: {} bytes > {} bytes",
+            size,
+            MAX_ATTACHMENT_BYTES
+        );
+    }
+    Ok(())
+}
+
 async fn build_attachment_message(
     client: &Client,
     attachment: &Attachment,
     context_info: Option<wa::ContextInfo>,
 ) -> anyhow::Result<wa::Message> {
+    ensure_attachment_size_within_limit(attachment)?;
+
     let media_kind = outgoing_media_kind(&attachment.mime_type);
     let upload = client
         .upload(attachment.data.clone(), media_kind.media_type())
@@ -822,31 +1039,17 @@ async fn download_attachment(
 fn infer_extension_from_mime(mime: Option<&str>) -> Option<&'static str> {
     let mime = mime?;
     let mime = mime.to_ascii_lowercase();
-    if mime.contains("jpeg") {
-        return Some("jpg");
+    match mime.as_str() {
+        "image/jpeg" | "image/jpg" => Some("jpg"),
+        "image/png" => Some("png"),
+        "image/webp" => Some("webp"),
+        "image/gif" => Some("gif"),
+        "application/pdf" => Some("pdf"),
+        "audio/mpeg" | "audio/mp3" => Some("mp3"),
+        "audio/ogg" | "audio/opus" => Some("ogg"),
+        "video/mp4" => Some("mp4"),
+        _ => None,
     }
-    if mime.contains("png") {
-        return Some("png");
-    }
-    if mime.contains("webp") {
-        return Some("webp");
-    }
-    if mime.contains("gif") {
-        return Some("gif");
-    }
-    if mime.contains("pdf") {
-        return Some("pdf");
-    }
-    if mime.contains("mpeg") {
-        return Some("mp3");
-    }
-    if mime.contains("ogg") {
-        return Some("ogg");
-    }
-    if mime.contains("mp4") {
-        return Some("mp4");
-    }
-    None
 }
 
 #[cfg(test)]
@@ -873,5 +1076,47 @@ mod tests {
         );
         assert_eq!(infer_extension_from_mime(Some("audio/ogg")), Some("ogg"));
         assert_eq!(infer_extension_from_mime(Some("unknown/type")), None);
+    }
+
+    #[test]
+    fn infer_extension_from_mime_does_not_confuse_video_mpeg_with_audio() {
+        assert_eq!(infer_extension_from_mime(Some("audio/mpeg")), Some("mp3"));
+        assert_eq!(infer_extension_from_mime(Some("video/mpeg")), None);
+    }
+
+    #[test]
+    fn recent_message_cache_reinserting_same_id_does_not_duplicate_order() {
+        let mut cache = RecentMessageCache::default();
+        let first = CachedMessage {
+            info: MessageInfo::default(),
+            message: Box::default(),
+        };
+        let second = CachedMessage {
+            info: MessageInfo::default(),
+            message: Box::default(),
+        };
+
+        cache.insert("abc".to_string(), first);
+        cache.insert("abc".to_string(), second);
+
+        assert_eq!(cache.order.len(), 1);
+        assert_eq!(cache.order.front().map(String::as_str), Some("abc"));
+        assert!(cache.entries.contains_key("abc"));
+    }
+
+    #[test]
+    fn logout_target_jid_prefers_companion_device() {
+        let primary = Jid::pn("15551234567").with_device(0);
+        let companion = Jid::pn_device("15551234567", 33);
+
+        assert_eq!(
+            logout_target_jid(Some(primary.clone()), Some(companion.clone())),
+            Some(companion.clone())
+        );
+        assert_eq!(logout_target_jid(Some(primary), None), None);
+        assert_eq!(
+            logout_target_jid(None, Some(companion.clone())),
+            Some(companion)
+        );
     }
 }
