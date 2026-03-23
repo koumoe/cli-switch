@@ -1,3 +1,11 @@
+## [0.41.1](https://github.com/koumoe/cli-switch/compare/v0.41.0...v0.41.1) (2026-03-23)
+
+### Bug Fixes
+
+* delay removing processing notice until final output ([98e7568](https://github.com/koumoe/cli-switch/commit/98e75682d7e9b40ffb0c2e55860167eef225f26e))
+* improve telegram local file link rendering ([e35073f](https://github.com/koumoe/cli-switch/commit/e35073f4dce60e539eeb43a912a3cbfbf5187064))
+* reduce overview distribution whitespace ([3f05fe4](https://github.com/koumoe/cli-switch/commit/3f05fe4cbb01659abf191195f3a670c2319492ee))
+* require explicit chat bridge start flags ([c660e00](https://github.com/koumoe/cli-switch/commit/c660e00315d8f96b04fbe94690a5221ac2e1d006))
 ## [0.41.0](https://github.com/koumoe/cli-switch/compare/v0.40.0...v0.41.0) (2026-03-23)
 
 ### Features

@@ -1,3 +1,10 @@
+## [0.41.1](https://github.com/koumoe/cli-switch/compare/v0.41.0...v0.41.1) (2026-03-23)
+
+### 修复
+* 修复处理中提示过早消失 ([98e7568](https://github.com/koumoe/cli-switch/commit/98e75682d7e9b40ffb0c2e55860167eef225f26e))
+* 修复 Telegram 本地文件链接渲染 ([e35073f](https://github.com/koumoe/cli-switch/commit/e35073f4dce60e539eeb43a912a3cbfbf5187064))
+* 修复概览页渠道分布留白 ([3f05fe4](https://github.com/koumoe/cli-switch/commit/3f05fe4cbb01659abf191195f3a670c2319492ee))
+* 修复聊天桥启动命令显式参数解析 ([c660e00](https://github.com/koumoe/cli-switch/commit/c660e00315d8f96b04fbe94690a5221ac2e1d006))
 ## [0.41.0](https://github.com/koumoe/cli-switch/compare/v0.40.0...v0.41.0) (2026-03-23)
 
 ### 功能
