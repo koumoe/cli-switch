@@ -365,16 +365,28 @@ fn parse_start_command(tool: CliToolId, rest: &str, locale: AppLocale) -> anyhow
 
     let mut alias = None;
     let mut permission_mode = BridgePermissionMode::Safe;
-    for token in tokens {
-        if token == "--yolo" {
-            permission_mode = BridgePermissionMode::Yolo;
-            continue;
+    while let Some(token) = tokens.next() {
+        match normalize_start_command_flag(token).as_str() {
+            "-yolo" => {
+                if permission_mode == BridgePermissionMode::Yolo {
+                    anyhow::bail!("{}", usage);
+                }
+                permission_mode = BridgePermissionMode::Yolo;
+            }
+            "-a" | "-alias" => {
+                if alias.is_some() {
+                    anyhow::bail!("{}", usage);
+                }
+                let alias_value = tokens
+                    .next()
+                    .ok_or_else(|| anyhow::anyhow!("{}", usage.clone()))?;
+                if looks_like_start_command_flag(alias_value) {
+                    anyhow::bail!("{}", usage);
+                }
+                alias = Some(alias_value.to_string());
+            }
+            _ => anyhow::bail!("{}", usage),
         }
-        if alias.is_none() {
-            alias = Some(token.to_string());
-            continue;
-        }
-        anyhow::bail!("{}", usage);
     }
 
     Ok(Command::Start {
@@ -383,6 +395,21 @@ fn parse_start_command(tool: CliToolId, rest: &str, locale: AppLocale) -> anyhow
         alias,
         permission_mode,
     })
+}
+
+fn normalize_start_command_flag(token: &str) -> String {
+    token
+        .chars()
+        .map(|ch| match ch {
+            '-' | '\u{2010}' | '\u{2011}' | '\u{2012}' | '\u{2013}' | '\u{2014}' | '\u{2015}'
+            | '\u{2212}' | '\u{FF0D}' => '-',
+            _ => ch,
+        })
+        .collect()
+}
+
+fn looks_like_start_command_flag(token: &str) -> bool {
+    normalize_start_command_flag(token).starts_with('-')
 }
 
 fn session_status_label(session: &BridgeSession, locale: AppLocale) -> String {
@@ -448,7 +475,8 @@ mod tests {
 
     #[test]
     fn parse_start_command_supports_alias_and_yolo() {
-        let parsed = parse_input("/codex 1 alpha --yolo", AppLocale::ZhCN).expect("parse command");
+        let parsed =
+            parse_input("/codex 1 -a alpha -yolo", AppLocale::ZhCN).expect("parse command");
         match parsed {
             ParsedInput::Command(Command::Start {
                 tool,
@@ -463,6 +491,53 @@ mod tests {
             }
             other => panic!("unexpected parse result: {other:?}"),
         }
+    }
+
+    #[test]
+    fn parse_start_command_supports_long_alias_flag_and_unicode_dash_yolo() {
+        let parsed =
+            parse_input("/codex 1 -alias alpha —yolo", AppLocale::ZhCN).expect("parse command");
+        match parsed {
+            ParsedInput::Command(Command::Start {
+                tool,
+                project_ref,
+                alias,
+                permission_mode,
+            }) => {
+                assert_eq!(tool, CliToolId::Codex);
+                assert_eq!(project_ref, "1");
+                assert_eq!(alias.as_deref(), Some("alpha"));
+                assert_eq!(permission_mode, BridgePermissionMode::Yolo);
+            }
+            other => panic!("unexpected parse result: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_start_command_rejects_legacy_syntax() {
+        let err = parse_input("/codex 1 alpha --yolo", AppLocale::ZhCN).expect_err("legacy form");
+        assert_eq!(
+            err.to_string(),
+            "用法：/codex <项目> [-a <别名> | -alias <别名>] [-yolo]"
+        );
+    }
+
+    #[test]
+    fn parse_start_command_rejects_missing_alias_value() {
+        let err = parse_input("/codex 1 -a -yolo", AppLocale::ZhCN).expect_err("missing alias");
+        assert_eq!(
+            err.to_string(),
+            "用法：/codex <项目> [-a <别名> | -alias <别名>] [-yolo]"
+        );
+    }
+
+    #[test]
+    fn parse_start_command_rejects_duplicate_yolo_flag() {
+        let err = parse_input("/codex 1 -yolo -yolo", AppLocale::ZhCN).expect_err("duplicate yolo");
+        assert_eq!(
+            err.to_string(),
+            "用法：/codex <项目> [-a <别名> | -alias <别名>] [-yolo]"
+        );
     }
 
     #[test]
@@ -530,7 +605,7 @@ mod tests {
     fn help_text_matches_snapshot_zh_cn() {
         assert_eq!(
             help_text(AppLocale::ZhCN),
-            "可用命令：\n/bind <配对码>\n/projects\n/channels\n/channels enable <渠道>\n/channels disable <渠道>\n/routes\n/codex <项目> [别名] [--yolo]\n/claude <项目> [别名] [--yolo]\n/gemini <项目> [别名] [--yolo]\n/chat <会话> <消息>\n/switch <会话>\n/sessions\n/stop <会话|all>\n/usage [today|yesterday|week|month]\n/costs [today|yesterday|week|month]\n/status\n/help"
+            "可用命令：\n/bind <配对码>\n/projects\n/channels\n/channels enable <渠道>\n/channels disable <渠道>\n/routes\n/codex <项目> [-a <别名> | -alias <别名>] [-yolo]\n/claude <项目> [-a <别名> | -alias <别名>] [-yolo]\n/gemini <项目> [-a <别名> | -alias <别名>] [-yolo]\n/chat <会话> <消息>\n/switch <会话>\n/sessions\n/stop <会话|all>\n/usage [today|yesterday|week|month]\n/costs [today|yesterday|week|month]\n/status\n/help"
         );
     }
 
@@ -538,7 +613,7 @@ mod tests {
     fn help_text_matches_snapshot_en_us() {
         assert_eq!(
             help_text(AppLocale::EnUS),
-            "Available commands:\n/bind <pairing-token>\n/projects\n/channels\n/channels enable <channel>\n/channels disable <channel>\n/routes\n/codex <project> [alias] [--yolo]\n/claude <project> [alias] [--yolo]\n/gemini <project> [alias] [--yolo]\n/chat <session> <message>\n/switch <session>\n/sessions\n/stop <session|all>\n/usage [today|yesterday|week|month]\n/costs [today|yesterday|week|month]\n/status\n/help"
+            "Available commands:\n/bind <pairing-token>\n/projects\n/channels\n/channels enable <channel>\n/channels disable <channel>\n/routes\n/codex <project> [-a <alias> | -alias <alias>] [-yolo]\n/claude <project> [-a <alias> | -alias <alias>] [-yolo]\n/gemini <project> [-a <alias> | -alias <alias>] [-yolo]\n/chat <session> <message>\n/switch <session>\n/sessions\n/stop <session|all>\n/usage [today|yesterday|week|month]\n/costs [today|yesterday|week|month]\n/status\n/help"
         );
     }
 

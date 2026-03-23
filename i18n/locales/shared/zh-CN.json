@@ -118,14 +118,14 @@
       "chat_usage": "用法：/chat <会话> <消息>",
       "channels_usage": "用法：/channels [enable|disable <渠道>]",
       "costs_usage": "用法：/costs [today|yesterday|week|month]",
-      "start_usage": "用法：/{{tool}} <项目> [别名] [--yolo]",
+      "start_usage": "用法：/{{tool}} <项目> [-a <别名> | -alias <别名>] [-yolo]",
       "stop_usage": "用法：/stop <会话|all>",
       "switch_usage": "用法：/switch <会话>",
       "usage_usage": "用法：/usage [today|yesterday|week|month]",
       "unknown": "未知命令：/{{command}}"
     },
     "help": {
-      "full": "可用命令：\n/bind <配对码>\n/projects\n/channels\n/channels enable <渠道>\n/channels disable <渠道>\n/routes\n/codex <项目> [别名] [--yolo]\n/claude <项目> [别名] [--yolo]\n/gemini <项目> [别名] [--yolo]\n/chat <会话> <消息>\n/switch <会话>\n/sessions\n/stop <会话|all>\n/usage [today|yesterday|week|month]\n/costs [today|yesterday|week|month]\n/status\n/help"
+      "full": "可用命令：\n/bind <配对码>\n/projects\n/channels\n/channels enable <渠道>\n/channels disable <渠道>\n/routes\n/codex <项目> [-a <别名> | -alias <别名>] [-yolo]\n/claude <项目> [-a <别名> | -alias <别名>] [-yolo]\n/gemini <项目> [-a <别名> | -alias <别名>] [-yolo]\n/chat <会话> <消息>\n/switch <会话>\n/sessions\n/stop <会话|all>\n/usage [today|yesterday|week|month]\n/costs [today|yesterday|week|month]\n/status\n/help"
     },
     "channel": {
       "ambiguous_hint": "请改用完整渠道 ID、唯一名称，或唯一 ID 前缀。",
@@ -270,7 +270,7 @@
       "user_text_label": "用户文本："
     },
     "notice": {
-      "safe_mode_footer": "如需允许写入等危险操作，请重新启动该会话并使用 --yolo。",
+      "safe_mode_footer": "如需允许写入等危险操作，请重新启动该会话并使用 -yolo。",
       "safe_mode_header": "检测到安全模式拦截了部分操作：",
       "safe_mode_more": "还有更多相关提示未展开"
     },
