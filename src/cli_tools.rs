@@ -1139,7 +1139,8 @@ mod path_tests {
             std::env::join_paths([shell_dir.clone(), shared_dir.clone()]).expect("join shell");
         let env = std::env::join_paths([env_dir.clone(), shared_dir.clone()]).expect("join env");
 
-        let dirs = path_search_dirs_with_env(&[extra.clone()], Some(&shell), Some(&env));
+        let dirs =
+            path_search_dirs_with_env(std::slice::from_ref(&extra), Some(&shell), Some(&env));
 
         assert_eq!(dirs.first(), Some(&extra));
         assert!(dirs.iter().any(|item| item == &shell_dir));
