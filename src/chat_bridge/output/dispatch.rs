@@ -45,7 +45,7 @@ const DISCORD_OUTPUT_POLICY: PlatformOutputPolicy = PlatformOutputPolicy {
 };
 
 const WHATSAPP_OUTPUT_POLICY: PlatformOutputPolicy = PlatformOutputPolicy {
-    // WhatsApp Cloud API text limit is tight enough that we should prefer attachments for longer
+    // WhatsApp message text limit is tight enough that we should prefer attachments for longer
     // terminal outputs instead of spamming multiple messages.
     message_char_limit: 3600,
     attachment_threshold: Some(6_000),

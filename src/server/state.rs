@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use tokio::sync::{mpsc, watch};
 
+use crate::chat_bridge::whatsapp_web::{WhatsAppWebControl, WhatsAppWebStatus};
 use crate::storage;
 use crate::update;
 
@@ -18,8 +19,8 @@ pub struct AppState {
     pub channels_cache: watch::Sender<Arc<Vec<storage::Channel>>>,
     pub channels_cache_rx: watch::Receiver<Arc<Vec<storage::Channel>>>,
     pub update_runtime: Arc<tokio::sync::Mutex<update::UpdateRuntime>>,
-    pub whatsapp_webhook_tx:
-        Option<mpsc::Sender<crate::chat_bridge::adapter::whatsapp::WhatsAppWebhookMessage>>,
+    pub whatsapp_control_tx: mpsc::Sender<WhatsAppWebControl>,
+    pub whatsapp_status_rx: watch::Receiver<WhatsAppWebStatus>,
 }
 
 impl AppState {

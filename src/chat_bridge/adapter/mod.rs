@@ -5,7 +5,6 @@ use crate::storage::ChatPlatform;
 
 pub mod discord;
 pub mod telegram;
-pub mod whatsapp;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IncomingAttachmentKind {
