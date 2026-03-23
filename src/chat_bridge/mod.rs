@@ -108,6 +108,13 @@ struct ActiveTurnRegistration {
     child_pid: Arc<AtomicU32>,
 }
 
+pub struct SupervisorChannels {
+    pub whatsapp_control_rx: mpsc::Receiver<WhatsAppWebControl>,
+    pub whatsapp_status_tx: watch::Sender<WhatsAppWebStatus>,
+    pub weixin_control_rx: mpsc::Receiver<WeixinControl>,
+    pub weixin_status_tx: watch::Sender<WeixinStatus>,
+}
+
 impl ManagedBridgeTask {
     fn new(platform_name: &'static str) -> Self {
         Self {
@@ -211,11 +218,15 @@ pub async fn run_supervisor(
     http_client: reqwest::Client,
     mut settings_rx: watch::Receiver<Arc<storage::AppSettings>>,
     channels_cache: Option<watch::Sender<Arc<Vec<storage::Channel>>>>,
-    mut whatsapp_control_rx: mpsc::Receiver<WhatsAppWebControl>,
-    whatsapp_status_tx: watch::Sender<WhatsAppWebStatus>,
-    mut weixin_control_rx: mpsc::Receiver<WeixinControl>,
-    weixin_status_tx: watch::Sender<WeixinStatus>,
+    supervisor_channels: SupervisorChannels,
 ) {
+    let SupervisorChannels {
+        mut whatsapp_control_rx,
+        whatsapp_status_tx,
+        mut weixin_control_rx,
+        weixin_status_tx,
+    } = supervisor_channels;
+
     let runtime = ChatBridgeRuntime {
         db_path,
         settings_rx: settings_rx.clone(),

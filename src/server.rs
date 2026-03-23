@@ -483,10 +483,12 @@ pub async fn serve_with_listener(
         http_client.clone(),
         chat_bridge_settings_rx,
         Some(chat_bridge_channels_cache),
-        whatsapp_control_rx,
-        whatsapp_status_tx,
-        weixin_control_rx,
-        weixin_status_tx,
+        chat_bridge::SupervisorChannels {
+            whatsapp_control_rx,
+            whatsapp_status_tx,
+            weixin_control_rx,
+            weixin_status_tx,
+        },
     ));
 
     if open_browser {
