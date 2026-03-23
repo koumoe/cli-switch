@@ -87,7 +87,6 @@ pub(crate) fn apply_to_command(cmd: &mut std::process::Command) {
                 continue;
             }
             if is_excluded_var(&key) {
-                cmd.env_remove(&key);
                 continue;
             }
             cmd.env(&key, value);
