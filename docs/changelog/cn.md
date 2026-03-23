@@ -1,3 +1,10 @@
+## [0.42.0](https://github.com/koumoe/cli-switch/compare/v0.41.1...v0.42.0) (2026-03-23)
+
+### 功能
+* 让 CLI 工具继承 Shell 环境 ([1f1af05](https://github.com/koumoe/cli-switch/commit/1f1af051a1108f60dfade2d93238d56d63dca8a7))
+
+### 修复
+* 修复 Shell 环境路径测试的 clippy 问题 ([72f32fb](https://github.com/koumoe/cli-switch/commit/72f32fb527c624bc3ab1691a7f0ea2e9971fa947))
 ## [0.41.1](https://github.com/koumoe/cli-switch/compare/v0.41.0...v0.41.1) (2026-03-23)
 
 ### 修复
