@@ -518,7 +518,7 @@ mod tests {
         let err = parse_input("/codex 1 alpha --yolo", AppLocale::ZhCN).expect_err("legacy form");
         assert_eq!(
             err.to_string(),
-            "用法：/codex <项目> [-a <别名> | -alias <别名>] [-yolo]"
+            "用法：/codex <项目> [-a|-alias <别名>] [-yolo]"
         );
     }
 
@@ -527,7 +527,7 @@ mod tests {
         let err = parse_input("/codex 1 -a -yolo", AppLocale::ZhCN).expect_err("missing alias");
         assert_eq!(
             err.to_string(),
-            "用法：/codex <项目> [-a <别名> | -alias <别名>] [-yolo]"
+            "用法：/codex <项目> [-a|-alias <别名>] [-yolo]"
         );
     }
 
@@ -536,7 +536,7 @@ mod tests {
         let err = parse_input("/codex 1 -yolo -yolo", AppLocale::ZhCN).expect_err("duplicate yolo");
         assert_eq!(
             err.to_string(),
-            "用法：/codex <项目> [-a <别名> | -alias <别名>] [-yolo]"
+            "用法：/codex <项目> [-a|-alias <别名>] [-yolo]"
         );
     }
 
@@ -605,7 +605,7 @@ mod tests {
     fn help_text_matches_snapshot_zh_cn() {
         assert_eq!(
             help_text(AppLocale::ZhCN),
-            "可用命令：\n/bind <配对码>\n/projects\n/channels\n/channels enable <渠道>\n/channels disable <渠道>\n/routes\n/codex <项目> [-a <别名> | -alias <别名>] [-yolo]\n/claude <项目> [-a <别名> | -alias <别名>] [-yolo]\n/gemini <项目> [-a <别名> | -alias <别名>] [-yolo]\n/chat <会话> <消息>\n/switch <会话>\n/sessions\n/stop <会话|all>\n/usage [today|yesterday|week|month]\n/costs [today|yesterday|week|month]\n/status\n/help"
+            "可用命令：\n\n绑定\n/bind <配对码>\n\n会话\n/projects\n/codex <项目> [-a|-alias <别名>] [-yolo]\n/claude <项目> [-a|-alias <别名>] [-yolo]\n/gemini <项目> [-a|-alias <别名>] [-yolo]\n/sessions\n/switch <会话>\n/chat <会话> <消息>\n/stop <会话|all>\n\n渠道\n/channels [enable|disable <渠道>]\n/routes\n\n统计\n/usage [today|yesterday|week|month]\n/costs [today|yesterday|week|month]\n\n其他\n/status\n/help"
         );
     }
 
@@ -613,7 +613,7 @@ mod tests {
     fn help_text_matches_snapshot_en_us() {
         assert_eq!(
             help_text(AppLocale::EnUS),
-            "Available commands:\n/bind <pairing-token>\n/projects\n/channels\n/channels enable <channel>\n/channels disable <channel>\n/routes\n/codex <project> [-a <alias> | -alias <alias>] [-yolo]\n/claude <project> [-a <alias> | -alias <alias>] [-yolo]\n/gemini <project> [-a <alias> | -alias <alias>] [-yolo]\n/chat <session> <message>\n/switch <session>\n/sessions\n/stop <session|all>\n/usage [today|yesterday|week|month]\n/costs [today|yesterday|week|month]\n/status\n/help"
+            "Available commands:\n\nBinding\n/bind <pairing-token>\n\nSessions\n/projects\n/codex <project> [-a|-alias <alias>] [-yolo]\n/claude <project> [-a|-alias <alias>] [-yolo]\n/gemini <project> [-a|-alias <alias>] [-yolo]\n/sessions\n/switch <session>\n/chat <session> <message>\n/stop <session|all>\n\nChannels\n/channels [enable|disable <channel>]\n/routes\n\nStats\n/usage [today|yesterday|week|month]\n/costs [today|yesterday|week|month]\n\nOther\n/status\n/help"
         );
     }
 

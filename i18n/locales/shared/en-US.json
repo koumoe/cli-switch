@@ -118,14 +118,14 @@
       "chat_usage": "Usage: /chat <session> <message>",
       "channels_usage": "Usage: /channels [enable|disable <channel>]",
       "costs_usage": "Usage: /costs [today|yesterday|week|month]",
-      "start_usage": "Usage: /{{tool}} <project> [-a <alias> | -alias <alias>] [-yolo]",
+      "start_usage": "Usage: /{{tool}} <project> [-a|-alias <alias>] [-yolo]",
       "stop_usage": "Usage: /stop <session|all>",
       "switch_usage": "Usage: /switch <session>",
       "usage_usage": "Usage: /usage [today|yesterday|week|month]",
       "unknown": "Unknown command: /{{command}}"
     },
     "help": {
-      "full": "Available commands:\n/bind <pairing-token>\n/projects\n/channels\n/channels enable <channel>\n/channels disable <channel>\n/routes\n/codex <project> [-a <alias> | -alias <alias>] [-yolo]\n/claude <project> [-a <alias> | -alias <alias>] [-yolo]\n/gemini <project> [-a <alias> | -alias <alias>] [-yolo]\n/chat <session> <message>\n/switch <session>\n/sessions\n/stop <session|all>\n/usage [today|yesterday|week|month]\n/costs [today|yesterday|week|month]\n/status\n/help"
+      "full": "Available commands:\n\nBinding\n/bind <pairing-token>\n\nSessions\n/projects\n/codex <project> [-a|-alias <alias>] [-yolo]\n/claude <project> [-a|-alias <alias>] [-yolo]\n/gemini <project> [-a|-alias <alias>] [-yolo]\n/sessions\n/switch <session>\n/chat <session> <message>\n/stop <session|all>\n\nChannels\n/channels [enable|disable <channel>]\n/routes\n\nStats\n/usage [today|yesterday|week|month]\n/costs [today|yesterday|week|month]\n\nOther\n/status\n/help"
     },
     "channel": {
       "ambiguous_hint": "Use the full channel ID, a unique channel name, or a unique ID prefix.",
@@ -136,9 +136,12 @@
       "enabled": "Channel {{name}} has been enabled.",
       "id_label": "ID",
       "list_title": "Channels:",
+      "name_label": "Name",
       "none": "No channels are configured.",
       "not_found": "Channel not found: {{target}}",
       "priority_label": "Priority",
+      "protocol_label": "Protocol",
+      "status_label": "Status",
       "status_auto_disabled": "auto-disabled",
       "status_disabled": "disabled",
       "status_enabled": "enabled"
@@ -180,16 +183,19 @@
       "avg_latency_label": "Average latency",
       "by_channel_empty": "No channel activity in the selected range.",
       "by_channel_label": "By channel:",
+      "channel_label": "Channel",
       "completion_tokens_label": "Completion Tokens",
       "costs_title": "Cost report:",
       "estimated_cost_label": "Estimated cost",
       "estimated_cost_short_label": "cost",
       "failed_label": "Failed",
       "last_sync_label": "Pricing last sync",
+      "metric_label": "Metric",
       "not_synced": "not synced",
       "pricing_missing_hint": "No pricing models are synced yet, so estimated costs may be empty.",
       "pricing_models_label": "Pricing models",
       "prompt_tokens_label": "Prompt Tokens",
+      "protocol_label": "Protocol",
       "range_label": "Range",
       "range_month": "this month",
       "range_today": "today",
@@ -198,7 +204,8 @@
       "requests_label": "Requests",
       "success_label": "Success",
       "total_tokens_label": "Total Tokens",
-      "usage_title": "Usage:"
+      "usage_title": "Usage:",
+      "value_label": "Value"
     },
     "status": {
       "active_sessions_label": "active_sessions",
