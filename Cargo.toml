@@ -52,6 +52,9 @@ sha2 = "0.10"
 tar = "0.4"
 zip = { version = "6", default-features = false, features = ["deflate-flate2"] }
 xz2 = "0.1"
+whatsapp-rust = { version = "0.5.0", default-features = false, features = ["sqlite-storage", "tokio-runtime"] }
+whatsapp-rust-tokio-transport = "0.5.0"
+whatsapp-rust-ureq-http-client = "0.5.0"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
