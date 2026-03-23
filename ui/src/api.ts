@@ -60,7 +60,7 @@ export type ChatBridgeWhatsAppStatus = {
   connected: boolean;
   me?: string | null;
   qr?: string | null;
-  qr_svg?: string | null;
+  qr_image?: string | null;
   last_error?: string | null;
 };
 

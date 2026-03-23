@@ -15,6 +15,7 @@ use crate::cli_tools::CliExecEnv;
 use crate::{nodejs, process};
 
 const BRIDGE_PACKAGE_JSON: &str = include_str!("whatsapp_web/package.json");
+const BRIDGE_PACKAGE_LOCK_JSON: &str = include_str!("whatsapp_web/package-lock.json");
 const BRIDGE_MJS: &str = include_str!("whatsapp_web/bridge.mjs");
 
 const BRIDGE_INSTALL_TIMEOUT: Duration = Duration::from_secs(10 * 60);
@@ -36,6 +37,7 @@ pub struct WhatsAppWebStatus {
     pub connected: bool,
     pub me: Option<String>,
     pub qr: Option<String>,
+    pub qr_image: Option<String>,
     pub last_error: Option<String>,
 }
 
@@ -46,6 +48,7 @@ impl Default for WhatsAppWebStatus {
             connected: false,
             me: None,
             qr: None,
+            qr_image: None,
             last_error: None,
         }
     }
@@ -62,6 +65,7 @@ impl WhatsAppWebStatus {
             connected: false,
             me: None,
             qr: None,
+            qr_image: None,
             last_error: None,
         }
     }
@@ -72,6 +76,7 @@ impl WhatsAppWebStatus {
             connected: false,
             me: None,
             qr: None,
+            qr_image: None,
             last_error: Some(err.into()),
         }
     }
@@ -264,7 +269,7 @@ pub(crate) fn logout_by_clearing_auth_state(data_dir: &Path) -> anyhow::Result<(
     Ok(())
 }
 
-pub(crate) fn qr_svg(raw: &str) -> anyhow::Result<String> {
+pub(crate) fn qr_image_data_uri(raw: &str) -> anyhow::Result<String> {
     let code = QrCode::new(raw.as_bytes()).context("build whatsapp qr failed")?;
     let width = code.width() as u32;
     let scale = 8u32;
@@ -312,6 +317,12 @@ async fn ensure_bridge_files(bridge_dir: &Path) -> anyhow::Result<()> {
     tokio::fs::write(bridge_dir.join("package.json"), BRIDGE_PACKAGE_JSON)
         .await
         .with_context(|| "write whatsapp bridge package.json failed")?;
+    tokio::fs::write(
+        bridge_dir.join("package-lock.json"),
+        BRIDGE_PACKAGE_LOCK_JSON,
+    )
+    .await
+    .with_context(|| "write whatsapp bridge package-lock.json failed")?;
     tokio::fs::write(bridge_dir.join("bridge.mjs"), BRIDGE_MJS)
         .await
         .with_context(|| "write whatsapp bridge bridge.mjs failed")?;
@@ -332,13 +343,7 @@ fn npm_install_bridge(env: &CliExecEnv, bridge_dir: &Path) -> anyhow::Result<()>
         anyhow::bail!("npm is not available");
     };
     cmd.current_dir(bridge_dir);
-    cmd.args([
-        "install",
-        "--omit=dev",
-        "--no-audit",
-        "--no-fund",
-        "--silent",
-    ]);
+    cmd.args(["ci", "--omit=dev", "--no-audit", "--no-fund", "--silent"]);
     cmd.env("npm_config_update_notifier", "false");
     cmd.env("npm_config_loglevel", "error");
     let out = process::command_output_with_timeout(&mut cmd, BRIDGE_INSTALL_TIMEOUT)
@@ -457,6 +462,10 @@ pub(super) async fn run_whatsapp_web_bridge(
     cmd.arg(&script_path);
     cmd.env("CLISWITCH_WHATSAPP_AUTH_DIR", auth_dir);
     cmd.env("CLISWITCH_WHATSAPP_LOG_LEVEL", "silent");
+    cmd.env(
+        "CLISWITCH_WHATSAPP_BRIDGE_VERSION",
+        env!("CARGO_PKG_VERSION"),
+    );
     cmd.stdin(std::process::Stdio::piped());
     cmd.stdout(std::process::Stdio::piped());
     cmd.stderr(std::process::Stdio::piped());
@@ -594,6 +603,7 @@ pub(super) async fn run_whatsapp_web_bridge(
                             connected: false,
                             me: None,
                             qr: Some(qr.to_string()),
+                            qr_image: qr_image_data_uri(qr).ok(),
                             last_error: None,
                         };
                         let _ = status_tx_reader.send(next);
@@ -609,6 +619,7 @@ pub(super) async fn run_whatsapp_web_bridge(
                         connected: true,
                         me,
                         qr: None,
+                        qr_image: None,
                         last_error: None,
                     };
                     let _ = status_tx_reader.send(next);
@@ -623,12 +634,16 @@ pub(super) async fn run_whatsapp_web_bridge(
                         let mut cur = status_tx_reader.borrow().clone();
                         cur.state = WhatsAppWebState::Connected;
                         cur.connected = true;
+                        cur.qr = None;
+                        cur.qr_image = None;
                         cur.last_error = None;
                         let _ = status_tx_reader.send(cur);
                     } else if conn == "close" {
                         let mut cur = status_tx_reader.borrow().clone();
                         cur.connected = false;
                         cur.state = WhatsAppWebState::Starting;
+                        cur.qr = None;
+                        cur.qr_image = None;
                         let _ = status_tx_reader.send(cur);
                     }
                 }

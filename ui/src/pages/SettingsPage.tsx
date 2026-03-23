@@ -545,19 +545,29 @@ export function SettingsPage() {
     }
 
     let cancelled = false;
+    let timer: number | null = null;
+    const nextPollDelay = (status: ChatBridgeWhatsAppStatus | null) => {
+      if (!status) return 5_000;
+      if (status.connected) return 15_000;
+      if (status.state === "awaiting_qr") return 2_000;
+      if (status.state === "error") return 5_000;
+      return 3_000;
+    };
     const refresh = async () => {
       const next = await refreshChatBridgeWhatsAppStatus({ silent: true });
-      if (!next || cancelled) return;
+      if (cancelled) return;
+      timer = window.setTimeout(() => {
+        void refresh();
+      }, nextPollDelay(next));
     };
 
     void refresh();
-    const timer = window.setInterval(() => {
-      void refresh();
-    }, 2000);
 
     return () => {
       cancelled = true;
-      window.clearInterval(timer);
+      if (timer !== null) {
+        window.clearTimeout(timer);
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
@@ -870,10 +880,10 @@ export function SettingsPage() {
                       <div className="font-medium text-sm">{t("settings.chatBridge.whatsapp.qrTitle")}</div>
                       <div className="text-xs text-muted-foreground">{t("settings.chatBridge.whatsapp.qrHint")}</div>
                     </div>
-                    {chatBridgeWhatsAppStatus?.qr_svg ? (
+                    {chatBridgeWhatsAppStatus?.qr_image ? (
                       <div className="flex justify-center">
                         <img
-                          src={chatBridgeWhatsAppStatus.qr_svg}
+                          src={chatBridgeWhatsAppStatus.qr_image}
                           alt={t("settings.chatBridge.whatsapp.qrAlt")}
                           className="h-56 w-56 rounded-lg border bg-white p-3"
                         />

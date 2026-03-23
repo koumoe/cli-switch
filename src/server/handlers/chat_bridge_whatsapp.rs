@@ -13,7 +13,7 @@ pub(in crate::server) struct WhatsAppStatusResponse {
     pub connected: bool,
     pub me: Option<String>,
     pub qr: Option<String>,
-    pub qr_svg: Option<String>,
+    pub qr_image: Option<String>,
     pub last_error: Option<String>,
 }
 
@@ -26,13 +26,11 @@ pub(in crate::server) async fn get_chat_bridge_whatsapp_status(
         status.state = WhatsAppWebState::Disabled;
         status.connected = false;
         status.qr = None;
+        status.qr_image = None;
     }
 
     Json(WhatsAppStatusResponse {
-        qr_svg: status
-            .qr
-            .as_deref()
-            .and_then(|raw| crate::chat_bridge::whatsapp_web::qr_svg(raw).ok()),
+        qr_image: status.qr_image,
         state: status.state,
         connected: status.connected,
         me: status.me,

@@ -28,13 +28,24 @@ const maxAttachmentBytes = envInt(
   "CLISWITCH_WHATSAPP_MAX_ATTACHMENT_BYTES",
   20 * 1024 * 1024,
 );
+const bridgeVersion = envString("CLISWITCH_WHATSAPP_BRIDGE_VERSION", "dev");
 const logLevel = envString("CLISWITCH_WHATSAPP_LOG_LEVEL", "silent");
+const reconnectBaseDelayMs = envInt(
+  "CLISWITCH_WHATSAPP_RECONNECT_BASE_DELAY_MS",
+  2_000,
+);
+const reconnectMaxDelayMs = envInt(
+  "CLISWITCH_WHATSAPP_RECONNECT_MAX_DELAY_MS",
+  30_000,
+);
 const logger = pino({ level: logLevel });
 
 let sock = null;
 let connected = false;
 let latestQr = null;
 let me = null;
+let reconnectAttempt = 0;
+let reconnectTask = null;
 
 const recentMessages = new Map(); // message_id -> WebMessageInfo
 const RECENT_LIMIT = 256;
@@ -71,6 +82,47 @@ function rememberSentMessageId(id) {
   while (sentByBridgeOrder.length > RECENT_LIMIT) {
     const oldest = sentByBridgeOrder.shift();
     if (oldest) sentByBridgeIds.delete(oldest);
+  }
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function nextReconnectDelayMs() {
+  const exponent = Math.min(reconnectAttempt, 5);
+  const delay = Math.min(reconnectBaseDelayMs * (2 ** exponent), reconnectMaxDelayMs);
+  reconnectAttempt += 1;
+  return delay;
+}
+
+async function scheduleReconnect(reason) {
+  if (reconnectTask) {
+    return reconnectTask;
+  }
+  reconnectTask = (async () => {
+    while (true) {
+      const delayMs = nextReconnectDelayMs();
+      emit({
+        event: "reconnect",
+        reason,
+        delay_ms: delayMs,
+        attempt: reconnectAttempt,
+      });
+      await sleep(delayMs);
+      try {
+        await startSocket();
+        return;
+      } catch (e) {
+        emit({ event: "error", scope: "reconnect", error: String(e?.message ?? e) });
+        reason = "retry_failed";
+      }
+    }
+  })();
+  try {
+    await reconnectTask;
+  } finally {
+    reconnectTask = null;
   }
 }
 
@@ -219,7 +271,7 @@ async function startSocket() {
     auth: state,
     printQRInTerminal: false,
     logger,
-    browser: ["CliSwitch", "Desktop", "0.40.0"],
+    browser: ["CliSwitch", "Desktop", bridgeVersion],
     syncFullHistory: false,
   });
 
@@ -235,6 +287,7 @@ async function startSocket() {
     }
 
     if (update.connection === "open") {
+      reconnectAttempt = 0;
       me = sock.user?.id ?? null;
       emit({ event: "ready", me });
     }
@@ -246,15 +299,14 @@ async function startSocket() {
         null;
       if (reason === DisconnectReason.loggedOut) {
         emit({ event: "logged_out" });
+        reconnectAttempt = 0;
         me = null;
         latestQr = null;
         connected = false;
         return;
       }
-      // Baileys reconnect policy: re-create socket on transient disconnects.
-      emit({ event: "reconnect", reason });
       try {
-        await startSocket();
+        await scheduleReconnect(reason);
       } catch (e) {
         emit({ event: "error", scope: "reconnect", error: String(e?.message ?? e) });
       }
