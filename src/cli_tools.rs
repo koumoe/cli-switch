@@ -1,6 +1,6 @@
 use anyhow::Context as _;
 use serde::{Deserialize, Serialize};
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::path::Path;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
@@ -15,6 +15,8 @@ const GEO_IPINFO_TIMEOUT: Duration = Duration::from_millis(1200);
 
 pub const NPM_REGISTRY_OFFICIAL: &str = "https://registry.npmjs.org";
 pub const NPM_REGISTRY_NPMMIRROR: &str = "https://registry.npmmirror.com";
+
+use crate::shell_env;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -348,16 +350,47 @@ fn fallback_executable_dirs_with_home(home: Option<&Path>, nvm_dir: Option<&Path
     out
 }
 
+fn extend_path_dirs(out: &mut Vec<PathBuf>, path_var: Option<&OsStr>) {
+    if let Some(path_var) = path_var {
+        out.extend(std::env::split_paths(path_var));
+    }
+}
+
+fn dedup_dirs(out: &mut Vec<PathBuf>) {
+    let mut seen = std::collections::HashSet::<PathBuf>::new();
+    out.retain(|p| seen.insert(p.clone()));
+}
+
+fn path_search_dirs_with_env(
+    extra_dirs: &[PathBuf],
+    shell_path: Option<&OsStr>,
+    env_path: Option<&OsStr>,
+) -> Vec<PathBuf> {
+    let mut out: Vec<PathBuf> = Vec::new();
+    out.extend_from_slice(extra_dirs);
+    extend_path_dirs(&mut out, shell_path);
+    extend_path_dirs(&mut out, env_path);
+    out.extend(fallback_executable_dirs());
+    dedup_dirs(&mut out);
+    out
+}
+
+fn path_search_dirs(extra_dirs: &[PathBuf]) -> Vec<PathBuf> {
+    let shell_path = shell_env::shell_path();
+    let env_path = std::env::var_os("PATH");
+    path_search_dirs_with_env(extra_dirs, shell_path.as_deref(), env_path.as_deref())
+}
+
+pub(crate) fn joined_child_path_for_dirs(extra_dirs: &[PathBuf]) -> Option<OsString> {
+    std::env::join_paths(path_search_dirs(extra_dirs)).ok()
+}
+
 pub fn find_executable_in_path(name: &str) -> Option<PathBuf> {
     if name.is_empty() {
         return None;
     }
 
-    let mut dirs: Vec<PathBuf> = Vec::new();
-    if let Some(path_var) = std::env::var_os("PATH") {
-        dirs.extend(std::env::split_paths(&path_var));
-    }
-    dirs.extend(fallback_executable_dirs());
+    let dirs = path_search_dirs(&[]);
 
     #[cfg(target_os = "windows")]
     let candidate_names: Vec<OsString> = {
@@ -406,8 +439,15 @@ pub fn find_executable_in_path(name: &str) -> Option<PathBuf> {
 
 pub fn try_get_cmd_version(program: &str) -> Option<String> {
     let program_path = find_executable_in_path(program)?;
+    let joined = program_path
+        .parent()
+        .map(|dir| joined_child_path_for_dirs(&[dir.to_path_buf()]))?;
     let mut cmd = std::process::Command::new(program_path);
     cmd.arg("--version");
+    shell_env::apply_to_command(&mut cmd);
+    if let Some(path) = &joined {
+        cmd.env("PATH", path);
+    }
     crate::process::command_silent(&mut cmd);
     let out = crate::process::command_output_with_timeout(&mut cmd, CMD_VERSION_TIMEOUT).ok()?;
     if !out.status.success() {
@@ -456,9 +496,17 @@ pub fn try_get_node_version() -> Option<String> {
 pub fn npm_install_global(pkg: &str) -> anyhow::Result<CmdOutput> {
     let npm =
         find_executable_in_path("npm").ok_or_else(|| anyhow::anyhow!("npm not found in PATH"))?;
+    let npm_dir = npm
+        .parent()
+        .map(|dir| dir.to_path_buf())
+        .ok_or_else(|| anyhow::anyhow!("npm path has no parent dir: {}", npm.display()))?;
 
     let mut cmd = std::process::Command::new(npm);
     cmd.args(["install", "-g", pkg, "--no-fund", "--no-audit"]);
+    shell_env::apply_to_command(&mut cmd);
+    if let Some(path) = joined_child_path_for_dirs(&[npm_dir]) {
+        cmd.env("PATH", path);
+    }
     crate::process::command_silent(&mut cmd);
     let out = crate::process::command_output_with_timeout(&mut cmd, NPM_INSTALL_TIMEOUT)
         .with_context(|| format!("run npm install -g {pkg} failed"))?;
@@ -561,11 +609,7 @@ pub(crate) fn try_get_cmd_version_at(program_path: &Path) -> Option<String> {
 
     // Ensure scripts like npm(.cmd) can find sibling node by prefixing PATH with the program dir.
     let program_dir = program_path.parent().map(|d| d.to_path_buf())?;
-    let mut dirs: Vec<PathBuf> = vec![program_dir];
-    if let Some(env_path) = std::env::var_os("PATH") {
-        dirs.extend(std::env::split_paths(&env_path));
-    }
-    let joined = std::env::join_paths(dirs).ok();
+    let joined = joined_child_path_for_dirs(&[program_dir]);
 
     #[cfg(target_os = "windows")]
     {
@@ -578,6 +622,7 @@ pub(crate) fn try_get_cmd_version_at(program_path: &Path) -> Option<String> {
             let p = program_path.to_string_lossy().to_string();
             let mut cmd = std::process::Command::new("cmd");
             cmd.args(["/C", &p, "--version"]);
+            shell_env::apply_to_command(&mut cmd);
             if let Some(p) = &joined {
                 cmd.env("PATH", p);
             }
@@ -601,6 +646,7 @@ pub(crate) fn try_get_cmd_version_at(program_path: &Path) -> Option<String> {
 
     let mut cmd = std::process::Command::new(program_path);
     cmd.arg("--version");
+    shell_env::apply_to_command(&mut cmd);
     if let Some(p) = &joined {
         cmd.env("PATH", p);
     }
@@ -650,21 +696,6 @@ fn program_dir(p: Option<&PathBuf>) -> Option<PathBuf> {
     p.and_then(|p| p.parent().map(|d| d.to_path_buf()))
 }
 
-fn join_child_path(extra_dirs: &[PathBuf]) -> Option<OsString> {
-    let mut out: Vec<PathBuf> = Vec::new();
-    out.extend_from_slice(extra_dirs);
-    if let Some(env_path) = std::env::var_os("PATH") {
-        out.extend(std::env::split_paths(&env_path));
-    }
-    out.extend(fallback_executable_dirs());
-
-    // Dedup, keep order.
-    let mut seen = std::collections::HashSet::<PathBuf>::new();
-    out.retain(|p| seen.insert(p.clone()));
-
-    std::env::join_paths(out).ok()
-}
-
 impl CliExecEnv {
     pub fn new(npm_path: Option<&str>, node_path: Option<&str>) -> Self {
         let npm = resolve_program("npm", npm_path);
@@ -684,17 +715,13 @@ impl CliExecEnv {
             child_dirs.push(dir);
         }
 
-        // Dedup, keep order.
-        let mut seen = std::collections::HashSet::<PathBuf>::new();
-        child_dirs.retain(|p| seen.insert(p.clone()));
-
-        let child_path = join_child_path(&child_dirs);
+        dedup_dirs(&mut child_dirs);
 
         let mut env = Self {
             npm,
             node,
             npm_global_bin: None,
-            child_path,
+            child_path: None,
             extra_dirs: child_dirs,
         };
 
@@ -705,6 +732,8 @@ impl CliExecEnv {
         {
             env.extra_dirs.push(global_bin);
         }
+        dedup_dirs(&mut env.extra_dirs);
+        env.child_path = joined_child_path_for_dirs(&env.extra_dirs);
 
         env
     }
@@ -757,7 +786,8 @@ impl CliExecEnv {
     }
 
     pub fn find_executable(&self, name: &str) -> Option<PathBuf> {
-        find_executable_in_path(name).or_else(|| find_executable_in_dirs(name, &self.extra_dirs))
+        let dirs = path_search_dirs(&self.extra_dirs);
+        find_executable_in_dirs(name, &dirs)
     }
 
     pub fn command_for(&self, program: &str) -> Option<std::process::Command> {
@@ -779,6 +809,7 @@ impl CliExecEnv {
                 let p = program_path.to_string_lossy().to_string();
                 let mut cmd = std::process::Command::new("cmd");
                 cmd.args(["/C", &p]);
+                shell_env::apply_to_command(&mut cmd);
                 if let Some(p) = &self.child_path {
                     cmd.env("PATH", p);
                 }
@@ -788,6 +819,7 @@ impl CliExecEnv {
         }
 
         let mut cmd = std::process::Command::new(program_path);
+        shell_env::apply_to_command(&mut cmd);
         if let Some(p) = &self.child_path {
             cmd.env("PATH", p);
         }
@@ -947,6 +979,7 @@ impl CliExecEnv {
 fn brew_list_contains(brew: &Path, args: &[&str], needle: &str) -> bool {
     let mut cmd = std::process::Command::new(brew);
     cmd.args(args);
+    shell_env::apply_to_command(&mut cmd);
     crate::process::command_silent(&mut cmd);
     let out = crate::process::command_output_with_timeout(&mut cmd, CMD_VERSION_TIMEOUT);
     let Ok(out) = out else {
@@ -1048,6 +1081,7 @@ pub fn brew_upgrade_cli_tool(brew: &Path, tool: CliToolId) -> anyhow::Result<Cmd
         }
     };
 
+    shell_env::apply_to_command(&mut cmd);
     crate::process::command_silent(&mut cmd);
     let out = crate::process::command_output_with_timeout(&mut cmd, BREW_TIMEOUT)
         .with_context(|| format!("run brew upgrade for {tool:?} failed"))?;
@@ -1093,6 +1127,26 @@ mod path_tests {
         assert!(dirs.contains(&nvm_bin));
 
         let _ = std::fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn path_search_dirs_prefers_extra_then_shell_then_process_then_fallback() {
+        let extra = PathBuf::from("extra-bin");
+        let shell_dir = PathBuf::from("shell-bin");
+        let env_dir = PathBuf::from("env-bin");
+        let shared_dir = PathBuf::from("shared-bin");
+        let shell =
+            std::env::join_paths([shell_dir.clone(), shared_dir.clone()]).expect("join shell");
+        let env = std::env::join_paths([env_dir.clone(), shared_dir.clone()]).expect("join env");
+
+        let dirs = path_search_dirs_with_env(&[extra.clone()], Some(&shell), Some(&env));
+
+        assert_eq!(dirs.first(), Some(&extra));
+        assert!(dirs.iter().any(|item| item == &shell_dir));
+        assert!(dirs.iter().any(|item| item == &env_dir));
+
+        let shared_count = dirs.iter().filter(|item| **item == shared_dir).count();
+        assert_eq!(shared_count, 1);
     }
 }
 

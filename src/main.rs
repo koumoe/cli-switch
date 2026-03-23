@@ -104,6 +104,9 @@ async fn async_main() -> anyhow::Result<()> {
         }
     }
 
+    cliswitch::shell_env::init();
+    cliswitch::shell_env::spawn_refresh_task();
+
     match cmd {
         Command::Serve { port, open } => {
             let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), port);

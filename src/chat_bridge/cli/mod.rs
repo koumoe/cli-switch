@@ -102,13 +102,7 @@ fn joined_child_path(program_path: &Path, settings: &AppSettings) -> Option<OsSt
     if let Some(dir) = setting_path_dir(settings.cli_tools_npm_path.as_deref()) {
         dirs.push(dir);
     }
-    if let Some(env_path) = std::env::var_os("PATH") {
-        dirs.extend(std::env::split_paths(&env_path));
-    }
-
-    let mut seen = std::collections::HashSet::<PathBuf>::new();
-    dirs.retain(|item| seen.insert(item.clone()));
-    std::env::join_paths(dirs).ok()
+    crate::cli_tools::joined_child_path_for_dirs(&dirs)
 }
 
 fn base_async_command(program_path: &Path, settings: &AppSettings) -> TokioCommand {
@@ -122,6 +116,7 @@ fn base_async_command(program_path: &Path, settings: &AppSettings) -> TokioComma
         if is_cmd {
             let mut cmd = TokioCommand::new("cmd");
             cmd.args(["/C", &program_path.to_string_lossy()]);
+            crate::shell_env::apply_to_command(cmd.as_std_mut());
             if let Some(path) = joined_child_path(program_path, settings) {
                 cmd.env("PATH", path);
             }
@@ -131,6 +126,7 @@ fn base_async_command(program_path: &Path, settings: &AppSettings) -> TokioComma
     }
 
     let mut cmd = TokioCommand::new(program_path);
+    crate::shell_env::apply_to_command(cmd.as_std_mut());
     if let Some(path) = joined_child_path(program_path, settings) {
         cmd.env("PATH", path);
     }
@@ -149,6 +145,7 @@ fn base_std_command(program_path: &Path, settings: &AppSettings) -> std::process
         if is_cmd {
             let mut cmd = std::process::Command::new("cmd");
             cmd.args(["/C", &program_path.to_string_lossy()]);
+            crate::shell_env::apply_to_command(&mut cmd);
             if let Some(path) = joined_child_path(program_path, settings) {
                 cmd.env("PATH", path);
             }
@@ -158,6 +155,7 @@ fn base_std_command(program_path: &Path, settings: &AppSettings) -> std::process
     }
 
     let mut cmd = std::process::Command::new(program_path);
+    crate::shell_env::apply_to_command(&mut cmd);
     if let Some(path) = joined_child_path(program_path, settings) {
         cmd.env("PATH", path);
     }

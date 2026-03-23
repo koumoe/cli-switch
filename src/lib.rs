@@ -12,6 +12,7 @@ pub mod nodejs;
 pub(crate) mod process;
 pub mod proxy;
 pub mod server;
+pub mod shell_env;
 pub mod storage;
 pub mod terminal;
 pub mod update;
