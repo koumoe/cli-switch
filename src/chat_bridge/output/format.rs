@@ -5,6 +5,8 @@ use crate::chat_bridge::i18n::{args, t, t_args};
 use crate::chat_bridge::projects::{AggregatedProject, display_project_index};
 use crate::i18n::AppLocale;
 use crate::storage::ChatPlatform;
+use regex::Regex;
+use std::sync::OnceLock;
 
 pub(in crate::chat_bridge) struct RenderedMessage {
     pub(in crate::chat_bridge) content: String,
@@ -941,7 +943,7 @@ fn render_inline_code(body: &str) -> String {
                 out.push_str("</code>");
                 buffer.clear();
             } else {
-                out.push_str(&escape_html(&buffer));
+                out.push_str(&render_plain_inline_markup(&buffer));
                 buffer.clear();
             }
             in_code = !in_code;
@@ -953,12 +955,168 @@ fn render_inline_code(body: &str) -> String {
     if in_code {
         out.push('`');
     }
-    out.push_str(&escape_html(&buffer));
+    if in_code {
+        out.push_str(&escape_html(&buffer));
+    } else {
+        out.push_str(&render_plain_inline_markup(&buffer));
+    }
     out
 }
 
 fn wrap_preformatted(body: &str) -> String {
     format!("<pre><code>{}</code></pre>", escape_html(body))
+}
+
+fn render_plain_inline_markup(text: &str) -> String {
+    let mut out = String::new();
+    let mut last = 0usize;
+
+    for caps in markdown_link_regex().captures_iter(text) {
+        let Some(full) = caps.get(0) else {
+            continue;
+        };
+        let Some(label) = caps.get(1).map(|value| value.as_str().trim()) else {
+            continue;
+        };
+        let Some(target) = caps.get(2).map(|value| value.as_str().trim()) else {
+            continue;
+        };
+
+        out.push_str(&escape_html(&text[last..full.start()]));
+        out.push_str(&render_markdown_link(label, target, full.as_str()));
+        last = full.end();
+    }
+
+    out.push_str(&escape_html(&text[last..]));
+    out
+}
+
+fn render_markdown_link(label: &str, target: &str, raw: &str) -> String {
+    if label.is_empty() || target.is_empty() {
+        return escape_html(raw);
+    }
+
+    if is_local_markdown_target(target) {
+        let display = display_local_markdown_link(label, target);
+        return format!("<code>{}</code>", escape_html(&display));
+    }
+
+    if is_supported_external_link(target) {
+        return format!(
+            "<a href=\"{}\">{}</a>",
+            escape_html(target),
+            escape_html(label),
+        );
+    }
+
+    escape_html(raw)
+}
+
+fn markdown_link_regex() -> &'static Regex {
+    static REGEX: OnceLock<Regex> = OnceLock::new();
+    REGEX.get_or_init(|| {
+        Regex::new(r"\[([^\]\n]+)\]\(([^)\n]+)\)").expect("compile markdown link regex")
+    })
+}
+
+fn is_local_markdown_target(target: &str) -> bool {
+    let normalized = target
+        .trim()
+        .strip_prefix("file://")
+        .unwrap_or(target.trim());
+    normalized.starts_with('/')
+        || normalized.starts_with("./")
+        || normalized.starts_with("../")
+        || looks_like_windows_abs_path(normalized)
+}
+
+fn is_supported_external_link(target: &str) -> bool {
+    let normalized = target.trim().to_ascii_lowercase();
+    normalized.starts_with("https://")
+        || normalized.starts_with("http://")
+        || normalized.starts_with("mailto:")
+}
+
+fn looks_like_windows_abs_path(path: &str) -> bool {
+    let bytes = path.as_bytes();
+    bytes.len() >= 3
+        && bytes[0].is_ascii_alphabetic()
+        && bytes[1] == b':'
+        && matches!(bytes[2], b'/' | b'\\')
+}
+
+fn display_local_markdown_link(label: &str, target: &str) -> String {
+    let trimmed_label = label.trim();
+    if !trimmed_label.is_empty()
+        && !trimmed_label.starts_with('/')
+        && !looks_like_windows_abs_path(trimmed_label)
+    {
+        return trimmed_label.to_string();
+    }
+
+    let normalized = target
+        .trim()
+        .strip_prefix("file://")
+        .unwrap_or(target.trim());
+    let (path_part, suffix) = split_local_target_suffix(normalized);
+    let basename = path_part
+        .rsplit(['/', '\\'])
+        .next()
+        .filter(|value| !value.is_empty())
+        .unwrap_or(path_part);
+
+    format!("{basename}{suffix}")
+}
+
+fn split_local_target_suffix(target: &str) -> (&str, &str) {
+    let last_sep = target
+        .rfind(['/', '\\'])
+        .map(|index| index + 1)
+        .unwrap_or(0);
+
+    if let Some(index) = target.rfind('#') {
+        let suffix = &target[index..];
+        if index >= last_sep && looks_like_line_hash_suffix(suffix) {
+            return (&target[..index], suffix);
+        }
+    }
+
+    if let Some(relative_index) = target[last_sep..].rfind(':') {
+        let index = last_sep + relative_index;
+        let suffix = &target[index..];
+        if looks_like_line_colon_suffix(suffix) {
+            return (&target[..index], suffix);
+        }
+    }
+
+    (target, "")
+}
+
+fn looks_like_line_hash_suffix(suffix: &str) -> bool {
+    let Some(rest) = suffix.strip_prefix("#L") else {
+        return false;
+    };
+    let (line, column) = rest
+        .split_once('C')
+        .map_or((rest, None), |(line, column)| (line, Some(column)));
+    !line.is_empty()
+        && line.chars().all(|ch| ch.is_ascii_digit())
+        && column
+            .is_none_or(|value| !value.is_empty() && value.chars().all(|ch| ch.is_ascii_digit()))
+}
+
+fn looks_like_line_colon_suffix(suffix: &str) -> bool {
+    let Some(rest) = suffix.strip_prefix(':') else {
+        return false;
+    };
+    let mut parts = rest.split(':');
+    let Some(line) = parts.next() else {
+        return false;
+    };
+    if line.is_empty() || !line.chars().all(|ch| ch.is_ascii_digit()) {
+        return false;
+    }
+    parts.all(|part| !part.is_empty() && part.chars().all(|ch| ch.is_ascii_digit()))
 }
 
 fn looks_like_code_block(body: &str) -> bool {
@@ -1090,6 +1248,42 @@ mod tests {
             "[#1|codex|demo]\n````markdown\ncode with ``` inside\n````",
         );
         assert!(rendered.content.contains("<pre><code>code with ``` inside"));
+    }
+
+    #[test]
+    fn render_chat_message_formats_local_markdown_file_links_for_telegram() {
+        let rendered = render_chat_message(
+            ChatPlatform::Telegram,
+            "见 [collector.go#L357](/Users/koumoe/Projects/Work/ChannelSentinel/internal/collector/collector.go#L357) 的处理。",
+        );
+        assert!(rendered.content.contains("<code>collector.go#L357</code>"));
+        assert!(!rendered.content.contains("/Users/koumoe/Projects"));
+    }
+
+    #[test]
+    fn render_chat_message_formats_http_markdown_links_for_telegram() {
+        let rendered = render_chat_message(
+            ChatPlatform::Telegram,
+            "参考 [OpenAI Docs](https://platform.openai.com/docs/overview)。",
+        );
+        assert!(
+            rendered
+                .content
+                .contains("<a href=\"https://platform.openai.com/docs/overview\">OpenAI Docs</a>")
+        );
+    }
+
+    #[test]
+    fn render_chat_message_keeps_markdown_links_inside_inline_code_literal() {
+        let rendered = render_chat_message(
+            ChatPlatform::Telegram,
+            "请保留 `[collector.go#L357](/Users/demo/project/collector.go#L357)` 原样。",
+        );
+        assert!(
+            rendered.content.contains(
+                "<code>[collector.go#L357](/Users/demo/project/collector.go#L357)</code>"
+            )
+        );
     }
 
     #[test]
