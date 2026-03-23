@@ -29,6 +29,7 @@ pub enum ChatPlatform {
     Telegram,
     Discord,
     WhatsApp,
+    Weixin,
 }
 
 impl ChatPlatform {
@@ -37,6 +38,7 @@ impl ChatPlatform {
             ChatPlatform::Telegram => "telegram",
             ChatPlatform::Discord => "discord",
             ChatPlatform::WhatsApp => "whatsapp",
+            ChatPlatform::Weixin => "weixin",
         }
     }
 
@@ -45,6 +47,7 @@ impl ChatPlatform {
             ChatPlatform::Telegram => "Telegram",
             ChatPlatform::Discord => "Discord",
             ChatPlatform::WhatsApp => "WhatsApp",
+            ChatPlatform::Weixin => "Weixin",
         }
     }
 
@@ -53,6 +56,7 @@ impl ChatPlatform {
             "telegram" => Ok(ChatPlatform::Telegram),
             "discord" => Ok(ChatPlatform::Discord),
             "whatsapp" => Ok(ChatPlatform::WhatsApp),
+            "weixin" => Ok(ChatPlatform::Weixin),
             other => anyhow::bail!("unknown chat platform: {other}"),
         }
     }

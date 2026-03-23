@@ -6,6 +6,7 @@ mod output;
 mod projects;
 mod resolver;
 mod router;
+pub(crate) mod weixin;
 pub(crate) mod whatsapp_web;
 
 use anyhow::Context as _;
@@ -40,6 +41,10 @@ use self::projects::AggregatedProject;
 use self::projects::ProjectStore;
 use self::router::{
     Command, StatsRange as CommandStatsRange, format_session_label, format_sessions_list, help_text,
+};
+use crate::chat_bridge::weixin::{
+    WeixinControl, WeixinState, WeixinStatus,
+    logout_by_clearing_auth_state as logout_weixin_by_clearing_auth_state, run_weixin_bridge,
 };
 use crate::chat_bridge::whatsapp_web::{
     WhatsAppWebControl, WhatsAppWebState, WhatsAppWebStatus, logout_by_clearing_auth_state,
@@ -208,11 +213,14 @@ pub async fn run_supervisor(
     channels_cache: Option<watch::Sender<Arc<Vec<storage::Channel>>>>,
     mut whatsapp_control_rx: mpsc::Receiver<WhatsAppWebControl>,
     whatsapp_status_tx: watch::Sender<WhatsAppWebStatus>,
+    mut weixin_control_rx: mpsc::Receiver<WeixinControl>,
+    weixin_status_tx: watch::Sender<WeixinStatus>,
 ) {
     let runtime = ChatBridgeRuntime {
         db_path,
         settings_rx: settings_rx.clone(),
         whatsapp_status_rx: whatsapp_status_tx.subscribe(),
+        weixin_status_rx: weixin_status_tx.subscribe(),
         channels_cache,
         project_store: Arc::new(ProjectStore::new()),
         busy_sessions: Arc::new(Mutex::new(HashSet::new())),
@@ -222,17 +230,22 @@ pub async fn run_supervisor(
     let mut telegram_task = ManagedBridgeTask::new("telegram");
     let mut discord_task = ManagedBridgeTask::new("discord");
     let mut whatsapp_task = ManagedBridgeTask::new("whatsapp");
+    let mut weixin_task = ManagedBridgeTask::new("weixin");
     let mut whatsapp_nonce: u64 = 0;
+    let mut weixin_nonce: u64 = 0;
 
     loop {
         let telegram_token = desired_telegram_token(settings_rx.borrow().as_ref());
         let discord_token = desired_discord_token(settings_rx.borrow().as_ref());
         let whatsapp_enabled = desired_whatsapp_enabled(settings_rx.borrow().as_ref());
+        let weixin_enabled = desired_weixin_enabled(settings_rx.borrow().as_ref());
         let whatsapp_key = whatsapp_enabled.then_some(format!("whatsapp-web:{whatsapp_nonce}"));
+        let weixin_key = weixin_enabled.then_some(format!("weixin:{weixin_nonce}"));
 
         telegram_task.sync_token(telegram_token.as_deref());
         discord_task.sync_token(discord_token.as_deref());
         whatsapp_task.sync_token(whatsapp_key.as_deref());
+        weixin_task.sync_token(weixin_key.as_deref());
 
         if telegram_token.is_some() {
             let runtime = runtime.clone();
@@ -267,9 +280,23 @@ pub async fn run_supervisor(
             let _ = whatsapp_status_tx.send(WhatsAppWebStatus::disabled());
         }
 
+        if let Some(key) = weixin_key.clone() {
+            let runtime = runtime.clone();
+            let client = http_client.clone();
+            let status_tx = weixin_status_tx.clone();
+            weixin_task.spawn_if_needed(Some(key), move |_token| {
+                tokio::spawn(async move {
+                    run_weixin_bridge(runtime, client, status_tx).await;
+                })
+            });
+        } else {
+            let _ = weixin_status_tx.send(WeixinStatus::disabled());
+        }
+
         let telegram_running = telegram_task.is_running();
         let discord_running = discord_task.is_running();
         let whatsapp_running = whatsapp_task.is_running();
+        let weixin_running = weixin_task.is_running();
         tokio::select! {
             changed = settings_rx.changed() => {
                 if changed.is_err() {
@@ -295,6 +322,24 @@ pub async fn run_supervisor(
                     }
                 }
             }
+            cmd = weixin_control_rx.recv() => {
+                let Some(cmd) = cmd else {
+                    continue;
+                };
+                match cmd {
+                    WeixinControl::StartLogin => {
+                        if weixin_enabled {
+                            weixin_nonce = weixin_nonce.wrapping_add(1);
+                        }
+                    }
+                    WeixinControl::Logout => {
+                        if let Err(err) = logout_weixin_by_clearing_auth_state(&runtime.data_dir()) {
+                            tracing::warn!(err = %err, "clear weixin auth state failed");
+                        }
+                        weixin_nonce = weixin_nonce.wrapping_add(1);
+                    }
+                }
+            }
             exit = telegram_task.wait_for_exit(), if telegram_running => {
                 telegram_task.handle_exit(exit).await;
             }
@@ -304,13 +349,18 @@ pub async fn run_supervisor(
             exit = whatsapp_task.wait_for_exit(), if whatsapp_running => {
                 whatsapp_task.handle_exit(exit).await;
             }
+            exit = weixin_task.wait_for_exit(), if weixin_running => {
+                weixin_task.handle_exit(exit).await;
+            }
         }
     }
 
     telegram_task.abort_and_join().await;
     discord_task.abort_and_join().await;
     whatsapp_task.abort_and_join().await;
+    weixin_task.abort_and_join().await;
     let _ = whatsapp_status_tx.send(WhatsAppWebStatus::disabled());
+    let _ = weixin_status_tx.send(WeixinStatus::disabled());
 }
 
 #[derive(Clone)]
@@ -318,6 +368,7 @@ struct ChatBridgeRuntime {
     db_path: PathBuf,
     settings_rx: watch::Receiver<Arc<storage::AppSettings>>,
     whatsapp_status_rx: watch::Receiver<WhatsAppWebStatus>,
+    weixin_status_rx: watch::Receiver<WeixinStatus>,
     channels_cache: Option<watch::Sender<Arc<Vec<storage::Channel>>>>,
     project_store: Arc<ProjectStore>,
     busy_sessions: Arc<Mutex<HashSet<i64>>>,
@@ -706,9 +757,18 @@ impl ChatBridgeRuntime {
                     ChatPlatform::WhatsApp,
                 )
                 .await?;
+                let weixin_sessions = storage::count_active_bridge_sessions_for_platform(
+                    self.db_path.clone(),
+                    ChatPlatform::Weixin,
+                )
+                .await?;
                 let mut whatsapp_status = self.whatsapp_status_rx.borrow().clone();
                 if !desired_whatsapp_enabled(settings.as_ref()) {
                     whatsapp_status = WhatsAppWebStatus::disabled();
+                }
+                let mut weixin_status = self.weixin_status_rx.borrow().clone();
+                if !desired_weixin_enabled(settings.as_ref()) {
+                    weixin_status = WeixinStatus::disabled();
                 }
                 let tool_statuses =
                     detect_cli_tool_statuses(settings.as_ref(), self.data_dir()).await?;
@@ -722,7 +782,9 @@ impl ChatBridgeRuntime {
                     telegram_sessions,
                     discord_sessions,
                     whatsapp_sessions,
+                    weixin_sessions,
                     whatsapp_status: &whatsapp_status,
+                    weixin_status: &weixin_status,
                     pricing: &pricing,
                     update_status: update_status.as_ref(),
                     locale,
@@ -1511,7 +1573,9 @@ struct StatusReportContext<'a> {
     telegram_sessions: i64,
     discord_sessions: i64,
     whatsapp_sessions: i64,
+    weixin_sessions: i64,
     whatsapp_status: &'a WhatsAppWebStatus,
+    weixin_status: &'a WeixinStatus,
     pricing: &'a storage::PricingStatus,
     update_status: Option<&'a crate::update::UpdateStatus>,
     locale: AppLocale,
@@ -1527,7 +1591,9 @@ fn format_status_report(ctx: StatusReportContext<'_>) -> String {
         telegram_sessions,
         discord_sessions,
         whatsapp_sessions,
+        weixin_sessions,
         whatsapp_status,
+        weixin_status,
         pricing,
         update_status,
         locale,
@@ -1581,6 +1647,18 @@ fn format_status_report(ctx: StatusReportContext<'_>) -> String {
             .unwrap_or_else(|| t(locale, "status.unknown_label")),
         t(locale, "status.active_sessions_label"),
         whatsapp_sessions
+    ));
+    lines.push(format!(
+        "- Weixin: {} / state={} / connected={} / me={} / {}={}",
+        enabled_label(settings.chat_bridge_weixin_enabled, locale),
+        weixin_state_label(weixin_status.state, locale),
+        configured_label(weixin_status.connected, locale),
+        weixin_status
+            .me
+            .clone()
+            .unwrap_or_else(|| t(locale, "status.unknown_label")),
+        t(locale, "status.active_sessions_label"),
+        weixin_sessions
     ));
     lines.push(format!(
         "{}: {}={}  {}={}  {}={}",
@@ -1746,6 +1824,25 @@ fn whatsapp_web_state_label(state: WhatsAppWebState, locale: AppLocale) -> &'sta
             WhatsAppWebState::AwaitingQr => "awaiting_qr",
             WhatsAppWebState::Connected => "connected",
             WhatsAppWebState::Error => "error",
+        },
+    }
+}
+
+fn weixin_state_label(state: WeixinState, locale: AppLocale) -> &'static str {
+    match locale {
+        AppLocale::ZhCN => match state {
+            WeixinState::Disabled => "已禁用",
+            WeixinState::Starting => "启动中",
+            WeixinState::AwaitingQr => "等待扫码",
+            WeixinState::Connected => "已连接",
+            WeixinState::Error => "异常",
+        },
+        AppLocale::EnUS => match state {
+            WeixinState::Disabled => "disabled",
+            WeixinState::Starting => "starting",
+            WeixinState::AwaitingQr => "awaiting_qr",
+            WeixinState::Connected => "connected",
+            WeixinState::Error => "error",
         },
     }
 }
@@ -2026,7 +2123,7 @@ where
 }
 
 fn should_stream_live_output(platform: ChatPlatform, active_session_count: i64) -> bool {
-    platform != ChatPlatform::WhatsApp && active_session_count <= 1
+    !matches!(platform, ChatPlatform::WhatsApp | ChatPlatform::Weixin) && active_session_count <= 1
 }
 
 fn desired_telegram_token(settings: &storage::AppSettings) -> Option<String> {
@@ -2047,6 +2144,10 @@ fn desired_discord_token(settings: &storage::AppSettings) -> Option<String> {
 
 fn desired_whatsapp_enabled(settings: &storage::AppSettings) -> bool {
     settings.chat_bridge_enabled && settings.chat_bridge_whatsapp_enabled
+}
+
+fn desired_weixin_enabled(settings: &storage::AppSettings) -> bool {
+    settings.chat_bridge_enabled && settings.chat_bridge_weixin_enabled
 }
 
 fn incoming_attachment_filename(
@@ -2212,10 +2313,12 @@ mod tests {
         let (_settings_tx, settings_rx) = watch::channel(Arc::new(settings));
         let (_whatsapp_status_tx, whatsapp_status_rx) =
             watch::channel(WhatsAppWebStatus::disabled());
+        let (_weixin_status_tx, weixin_status_rx) = watch::channel(WeixinStatus::disabled());
         ChatBridgeRuntime {
             db_path: db_path.to_path_buf(),
             settings_rx,
             whatsapp_status_rx,
+            weixin_status_rx,
             channels_cache: None,
             project_store: Arc::new(ProjectStore::new()),
             busy_sessions: Arc::new(Mutex::new(HashSet::new())),

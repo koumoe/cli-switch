@@ -51,6 +51,11 @@ const WHATSAPP_OUTPUT_POLICY: PlatformOutputPolicy = PlatformOutputPolicy {
     attachment_threshold: Some(6_000),
 };
 
+const WEIXIN_OUTPUT_POLICY: PlatformOutputPolicy = PlatformOutputPolicy {
+    message_char_limit: 3600,
+    attachment_threshold: None,
+};
+
 pub(in crate::chat_bridge) struct TurnExecutionResult {
     pub(in crate::chat_bridge) success: bool,
     pub(in crate::chat_bridge) stdout: String,
@@ -704,6 +709,7 @@ fn output_policy(platform: storage::ChatPlatform) -> PlatformOutputPolicy {
         storage::ChatPlatform::Telegram => TELEGRAM_OUTPUT_POLICY,
         storage::ChatPlatform::Discord => DISCORD_OUTPUT_POLICY,
         storage::ChatPlatform::WhatsApp => WHATSAPP_OUTPUT_POLICY,
+        storage::ChatPlatform::Weixin => WEIXIN_OUTPUT_POLICY,
     }
 }
 
