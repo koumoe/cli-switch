@@ -118,14 +118,14 @@
       "chat_usage": "Usage: /chat <session> <message>",
       "channels_usage": "Usage: /channels [enable|disable <channel>]",
       "costs_usage": "Usage: /costs [today|yesterday|week|month]",
-      "start_usage": "Usage: /{{tool}} <project> [alias] [--yolo]",
+      "start_usage": "Usage: /{{tool}} <project> [-a <alias> | -alias <alias>] [-yolo]",
       "stop_usage": "Usage: /stop <session|all>",
       "switch_usage": "Usage: /switch <session>",
       "usage_usage": "Usage: /usage [today|yesterday|week|month]",
       "unknown": "Unknown command: /{{command}}"
     },
     "help": {
-      "full": "Available commands:\n/bind <pairing-token>\n/projects\n/channels\n/channels enable <channel>\n/channels disable <channel>\n/routes\n/codex <project> [alias] [--yolo]\n/claude <project> [alias] [--yolo]\n/gemini <project> [alias] [--yolo]\n/chat <session> <message>\n/switch <session>\n/sessions\n/stop <session|all>\n/usage [today|yesterday|week|month]\n/costs [today|yesterday|week|month]\n/status\n/help"
+      "full": "Available commands:\n/bind <pairing-token>\n/projects\n/channels\n/channels enable <channel>\n/channels disable <channel>\n/routes\n/codex <project> [-a <alias> | -alias <alias>] [-yolo]\n/claude <project> [-a <alias> | -alias <alias>] [-yolo]\n/gemini <project> [-a <alias> | -alias <alias>] [-yolo]\n/chat <session> <message>\n/switch <session>\n/sessions\n/stop <session|all>\n/usage [today|yesterday|week|month]\n/costs [today|yesterday|week|month]\n/status\n/help"
     },
     "channel": {
       "ambiguous_hint": "Use the full channel ID, a unique channel name, or a unique ID prefix.",
@@ -270,7 +270,7 @@
       "user_text_label": "User text:"
     },
     "notice": {
-      "safe_mode_footer": "If you need write access or other risky actions, restart this session with --yolo.",
+      "safe_mode_footer": "If you need write access or other risky actions, restart this session with -yolo.",
       "safe_mode_header": "Safe mode blocked part of the operation:",
       "safe_mode_more": "More related hints were omitted"
     },

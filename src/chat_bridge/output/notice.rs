@@ -150,7 +150,7 @@ mod tests {
 
         assert!(notice.contains("Sandbox blocked while deleting src/config/prod.env"));
         assert!(notice.contains("Permission denied when removing secrets.env"));
-        assert!(notice.contains("--yolo"));
+        assert!(notice.contains("-yolo"));
     }
 
     #[test]
@@ -162,7 +162,7 @@ mod tests {
 
         assert_eq!(
             notice,
-            "检测到安全模式拦截了部分操作：\n- Sandbox blocked while deleting src/config/prod.env\n- Permission denied when removing secrets.env\n如需允许写入等危险操作，请重新启动该会话并使用 --yolo。"
+            "检测到安全模式拦截了部分操作：\n- Sandbox blocked while deleting src/config/prod.env\n- Permission denied when removing secrets.env\n如需允许写入等危险操作，请重新启动该会话并使用 -yolo。"
         );
     }
 
@@ -175,7 +175,7 @@ mod tests {
 
         assert_eq!(
             notice,
-            "Safe mode blocked part of the operation:\n- Sandbox blocked while deleting src/config/prod.env\n- Permission denied when removing secrets.env\nIf you need write access or other risky actions, restart this session with --yolo."
+            "Safe mode blocked part of the operation:\n- Sandbox blocked while deleting src/config/prod.env\n- Permission denied when removing secrets.env\nIf you need write access or other risky actions, restart this session with -yolo."
         );
     }
 }
