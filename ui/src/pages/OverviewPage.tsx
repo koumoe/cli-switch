@@ -432,7 +432,7 @@ export function OverviewPage() {
         </Card>
 
         {/* 渠道使用分布 */}
-        <Card className="flex flex-col md:col-span-1 md:self-start">
+        <Card className="flex flex-col md:col-span-1">
           <CardHeader className="py-3 px-3">
             <div className="flex items-center justify-between gap-2">
               <CardTitle className="text-sm">
@@ -455,7 +455,7 @@ export function OverviewPage() {
               </Tabs>
             </div>
           </CardHeader>
-          <CardContent className="px-3 pb-3">
+          <CardContent className="px-3 pb-3 flex-1 min-h-0 flex flex-col">
             {loading ? (
               <p className="text-muted-foreground text-xs">{t("common.loading")}</p>
             ) : channelStatsUsed.length === 0 ? (
@@ -463,7 +463,7 @@ export function OverviewPage() {
                 {t("overview.distribution.empty")}
               </p>
             ) : (
-              <div className="max-h-72 overflow-y-auto pr-1">
+              <div className="flex-1 min-h-0 overflow-y-auto pr-1">
                 <ChannelDistribution
                   stats={channelStatsUsed}
                   protocolLabel={protocolLabelText}
