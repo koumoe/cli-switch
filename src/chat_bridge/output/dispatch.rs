@@ -69,6 +69,7 @@ pub(in crate::chat_bridge) struct StreamingReply {
     reply_to: Option<String>,
     label: String,
     locale: AppLocale,
+    pending_message: Option<SentMessage>,
     message: Option<SentMessage>,
     stream: Option<StreamingMessage>,
     last_sent: String,
@@ -100,7 +101,8 @@ impl StreamingReply {
             reply_to,
             label: initial_label,
             locale,
-            message: pending_message,
+            pending_message,
+            message: None,
             stream: None,
             last_sent: String::new(),
         }
@@ -196,6 +198,7 @@ impl StreamingReply {
             ) && content == self.last_sent
             {
                 self.message = Some(sent);
+                self.clear_pending_message().await;
                 return Ok(());
             }
             send_or_replace_labeled_text(
@@ -208,6 +211,7 @@ impl StreamingReply {
                 Some(&sent.message_id),
             )
             .await?;
+            self.clear_pending_message().await;
             return Ok(());
         }
 
@@ -232,6 +236,7 @@ impl StreamingReply {
             };
             self.message = Some(sent);
             self.last_sent = rendered;
+            self.clear_pending_message().await;
             return Ok(());
         }
 
@@ -240,14 +245,22 @@ impl StreamingReply {
             .send_message(self.outgoing_message(self.render_content(body)))
             .await?;
         self.message = Some(sent);
+        self.clear_pending_message().await;
         Ok(())
+    }
+
+    async fn clear_pending_message(&mut self) {
+        if let Some(sent) = self.pending_message.take() {
+            delete_message_best_effort(&self.adapter, &self.chat_id, &sent.message_id).await;
+        }
     }
 
     pub(in crate::chat_bridge) async fn clear_progress_message(&mut self) -> anyhow::Result<()> {
         if let Some(sent) = self.message.take() {
-            self.adapter
-                .delete_message(&self.chat_id, &sent.message_id)
-                .await?;
+            delete_message_best_effort(&self.adapter, &self.chat_id, &sent.message_id).await;
+        }
+        if let Some(sent) = self.pending_message.take() {
+            delete_message_best_effort(&self.adapter, &self.chat_id, &sent.message_id).await;
         }
         self.stream = None;
         Ok(())
@@ -452,6 +465,9 @@ impl ChatBridgeRuntime {
                 locale,
             )
             .await?;
+            if let Some(sent) = pending_message.take() {
+                delete_message_best_effort(&adapter, &msg.chat_id, &sent.message_id).await;
+            }
         }
 
         if matches!(session.permission_mode, storage::BridgePermissionMode::Safe)
