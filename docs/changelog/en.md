@@ -1,3 +1,8 @@
+## [0.41.0](https://github.com/koumoe/cli-switch/compare/v0.40.0...v0.41.0) (2026-03-23)
+
+### Features
+
+* switch WhatsApp to WhatsApp Web QR login (#134) ([#134](https://github.com/koumoe/cli-switch/issues/134)) ([612989d](https://github.com/koumoe/cli-switch/commit/612989d8692fee704b2e6d089ad1cf7539e719de))
 ## [0.40.0](https://github.com/koumoe/cli-switch/compare/v0.39.2...v0.40.0) (2026-03-22)
 
 ### Features
