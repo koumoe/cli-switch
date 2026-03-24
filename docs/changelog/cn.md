@@ -1,3 +1,9 @@
+## [0.45.2](https://github.com/koumoe/cli-switch/compare/v0.45.1...v0.45.2) (2026-03-24)
+
+### 修复
+* 修复 WhatsApp 配对平台别名兼容 ([72ca121](https://github.com/koumoe/cli-switch/commit/72ca1211754fd57deb9e1b62fa0466ecd27539cd))
+* 修复微信二维码登录页 URL 编码 ([03a2eed](https://github.com/koumoe/cli-switch/commit/03a2eeddd6944b0791a35de793dce16b02059388))
+* 修复聊天桥接二维码与运行时错误体验 ([3525802](https://github.com/koumoe/cli-switch/commit/3525802332f6258f84aa50512032c43a78c7a51f))
 ## [0.45.1](https://github.com/koumoe/cli-switch/compare/v0.45.0...v0.45.1) (2026-03-24)
 
 ### 修复
