@@ -1,3 +1,7 @@
+## [0.45.0](https://github.com/koumoe/cli-switch/compare/v0.44.0...v0.45.0) (2026-03-24)
+
+### 功能
+* 优化聊天帮助展示 (#144) ([#144](https://github.com/koumoe/cli-switch/issues/144)) ([16ea9af](https://github.com/koumoe/cli-switch/commit/16ea9afef37895c5408a8a1e3f397e0e0c44ad30))
 ## [0.44.0](https://github.com/koumoe/cli-switch/compare/v0.43.0...v0.44.0) (2026-03-24)
 
 ### 功能
