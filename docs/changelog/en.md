@@ -1,3 +1,9 @@
+## [0.45.1](https://github.com/koumoe/cli-switch/compare/v0.45.0...v0.45.1) (2026-03-24)
+
+### Bug Fixes
+
+* prevent distribution card from stretching trend chart height ([356a515](https://github.com/koumoe/cli-switch/commit/356a515967f45a609cf7bbbd0436135c1c9c975d))
+* repair Weixin QR login flow in settings ([fa0bb9f](https://github.com/koumoe/cli-switch/commit/fa0bb9f585c984a3dcedaaf04917462409083d06))
 ## [0.45.0](https://github.com/koumoe/cli-switch/compare/v0.44.0...v0.45.0) (2026-03-24)
 
 ### Features

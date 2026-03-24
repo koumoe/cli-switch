@@ -1,3 +1,8 @@
+## [0.45.1](https://github.com/koumoe/cli-switch/compare/v0.45.0...v0.45.1) (2026-03-24)
+
+### 修复
+* 修复渠道分布卡片撑高趋势图高度 ([356a515](https://github.com/koumoe/cli-switch/commit/356a515967f45a609cf7bbbd0436135c1c9c975d))
+* 修复设置页微信扫码登录流程 ([fa0bb9f](https://github.com/koumoe/cli-switch/commit/fa0bb9f585c984a3dcedaaf04917462409083d06))
 ## [0.45.0](https://github.com/koumoe/cli-switch/compare/v0.44.0...v0.45.0) (2026-03-24)
 
 ### 功能
