@@ -28,6 +28,7 @@ pub const MAX_PAIRING_TOKEN_EXPIRES_MINUTES: i64 = 24 * 60;
 pub enum ChatPlatform {
     Telegram,
     Discord,
+    #[serde(rename = "whatsapp", alias = "whats_app")]
     WhatsApp,
     Weixin,
 }
@@ -189,4 +190,26 @@ fn normalize_optional_text(value: Option<String>) -> Option<String> {
     value
         .map(|v| v.trim().to_string())
         .filter(|v| !v.is_empty())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ChatPlatform;
+
+    #[test]
+    fn whatsapp_platform_serializes_as_whatsapp() {
+        let raw = serde_json::to_string(&ChatPlatform::WhatsApp).expect("serialize platform");
+        assert_eq!(raw, "\"whatsapp\"");
+    }
+
+    #[test]
+    fn whatsapp_platform_deserializes_legacy_and_current_names() {
+        let current: ChatPlatform =
+            serde_json::from_str("\"whatsapp\"").expect("deserialize current platform name");
+        let legacy: ChatPlatform =
+            serde_json::from_str("\"whats_app\"").expect("deserialize legacy platform name");
+
+        assert_eq!(current, ChatPlatform::WhatsApp);
+        assert_eq!(legacy, ChatPlatform::WhatsApp);
+    }
 }
