@@ -1,3 +1,10 @@
+## [0.43.0](https://github.com/koumoe/cli-switch/compare/v0.42.0...v0.43.0) (2026-03-24)
+
+### 功能
+* 添加微信聊天桥支持 (#142) ([#142](https://github.com/koumoe/cli-switch/issues/142)) ([e567782](https://github.com/koumoe/cli-switch/commit/e567782efb48ae1ef6faac77fdf5b76b0487d850))
+
+### 修复
+* 修复概览页渠道分布卡片高度填充 (#140) ([#140](https://github.com/koumoe/cli-switch/issues/140)) ([709c5df](https://github.com/koumoe/cli-switch/commit/709c5df72ab9f040b242d9d3d9638f8885bc0aa4))
 ## [0.42.0](https://github.com/koumoe/cli-switch/compare/v0.41.1...v0.42.0) (2026-03-23)
 
 ### 功能
