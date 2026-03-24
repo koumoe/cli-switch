@@ -21,6 +21,7 @@ use whatsapp_rust::request::InfoQuery;
 use whatsapp_rust::store::SqliteStore;
 use whatsapp_rust::types::events::{ConnectFailureReason, Event};
 use whatsapp_rust::types::message::MessageInfo;
+use whatsapp_rust::upload::UploadResponse;
 use whatsapp_rust::{Client, Jid, TokioRuntime, waproto::whatsapp as wa};
 use whatsapp_rust_tokio_transport::TokioWebSocketTransportFactory;
 
@@ -797,6 +798,24 @@ fn ensure_attachment_size_within_limit(attachment: &Attachment) -> anyhow::Resul
     Ok(())
 }
 
+macro_rules! uploaded_media_message {
+    ($ty:path, $uploaded:expr $(, $field:ident = $value:expr )* $(,)?) => {{
+        let uploaded = &$uploaded;
+        $ty {
+            url: Some(uploaded.url.clone()),
+            direct_path: Some(uploaded.direct_path.clone()),
+            media_key: Some(uploaded.media_key.clone()),
+            file_sha256: Some(uploaded.file_sha256.clone()),
+            file_enc_sha256: Some(uploaded.file_enc_sha256.clone()),
+            file_length: Some(uploaded.file_length),
+            mimetype: Some(uploaded.mimetype.clone()),
+            context_info: uploaded.context_info.clone(),
+            $($field: $value,)*
+            ..Default::default()
+        }
+    }};
+}
+
 async fn build_attachment_message(
     client: &Client,
     attachment: &Attachment,
@@ -809,67 +828,70 @@ async fn build_attachment_message(
         .upload(attachment.data.clone(), media_kind.media_type())
         .await
         .with_context(|| format!("upload whatsapp attachment failed: {}", attachment.filename))?;
+    let uploaded = UploadedMediaFields::new(&upload, attachment, context_info);
 
     Ok(match media_kind {
         OutgoingMediaKind::Image => wa::Message {
-            image_message: Some(Box::new(wa::message::ImageMessage {
-                url: Some(upload.url.clone()),
-                direct_path: Some(upload.direct_path.clone()),
-                media_key: Some(upload.media_key.clone()),
-                file_sha256: Some(upload.file_sha256.clone()),
-                file_enc_sha256: Some(upload.file_enc_sha256.clone()),
-                file_length: Some(upload.file_length),
-                mimetype: Some(attachment.mime_type.clone()),
-                context_info: context_info.map(Box::new),
-                ..Default::default()
-            })),
+            image_message: Some(Box::new(uploaded_media_message!(
+                wa::message::ImageMessage,
+                uploaded
+            ))),
             ..Default::default()
         },
         OutgoingMediaKind::Video => wa::Message {
-            video_message: Some(Box::new(wa::message::VideoMessage {
-                url: Some(upload.url.clone()),
-                direct_path: Some(upload.direct_path.clone()),
-                media_key: Some(upload.media_key.clone()),
-                file_sha256: Some(upload.file_sha256.clone()),
-                file_enc_sha256: Some(upload.file_enc_sha256.clone()),
-                file_length: Some(upload.file_length),
-                mimetype: Some(attachment.mime_type.clone()),
-                context_info: context_info.map(Box::new),
-                ..Default::default()
-            })),
+            video_message: Some(Box::new(uploaded_media_message!(
+                wa::message::VideoMessage,
+                uploaded
+            ))),
             ..Default::default()
         },
         OutgoingMediaKind::Audio => wa::Message {
-            audio_message: Some(Box::new(wa::message::AudioMessage {
-                url: Some(upload.url.clone()),
-                direct_path: Some(upload.direct_path.clone()),
-                media_key: Some(upload.media_key.clone()),
-                file_sha256: Some(upload.file_sha256.clone()),
-                file_enc_sha256: Some(upload.file_enc_sha256.clone()),
-                file_length: Some(upload.file_length),
-                mimetype: Some(attachment.mime_type.clone()),
-                ptt: Some(false),
-                context_info: context_info.map(Box::new),
-                ..Default::default()
-            })),
+            audio_message: Some(Box::new(uploaded_media_message!(
+                wa::message::AudioMessage,
+                uploaded,
+                ptt = Some(false)
+            ))),
             ..Default::default()
         },
         OutgoingMediaKind::Document => wa::Message {
-            document_message: Some(Box::new(wa::message::DocumentMessage {
-                url: Some(upload.url.clone()),
-                direct_path: Some(upload.direct_path.clone()),
-                media_key: Some(upload.media_key.clone()),
-                file_sha256: Some(upload.file_sha256.clone()),
-                file_enc_sha256: Some(upload.file_enc_sha256.clone()),
-                file_length: Some(upload.file_length),
-                mimetype: Some(attachment.mime_type.clone()),
-                file_name: Some(attachment.filename.clone()),
-                context_info: context_info.map(Box::new),
-                ..Default::default()
-            })),
+            document_message: Some(Box::new(uploaded_media_message!(
+                wa::message::DocumentMessage,
+                uploaded,
+                file_name = Some(attachment.filename.clone())
+            ))),
             ..Default::default()
         },
     })
+}
+
+struct UploadedMediaFields {
+    url: String,
+    direct_path: String,
+    media_key: Vec<u8>,
+    file_sha256: Vec<u8>,
+    file_enc_sha256: Vec<u8>,
+    file_length: u64,
+    mimetype: String,
+    context_info: Option<Box<wa::ContextInfo>>,
+}
+
+impl UploadedMediaFields {
+    fn new(
+        upload: &UploadResponse,
+        attachment: &Attachment,
+        context_info: Option<wa::ContextInfo>,
+    ) -> Self {
+        Self {
+            url: upload.url.clone(),
+            direct_path: upload.direct_path.clone(),
+            media_key: upload.media_key.clone(),
+            file_sha256: upload.file_sha256.clone(),
+            file_enc_sha256: upload.file_enc_sha256.clone(),
+            file_length: upload.file_length,
+            mimetype: attachment.mime_type.clone(),
+            context_info: context_info.map(Box::new),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
