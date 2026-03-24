@@ -705,12 +705,43 @@ async fn handle_runtime_event(
             )));
         }
         Event::Message(message, info) => {
-            if adapter.take_sent_message_id(&info.id).await
-                || info.source.is_from_me
-                || (info.source.chat.server == "broadcast" && info.source.chat.user == "status")
+            if adapter.take_sent_message_id(&info.id).await {
+                return;
+            }
+
+            let self_chat = if info.source.is_from_me {
+                is_self_chat(
+                    &info,
+                    client.get_pn().await.as_ref(),
+                    client.get_lid().await.as_ref(),
+                )
+            } else {
+                false
+            };
+
+            if info.source.is_from_me && !self_chat {
+                tracing::debug!(
+                    message_id = %info.id,
+                    chat_id = %info.source.chat.to_non_ad(),
+                    sender_id = %info.source.sender.to_non_ad(),
+                    "ignore whatsapp from_me message outside self-chat"
+                );
+                return;
+            }
+
+            if (info.source.chat.server == "broadcast" && info.source.chat.user == "status")
                 || info.source.chat.server == "newsletter"
             {
                 return;
+            }
+
+            if self_chat {
+                tracing::debug!(
+                    message_id = %info.id,
+                    chat_id = %info.source.chat.to_non_ad(),
+                    sender_id = %info.source.sender.to_non_ad(),
+                    "processing whatsapp self-chat message"
+                );
             }
 
             adapter
@@ -745,6 +776,12 @@ fn display_name_from_info(info: &MessageInfo) -> Option<String> {
     } else {
         Some(name.to_string())
     }
+}
+
+fn is_self_chat(info: &MessageInfo, own_pn: Option<&Jid>, own_lid: Option<&Jid>) -> bool {
+    let chat = info.source.chat.to_non_ad();
+    own_pn.is_some_and(|pn| chat == pn.to_non_ad())
+        || own_lid.is_some_and(|lid| chat == lid.to_non_ad())
 }
 
 async fn current_me(client: &Client) -> Option<String> {
@@ -1157,5 +1194,37 @@ mod tests {
             logout_target_jid(None, Some(companion.clone())),
             Some(companion)
         );
+    }
+
+    #[test]
+    fn is_self_chat_matches_own_lid() {
+        let own_lid: Jid = "100000000000001@lid".parse().expect("parse own lid");
+        let own_pn: Jid = "15551234567@s.whatsapp.net".parse().expect("parse own pn");
+        let mut info = MessageInfo::default();
+        info.source.chat = own_lid.clone();
+
+        assert!(is_self_chat(&info, Some(&own_pn), Some(&own_lid)));
+    }
+
+    #[test]
+    fn is_self_chat_matches_own_phone_number() {
+        let own_lid: Jid = "100000000000001@lid".parse().expect("parse own lid");
+        let own_pn: Jid = "15551234567@s.whatsapp.net".parse().expect("parse own pn");
+        let mut info = MessageInfo::default();
+        info.source.chat = own_pn.clone();
+
+        assert!(is_self_chat(&info, Some(&own_pn), Some(&own_lid)));
+    }
+
+    #[test]
+    fn is_self_chat_rejects_other_direct_message() {
+        let own_lid: Jid = "100000000000001@lid".parse().expect("parse own lid");
+        let own_pn: Jid = "15551234567@s.whatsapp.net".parse().expect("parse own pn");
+        let mut info = MessageInfo::default();
+        info.source.chat = "16667778888@s.whatsapp.net"
+            .parse()
+            .expect("parse foreign chat");
+
+        assert!(!is_self_chat(&info, Some(&own_pn), Some(&own_lid)));
     }
 }
