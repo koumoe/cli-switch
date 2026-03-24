@@ -29,6 +29,7 @@ const STORE_FILE_NAME: &str = "session.sqlite3";
 const LOGOUT_MARKER_FILE_NAME: &str = "pending-logout";
 const MAX_ATTACHMENT_BYTES: u64 = 20 * 1024 * 1024;
 const RECENT_LIMIT: usize = 256;
+const PUBLIC_RUNTIME_ERROR_CODE: &str = "runtime_unavailable";
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -80,13 +81,28 @@ impl WhatsAppWebStatus {
     }
 
     fn error(err: impl Into<String>) -> Self {
+        let err = err.into();
+        tracing::error!(err = %err, "whatsapp runtime entered error state");
         Self {
             state: WhatsAppWebState::Error,
             connected: false,
             me: None,
             qr: None,
             qr_image: None,
-            last_error: Some(err.into()),
+            last_error: Some(PUBLIC_RUNTIME_ERROR_CODE.to_string()),
+        }
+    }
+
+    fn warn(err: impl Into<String>) -> Self {
+        let err = err.into();
+        tracing::warn!(err = %err, "whatsapp runtime entered degraded state");
+        Self {
+            state: WhatsAppWebState::Error,
+            connected: false,
+            me: None,
+            qr: None,
+            qr_image: None,
+            last_error: Some(PUBLIC_RUNTIME_ERROR_CODE.to_string()),
         }
     }
 }
@@ -663,26 +679,27 @@ async fn handle_runtime_event(
             current.connected = false;
             current.qr = None;
             current.qr_image = None;
+            current.last_error = None;
             let _ = status_tx.send(current);
         }
         Event::LoggedOut(info) => {
-            let _ = status_tx.send(WhatsAppWebStatus::error(format!(
+            let _ = status_tx.send(WhatsAppWebStatus::warn(format!(
                 "logged out: {}",
                 connect_failure_reason_label(info.reason)
             )));
         }
         Event::ConnectFailure(failure) => {
-            let _ = status_tx.send(WhatsAppWebStatus::error(format!(
+            let _ = status_tx.send(WhatsAppWebStatus::warn(format!(
                 "connect failure: {} ({})",
                 failure.message,
                 connect_failure_reason_label(failure.reason)
             )));
         }
         Event::ClientOutdated(_) => {
-            let _ = status_tx.send(WhatsAppWebStatus::error("client outdated"));
+            let _ = status_tx.send(WhatsAppWebStatus::warn("client outdated"));
         }
         Event::StreamError(err) => {
-            let _ = status_tx.send(WhatsAppWebStatus::error(format!(
+            let _ = status_tx.send(WhatsAppWebStatus::warn(format!(
                 "stream error: {}",
                 err.code
             )));

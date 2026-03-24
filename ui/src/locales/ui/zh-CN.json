@@ -702,6 +702,7 @@
         "accountLabel": "已登录账号",
         "accountEmpty": "尚未登录",
         "lastErrorLabel": "最近错误",
+        "lastErrorGeneric": "WhatsApp 运行时出现异常，请查看日志或重新开始登录。",
         "qrTitle": "扫码登录",
         "qrHint": "点击开始登录，然后在手机 WhatsApp 中扫码完成登录。",
         "qrAlt": "WhatsApp 二维码",

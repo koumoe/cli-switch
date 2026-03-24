@@ -702,6 +702,7 @@
         "accountLabel": "Logged-in Account",
         "accountEmpty": "Not logged in yet",
         "lastErrorLabel": "Last Error",
+        "lastErrorGeneric": "The WhatsApp runtime encountered an error. Check the logs or start login again.",
         "qrTitle": "QR Login",
         "qrHint": "Click Start Login, then open WhatsApp on your phone and scan the QR code.",
         "qrAlt": "WhatsApp QR code",

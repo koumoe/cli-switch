@@ -7,6 +7,8 @@ use serde::Serialize;
 use crate::chat_bridge::whatsapp_web::{WhatsAppWebControl, WhatsAppWebState};
 use crate::server::AppState;
 
+const PUBLIC_RUNTIME_ERROR_CODE: &str = "runtime_unavailable";
+
 #[derive(Debug, Clone, Serialize)]
 pub(in crate::server) struct WhatsAppStatusResponse {
     pub state: WhatsAppWebState,
@@ -27,6 +29,7 @@ pub(in crate::server) async fn get_chat_bridge_whatsapp_status(
         status.connected = false;
         status.qr = None;
         status.qr_image = None;
+        status.last_error = None;
     }
 
     Json(WhatsAppStatusResponse {
@@ -35,7 +38,12 @@ pub(in crate::server) async fn get_chat_bridge_whatsapp_status(
         connected: status.connected,
         me: status.me,
         qr: status.qr,
-        last_error: status.last_error,
+        // Never expose backend error details to the client. The frontend maps this
+        // generic code to a localized user-facing message.
+        last_error: status
+            .last_error
+            .as_ref()
+            .map(|_| PUBLIC_RUNTIME_ERROR_CODE.to_string()),
     })
 }
 

@@ -737,6 +737,9 @@ export function SettingsPage() {
   const whatsappConnected = chatBridgeWhatsAppStatus?.connected ?? false;
   const whatsappQrImageSrc = normalizeQrImageSrc(chatBridgeWhatsAppStatus?.qr_image);
   const whatsappStatusLabel = t(`settings.chatBridge.whatsapp.state.${whatsappStatusKey}`);
+  const whatsappLastErrorMessage = whatsappStatusKey === "error"
+    ? t("settings.chatBridge.whatsapp.lastErrorGeneric")
+    : null;
   const whatsappStatusTone = whatsappStatusKey === "error"
     ? "destructive"
     : whatsappConnected
@@ -1036,10 +1039,10 @@ export function SettingsPage() {
                     </div>
                   </div>
 
-                  {chatBridgeWhatsAppStatus?.last_error ? (
+                  {whatsappLastErrorMessage ? (
                     <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-3 space-y-1">
                       <div className="text-xs text-muted-foreground">{t("settings.chatBridge.whatsapp.lastErrorLabel")}</div>
-                      <div className="text-sm break-words">{chatBridgeWhatsAppStatus.last_error}</div>
+                      <div className="text-sm break-words">{whatsappLastErrorMessage}</div>
                     </div>
                   ) : null}
 
