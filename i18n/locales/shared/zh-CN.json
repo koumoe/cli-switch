@@ -118,14 +118,14 @@
       "chat_usage": "用法：/chat <会话> <消息>",
       "channels_usage": "用法：/channels [enable|disable <渠道>]",
       "costs_usage": "用法：/costs [today|yesterday|week|month]",
-      "start_usage": "用法：/{{tool}} <项目> [-a <别名> | -alias <别名>] [-yolo]",
+      "start_usage": "用法：/{{tool}} <项目> [-a|-alias <别名>] [-yolo]",
       "stop_usage": "用法：/stop <会话|all>",
       "switch_usage": "用法：/switch <会话>",
       "usage_usage": "用法：/usage [today|yesterday|week|month]",
       "unknown": "未知命令：/{{command}}"
     },
     "help": {
-      "full": "可用命令：\n/bind <配对码>\n/projects\n/channels\n/channels enable <渠道>\n/channels disable <渠道>\n/routes\n/codex <项目> [-a <别名> | -alias <别名>] [-yolo]\n/claude <项目> [-a <别名> | -alias <别名>] [-yolo]\n/gemini <项目> [-a <别名> | -alias <别名>] [-yolo]\n/chat <会话> <消息>\n/switch <会话>\n/sessions\n/stop <会话|all>\n/usage [today|yesterday|week|month]\n/costs [today|yesterday|week|month]\n/status\n/help"
+      "full": "可用命令：\n\n绑定\n/bind <配对码>\n\n会话\n/projects\n/codex <项目> [-a|-alias <别名>] [-yolo]\n/claude <项目> [-a|-alias <别名>] [-yolo]\n/gemini <项目> [-a|-alias <别名>] [-yolo]\n/sessions\n/switch <会话>\n/chat <会话> <消息>\n/stop <会话|all>\n\n渠道\n/channels [enable|disable <渠道>]\n/routes\n\n统计\n/usage [today|yesterday|week|month]\n/costs [today|yesterday|week|month]\n\n其他\n/status\n/help"
     },
     "channel": {
       "ambiguous_hint": "请改用完整渠道 ID、唯一名称，或唯一 ID 前缀。",
@@ -136,9 +136,12 @@
       "enabled": "已启用渠道 {{name}}。",
       "id_label": "ID",
       "list_title": "渠道状态：",
+      "name_label": "名称",
       "none": "当前没有配置渠道。",
       "not_found": "未找到对应渠道：{{target}}",
       "priority_label": "优先级",
+      "protocol_label": "协议",
+      "status_label": "状态",
       "status_auto_disabled": "自动禁用中",
       "status_disabled": "手动禁用",
       "status_enabled": "启用"
@@ -180,16 +183,19 @@
       "avg_latency_label": "平均延迟",
       "by_channel_empty": "当前范围内没有渠道使用记录。",
       "by_channel_label": "按渠道：",
+      "channel_label": "渠道",
       "completion_tokens_label": "Completion Tokens",
       "costs_title": "费用报告：",
       "estimated_cost_label": "预估成本",
       "estimated_cost_short_label": "成本",
       "failed_label": "失败",
       "last_sync_label": "价格最后同步",
+      "metric_label": "指标",
       "not_synced": "尚未同步",
       "pricing_missing_hint": "当前没有价格模型数据，预估成本可能为空。",
       "pricing_models_label": "价格模型数",
       "prompt_tokens_label": "Prompt Tokens",
+      "protocol_label": "协议",
       "range_label": "范围",
       "range_month": "本月",
       "range_today": "今天",
@@ -198,7 +204,8 @@
       "requests_label": "请求数",
       "success_label": "成功",
       "total_tokens_label": "Total Tokens",
-      "usage_title": "用量统计："
+      "usage_title": "用量统计：",
+      "value_label": "值"
     },
     "status": {
       "active_sessions_label": "活跃会话",

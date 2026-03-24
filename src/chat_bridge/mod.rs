@@ -1367,43 +1367,45 @@ fn format_channels_list(channels: &[storage::Channel], now_ms: i64, locale: AppL
         return t(locale, "channel.none");
     }
 
-    let mut lines = vec![t(locale, "channel.list_title")];
-    for channel in channels {
-        lines.push(format!(
-            "{} [{}]  {}",
-            channel.name,
-            channel.protocol.as_str(),
-            channel_status_label(channel, now_ms, locale),
-        ));
-        lines.push(format!(
-            "    {}: {}",
-            t(locale, "channel.id_label"),
-            channel.id
-        ));
-        lines.push(format!(
-            "    {}: {}",
-            t(locale, "channel.priority_label"),
-            channel.priority
-        ));
-        lines.push(format!(
-            "    {}: {}",
-            t(locale, "channel.base_url_label"),
-            channel.base_url
-        ));
-        if storage::channel_is_auto_disabled(channel, now_ms) {
-            lines.push(format!(
-                "    {}: {}",
-                t(locale, "channel.auto_disabled_until_label"),
-                format_local_timestamp_with_relative(
-                    now_ms,
-                    channel.auto_disabled_until_ms,
-                    locale
+    let rows = channels
+        .iter()
+        .map(|channel| {
+            let status = if storage::channel_is_auto_disabled(channel, now_ms) {
+                format!(
+                    "{} ({})",
+                    channel_status_label(channel, now_ms, locale),
+                    format_local_timestamp_with_relative(
+                        now_ms,
+                        channel.auto_disabled_until_ms,
+                        locale
+                    )
                 )
-            ));
-        }
-    }
+            } else {
+                channel_status_label(channel, now_ms, locale)
+            };
 
-    lines.join("\n")
+            vec![
+                channel.name.clone(),
+                channel.protocol.as_str().to_string(),
+                status,
+                channel.priority.to_string(),
+                short_id(&channel.id).to_string(),
+            ]
+        })
+        .collect::<Vec<_>>();
+
+    let table = format_text_table(
+        vec![
+            t(locale, "channel.name_label"),
+            t(locale, "channel.protocol_label"),
+            t(locale, "channel.status_label"),
+            t(locale, "channel.priority_label"),
+            t(locale, "channel.id_label"),
+        ],
+        rows,
+    );
+
+    format!("{}\n{}", t(locale, "channel.list_title"), table)
 }
 
 fn format_routes_list(
@@ -1480,54 +1482,49 @@ fn format_usage_report(
     channel_stats: &[storage::ChannelStats],
     locale: AppLocale,
 ) -> String {
-    let mut lines = vec![t(locale, "stats.usage_title")];
-    lines.push(format!(
-        "{}: {}",
-        t(locale, "stats.range_label"),
-        stats_range_label(range, locale)
-    ));
-    lines.push(format!(
-        "{}: {}",
-        t(locale, "stats.requests_label"),
-        summary.requests
-    ));
-    lines.push(format!(
-        "{}: {}",
-        t(locale, "stats.success_label"),
-        summary.success
-    ));
-    lines.push(format!(
-        "{}: {}",
-        t(locale, "stats.failed_label"),
-        summary.failed
-    ));
-    lines.push(format!(
-        "{}: {}",
-        t(locale, "stats.avg_latency_label"),
-        format_avg_latency(summary.avg_latency_ms)
-    ));
-    lines.push(format!(
-        "{}: {}",
-        t(locale, "stats.prompt_tokens_label"),
-        summary.prompt_tokens
-    ));
-    lines.push(format!(
-        "{}: {}",
-        t(locale, "stats.completion_tokens_label"),
-        summary.completion_tokens
-    ));
-    lines.push(format!(
-        "{}: {}",
-        t(locale, "stats.total_tokens_label"),
-        summary.total_tokens
-    ));
-    lines.push(format!(
-        "{}: {}",
-        t(locale, "stats.estimated_cost_label"),
-        format_cost_usd(summary.estimated_cost_usd.as_deref())
-    ));
-    lines.push(String::new());
-    lines.push(t(locale, "stats.by_channel_label"));
+    let mut lines = vec![
+        t(locale, "stats.usage_title"),
+        format_key_value_table(
+            locale,
+            vec![
+                (
+                    t(locale, "stats.range_label"),
+                    stats_range_label(range, locale),
+                ),
+                (
+                    t(locale, "stats.requests_label"),
+                    summary.requests.to_string(),
+                ),
+                (
+                    t(locale, "stats.success_label"),
+                    summary.success.to_string(),
+                ),
+                (t(locale, "stats.failed_label"), summary.failed.to_string()),
+                (
+                    t(locale, "stats.avg_latency_label"),
+                    format_avg_latency(summary.avg_latency_ms),
+                ),
+                (
+                    t(locale, "stats.prompt_tokens_label"),
+                    summary.prompt_tokens.to_string(),
+                ),
+                (
+                    t(locale, "stats.completion_tokens_label"),
+                    summary.completion_tokens.to_string(),
+                ),
+                (
+                    t(locale, "stats.total_tokens_label"),
+                    summary.total_tokens.to_string(),
+                ),
+                (
+                    t(locale, "stats.estimated_cost_label"),
+                    format_cost_usd(summary.estimated_cost_usd.as_deref()),
+                ),
+            ],
+        ),
+        String::new(),
+        t(locale, "stats.by_channel_label"),
+    ];
 
     let active_channels = channel_stats
         .iter()
@@ -1538,23 +1535,31 @@ fn format_usage_report(
         return lines.join("\n");
     }
 
-    for item in active_channels {
-        lines.push(format!(
-            "- {} [{}]  {}={}  {}={}  {}={}  {}={}  {}={}",
-            item.name,
-            item.protocol.as_str(),
+    lines.push(format_text_table(
+        vec![
+            t(locale, "stats.channel_label"),
+            t(locale, "stats.protocol_label"),
             t(locale, "stats.requests_label"),
-            item.requests,
             t(locale, "stats.success_label"),
-            item.success,
             t(locale, "stats.failed_label"),
-            item.failed,
             t(locale, "stats.total_tokens_label"),
-            item.total_tokens,
             t(locale, "stats.estimated_cost_short_label"),
-            format_cost_usd(item.estimated_cost_usd.as_deref())
-        ));
-    }
+        ],
+        active_channels
+            .into_iter()
+            .map(|item| {
+                vec![
+                    item.name.clone(),
+                    item.protocol.as_str().to_string(),
+                    item.requests.to_string(),
+                    item.success.to_string(),
+                    item.failed.to_string(),
+                    item.total_tokens.to_string(),
+                    format_cost_usd(item.estimated_cost_usd.as_deref()),
+                ]
+            })
+            .collect(),
+    ));
 
     lines.join("\n")
 }
@@ -1566,35 +1571,39 @@ fn format_costs_report(
     pricing: &storage::PricingStatus,
     locale: AppLocale,
 ) -> String {
-    let mut lines = vec![t(locale, "stats.costs_title")];
-    lines.push(format!(
-        "{}: {}",
-        t(locale, "stats.range_label"),
-        stats_range_label(range, locale)
-    ));
-    lines.push(format!(
-        "{}: {}",
-        t(locale, "stats.estimated_cost_label"),
-        format_cost_usd(summary.estimated_cost_usd.as_deref())
-    ));
-    lines.push(format!(
-        "{}: {}",
-        t(locale, "stats.total_tokens_label"),
-        summary.total_tokens
-    ));
-    lines.push(format!(
-        "{}: {}",
-        t(locale, "stats.pricing_models_label"),
-        pricing.count
-    ));
-    lines.push(format!(
-        "{}: {}",
-        t(locale, "stats.last_sync_label"),
-        pricing
-            .last_sync_ms
-            .map(|value| format_local_timestamp_with_relative(storage::now_ms(), value, locale))
-            .unwrap_or_else(|| t(locale, "stats.not_synced"))
-    ));
+    let mut lines = vec![
+        t(locale, "stats.costs_title"),
+        format_key_value_table(
+            locale,
+            vec![
+                (
+                    t(locale, "stats.range_label"),
+                    stats_range_label(range, locale),
+                ),
+                (
+                    t(locale, "stats.estimated_cost_label"),
+                    format_cost_usd(summary.estimated_cost_usd.as_deref()),
+                ),
+                (
+                    t(locale, "stats.total_tokens_label"),
+                    summary.total_tokens.to_string(),
+                ),
+                (
+                    t(locale, "stats.pricing_models_label"),
+                    pricing.count.to_string(),
+                ),
+                (
+                    t(locale, "stats.last_sync_label"),
+                    pricing
+                        .last_sync_ms
+                        .map(|value| {
+                            format_local_timestamp_with_relative(storage::now_ms(), value, locale)
+                        })
+                        .unwrap_or_else(|| t(locale, "stats.not_synced")),
+                ),
+            ],
+        ),
+    ];
 
     if pricing.count == 0 {
         lines.push(t(locale, "stats.pricing_missing_hint"));
@@ -1612,21 +1621,70 @@ fn format_costs_report(
         return lines.join("\n");
     }
 
-    for item in active_channels {
-        lines.push(format!(
-            "- {} [{}]  {}={}  {}={}  {}={}",
-            item.name,
-            item.protocol.as_str(),
+    lines.push(format_text_table(
+        vec![
+            t(locale, "stats.channel_label"),
+            t(locale, "stats.protocol_label"),
             t(locale, "stats.estimated_cost_short_label"),
-            format_cost_usd(item.estimated_cost_usd.as_deref()),
             t(locale, "stats.requests_label"),
-            item.requests,
             t(locale, "stats.total_tokens_label"),
-            item.total_tokens
-        ));
-    }
+        ],
+        active_channels
+            .into_iter()
+            .map(|item| {
+                vec![
+                    item.name.clone(),
+                    item.protocol.as_str().to_string(),
+                    format_cost_usd(item.estimated_cost_usd.as_deref()),
+                    item.requests.to_string(),
+                    item.total_tokens.to_string(),
+                ]
+            })
+            .collect(),
+    ));
 
     lines.join("\n")
+}
+
+fn format_key_value_table(locale: AppLocale, rows: Vec<(String, String)>) -> String {
+    format_text_table(
+        vec![
+            t(locale, "stats.metric_label"),
+            t(locale, "stats.value_label"),
+        ],
+        rows.into_iter()
+            .map(|(key, value)| vec![key, value])
+            .collect(),
+    )
+}
+
+fn format_text_table(headers: Vec<String>, rows: Vec<Vec<String>>) -> String {
+    let mut lines = Vec::with_capacity(rows.len().saturating_add(3));
+    lines.push(format_table_row(headers.iter().map(|cell| cell.as_str())));
+    lines.push(format_table_row(std::iter::repeat_n("---", headers.len())));
+    for row in rows {
+        lines.push(format_table_row(row.iter().map(|cell| cell.as_str())));
+    }
+
+    format!("```text\n{}\n```", lines.join("\n"))
+}
+
+fn format_table_row<'a>(cells: impl IntoIterator<Item = &'a str>) -> String {
+    let rendered = cells
+        .into_iter()
+        .map(sanitize_table_cell)
+        .collect::<Vec<_>>()
+        .join(" | ");
+    format!("| {rendered} |")
+}
+
+fn sanitize_table_cell(value: &str) -> String {
+    let trimmed = value.trim().replace('\n', " ").replace('|', "¦");
+    if trimmed.is_empty() {
+        "-".to_string()
+    } else {
+        trimmed
+    }
 }
 
 struct StatusReportContext<'a> {
@@ -1977,7 +2035,24 @@ fn format_avg_latency(value: Option<f64>) -> String {
 
 fn format_cost_usd(value: Option<&str>) -> String {
     value
-        .map(|item| format!("${item}"))
+        .map(|item| {
+            let normalized = item
+                .parse::<f64>()
+                .ok()
+                .map(|parsed| {
+                    let mut s = format!("{parsed:.12}");
+                    while s.contains('.') && s.ends_with('0') {
+                        s.pop();
+                    }
+                    if s.ends_with('.') {
+                        s.pop();
+                    }
+                    s
+                })
+                .filter(|parsed| !parsed.is_empty())
+                .unwrap_or_else(|| item.to_string());
+            format!("${normalized}")
+        })
         .unwrap_or_else(|| "-".to_string())
 }
 
@@ -2858,6 +2933,43 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn channels_command_renders_table() {
+        let db_path = temp_db_path();
+        remove_sqlite_artifacts(&db_path);
+        storage::init_db(&db_path).expect("init db");
+        bind_test_user(
+            &db_path,
+            ChatPlatform::Telegram,
+            "tg-user-2-list",
+            AppLocale::ZhCN,
+        )
+        .await;
+        create_test_channel(&db_path, "openai-main", Protocol::Openai).await;
+
+        let runtime = test_runtime(&db_path).await;
+        let adapter = FakeAdapter::new(false);
+        runtime
+            .handle_message(
+                Arc::new(adapter.clone()),
+                test_message(ChatPlatform::Telegram, "tg-user-2-list", "/channels"),
+            )
+            .await;
+
+        let output = adapter.calls().join("\n");
+        assert!(output.contains("渠道状态："), "{output}");
+        assert!(output.contains("```text"), "{output}");
+        assert!(
+            output.contains("| 名称 | 协议 | 状态 | 优先级 | ID |"),
+            "{output}"
+        );
+        assert!(
+            output.contains("| openai-main | openai | 启用 | 10 |"),
+            "{output}"
+        );
+        remove_sqlite_artifacts(&db_path);
+    }
+
+    #[tokio::test]
     async fn routes_command_lists_bound_channels() {
         let db_path = temp_db_path();
         remove_sqlite_artifacts(&db_path);
@@ -2951,8 +3063,83 @@ mod tests {
 
         let output = adapter.calls().join("\n");
         assert!(output.contains("用量统计："), "{output}");
-        assert!(output.contains("请求数: 1"), "{output}");
-        assert!(output.contains("预估成本: $0.12"), "{output}");
+        assert!(output.contains("```text"), "{output}");
+        assert!(output.contains("| 指标 | 值 |"), "{output}");
+        assert!(output.contains("| 请求数 | 1 |"), "{output}");
+        assert!(output.contains("| 预估成本 | $0.12 |"), "{output}");
+        assert!(
+            output.contains("| 渠道 | 协议 | 请求数 | 成功 | 失败 | Total Tokens | 成本 |"),
+            "{output}"
+        );
+        assert!(
+            output.contains("| openai-main | openai | 1 | 1 | 0 | 15 | $0.12 |"),
+            "{output}"
+        );
+        remove_sqlite_artifacts(&db_path);
+    }
+
+    #[tokio::test]
+    async fn costs_command_reports_table() {
+        let db_path = temp_db_path();
+        remove_sqlite_artifacts(&db_path);
+        storage::init_db(&db_path).expect("init db");
+        bind_test_user(
+            &db_path,
+            ChatPlatform::Telegram,
+            "tg-user-5",
+            AppLocale::ZhCN,
+        )
+        .await;
+        let channel = create_test_channel(&db_path, "openai-main", Protocol::Openai).await;
+        storage::insert_usage_event(
+            db_path.clone(),
+            storage::CreateUsageEvent {
+                request_id: None,
+                ts_ms: storage::now_ms(),
+                protocol: Protocol::Openai,
+                route_id: None,
+                channel_id: channel.id,
+                model: Some("gpt-4o".to_string()),
+                success: true,
+                http_status: Some(200),
+                error_kind: None,
+                error_detail: None,
+                latency_ms: 120,
+                ttft_ms: Some(30),
+                prompt_tokens: Some(10),
+                completion_tokens: Some(5),
+                total_tokens: Some(15),
+                cache_read_tokens: None,
+                cache_write_tokens: None,
+                estimated_cost_usd: Some("0.12".to_string()),
+            },
+        )
+        .await
+        .expect("insert usage event");
+
+        let runtime = test_runtime(&db_path).await;
+        let adapter = FakeAdapter::new(false);
+        runtime
+            .handle_message(
+                Arc::new(adapter.clone()),
+                test_message(ChatPlatform::Telegram, "tg-user-5", "/costs"),
+            )
+            .await;
+
+        let output = adapter.calls().join("\n");
+        assert!(output.contains("费用报告："), "{output}");
+        assert!(output.contains("```text"), "{output}");
+        assert!(output.contains("| 指标 | 值 |"), "{output}");
+        assert!(output.contains("| 预估成本 | $0.12 |"), "{output}");
+        assert!(output.contains("| 价格模型数 | 0 |"), "{output}");
+        assert!(
+            output.contains("| 渠道 | 协议 | 成本 | 请求数 | Total Tokens |"),
+            "{output}"
+        );
+        assert!(
+            output.contains("| openai-main | openai | $0.12 | 1 | 15 |"),
+            "{output}"
+        );
         remove_sqlite_artifacts(&db_path);
     }
 }
