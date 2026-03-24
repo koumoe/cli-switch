@@ -2,6 +2,7 @@ pub mod adapter;
 mod auth;
 pub mod cli;
 mod i18n;
+mod node_bridge;
 mod output;
 mod projects;
 mod resolver;

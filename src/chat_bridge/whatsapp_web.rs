@@ -3,14 +3,16 @@ use base64::Engine as _;
 use image::{ImageBuffer, Luma};
 use qrcode::QrCode;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::io::{AsyncBufReadExt as _, AsyncWriteExt as _, BufReader};
-use tokio::sync::{Mutex, mpsc, oneshot, watch};
+use tokio::sync::{mpsc, watch};
 
 use super::adapter::{ChatAdapter, IncomingAttachment, IncomingAttachmentKind};
+use super::node_bridge::{
+    KillProcessOnDrop, NodeBridgeClient, close_pending_responses, new_pending_responses,
+    spawn_stderr_task, spawn_stdin_task, spawn_stdout_task,
+};
 use crate::cli_tools::CliExecEnv;
 use crate::{nodejs, process};
 
@@ -88,23 +90,6 @@ pub enum WhatsAppWebControl {
     Logout,
 }
 
-#[derive(Debug)]
-struct NodeRequest {
-    id: String,
-    line: String,
-    resp_tx: oneshot::Sender<anyhow::Result<serde_json::Value>>,
-}
-
-#[derive(Debug, Deserialize)]
-struct NodeResponseEnvelope {
-    id: String,
-    ok: bool,
-    #[serde(default)]
-    result: Option<serde_json::Value>,
-    #[serde(default)]
-    error: Option<String>,
-}
-
 #[derive(Debug, Deserialize)]
 struct NodeIncomingAttachment {
     kind: String,
@@ -132,46 +117,12 @@ struct NodeIncomingMessage {
 
 #[derive(Clone)]
 pub(crate) struct WhatsAppWebAdapter {
-    req_tx: mpsc::Sender<NodeRequest>,
+    node: NodeBridgeClient,
 }
 
 impl WhatsAppWebAdapter {
-    async fn send_node_request(
-        &self,
-        payload: serde_json::Value,
-    ) -> anyhow::Result<serde_json::Value> {
-        let id = payload
-            .get("id")
-            .and_then(|v| v.as_str())
-            .unwrap_or_default()
-            .to_string();
-        if id.is_empty() {
-            anyhow::bail!("node request missing id");
-        }
-
-        let line = serde_json::to_string(&payload)
-            .context("serialize whatsapp web bridge request failed")?;
-        let (tx, rx) = oneshot::channel();
-        let req = NodeRequest {
-            id,
-            line,
-            resp_tx: tx,
-        };
-        self.req_tx
-            .send(req)
-            .await
-            .context("send whatsapp web bridge request failed")?;
-
-        tokio::time::timeout(BRIDGE_SEND_TIMEOUT, rx)
-            .await
-            .context("wait whatsapp web bridge response timed out")?
-            .context("whatsapp web bridge response channel closed")?
-    }
-
     async fn send_ping(&self) -> anyhow::Result<serde_json::Value> {
-        let id = uuid::Uuid::new_v4().to_string();
-        self.send_node_request(serde_json::json!({ "id": id, "type": "ping" }))
-            .await
+        self.node.send_ping().await
     }
 }
 
@@ -195,7 +146,8 @@ impl ChatAdapter for WhatsAppWebAdapter {
             .collect();
 
         let result = self
-            .send_node_request(serde_json::json!({
+            .node
+            .send_request(serde_json::json!({
                 "id": id,
                 "type": "send",
                 "chat_id": msg.chat_id,
@@ -232,18 +184,6 @@ impl ChatAdapter for WhatsAppWebAdapter {
 
     fn platform(&self) -> crate::storage::ChatPlatform {
         crate::storage::ChatPlatform::WhatsApp
-    }
-}
-
-struct KillProcessOnDrop {
-    pid: Option<u32>,
-}
-
-impl Drop for KillProcessOnDrop {
-    fn drop(&mut self) {
-        if let Some(pid) = self.pid {
-            process::kill_process_tree_best_effort(pid);
-        }
     }
 }
 
@@ -509,220 +449,156 @@ pub(super) async fn run_whatsapp_web_bridge(
     };
     let child_stderr = child.stderr.take();
 
-    let (req_tx, mut req_rx) = mpsc::channel::<NodeRequest>(128);
-    let adapter = WhatsAppWebAdapter { req_tx };
-    let pending = Arc::new(Mutex::new(HashMap::<
-        String,
-        oneshot::Sender<anyhow::Result<serde_json::Value>>,
-    >::new()));
+    let (req_tx, req_rx) = mpsc::channel(128);
+    let node = NodeBridgeClient::new(req_tx, "whatsapp web bridge", BRIDGE_SEND_TIMEOUT);
+    let adapter = WhatsAppWebAdapter { node };
+    let pending = new_pending_responses();
 
-    let pending_writer = pending.clone();
-    let stdin_task = tokio::spawn(async move {
-        let mut stdin = child_stdin;
-        while let Some(req) = req_rx.recv().await {
-            {
-                let mut guard = pending_writer.lock().await;
-                guard.insert(req.id.clone(), req.resp_tx);
-            }
+    let stdin_task = spawn_stdin_task(child_stdin, req_rx, pending.clone(), "whatsapp web bridge");
 
-            if let Err(err) = stdin.write_all(req.line.as_bytes()).await {
-                let mut guard = pending_writer.lock().await;
-                if let Some(tx) = guard.remove(&req.id) {
-                    let _ = tx.send(Err(
-                        anyhow::anyhow!(err).context("write to whatsapp bridge failed")
-                    ));
-                }
-                continue;
-            }
-            if let Err(err) = stdin.write_all(b"\n").await {
-                let mut guard = pending_writer.lock().await;
-                if let Some(tx) = guard.remove(&req.id) {
-                    let _ = tx.send(Err(
-                        anyhow::anyhow!(err).context("write newline to whatsapp bridge failed")
-                    ));
-                }
-                continue;
-            }
-        }
-    });
-
-    let pending_reader = pending.clone();
     let status_tx_reader = status_tx.clone();
     let adapter_for_inbound = adapter.clone();
     let runtime_for_inbound = runtime.clone();
-    let stdout_task = tokio::spawn(async move {
-        let mut lines = BufReader::new(child_stdout).lines();
-        while let Ok(Some(line)) = lines.next_line().await {
-            let trimmed = line.trim();
-            if trimmed.is_empty() {
-                continue;
-            }
-            let parsed: serde_json::Value = match serde_json::from_str(trimmed) {
-                Ok(v) => v,
-                Err(err) => {
-                    tracing::warn!(err = %err, line = %trimmed, "decode whatsapp bridge json failed");
-                    continue;
-                }
-            };
+    let stdout_task = spawn_stdout_task(
+        child_stdout,
+        pending.clone(),
+        "whatsapp web bridge",
+        move |parsed| {
+            let status_tx_reader = status_tx_reader.clone();
+            let adapter_for_inbound = adapter_for_inbound.clone();
+            let runtime_for_inbound = runtime_for_inbound.clone();
+            async move {
+                let Some(event) = parsed.get("event").and_then(|v| v.as_str()) else {
+                    return;
+                };
 
-            if parsed.get("id").is_some() {
-                let env: NodeResponseEnvelope = match serde_json::from_value(parsed) {
-                    Ok(v) => v,
-                    Err(err) => {
-                        tracing::warn!(err = %err, "decode whatsapp bridge response failed");
-                        continue;
+                match event {
+                    "qr" => {
+                        if let Some(qr) = parsed.get("qr").and_then(|v| v.as_str()) {
+                            let next = WhatsAppWebStatus {
+                                state: WhatsAppWebState::AwaitingQr,
+                                connected: false,
+                                me: None,
+                                qr: Some(qr.to_string()),
+                                qr_image: qr_image_data_uri(qr).ok(),
+                                last_error: None,
+                            };
+                            let _ = status_tx_reader.send(next);
+                        }
                     }
-                };
-                let tx = {
-                    let mut guard = pending_reader.lock().await;
-                    guard.remove(&env.id)
-                };
-                if let Some(tx) = tx {
-                    let res = if env.ok {
-                        env.result.unwrap_or_else(|| serde_json::json!({}))
-                    } else {
-                        let msg = env.error.unwrap_or_else(|| "unknown error".to_string());
-                        let err = anyhow::anyhow!(msg);
-                        let _ = tx.send(Err(err));
-                        continue;
-                    };
-                    let _ = tx.send(Ok(res));
-                }
-                continue;
-            }
-
-            let Some(event) = parsed.get("event").and_then(|v| v.as_str()) else {
-                continue;
-            };
-
-            match event {
-                "qr" => {
-                    if let Some(qr) = parsed.get("qr").and_then(|v| v.as_str()) {
+                    "ready" => {
+                        let me = parsed
+                            .get("me")
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_string());
                         let next = WhatsAppWebStatus {
-                            state: WhatsAppWebState::AwaitingQr,
-                            connected: false,
-                            me: None,
-                            qr: Some(qr.to_string()),
-                            qr_image: qr_image_data_uri(qr).ok(),
+                            state: WhatsAppWebState::Connected,
+                            connected: true,
+                            me,
+                            qr: None,
+                            qr_image: None,
                             last_error: None,
                         };
                         let _ = status_tx_reader.send(next);
                     }
-                }
-                "ready" => {
-                    let me = parsed
-                        .get("me")
-                        .and_then(|v| v.as_str())
-                        .map(|s| s.to_string());
-                    let next = WhatsAppWebStatus {
-                        state: WhatsAppWebState::Connected,
-                        connected: true,
-                        me,
-                        qr: None,
-                        qr_image: None,
-                        last_error: None,
-                    };
-                    let _ = status_tx_reader.send(next);
-                }
-                "connection" => {
-                    let conn = parsed
-                        .get("connection")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("-");
-                    if conn == "open" {
-                        // ready will follow with the `me` field, keep it optimistic here.
-                        let mut cur = status_tx_reader.borrow().clone();
-                        cur.state = WhatsAppWebState::Connected;
-                        cur.connected = true;
-                        cur.qr = None;
-                        cur.qr_image = None;
-                        cur.last_error = None;
-                        let _ = status_tx_reader.send(cur);
-                    } else if conn == "close" {
-                        let mut cur = status_tx_reader.borrow().clone();
-                        cur.connected = false;
-                        cur.state = WhatsAppWebState::Starting;
-                        cur.qr = None;
-                        cur.qr_image = None;
-                        let _ = status_tx_reader.send(cur);
-                    }
-                }
-                "message" => {
-                    let msg: NodeIncomingMessage = match serde_json::from_value(
-                        parsed
-                            .get("message")
-                            .cloned()
-                            .unwrap_or_else(|| serde_json::json!({})),
-                    ) {
-                        Ok(v) => v,
-                        Err(err) => {
-                            tracing::warn!(err = %err, "decode whatsapp bridge inbound message failed");
-                            continue;
+                    "connection" => {
+                        let conn = parsed
+                            .get("connection")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("-");
+                        if conn == "open" {
+                            // ready will follow with the `me` field, keep it optimistic here.
+                            let mut cur = status_tx_reader.borrow().clone();
+                            cur.state = WhatsAppWebState::Connected;
+                            cur.connected = true;
+                            cur.qr = None;
+                            cur.qr_image = None;
+                            cur.last_error = None;
+                            let _ = status_tx_reader.send(cur);
+                        } else if conn == "close" {
+                            let mut cur = status_tx_reader.borrow().clone();
+                            cur.connected = false;
+                            cur.state = WhatsAppWebState::Starting;
+                            cur.qr = None;
+                            cur.qr_image = None;
+                            let _ = status_tx_reader.send(cur);
                         }
-                    };
-
-                    let mut attachments = Vec::new();
-                    for att in msg.attachments {
-                        match decode_incoming_attachment(att) {
-                            Ok(v) => attachments.push(v),
+                    }
+                    "message" => {
+                        let msg: NodeIncomingMessage = match serde_json::from_value(
+                            parsed
+                                .get("message")
+                                .cloned()
+                                .unwrap_or_else(|| serde_json::json!({})),
+                        ) {
+                            Ok(v) => v,
                             Err(err) => {
-                                tracing::warn!(err = %err, "decode whatsapp bridge attachment failed");
+                                tracing::warn!(
+                                    err = %err,
+                                    "decode whatsapp bridge inbound message failed"
+                                );
+                                return;
+                            }
+                        };
+
+                        let mut attachments = Vec::new();
+                        for att in msg.attachments {
+                            match decode_incoming_attachment(att) {
+                                Ok(v) => attachments.push(v),
+                                Err(err) => {
+                                    tracing::warn!(
+                                        err = %err,
+                                        "decode whatsapp bridge attachment failed"
+                                    );
+                                }
                             }
                         }
+
+                        let incoming = super::adapter::IncomingMessage {
+                            platform: crate::storage::ChatPlatform::WhatsApp,
+                            sender_id: msg.sender_id,
+                            sender_display_name: msg.sender_display_name,
+                            chat_id: msg.chat_id,
+                            text: msg.text,
+                            attachments,
+                            message_id: msg.message_id,
+                            timestamp_ms: msg.timestamp_ms,
+                        };
+
+                        let runtime = runtime_for_inbound.clone();
+                        let sender: Arc<dyn ChatAdapter> = Arc::new(adapter_for_inbound.clone());
+                        tokio::spawn(async move {
+                            runtime.handle_message(sender, incoming).await;
+                        });
                     }
-
-                    let incoming = super::adapter::IncomingMessage {
-                        platform: crate::storage::ChatPlatform::WhatsApp,
-                        sender_id: msg.sender_id,
-                        sender_display_name: msg.sender_display_name,
-                        chat_id: msg.chat_id,
-                        text: msg.text,
-                        attachments,
-                        message_id: msg.message_id,
-                        timestamp_ms: msg.timestamp_ms,
-                    };
-
-                    let runtime = runtime_for_inbound.clone();
-                    let sender: Arc<dyn ChatAdapter> = Arc::new(adapter_for_inbound.clone());
-                    tokio::spawn(async move {
-                        runtime.handle_message(sender, incoming).await;
-                    });
-                }
-                "error" => {
-                    let scope = parsed
-                        .get("scope")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("unknown");
-                    let err = parsed
-                        .get("error")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("unknown");
-                    tracing::warn!(scope, err, "whatsapp bridge error event");
-                }
-                "fatal" => {
-                    let err = parsed
-                        .get("error")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("unknown");
-                    let _ = status_tx_reader.send(WhatsAppWebStatus::error(err));
-                }
-                other => {
-                    tracing::debug!(event = %other, "ignore whatsapp bridge event");
+                    "error" => {
+                        let scope = parsed
+                            .get("scope")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("unknown");
+                        let err = parsed
+                            .get("error")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("unknown");
+                        tracing::warn!(scope, err, "whatsapp bridge error event");
+                    }
+                    "fatal" => {
+                        let err = parsed
+                            .get("error")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("unknown");
+                        let _ = status_tx_reader.send(WhatsAppWebStatus::error(err));
+                    }
+                    other => {
+                        tracing::debug!(event = %other, "ignore whatsapp bridge event");
+                    }
                 }
             }
-        }
-    });
+        },
+    );
 
     if let Some(stderr) = child_stderr {
-        tokio::spawn(async move {
-            let mut lines = BufReader::new(stderr).lines();
-            while let Ok(Some(line)) = lines.next_line().await {
-                let line = line.trim();
-                if !line.is_empty() {
-                    tracing::debug!(line, "whatsapp bridge stderr");
-                }
-            }
-        });
+        spawn_stderr_task(stderr, "whatsapp web bridge");
     }
 
     // Keep the adapter alive for as long as stdout task is running.
@@ -739,9 +615,6 @@ pub(super) async fn run_whatsapp_web_bridge(
     }
 
     // Avoid dangling waiters on shutdown.
-    let mut guard = pending.lock().await;
-    for (_, tx) in guard.drain() {
-        let _ = tx.send(Err(anyhow::anyhow!("whatsapp bridge closed")));
-    }
+    close_pending_responses(&pending, "whatsapp web bridge").await;
     let _ = status_tx.send(WhatsAppWebStatus::error("whatsapp bridge stopped"));
 }

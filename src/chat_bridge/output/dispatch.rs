@@ -52,6 +52,8 @@ const WHATSAPP_OUTPUT_POLICY: PlatformOutputPolicy = PlatformOutputPolicy {
 };
 
 const WEIXIN_OUTPUT_POLICY: PlatformOutputPolicy = PlatformOutputPolicy {
+    // Weixin text replies hit practical rendering/API issues beyond roughly 3.6k chars,
+    // so keep the same ceiling we already use for WhatsApp-sized long-form replies.
     message_char_limit: 3600,
     attachment_threshold: None,
 };

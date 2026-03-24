@@ -24,6 +24,15 @@ const bridgeVersion = envString("CLISWITCH_WEIXIN_BRIDGE_VERSION", "dev");
 const qrPollTimeoutMs = envInt("CLISWITCH_WEIXIN_QR_POLL_TIMEOUT_MS", 35_000);
 const updatesTimeoutMs = envInt("CLISWITCH_WEIXIN_UPDATES_TIMEOUT_MS", 35_000);
 const retryDelayMs = envInt("CLISWITCH_WEIXIN_RETRY_DELAY_MS", 2_000);
+const maxCachedChats = envInt("CLISWITCH_WEIXIN_MAX_CACHED_CHATS", 512);
+const contextTokenTtlMs = envInt(
+  "CLISWITCH_WEIXIN_CONTEXT_TOKEN_TTL_MS",
+  24 * 60 * 60 * 1000,
+);
+const typingTicketTtlMs = envInt(
+  "CLISWITCH_WEIXIN_TYPING_TICKET_TTL_MS",
+  5 * 60 * 1000,
+);
 const sessionExpiredErrCode = -14;
 
 const credentialsFile = path.join(stateDir, "credentials.json");
@@ -72,9 +81,19 @@ function loadJsonFile(filePath) {
   }
 }
 
-function writeJsonFile(filePath, value) {
+function writeJsonFile(filePath, value, { privateFile = false } = {}) {
   ensureStateDir();
-  fs.writeFileSync(filePath, JSON.stringify(value, null, 2), "utf-8");
+  fs.writeFileSync(filePath, JSON.stringify(value, null, 2), {
+    encoding: "utf-8",
+    mode: privateFile ? 0o600 : 0o644,
+  });
+  if (privateFile) {
+    try {
+      fs.chmodSync(filePath, 0o600);
+    } catch {
+      // Ignore platform-specific chmod failures.
+    }
+  }
 }
 
 function loadCredentials() {
@@ -89,7 +108,7 @@ function saveCredentials(next) {
     user_id: next.user_id ?? null,
     saved_at: new Date().toISOString(),
   };
-  writeJsonFile(credentialsFile, credentials);
+  writeJsonFile(credentialsFile, credentials, { privateFile: true });
 }
 
 function clearCredentials() {
@@ -259,6 +278,7 @@ async function sendMessage(baseUrl, token, chatId, content, contextToken) {
         from_user_id: "",
         to_user_id: chatId,
         client_id: clientId,
+        // The official API expects plain text bot replies to use message_type = 2.
         message_type: 2,
         message_state: 2,
         item_list: [{ type: 1, text_item: { text: content } }],
@@ -320,19 +340,58 @@ function extractText(itemList) {
   return messagePlaceholder(itemList);
 }
 
+function pruneBoundedMap(map) {
+  while (map.size > maxCachedChats) {
+    const oldestKey = map.keys().next().value;
+    if (oldestKey == null) return;
+    map.delete(oldestKey);
+  }
+}
+
+function setBoundedMapValue(map, key, value) {
+  if (map.has(key)) {
+    map.delete(key);
+  }
+  map.set(key, value);
+  pruneBoundedMap(map);
+}
+
+function getContextToken(chatId) {
+  const cached = latestContextTokens.get(chatId);
+  if (!cached) return null;
+  if (Date.now() - cached.updatedAt > contextTokenTtlMs) {
+    latestContextTokens.delete(chatId);
+    return null;
+  }
+  return cached.token;
+}
+
 function rememberContextToken(chatId, contextToken) {
   if (typeof chatId !== "string" || !chatId.trim()) return;
   if (typeof contextToken !== "string" || !contextToken.trim()) return;
-  latestContextTokens.set(chatId, contextToken);
+  const normalizedChatId = chatId.trim();
+  const previous = getContextToken(normalizedChatId);
+  if (previous && previous !== contextToken) {
+    typingTickets.delete(normalizedChatId);
+  }
+  setBoundedMapValue(latestContextTokens, normalizedChatId, {
+    token: contextToken,
+    updatedAt: Date.now(),
+  });
 }
 
 async function ensureTypingTicket(chatId) {
+  const contextToken = getContextToken(chatId);
   const cached = typingTickets.get(chatId);
-  if (typeof cached === "string" && cached) {
-    return cached;
+  if (
+    cached &&
+    cached.contextToken === contextToken &&
+    Date.now() - cached.fetchedAt <= typingTicketTtlMs
+  ) {
+    return cached.ticket;
   }
+  typingTickets.delete(chatId);
   if (!credentials?.token) return null;
-  const contextToken = latestContextTokens.get(chatId);
   const config = await getConfig(
     credentials.base_url || defaultBaseUrl,
     credentials.token,
@@ -341,7 +400,11 @@ async function ensureTypingTicket(chatId) {
   );
   const typingTicket = typeof config?.typing_ticket === "string" ? config.typing_ticket : null;
   if (typingTicket) {
-    typingTickets.set(chatId, typingTicket);
+    setBoundedMapValue(typingTickets, chatId, {
+      ticket: typingTicket,
+      contextToken,
+      fetchedAt: Date.now(),
+    });
   }
   return typingTicket;
 }
@@ -445,7 +508,7 @@ async function ensurePolling() {
 
         const errcode = Number(response?.errcode ?? 0);
         const ret = Number(response?.ret ?? 0);
-        if ((errcode && errcode !== 0) || (ret && ret !== 0)) {
+        if (errcode !== 0 || ret !== 0) {
           if (errcode === sessionExpiredErrCode || ret === sessionExpiredErrCode) {
             clearCredentials();
             emitStatus({
@@ -475,6 +538,8 @@ async function ensurePolling() {
           const senderId =
             typeof msg.from_user_id === "string" ? msg.from_user_id.trim() : "";
           if (!senderId) continue;
+          // The API echoes bot-authored text replies back through getupdates with message_type = 2.
+          // Ignore that echo so our own replies do not loop back into the bridge.
           if (Number(msg.message_type ?? 0) === 2) continue;
 
           rememberContextToken(senderId, msg.context_token);
@@ -534,7 +599,7 @@ async function handleSend(req) {
     credentials.token,
     chatId,
     content,
-    latestContextTokens.get(chatId),
+    getContextToken(chatId),
   );
 }
 
@@ -551,12 +616,26 @@ async function handleTyping(req) {
   if (!typingTicket) {
     return { sent: false };
   }
-  await sendTyping(
-    credentials.base_url || defaultBaseUrl,
-    credentials.token,
-    chatId,
-    typingTicket,
-  );
+  try {
+    await sendTyping(
+      credentials.base_url || defaultBaseUrl,
+      credentials.token,
+      chatId,
+      typingTicket,
+    );
+  } catch (err) {
+    typingTickets.delete(chatId);
+    const refreshedTypingTicket = await ensureTypingTicket(chatId);
+    if (!refreshedTypingTicket) {
+      throw err;
+    }
+    await sendTyping(
+      credentials.base_url || defaultBaseUrl,
+      credentials.token,
+      chatId,
+      refreshedTypingTicket,
+    );
+  }
   return { sent: true };
 }
 

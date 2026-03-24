@@ -1,15 +1,17 @@
 use anyhow::Context as _;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::io::{AsyncBufReadExt as _, AsyncWriteExt as _, BufReader};
-use tokio::sync::{Mutex, mpsc, oneshot, watch};
+use tokio::sync::{mpsc, watch};
 
 use super::adapter::ChatAdapter;
+use super::node_bridge::{
+    KillProcessOnDrop, NodeBridgeClient, close_pending_responses, new_pending_responses,
+    spawn_stderr_task, spawn_stdin_task, spawn_stdout_task,
+};
 use crate::cli_tools::CliExecEnv;
-use crate::{nodejs, process};
+use crate::nodejs;
 
 const BRIDGE_MJS: &str = include_str!("weixin/bridge.mjs");
 const BRIDGE_SEND_TIMEOUT: Duration = Duration::from_secs(30);
@@ -25,7 +27,7 @@ pub enum WeixinState {
     Error,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct WeixinStatus {
     pub state: WeixinState,
     pub connected: bool,
@@ -82,23 +84,6 @@ pub enum WeixinControl {
     Logout,
 }
 
-#[derive(Debug)]
-struct NodeRequest {
-    id: String,
-    line: String,
-    resp_tx: oneshot::Sender<anyhow::Result<serde_json::Value>>,
-}
-
-#[derive(Debug, Deserialize)]
-struct NodeResponseEnvelope {
-    id: String,
-    ok: bool,
-    #[serde(default)]
-    result: Option<serde_json::Value>,
-    #[serde(default)]
-    error: Option<String>,
-}
-
 #[derive(Debug, Deserialize)]
 struct NodeIncomingMessage {
     sender_id: String,
@@ -125,48 +110,27 @@ struct NodeStatusEvent {
     last_error: Option<String>,
 }
 
+impl From<NodeStatusEvent> for WeixinStatus {
+    fn from(value: NodeStatusEvent) -> Self {
+        Self {
+            state: value.state,
+            connected: value.connected,
+            me: value.me,
+            qr: value.qr,
+            qr_image: value.qr_image,
+            last_error: value.last_error,
+        }
+    }
+}
+
 #[derive(Clone)]
 pub(crate) struct WeixinAdapter {
-    req_tx: mpsc::Sender<NodeRequest>,
+    node: NodeBridgeClient,
 }
 
 impl WeixinAdapter {
-    async fn send_node_request(
-        &self,
-        payload: serde_json::Value,
-    ) -> anyhow::Result<serde_json::Value> {
-        let id = payload
-            .get("id")
-            .and_then(|v| v.as_str())
-            .unwrap_or_default()
-            .to_string();
-        if id.is_empty() {
-            anyhow::bail!("node request missing id");
-        }
-
-        let line =
-            serde_json::to_string(&payload).context("serialize weixin bridge request failed")?;
-        let (tx, rx) = oneshot::channel();
-        let req = NodeRequest {
-            id,
-            line,
-            resp_tx: tx,
-        };
-        self.req_tx
-            .send(req)
-            .await
-            .context("send weixin bridge request failed")?;
-
-        tokio::time::timeout(BRIDGE_SEND_TIMEOUT, rx)
-            .await
-            .context("wait weixin bridge response timed out")?
-            .context("weixin bridge response channel closed")?
-    }
-
     async fn send_ping(&self) -> anyhow::Result<serde_json::Value> {
-        let id = uuid::Uuid::new_v4().to_string();
-        self.send_node_request(serde_json::json!({ "id": id, "type": "ping" }))
-            .await
+        self.node.send_ping().await
     }
 }
 
@@ -182,7 +146,8 @@ impl ChatAdapter for WeixinAdapter {
 
         let id = uuid::Uuid::new_v4().to_string();
         let result = self
-            .send_node_request(serde_json::json!({
+            .node
+            .send_request(serde_json::json!({
                 "id": id,
                 "type": "send",
                 "chat_id": msg.chat_id,
@@ -214,7 +179,8 @@ impl ChatAdapter for WeixinAdapter {
     async fn send_typing(&self, chat_id: &str) -> anyhow::Result<()> {
         let id = uuid::Uuid::new_v4().to_string();
         let _ = self
-            .send_node_request(serde_json::json!({
+            .node
+            .send_request(serde_json::json!({
                 "id": id,
                 "type": "typing",
                 "chat_id": chat_id,
@@ -225,18 +191,6 @@ impl ChatAdapter for WeixinAdapter {
 
     fn platform(&self) -> crate::storage::ChatPlatform {
         crate::storage::ChatPlatform::Weixin
-    }
-}
-
-struct KillProcessOnDrop {
-    pid: Option<u32>,
-}
-
-impl Drop for KillProcessOnDrop {
-    fn drop(&mut self) {
-        if let Some(pid) = self.pid {
-            process::kill_process_tree_best_effort(pid);
-        }
     }
 }
 
@@ -371,185 +325,112 @@ pub(super) async fn run_weixin_bridge(
     };
     let child_stderr = child.stderr.take();
 
-    let (req_tx, mut req_rx) = mpsc::channel::<NodeRequest>(128);
-    let adapter = WeixinAdapter { req_tx };
-    let pending = Arc::new(Mutex::new(HashMap::<
-        String,
-        oneshot::Sender<anyhow::Result<serde_json::Value>>,
-    >::new()));
+    let (req_tx, req_rx) = mpsc::channel(128);
+    let node = NodeBridgeClient::new(req_tx, "weixin bridge", BRIDGE_SEND_TIMEOUT);
+    let adapter = WeixinAdapter { node };
+    let pending = new_pending_responses();
 
-    let pending_writer = pending.clone();
-    let stdin_task = tokio::spawn(async move {
-        let mut stdin = child_stdin;
-        while let Some(req) = req_rx.recv().await {
-            {
-                let mut guard = pending_writer.lock().await;
-                guard.insert(req.id.clone(), req.resp_tx);
-            }
+    let stdin_task = spawn_stdin_task(child_stdin, req_rx, pending.clone(), "weixin bridge");
 
-            if let Err(err) = stdin.write_all(req.line.as_bytes()).await {
-                let mut guard = pending_writer.lock().await;
-                if let Some(tx) = guard.remove(&req.id) {
-                    let _ = tx.send(Err(
-                        anyhow::anyhow!(err).context("write to weixin bridge failed")
-                    ));
-                }
-                continue;
-            }
-            if let Err(err) = stdin.write_all(b"\n").await {
-                let mut guard = pending_writer.lock().await;
-                if let Some(tx) = guard.remove(&req.id) {
-                    let _ = tx.send(Err(
-                        anyhow::anyhow!(err).context("write newline to weixin bridge failed")
-                    ));
-                }
-                continue;
-            }
-        }
-    });
-
-    let pending_reader = pending.clone();
     let status_tx_reader = status_tx.clone();
     let adapter_for_inbound = adapter.clone();
     let runtime_for_inbound = runtime.clone();
-    let stdout_task = tokio::spawn(async move {
-        let mut lines = BufReader::new(child_stdout).lines();
-        while let Ok(Some(line)) = lines.next_line().await {
-            let trimmed = line.trim();
-            if trimmed.is_empty() {
-                continue;
-            }
-            let parsed: serde_json::Value = match serde_json::from_str(trimmed) {
-                Ok(v) => v,
-                Err(err) => {
-                    tracing::warn!(err = %err, line = %trimmed, "decode weixin bridge json failed");
-                    continue;
-                }
-            };
+    let stdout_task = spawn_stdout_task(
+        child_stdout,
+        pending.clone(),
+        "weixin bridge",
+        move |parsed| {
+            let status_tx_reader = status_tx_reader.clone();
+            let adapter_for_inbound = adapter_for_inbound.clone();
+            let runtime_for_inbound = runtime_for_inbound.clone();
+            async move {
+                let Some(event) = parsed.get("event").and_then(|v| v.as_str()) else {
+                    return;
+                };
 
-            if parsed.get("id").is_some() {
-                let env: NodeResponseEnvelope = match serde_json::from_value(parsed) {
-                    Ok(v) => v,
-                    Err(err) => {
-                        tracing::warn!(err = %err, "decode weixin bridge response failed");
-                        continue;
+                match event {
+                    "status" => {
+                        let status: NodeStatusEvent = match serde_json::from_value(
+                            parsed
+                                .get("status")
+                                .cloned()
+                                .unwrap_or_else(|| serde_json::json!({})),
+                        ) {
+                            Ok(v) => v,
+                            Err(err) => {
+                                tracing::warn!(err = %err, "decode weixin bridge status failed");
+                                return;
+                            }
+                        };
+                        let _ = status_tx_reader.send(status.into());
                     }
-                };
-                let tx = {
-                    let mut guard = pending_reader.lock().await;
-                    guard.remove(&env.id)
-                };
-                if let Some(tx) = tx {
-                    let res = if env.ok {
-                        env.result.unwrap_or_else(|| serde_json::json!({}))
-                    } else {
-                        let msg = env.error.unwrap_or_else(|| "unknown error".to_string());
-                        let _ = tx.send(Err(anyhow::anyhow!(msg)));
-                        continue;
-                    };
-                    let _ = tx.send(Ok(res));
-                }
-                continue;
-            }
+                    "message" => {
+                        let msg: NodeIncomingMessage = match serde_json::from_value(
+                            parsed
+                                .get("message")
+                                .cloned()
+                                .unwrap_or_else(|| serde_json::json!({})),
+                        ) {
+                            Ok(v) => v,
+                            Err(err) => {
+                                tracing::warn!(
+                                    err = %err,
+                                    "decode weixin bridge inbound message failed"
+                                );
+                                return;
+                            }
+                        };
 
-            let Some(event) = parsed.get("event").and_then(|v| v.as_str()) else {
-                continue;
-            };
+                        let incoming = super::adapter::IncomingMessage {
+                            platform: crate::storage::ChatPlatform::Weixin,
+                            sender_id: msg.sender_id,
+                            sender_display_name: msg.sender_display_name,
+                            chat_id: msg.chat_id,
+                            text: msg.text,
+                            attachments: Vec::new(),
+                            message_id: msg.message_id,
+                            timestamp_ms: msg.timestamp_ms,
+                        };
 
-            match event {
-                "status" => {
-                    let status: NodeStatusEvent = match serde_json::from_value(
-                        parsed
-                            .get("status")
-                            .cloned()
-                            .unwrap_or_else(|| serde_json::json!({})),
-                    ) {
-                        Ok(v) => v,
-                        Err(err) => {
-                            tracing::warn!(err = %err, "decode weixin bridge status failed");
-                            continue;
-                        }
-                    };
-                    let _ = status_tx_reader.send(WeixinStatus {
-                        state: status.state,
-                        connected: status.connected,
-                        me: status.me,
-                        qr: status.qr,
-                        qr_image: status.qr_image,
-                        last_error: status.last_error,
-                    });
-                }
-                "message" => {
-                    let msg: NodeIncomingMessage = match serde_json::from_value(
-                        parsed
+                        let runtime = runtime_for_inbound.clone();
+                        let sender: Arc<dyn ChatAdapter> = Arc::new(adapter_for_inbound.clone());
+                        tokio::spawn(async move {
+                            runtime.handle_message(sender, incoming).await;
+                        });
+                    }
+                    "log" => {
+                        let message = parsed
                             .get("message")
-                            .cloned()
-                            .unwrap_or_else(|| serde_json::json!({})),
-                    ) {
-                        Ok(v) => v,
-                        Err(err) => {
-                            tracing::warn!(err = %err, "decode weixin bridge inbound message failed");
-                            continue;
+                            .and_then(|v| v.as_str())
+                            .unwrap_or_default();
+                        if !message.is_empty() {
+                            tracing::debug!(message, "weixin bridge log");
                         }
-                    };
-
-                    let incoming = super::adapter::IncomingMessage {
-                        platform: crate::storage::ChatPlatform::Weixin,
-                        sender_id: msg.sender_id,
-                        sender_display_name: msg.sender_display_name,
-                        chat_id: msg.chat_id,
-                        text: msg.text,
-                        attachments: Vec::new(),
-                        message_id: msg.message_id,
-                        timestamp_ms: msg.timestamp_ms,
-                    };
-
-                    let runtime = runtime_for_inbound.clone();
-                    let sender: Arc<dyn ChatAdapter> = Arc::new(adapter_for_inbound.clone());
-                    tokio::spawn(async move {
-                        runtime.handle_message(sender, incoming).await;
-                    });
-                }
-                "log" => {
-                    let message = parsed
-                        .get("message")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or_default();
-                    if !message.is_empty() {
-                        tracing::debug!(message, "weixin bridge log");
+                    }
+                    "error" => {
+                        let err = parsed
+                            .get("error")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("unknown");
+                        tracing::warn!(err, "weixin bridge error event");
+                    }
+                    "fatal" => {
+                        let err = parsed
+                            .get("error")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("unknown");
+                        let _ = status_tx_reader.send(WeixinStatus::error(err));
+                    }
+                    other => {
+                        tracing::debug!(event = %other, "ignore weixin bridge event");
                     }
                 }
-                "error" => {
-                    let err = parsed
-                        .get("error")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("unknown");
-                    tracing::warn!(err, "weixin bridge error event");
-                }
-                "fatal" => {
-                    let err = parsed
-                        .get("error")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("unknown");
-                    let _ = status_tx_reader.send(WeixinStatus::error(err));
-                }
-                other => {
-                    tracing::debug!(event = %other, "ignore weixin bridge event");
-                }
             }
-        }
-    });
+        },
+    );
 
     if let Some(stderr) = child_stderr {
-        tokio::spawn(async move {
-            let mut lines = BufReader::new(stderr).lines();
-            while let Ok(Some(line)) = lines.next_line().await {
-                let line = line.trim();
-                if !line.is_empty() {
-                    tracing::debug!(line, "weixin bridge stderr");
-                }
-            }
-        });
+        spawn_stderr_task(stderr, "weixin bridge");
     }
 
     let _ = adapter.send_ping().await;
@@ -564,9 +445,6 @@ pub(super) async fn run_weixin_bridge(
         }
     }
 
-    let mut guard = pending.lock().await;
-    for (_, tx) in guard.drain() {
-        let _ = tx.send(Err(anyhow::anyhow!("weixin bridge closed")));
-    }
+    close_pending_responses(&pending, "weixin bridge").await;
     let _ = status_tx.send(WeixinStatus::error("weixin bridge stopped"));
 }
