@@ -117,10 +117,22 @@ fn resolve_weixin_qr_image(qr: Option<&str>, qr_image: Option<&str>) -> Option<S
         if trimmed.starts_with("data:image/") {
             return Some(trimmed.to_string());
         }
+
+        // The upstream field currently points to a LiteApp landing page, not an image file.
+        // The official page uses location.href as the QR payload, so we need to encode the page
+        // URL itself instead of the raw token.
+        if trimmed.starts_with("https://liteapp.weixin.qq.com/q/")
+            || trimmed.starts_with("http://liteapp.weixin.qq.com/q/")
+        {
+            return qr_image_data_uri(trimmed).ok();
+        }
+
+        if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
+            return Some(trimmed.to_string());
+        }
     }
 
-    // The Weixin QR API currently returns an HTML landing-page URL instead of an image URL.
-    // Render the QR locally from the raw code so the desktop UI always has a usable image.
+    // Fall back to the raw token when the runtime only provides the code value.
     qr.and_then(|value| qr_image_data_uri(value).ok())
 }
 
@@ -466,7 +478,7 @@ pub(super) async fn run_weixin_bridge(
 
 #[cfg(test)]
 mod tests {
-    use super::resolve_weixin_qr_image;
+    use super::{qr_image_data_uri, resolve_weixin_qr_image};
 
     #[test]
     fn resolve_weixin_qr_image_prefers_existing_data_uri() {
@@ -479,18 +491,21 @@ mod tests {
 
     #[test]
     fn resolve_weixin_qr_image_generates_local_qr_for_remote_page_url() {
+        let landing_page_url = "https://liteapp.weixin.qq.com/q/7GiQu1?qrcode=40e22bde5c819e20d9c1d0c11d13012b&bot_type=3";
         let resolved = resolve_weixin_qr_image(
             Some("40e22bde5c819e20d9c1d0c11d13012b"),
-            Some(
-                "https://liteapp.weixin.qq.com/q/7GiQu1?qrcode=40e22bde5c819e20d9c1d0c11d13012b&bot_type=3",
-            ),
+            Some(landing_page_url),
         );
 
-        assert!(resolved.is_some());
-        assert!(
-            resolved
-                .as_deref()
-                .is_some_and(|value| value.starts_with("data:image/png;base64,"))
+        assert_eq!(resolved, qr_image_data_uri(landing_page_url).ok());
+    }
+
+    #[test]
+    fn resolve_weixin_qr_image_keeps_regular_remote_image_url() {
+        let image_url = "https://example.com/qrcode.png";
+        assert_eq!(
+            resolve_weixin_qr_image(Some("unused"), Some(image_url)),
+            Some(image_url.to_string())
         );
     }
 }
