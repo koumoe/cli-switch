@@ -267,8 +267,7 @@ pub async fn run_supervisor(
     let mut weixin_task = ManagedBridgeTask::new("weixin");
     let mut whatsapp_nonce: u64 = 0;
     let mut weixin_nonce: u64 = 0;
-    let mut whatsapp_bridge_control_tx: Option<mpsc::UnboundedSender<WhatsAppBridgeCommand>> =
-        None;
+    let mut whatsapp_bridge_control_tx: Option<mpsc::UnboundedSender<WhatsAppBridgeCommand>> = None;
     let mut whatsapp_skip_restart_backoff = false;
 
     loop {
