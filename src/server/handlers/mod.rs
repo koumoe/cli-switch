@@ -1,5 +1,6 @@
 pub(super) mod channel;
 pub(super) mod chat_bridge;
+pub(super) mod chat_bridge_weixin;
 pub(super) mod chat_bridge_whatsapp;
 pub(super) mod health;
 pub(super) mod maintenance;
@@ -20,6 +21,9 @@ pub(super) use channel::{
 };
 pub(super) use chat_bridge::{
     create_chat_bridge_pairing_token, deactivate_chat_bridge_binding, list_chat_bridge_bindings,
+};
+pub(super) use chat_bridge_weixin::{
+    get_chat_bridge_weixin_status, logout_chat_bridge_weixin, start_chat_bridge_weixin_login,
 };
 pub(super) use chat_bridge_whatsapp::{
     get_chat_bridge_whatsapp_status, logout_chat_bridge_whatsapp, start_chat_bridge_whatsapp_login,

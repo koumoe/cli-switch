@@ -42,7 +42,7 @@ import { setLogLevel } from "@/lib/logger";
 import { UpdatePromptDialog } from "@/components/UpdatePromptDialog";
 import { postIpc } from "@/lib/ipc";
 import { formatBytes, formatDateTime } from "../lib";
-import { applyCliToolsProxyConfig, checkUpdate, clearLogs, clearRecords, createChatBridgePairingToken, deactivateChatBridgeBinding, downloadUpdate, getChatBridgeWhatsAppStatus, getCliToolsProxyConfigStatus, getCliToolsStatus, getDbSize, getHealth, getLogsSize, getSettings, getUpdateChangelog, getUpdateStatus, ignoreUpdate, listChatBridgeBindings, logoutChatBridgeWhatsApp, openDataDir, pricingStatus, pricingSync, startChatBridgeWhatsAppLogin, updateSettings, type AppSettings, type AutoStartLaunchMode, type ChatBridgeBinding, type ChatBridgePairingToken, type ChatBridgeWhatsAppStatus, type ChatPlatform, type CloseBehavior, type DbSize, type Health, type LogsSize, type PricingStatus, type RecordsClearMode, type UpdateCheck, type UpdateStatus, type ChangelogSection, type CliToolId, type CliToolsStatus, type CliToolStatus, type CliToolProxyConfigStatus, type CliToolProxyConfigToolStatus } from "../api";
+import { applyCliToolsProxyConfig, checkUpdate, clearLogs, clearRecords, createChatBridgePairingToken, deactivateChatBridgeBinding, downloadUpdate, getChatBridgeWeixinStatus, getChatBridgeWhatsAppStatus, getCliToolsProxyConfigStatus, getCliToolsStatus, getDbSize, getHealth, getLogsSize, getSettings, getUpdateChangelog, getUpdateStatus, ignoreUpdate, listChatBridgeBindings, logoutChatBridgeWeixin, logoutChatBridgeWhatsApp, openDataDir, pricingStatus, pricingSync, startChatBridgeWeixinLogin, startChatBridgeWhatsAppLogin, updateSettings, type AppSettings, type AutoStartLaunchMode, type ChatBridgeBinding, type ChatBridgePairingToken, type ChatBridgeWeixinStatus, type ChatBridgeWhatsAppStatus, type ChatPlatform, type CloseBehavior, type DbSize, type Health, type LogsSize, type PricingStatus, type RecordsClearMode, type UpdateCheck, type UpdateStatus, type ChangelogSection, type CliToolId, type CliToolsStatus, type CliToolStatus, type CliToolProxyConfigStatus, type CliToolProxyConfigToolStatus } from "../api";
 import type { CliswitchUpdateStatusEvent } from "@/lib/cliswitchEvents";
 import { clearUpdateReadyShown } from "@/lib/updateReadyPrompt";
 
@@ -109,6 +109,9 @@ export function SettingsPage() {
   const [chatBridgeWhatsAppStatus, setChatBridgeWhatsAppStatus] = useState<ChatBridgeWhatsAppStatus | null>(null);
   const [chatBridgeWhatsAppStatusLoading, setChatBridgeWhatsAppStatusLoading] = useState(false);
   const [chatBridgeWhatsAppActionBusy, setChatBridgeWhatsAppActionBusy] = useState(false);
+  const [chatBridgeWeixinStatus, setChatBridgeWeixinStatus] = useState<ChatBridgeWeixinStatus | null>(null);
+  const [chatBridgeWeixinStatusLoading, setChatBridgeWeixinStatusLoading] = useState(false);
+  const [chatBridgeWeixinActionBusy, setChatBridgeWeixinActionBusy] = useState(false);
 
   // 数据库相关 state
   const [dbSize, setDbSize] = useState<DbSize | null>(null);
@@ -281,6 +284,26 @@ export function SettingsPage() {
     }
   }
 
+  async function saveWeixinConfig(options?: { silent?: boolean }): Promise<AppSettings | null> {
+    if (!appSettings) return null;
+    setChatBridgeSaving(true);
+    try {
+      const next = await updateSettings({
+        chat_bridge_weixin_enabled: appSettings.chat_bridge_weixin_enabled,
+      });
+      setAppSettings(next);
+      if (!options?.silent) {
+        toast.success(t("settings.chatBridge.saved"));
+      }
+      return next;
+    } catch (e) {
+      toast.error(t("settings.chatBridge.saveFail"), { description: humanizeApiError(e, t) });
+      return null;
+    } finally {
+      setChatBridgeSaving(false);
+    }
+  }
+
   async function refreshChatBridgeWhatsAppStatus(options?: { silent?: boolean }) {
     const shouldShowSpinner = !options?.silent;
     if (shouldShowSpinner) {
@@ -300,6 +323,29 @@ export function SettingsPage() {
     } finally {
       if (shouldShowSpinner) {
         setChatBridgeWhatsAppStatusLoading(false);
+      }
+    }
+  }
+
+  async function refreshChatBridgeWeixinStatus(options?: { silent?: boolean }) {
+    const shouldShowSpinner = !options?.silent;
+    if (shouldShowSpinner) {
+      setChatBridgeWeixinStatusLoading(true);
+    }
+    try {
+      const next = await getChatBridgeWeixinStatus();
+      setChatBridgeWeixinStatus(next);
+      return next;
+    } catch (e) {
+      if (!options?.silent) {
+        toast.error(t("settings.chatBridge.weixin.statusLoadFail"), {
+          description: humanizeApiError(e, t),
+        });
+      }
+      return null;
+    } finally {
+      if (shouldShowSpinner) {
+        setChatBridgeWeixinStatusLoading(false);
       }
     }
   }
@@ -352,6 +398,57 @@ export function SettingsPage() {
       });
     } finally {
       setChatBridgeWhatsAppActionBusy(false);
+    }
+  }
+
+  async function beginWeixinLogin() {
+    if (!appSettings) return;
+    setChatBridgeSaving(true);
+    let saved: AppSettings | null = null;
+    try {
+      saved = await updateSettings({
+        chat_bridge_enabled: appSettings.chat_bridge_enabled,
+        chat_bridge_weixin_enabled: appSettings.chat_bridge_weixin_enabled,
+      });
+      setAppSettings(saved);
+    } catch (e) {
+      toast.error(t("settings.chatBridge.saveFail"), { description: humanizeApiError(e, t) });
+      saved = null;
+    } finally {
+      setChatBridgeSaving(false);
+    }
+
+    if (!saved || !saved.chat_bridge_enabled || !saved.chat_bridge_weixin_enabled) {
+      toast.error(t("settings.chatBridge.weixin.enableRequired"));
+      return;
+    }
+
+    setChatBridgeWeixinActionBusy(true);
+    try {
+      await startChatBridgeWeixinLogin();
+      toast.success(t("settings.chatBridge.weixin.loginStarted"));
+      await refreshChatBridgeWeixinStatus({ silent: true });
+    } catch (e) {
+      toast.error(t("settings.chatBridge.weixin.loginFail"), {
+        description: humanizeApiError(e, t),
+      });
+    } finally {
+      setChatBridgeWeixinActionBusy(false);
+    }
+  }
+
+  async function disconnectWeixin() {
+    setChatBridgeWeixinActionBusy(true);
+    try {
+      await logoutChatBridgeWeixin();
+      toast.success(t("settings.chatBridge.weixin.logoutOk"));
+      await refreshChatBridgeWeixinStatus({ silent: true });
+    } catch (e) {
+      toast.error(t("settings.chatBridge.weixin.logoutFail"), {
+        description: humanizeApiError(e, t),
+      });
+    } finally {
+      setChatBridgeWeixinActionBusy(false);
     }
   }
 
@@ -410,6 +507,7 @@ export function SettingsPage() {
     void refreshCliToolsProxyConfigStatus();
     void refreshChatBridgeBindings();
     void refreshChatBridgeWhatsAppStatus({ silent: true });
+    void refreshChatBridgeWeixinStatus({ silent: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -428,6 +526,7 @@ export function SettingsPage() {
   const chatBridgeBindingsByPlatform: Record<ChatPlatform, ChatBridgeBinding[]> = {
     telegram: chatBridgeBindings.filter((binding) => binding.platform === "telegram"),
     whatsapp: chatBridgeBindings.filter((binding) => binding.platform === "whatsapp"),
+    weixin: chatBridgeBindings.filter((binding) => binding.platform === "weixin"),
     discord: chatBridgeBindings.filter((binding) => binding.platform === "discord"),
   };
 
@@ -576,12 +675,60 @@ export function SettingsPage() {
     chatBridgePlatformTab,
   ]);
 
+  useEffect(() => {
+    const weixinEnabled =
+      (appSettings?.chat_bridge_enabled ?? false) &&
+      (appSettings?.chat_bridge_weixin_enabled ?? false);
+    if (chatBridgePlatformTab !== "weixin" || !weixinEnabled) {
+      return;
+    }
+
+    let cancelled = false;
+    let timer: number | null = null;
+    const nextPollDelay = (status: ChatBridgeWeixinStatus | null) => {
+      if (!status) return 5_000;
+      if (status.connected) return 15_000;
+      if (status.state === "awaiting_qr") return 2_000;
+      if (status.state === "error") return 5_000;
+      return 3_000;
+    };
+    const refresh = async () => {
+      const next = await refreshChatBridgeWeixinStatus({ silent: true });
+      if (cancelled) return;
+      timer = window.setTimeout(() => {
+        void refresh();
+      }, nextPollDelay(next));
+    };
+
+    void refresh();
+
+    return () => {
+      cancelled = true;
+      if (timer !== null) {
+        window.clearTimeout(timer);
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    appSettings?.chat_bridge_enabled,
+    appSettings?.chat_bridge_weixin_enabled,
+    chatBridgePlatformTab,
+  ]);
+
   const whatsappStatusKey = chatBridgeWhatsAppStatus?.state ?? "disabled";
   const whatsappConnected = chatBridgeWhatsAppStatus?.connected ?? false;
   const whatsappStatusLabel = t(`settings.chatBridge.whatsapp.state.${whatsappStatusKey}`);
   const whatsappStatusTone = whatsappStatusKey === "error"
     ? "destructive"
     : whatsappConnected
+      ? "success"
+      : "secondary";
+  const weixinStatusKey = chatBridgeWeixinStatus?.state ?? "disabled";
+  const weixinConnected = chatBridgeWeixinStatus?.connected ?? false;
+  const weixinStatusLabel = t(`settings.chatBridge.weixin.state.${weixinStatusKey}`);
+  const weixinStatusTone = weixinStatusKey === "error"
+    ? "destructive"
+    : weixinConnected
       ? "success"
       : "secondary";
 
@@ -649,6 +796,7 @@ export function SettingsPage() {
             <TabsList className="w-full justify-start">
               <TabsTrigger value="telegram">{t("settings.chatBridge.platform.telegram")}</TabsTrigger>
               <TabsTrigger value="whatsapp">{t("settings.chatBridge.platform.whatsapp")}</TabsTrigger>
+              <TabsTrigger value="weixin">{t("settings.chatBridge.platform.weixin")}</TabsTrigger>
               <TabsTrigger value="discord">{t("settings.chatBridge.platform.discord")}</TabsTrigger>
             </TabsList>
 
@@ -954,6 +1102,149 @@ export function SettingsPage() {
                     size="sm"
                     disabled={!appSettings || chatBridgeSaving}
                     onClick={() => void saveWhatsAppConfig()}
+                  >
+                    {t("common.save")}
+                  </Button>
+                </div>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="weixin" className="mt-4">
+              <div className="rounded-lg border p-4 space-y-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="space-y-1">
+                    <div className="font-medium text-sm">{t("settings.chatBridge.weixinConfigTitle")}</div>
+                    <div className="text-xs text-muted-foreground">{t("settings.chatBridge.weixinConfigHint")}</div>
+                  </div>
+                  <Badge variant="secondary">{t("settings.chatBridge.supportReady")}</Badge>
+                </div>
+
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <div className="font-medium text-sm">{t("settings.chatBridge.weixinEnable")}</div>
+                    <div className="text-xs text-muted-foreground">{t("settings.chatBridge.weixinEnableHint")}</div>
+                  </div>
+                  <Switch
+                    checked={appSettings?.chat_bridge_weixin_enabled ?? false}
+                    onCheckedChange={(v) => {
+                      setAppSettings((prev) => (prev ? { ...prev, chat_bridge_weixin_enabled: v } : prev));
+                    }}
+                    disabled={!appSettings || chatBridgeSaving}
+                  />
+                </div>
+
+                <div className="rounded-lg border bg-muted/20 p-4 space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="space-y-1">
+                      <div className="font-medium text-sm">{t("settings.chatBridge.weixin.runtimeTitle")}</div>
+                      <div className="text-xs text-muted-foreground">{t("settings.chatBridge.weixin.runtimeHint")}</div>
+                    </div>
+                    <Badge variant={weixinStatusTone}>{weixinStatusLabel}</Badge>
+                  </div>
+
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <div className="rounded-lg border bg-background px-3 py-3 space-y-1">
+                      <div className="text-xs text-muted-foreground">{t("settings.chatBridge.weixin.connectionLabel")}</div>
+                      <div className="text-sm font-medium">
+                        {weixinConnected
+                          ? t("settings.chatBridge.weixin.connectionConnected")
+                          : t("settings.chatBridge.weixin.connectionDisconnected")}
+                      </div>
+                    </div>
+                    <div className="rounded-lg border bg-background px-3 py-3 space-y-1">
+                      <div className="text-xs text-muted-foreground">{t("settings.chatBridge.weixin.accountLabel")}</div>
+                      <div className="text-sm font-medium break-all">
+                        {chatBridgeWeixinStatus?.me || t("settings.chatBridge.weixin.accountEmpty")}
+                      </div>
+                    </div>
+                  </div>
+
+                  {chatBridgeWeixinStatus?.last_error ? (
+                    <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-3 space-y-1">
+                      <div className="text-xs text-muted-foreground">{t("settings.chatBridge.weixin.lastErrorLabel")}</div>
+                      <div className="text-sm break-words">{chatBridgeWeixinStatus.last_error}</div>
+                    </div>
+                  ) : null}
+
+                  <div className="rounded-lg border bg-background px-3 py-3 space-y-3">
+                    <div className="space-y-1">
+                      <div className="font-medium text-sm">{t("settings.chatBridge.weixin.qrTitle")}</div>
+                      <div className="text-xs text-muted-foreground">{t("settings.chatBridge.weixin.qrHint")}</div>
+                    </div>
+                    {chatBridgeWeixinStatus?.qr_image ? (
+                      <div className="flex justify-center">
+                        <img
+                          src={chatBridgeWeixinStatus.qr_image}
+                          alt={t("settings.chatBridge.weixin.qrAlt")}
+                          className="h-56 w-56 rounded-lg border bg-white p-3"
+                        />
+                      </div>
+                    ) : (
+                      <div className="rounded-lg border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
+                        {chatBridgeWeixinStatusLoading
+                          ? t("common.loading")
+                          : t("settings.chatBridge.weixin.qrEmpty")}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      size="sm"
+                      onClick={() => void beginWeixinLogin()}
+                      disabled={!appSettings || chatBridgeSaving || chatBridgeWeixinActionBusy}
+                    >
+                      {t("settings.chatBridge.weixin.loginAction")}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => void disconnectWeixin()}
+                      disabled={!appSettings || chatBridgeSaving || chatBridgeWeixinActionBusy}
+                    >
+                      {t("settings.chatBridge.weixin.logoutAction")}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => void refreshChatBridgeWeixinStatus()}
+                      disabled={chatBridgeWeixinStatusLoading || chatBridgeWeixinActionBusy}
+                    >
+                      {t("common.refresh")}
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between gap-4 rounded-lg border bg-muted/30 px-3 py-3">
+                  <div className="space-y-1">
+                    <div className="font-medium text-sm">{t("settings.chatBridge.bindings.title")}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {t("settings.chatBridge.bindings.summary", { count: chatBridgeBindingsByPlatform.weixin.length })}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => openChatBridgePairing("weixin")}
+                    >
+                      {t("settings.chatBridge.actions.pairing")}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => openChatBridgeBindings("weixin")}
+                    >
+                      {t("settings.chatBridge.actions.bindings")}
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="flex justify-end">
+                  <Button
+                    size="sm"
+                    disabled={!appSettings || chatBridgeSaving}
+                    onClick={() => void saveWeixinConfig()}
                   >
                     {t("common.save")}
                   </Button>

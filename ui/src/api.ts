@@ -43,12 +43,13 @@ export type AppSettings = {
   chat_bridge_discord_bot_token?: string | null;
   chat_bridge_discord_bot_token_configured: boolean;
   chat_bridge_whatsapp_enabled: boolean;
+  chat_bridge_weixin_enabled: boolean;
   chat_bridge_allow_new_projects: boolean;
 };
 
-export type ChatPlatform = "telegram" | "discord" | "whatsapp";
+export type ChatPlatform = "telegram" | "discord" | "whatsapp" | "weixin";
 
-export type ChatBridgeWhatsAppStatusState =
+export type ChatBridgeRuntimeStatusState =
   | "disabled"
   | "starting"
   | "awaiting_qr"
@@ -56,7 +57,16 @@ export type ChatBridgeWhatsAppStatusState =
   | "error";
 
 export type ChatBridgeWhatsAppStatus = {
-  state: ChatBridgeWhatsAppStatusState;
+  state: ChatBridgeRuntimeStatusState;
+  connected: boolean;
+  me?: string | null;
+  qr?: string | null;
+  qr_image?: string | null;
+  last_error?: string | null;
+};
+
+export type ChatBridgeWeixinStatus = {
+  state: ChatBridgeRuntimeStatusState;
   connected: boolean;
   me?: string | null;
   qr?: string | null;
@@ -573,6 +583,18 @@ export function startChatBridgeWhatsAppLogin(): Promise<void> {
 
 export function logoutChatBridgeWhatsApp(): Promise<void> {
   return http<void>("POST", "/api/chat_bridge/whatsapp/logout", {});
+}
+
+export function getChatBridgeWeixinStatus(): Promise<ChatBridgeWeixinStatus> {
+  return http<ChatBridgeWeixinStatus>("GET", "/api/chat_bridge/weixin/status");
+}
+
+export function startChatBridgeWeixinLogin(): Promise<void> {
+  return http<void>("POST", "/api/chat_bridge/weixin/login", {});
+}
+
+export function logoutChatBridgeWeixin(): Promise<void> {
+  return http<void>("POST", "/api/chat_bridge/weixin/logout", {});
 }
 
 export function getCliToolsStatus(): Promise<CliToolsStatus> {

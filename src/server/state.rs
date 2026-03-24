@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use tokio::sync::{mpsc, watch};
 
+use crate::chat_bridge::weixin::{WeixinControl, WeixinStatus};
 use crate::chat_bridge::whatsapp_web::{WhatsAppWebControl, WhatsAppWebStatus};
 use crate::storage;
 use crate::update;
@@ -21,6 +22,8 @@ pub struct AppState {
     pub update_runtime: Arc<tokio::sync::Mutex<update::UpdateRuntime>>,
     pub whatsapp_control_tx: mpsc::Sender<WhatsAppWebControl>,
     pub whatsapp_status_rx: watch::Receiver<WhatsAppWebStatus>,
+    pub weixin_control_tx: mpsc::Sender<WeixinControl>,
+    pub weixin_status_rx: watch::Receiver<WeixinStatus>,
 }
 
 impl AppState {

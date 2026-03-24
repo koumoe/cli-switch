@@ -12,6 +12,7 @@ use tower_http::services::ServeDir;
 use tower_http::trace::TraceLayer;
 use tower_http::trace::{DefaultOnFailure, DefaultOnResponse};
 
+use crate::chat_bridge::weixin::WeixinStatus;
 use crate::chat_bridge::whatsapp_web::WhatsAppWebStatus;
 use crate::events::AppEvent;
 use crate::i18n::locale_context_middleware;
@@ -53,6 +54,9 @@ fn request_endpoint_template(method: &Method, path: &str) -> Option<&'static str
         ("GET", "/api/chat_bridge/whatsapp/status") => Some("/api/chat_bridge/whatsapp/status"),
         ("POST", "/api/chat_bridge/whatsapp/login") => Some("/api/chat_bridge/whatsapp/login"),
         ("POST", "/api/chat_bridge/whatsapp/logout") => Some("/api/chat_bridge/whatsapp/logout"),
+        ("GET", "/api/chat_bridge/weixin/status") => Some("/api/chat_bridge/weixin/status"),
+        ("POST", "/api/chat_bridge/weixin/login") => Some("/api/chat_bridge/weixin/login"),
+        ("POST", "/api/chat_bridge/weixin/logout") => Some("/api/chat_bridge/weixin/logout"),
         ("GET", "/api/channels") => Some("/api/channels"),
         ("POST", "/api/channels") => Some("/api/channels"),
         ("POST", "/api/channels/reorder") => Some("/api/channels/reorder"),
@@ -128,6 +132,9 @@ fn request_purpose(method: &Method, path: &str) -> &'static str {
         ("GET", "/api/chat_bridge/whatsapp/status") => "handlers::get_chat_bridge_whatsapp_status",
         ("POST", "/api/chat_bridge/whatsapp/login") => "handlers::start_chat_bridge_whatsapp_login",
         ("POST", "/api/chat_bridge/whatsapp/logout") => "handlers::logout_chat_bridge_whatsapp",
+        ("GET", "/api/chat_bridge/weixin/status") => "handlers::get_chat_bridge_weixin_status",
+        ("POST", "/api/chat_bridge/weixin/login") => "handlers::start_chat_bridge_weixin_login",
+        ("POST", "/api/chat_bridge/weixin/logout") => "handlers::logout_chat_bridge_weixin",
         ("GET", "/api/prompts/projects") => "handlers::list_prompt_projects",
         ("DELETE", "/api/prompts/projects") => "handlers::delete_prompt_project",
         ("GET", "/api/prompts/document") => "handlers::get_prompt_document",
@@ -270,6 +277,18 @@ fn build_app(state: AppState) -> Router {
             post(handlers::logout_chat_bridge_whatsapp),
         )
         .route(
+            "/api/chat_bridge/weixin/status",
+            get(handlers::get_chat_bridge_weixin_status),
+        )
+        .route(
+            "/api/chat_bridge/weixin/login",
+            post(handlers::start_chat_bridge_weixin_login),
+        )
+        .route(
+            "/api/chat_bridge/weixin/logout",
+            post(handlers::logout_chat_bridge_weixin),
+        )
+        .route(
             "/api/prompts/projects",
             get(handlers::list_prompt_projects).delete(handlers::delete_prompt_project),
         )
@@ -374,6 +393,8 @@ pub async fn serve_with_listener(
     let (channels_cache, channels_cache_rx) = watch::channel(Arc::new(channels0));
     let (whatsapp_control_tx, whatsapp_control_rx) = mpsc::channel(32);
     let (whatsapp_status_tx, whatsapp_status_rx) = watch::channel(WhatsAppWebStatus::disabled());
+    let (weixin_control_tx, weixin_control_rx) = mpsc::channel(32);
+    let (weixin_status_tx, weixin_status_rx) = watch::channel(WeixinStatus::disabled());
 
     let update_runtime = Arc::new(tokio::sync::Mutex::new(update::UpdateRuntime {
         locale: initial_update_locale,
@@ -391,6 +412,8 @@ pub async fn serve_with_listener(
         update_runtime: update_runtime.clone(),
         whatsapp_control_tx,
         whatsapp_status_rx,
+        weixin_control_tx,
+        weixin_status_rx,
     };
 
     tracing::info!(addr = %addr, open_browser, "backend server starting");
@@ -460,8 +483,12 @@ pub async fn serve_with_listener(
         http_client.clone(),
         chat_bridge_settings_rx,
         Some(chat_bridge_channels_cache),
-        whatsapp_control_rx,
-        whatsapp_status_tx,
+        chat_bridge::SupervisorChannels {
+            whatsapp_control_rx,
+            whatsapp_status_tx,
+            weixin_control_rx,
+            weixin_status_tx,
+        },
     ));
 
     if open_browser {

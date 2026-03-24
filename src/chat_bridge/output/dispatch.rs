@@ -51,6 +51,13 @@ const WHATSAPP_OUTPUT_POLICY: PlatformOutputPolicy = PlatformOutputPolicy {
     attachment_threshold: Some(6_000),
 };
 
+const WEIXIN_OUTPUT_POLICY: PlatformOutputPolicy = PlatformOutputPolicy {
+    // Weixin text replies hit practical rendering/API issues beyond roughly 3.6k chars,
+    // so keep the same ceiling we already use for WhatsApp-sized long-form replies.
+    message_char_limit: 3600,
+    attachment_threshold: None,
+};
+
 pub(in crate::chat_bridge) struct TurnExecutionResult {
     pub(in crate::chat_bridge) success: bool,
     pub(in crate::chat_bridge) stdout: String,
@@ -704,6 +711,7 @@ fn output_policy(platform: storage::ChatPlatform) -> PlatformOutputPolicy {
         storage::ChatPlatform::Telegram => TELEGRAM_OUTPUT_POLICY,
         storage::ChatPlatform::Discord => DISCORD_OUTPUT_POLICY,
         storage::ChatPlatform::WhatsApp => WHATSAPP_OUTPUT_POLICY,
+        storage::ChatPlatform::Weixin => WEIXIN_OUTPUT_POLICY,
     }
 }
 
