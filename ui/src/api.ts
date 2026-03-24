@@ -454,8 +454,10 @@ async function http<T>(method: string, path: string, body?: unknown): Promise<T>
   });
 
   if (res.ok) {
-    if (res.status === 204) return undefined as T;
-    return (await res.json()) as T;
+    if (res.status === 204 || res.status === 205) return undefined as T;
+    const text = await res.text();
+    if (!text.trim()) return undefined as T;
+    return JSON.parse(text) as T;
   }
 
   const text = await res.text().catch(() => "");

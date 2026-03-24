@@ -52,6 +52,24 @@ function joinPath(base: string, sub: string): string {
   return `${base}${sep}${sub}`;
 }
 
+function normalizeQrImageSrc(src: string | null | undefined): string | null {
+  if (typeof src !== "string") return null;
+  const trimmed = src.trim();
+  if (!trimmed) return null;
+  if (trimmed.startsWith("data:image/") || trimmed.startsWith("blob:")) {
+    return trimmed;
+  }
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+      return trimmed;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
 export function SettingsPage() {
   const { theme, setTheme } = useTheme();
   const { locale, setLocale, locales, t } = useI18n();
@@ -98,12 +116,12 @@ export function SettingsPage() {
   const [chatBridgeBindingsLoading, setChatBridgeBindingsLoading] = useState(false);
   const [chatBridgePairingToken, setChatBridgePairingToken] = useState<ChatBridgePairingToken | null>(null);
   const [chatBridgePairingCreating, setChatBridgePairingCreating] = useState(false);
-  const [chatBridgePairingPlatform, setChatBridgePairingPlatform] = useState<ChatPlatform>("telegram");
+  const [chatBridgePairingPlatform, setChatBridgePairingPlatform] = useState<ChatPlatform>("weixin");
   const [chatBridgeUnbindTarget, setChatBridgeUnbindTarget] = useState<ChatBridgeBinding | null>(null);
   const [chatBridgeUnbinding, setChatBridgeUnbinding] = useState(false);
   const [chatBridgeTelegramTokenDraft, setChatBridgeTelegramTokenDraft] = useState("");
   const [chatBridgeDiscordTokenDraft, setChatBridgeDiscordTokenDraft] = useState("");
-  const [chatBridgePlatformTab, setChatBridgePlatformTab] = useState<ChatPlatform>("telegram");
+  const [chatBridgePlatformTab, setChatBridgePlatformTab] = useState<ChatPlatform>("weixin");
   const [chatBridgePairingDialogOpen, setChatBridgePairingDialogOpen] = useState(false);
   const [chatBridgeBindingsDialogPlatform, setChatBridgeBindingsDialogPlatform] = useState<ChatPlatform | null>(null);
   const [chatBridgeWhatsAppStatus, setChatBridgeWhatsAppStatus] = useState<ChatBridgeWhatsAppStatus | null>(null);
@@ -717,6 +735,7 @@ export function SettingsPage() {
 
   const whatsappStatusKey = chatBridgeWhatsAppStatus?.state ?? "disabled";
   const whatsappConnected = chatBridgeWhatsAppStatus?.connected ?? false;
+  const whatsappQrImageSrc = normalizeQrImageSrc(chatBridgeWhatsAppStatus?.qr_image);
   const whatsappStatusLabel = t(`settings.chatBridge.whatsapp.state.${whatsappStatusKey}`);
   const whatsappStatusTone = whatsappStatusKey === "error"
     ? "destructive"
@@ -725,6 +744,7 @@ export function SettingsPage() {
       : "secondary";
   const weixinStatusKey = chatBridgeWeixinStatus?.state ?? "disabled";
   const weixinConnected = chatBridgeWeixinStatus?.connected ?? false;
+  const weixinQrImageSrc = normalizeQrImageSrc(chatBridgeWeixinStatus?.qr_image);
   const weixinStatusLabel = t(`settings.chatBridge.weixin.state.${weixinStatusKey}`);
   const weixinStatusTone = weixinStatusKey === "error"
     ? "destructive"
@@ -794,9 +814,9 @@ export function SettingsPage() {
         <CardContent className="space-y-4">
           <Tabs value={chatBridgePlatformTab} onValueChange={(value) => setChatBridgePlatformTab(value as ChatPlatform)} className="w-full">
             <TabsList className="w-full justify-start">
+              <TabsTrigger value="weixin">{t("settings.chatBridge.platform.weixin")}</TabsTrigger>
               <TabsTrigger value="telegram">{t("settings.chatBridge.platform.telegram")}</TabsTrigger>
               <TabsTrigger value="whatsapp">{t("settings.chatBridge.platform.whatsapp")}</TabsTrigger>
-              <TabsTrigger value="weixin">{t("settings.chatBridge.platform.weixin")}</TabsTrigger>
               <TabsTrigger value="discord">{t("settings.chatBridge.platform.discord")}</TabsTrigger>
             </TabsList>
 
@@ -1028,10 +1048,10 @@ export function SettingsPage() {
                       <div className="font-medium text-sm">{t("settings.chatBridge.whatsapp.qrTitle")}</div>
                       <div className="text-xs text-muted-foreground">{t("settings.chatBridge.whatsapp.qrHint")}</div>
                     </div>
-                    {chatBridgeWhatsAppStatus?.qr_image ? (
+                    {whatsappQrImageSrc ? (
                       <div className="flex justify-center">
                         <img
-                          src={chatBridgeWhatsAppStatus.qr_image}
+                          src={whatsappQrImageSrc}
                           alt={t("settings.chatBridge.whatsapp.qrAlt")}
                           className="h-56 w-56 rounded-lg border bg-white p-3"
                         />
@@ -1171,10 +1191,10 @@ export function SettingsPage() {
                       <div className="font-medium text-sm">{t("settings.chatBridge.weixin.qrTitle")}</div>
                       <div className="text-xs text-muted-foreground">{t("settings.chatBridge.weixin.qrHint")}</div>
                     </div>
-                    {chatBridgeWeixinStatus?.qr_image ? (
+                    {weixinQrImageSrc ? (
                       <div className="flex justify-center">
                         <img
-                          src={chatBridgeWeixinStatus.qr_image}
+                          src={weixinQrImageSrc}
                           alt={t("settings.chatBridge.weixin.qrAlt")}
                           className="h-56 w-56 rounded-lg border bg-white p-3"
                         />
