@@ -10,6 +10,7 @@ use super::node_bridge::{
     KillProcessOnDrop, NodeBridgeClient, close_pending_responses, new_pending_responses,
     spawn_stderr_task, spawn_stdin_task, spawn_stdout_task,
 };
+use super::whatsapp_web::qr_image_data_uri;
 use crate::cli_tools::CliExecEnv;
 use crate::nodejs;
 
@@ -110,14 +111,28 @@ struct NodeStatusEvent {
     last_error: Option<String>,
 }
 
+fn resolve_weixin_qr_image(qr: Option<&str>, qr_image: Option<&str>) -> Option<String> {
+    if let Some(image) = qr_image {
+        let trimmed = image.trim();
+        if trimmed.starts_with("data:image/") {
+            return Some(trimmed.to_string());
+        }
+    }
+
+    // The Weixin QR API currently returns an HTML landing-page URL instead of an image URL.
+    // Render the QR locally from the raw code so the desktop UI always has a usable image.
+    qr.and_then(|value| qr_image_data_uri(value).ok())
+}
+
 impl From<NodeStatusEvent> for WeixinStatus {
     fn from(value: NodeStatusEvent) -> Self {
+        let qr_image = resolve_weixin_qr_image(value.qr.as_deref(), value.qr_image.as_deref());
         Self {
             state: value.state,
             connected: value.connected,
             me: value.me,
             qr: value.qr,
-            qr_image: value.qr_image,
+            qr_image,
             last_error: value.last_error,
         }
     }
@@ -447,4 +462,35 @@ pub(super) async fn run_weixin_bridge(
 
     close_pending_responses(&pending, "weixin bridge").await;
     let _ = status_tx.send(WeixinStatus::error("weixin bridge stopped"));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::resolve_weixin_qr_image;
+
+    #[test]
+    fn resolve_weixin_qr_image_prefers_existing_data_uri() {
+        let data_uri = "data:image/png;base64,Zm9v";
+        assert_eq!(
+            resolve_weixin_qr_image(Some("unused"), Some(data_uri)),
+            Some(data_uri.to_string())
+        );
+    }
+
+    #[test]
+    fn resolve_weixin_qr_image_generates_local_qr_for_remote_page_url() {
+        let resolved = resolve_weixin_qr_image(
+            Some("40e22bde5c819e20d9c1d0c11d13012b"),
+            Some(
+                "https://liteapp.weixin.qq.com/q/7GiQu1?qrcode=40e22bde5c819e20d9c1d0c11d13012b&bot_type=3",
+            ),
+        );
+
+        assert!(resolved.is_some());
+        assert!(
+            resolved
+                .as_deref()
+                .is_some_and(|value| value.starts_with("data:image/png;base64,"))
+        );
+    }
 }
