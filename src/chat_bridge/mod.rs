@@ -906,10 +906,23 @@ impl ChatBridgeRuntime {
             storage::get_default_bridge_session_for_platform(self.db_path.clone(), platform)
                 .await?;
         let Some(session) = session else {
+            // Active sessions should normally always have a default. Keep a separate
+            // message for the inconsistent case so users only see /switch when it helps.
+            let message_key = if storage::count_active_bridge_sessions_for_platform(
+                self.db_path.clone(),
+                platform,
+            )
+            .await?
+                == 0
+            {
+                "session.no_active_for_message"
+            } else {
+                "session.no_default"
+            };
             self.send_text(
                 adapter,
                 &msg.chat_id,
-                &t(locale, "session.no_default"),
+                &t(locale, message_key),
                 msg.message_id.as_deref(),
                 locale,
             )
@@ -2889,6 +2902,95 @@ mod tests {
         assert_eq!(
             adapter.calls(),
             vec![format!("send:{}", help_text(AppLocale::EnUS))]
+        );
+        remove_sqlite_artifacts(&db_path);
+    }
+
+    #[tokio::test]
+    async fn plain_text_without_any_active_session_prompts_to_start_one() {
+        let db_path = temp_db_path();
+        remove_sqlite_artifacts(&db_path);
+        storage::init_db(&db_path).expect("init db");
+        bind_test_user(
+            &db_path,
+            ChatPlatform::Telegram,
+            "tg-user-no-session",
+            AppLocale::ZhCN,
+        )
+        .await;
+
+        let runtime = test_runtime(&db_path).await;
+        let adapter = FakeAdapter::new(false);
+        runtime
+            .handle_message(
+                Arc::new(adapter.clone()),
+                test_message(ChatPlatform::Telegram, "tg-user-no-session", "你好"),
+            )
+            .await;
+
+        assert_eq!(
+            adapter.calls(),
+            vec![
+                "send:当前没有活动会话，请先通过 /codex、/claude 或 /gemini 启动一个会话。"
+                    .to_string()
+            ]
+        );
+        remove_sqlite_artifacts(&db_path);
+    }
+
+    #[tokio::test]
+    async fn plain_text_without_default_session_but_with_active_session_prompts_to_switch() {
+        let db_path = temp_db_path();
+        remove_sqlite_artifacts(&db_path);
+        storage::init_db(&db_path).expect("init db");
+        bind_test_user(
+            &db_path,
+            ChatPlatform::Telegram,
+            "tg-user-no-default",
+            AppLocale::ZhCN,
+        )
+        .await;
+        let session = storage::create_bridge_session(
+            db_path.clone(),
+            storage::CreateBridgeSessionInput {
+                platform: ChatPlatform::Telegram,
+                alias: Some("alpha".to_string()),
+                cli_type: CliToolId::Codex,
+                cli_session_ref: None,
+                project_id: Some("/tmp/demo".to_string()),
+                project_name: "demo".to_string(),
+                working_dir: "/tmp/demo".to_string(),
+                permission_mode: storage::BridgePermissionMode::Safe,
+            },
+        )
+        .await
+        .expect("create bridge session");
+        storage::update_bridge_session(
+            db_path.clone(),
+            session.id,
+            storage::UpdateBridgeSessionInput {
+                is_default: Some(false),
+                ..Default::default()
+            },
+        )
+        .await
+        .expect("clear default session flag");
+
+        let runtime = test_runtime(&db_path).await;
+        let adapter = FakeAdapter::new(false);
+        runtime
+            .handle_message(
+                Arc::new(adapter.clone()),
+                test_message(ChatPlatform::Telegram, "tg-user-no-default", "hello"),
+            )
+            .await;
+
+        assert_eq!(
+            adapter.calls(),
+            vec![
+                "send:当前没有默认会话，请先通过 /switch 选择一个会话，或使用 /chat 指定目标。"
+                    .to_string()
+            ]
         );
         remove_sqlite_artifacts(&db_path);
     }

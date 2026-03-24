@@ -154,6 +154,7 @@
       "default_switched": "Default session switched to {{label}}.",
       "last_active_label": "Last active",
       "list_title": "Current sessions:",
+      "no_active_for_message": "There are no active sessions. Start one first with /codex, /claude, or /gemini.",
       "no_default": "No default session is set. Use /switch first, or target a session explicitly with /chat.",
       "none": "There are no active sessions.",
       "not_found": "Session not found.",

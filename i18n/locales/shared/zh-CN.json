@@ -154,6 +154,7 @@
       "default_switched": "已切换默认会话为 {{label}}。",
       "last_active_label": "最近活跃",
       "list_title": "当前会话：",
+      "no_active_for_message": "当前没有活动会话，请先通过 /codex、/claude 或 /gemini 启动一个会话。",
       "no_default": "当前没有默认会话，请先通过 /switch 选择一个会话，或使用 /chat 指定目标。",
       "none": "当前没有活动会话。",
       "not_found": "未找到对应会话。",
