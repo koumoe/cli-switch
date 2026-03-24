@@ -1,3 +1,7 @@
+## [0.44.0](https://github.com/koumoe/cli-switch/compare/v0.43.0...v0.44.0) (2026-03-24)
+
+### 功能
+* 内置 Rust WhatsApp 桥接 (#143) ([#143](https://github.com/koumoe/cli-switch/issues/143)) ([7550868](https://github.com/koumoe/cli-switch/commit/75508684b7941e47595b503c507beb09ffdf78f5))
 ## [0.43.0](https://github.com/koumoe/cli-switch/compare/v0.42.0...v0.43.0) (2026-03-24)
 
 ### 功能
