@@ -432,7 +432,8 @@ export function OverviewPage() {
         </Card>
 
         {/* 渠道使用分布 */}
-        <Card className="flex flex-col md:col-span-1">
+        <div className="relative md:col-span-1">
+          <Card className="md:absolute md:inset-0 flex flex-col overflow-hidden">
           <CardHeader className="py-3 px-3">
             <div className="flex items-center justify-between gap-2">
               <CardTitle className="text-sm">
@@ -472,7 +473,8 @@ export function OverviewPage() {
               </div>
             )}
           </CardContent>
-        </Card>
+          </Card>
+        </div>
       </div>
 
       {/* 活跃渠道链 */}
