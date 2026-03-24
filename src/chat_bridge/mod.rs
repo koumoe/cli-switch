@@ -48,8 +48,8 @@ use crate::chat_bridge::weixin::{
     logout_by_clearing_auth_state as logout_weixin_by_clearing_auth_state, run_weixin_bridge,
 };
 use crate::chat_bridge::whatsapp_web::{
-    WhatsAppWebControl, WhatsAppWebState, WhatsAppWebStatus, logout_by_clearing_auth_state,
-    run_whatsapp_web_bridge,
+    WhatsAppBridgeCommand, WhatsAppWebControl, WhatsAppWebState, WhatsAppWebStatus,
+    logout_by_clearing_auth_state, run_whatsapp_web_bridge,
 };
 use crate::cli_tools::{
     CLI_TOOLS, CliExecEnv, CliToolId, detect_cli_tool, normalize_version_string,
@@ -195,6 +195,28 @@ impl ManagedBridgeTask {
         .await;
     }
 
+    fn handle_expected_exit(
+        &mut self,
+        exit: Option<(Duration, Result<(), tokio::task::JoinError>)>,
+    ) {
+        let Some((_, result)) = exit else {
+            return;
+        };
+
+        if let Err(err) = result {
+            tracing::warn!(
+                platform = self.platform_name,
+                err = %err,
+                "chat bridge task exited during expected shutdown"
+            );
+        }
+
+        self.handle = None;
+        self.started_at = None;
+        self.token = None;
+        self.restart_failures = 0;
+    }
+
     fn abort_and_clear(&mut self) {
         if let Some(handle) = self.handle.take() {
             handle.abort();
@@ -245,6 +267,8 @@ pub async fn run_supervisor(
     let mut weixin_task = ManagedBridgeTask::new("weixin");
     let mut whatsapp_nonce: u64 = 0;
     let mut weixin_nonce: u64 = 0;
+    let mut whatsapp_bridge_control_tx: Option<mpsc::UnboundedSender<WhatsAppBridgeCommand>> = None;
+    let mut whatsapp_skip_restart_backoff = false;
 
     loop {
         let telegram_token = desired_telegram_token(settings_rx.borrow().as_ref());
@@ -258,6 +282,9 @@ pub async fn run_supervisor(
         discord_task.sync_token(discord_token.as_deref());
         whatsapp_task.sync_token(whatsapp_key.as_deref());
         weixin_task.sync_token(weixin_key.as_deref());
+        if !whatsapp_task.is_running() {
+            whatsapp_bridge_control_tx = None;
+        }
 
         if telegram_token.is_some() {
             let runtime = runtime.clone();
@@ -280,15 +307,21 @@ pub async fn run_supervisor(
         }
 
         if let Some(key) = whatsapp_key.clone() {
-            let runtime = runtime.clone();
-            let client = http_client.clone();
-            let status_tx = whatsapp_status_tx.clone();
-            whatsapp_task.spawn_if_needed(Some(key), move |_token| {
-                tokio::spawn(async move {
-                    run_whatsapp_web_bridge(runtime, client, status_tx).await;
-                })
-            });
+            if !whatsapp_task.is_running() {
+                let runtime = runtime.clone();
+                let client = http_client.clone();
+                let status_tx = whatsapp_status_tx.clone();
+                let (bridge_control_tx, bridge_control_rx) = mpsc::unbounded_channel();
+                whatsapp_bridge_control_tx = Some(bridge_control_tx);
+                whatsapp_task.spawn_if_needed(Some(key), move |_token| {
+                    tokio::spawn(async move {
+                        run_whatsapp_web_bridge(runtime, client, status_tx, bridge_control_rx)
+                            .await;
+                    })
+                });
+            }
         } else {
+            whatsapp_bridge_control_tx = None;
             let _ = whatsapp_status_tx.send(WhatsAppWebStatus::disabled());
         }
 
@@ -327,10 +360,24 @@ pub async fn run_supervisor(
                         }
                     }
                     WhatsAppWebControl::Logout => {
-                        if let Err(err) = logout_by_clearing_auth_state(&runtime.data_dir()) {
-                            tracing::warn!(err = %err, "clear whatsapp auth state failed");
+                        let mut sent_to_runtime = false;
+                        if let Some(tx) = whatsapp_bridge_control_tx.as_ref() {
+                            match tx.send(WhatsAppBridgeCommand::Logout) {
+                                Ok(_) => {
+                                    sent_to_runtime = true;
+                                    whatsapp_skip_restart_backoff = true;
+                                }
+                                Err(err) => {
+                                    tracing::warn!(err = %err, "send whatsapp bridge logout command failed");
+                                }
+                            }
                         }
-                        whatsapp_nonce = whatsapp_nonce.wrapping_add(1);
+                        if !sent_to_runtime {
+                            if let Err(err) = logout_by_clearing_auth_state(&runtime.data_dir()) {
+                                tracing::warn!(err = %err, "clear whatsapp auth state failed");
+                            }
+                            whatsapp_nonce = whatsapp_nonce.wrapping_add(1);
+                        }
                     }
                 }
             }
@@ -359,7 +406,13 @@ pub async fn run_supervisor(
                 discord_task.handle_exit(exit).await;
             }
             exit = whatsapp_task.wait_for_exit(), if whatsapp_running => {
-                whatsapp_task.handle_exit(exit).await;
+                whatsapp_bridge_control_tx = None;
+                if whatsapp_skip_restart_backoff {
+                    whatsapp_skip_restart_backoff = false;
+                    whatsapp_task.handle_expected_exit(exit);
+                } else {
+                    whatsapp_task.handle_exit(exit).await;
+                }
             }
             exit = weixin_task.wait_for_exit(), if weixin_running => {
                 weixin_task.handle_exit(exit).await;

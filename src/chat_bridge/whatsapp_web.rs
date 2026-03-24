@@ -3,25 +3,32 @@ use base64::Engine as _;
 use image::{ImageBuffer, Luma};
 use qrcode::QrCode;
 use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::Duration;
-use tokio::sync::{mpsc, watch};
+use tokio::sync::{Mutex, mpsc, watch};
 
-use super::adapter::{ChatAdapter, IncomingAttachment, IncomingAttachmentKind};
-use super::node_bridge::{
-    KillProcessOnDrop, NodeBridgeClient, close_pending_responses, new_pending_responses,
-    spawn_stderr_task, spawn_stdin_task, spawn_stdout_task,
+use super::adapter::{
+    Attachment, ChatAdapter, IncomingAttachment, IncomingAttachmentKind, OutgoingMessage,
+    SentMessage,
 };
-use crate::cli_tools::CliExecEnv;
-use crate::{nodejs, process};
+use wacore_binary::jid::SERVER_JID;
+use wacore_binary::node::NodeContent;
+use whatsapp_rust::bot::Bot;
+use whatsapp_rust::download::{Downloadable, MediaType};
+use whatsapp_rust::proto_helpers::{self, MessageExt as _};
+use whatsapp_rust::request::InfoQuery;
+use whatsapp_rust::store::SqliteStore;
+use whatsapp_rust::types::events::{ConnectFailureReason, Event};
+use whatsapp_rust::types::message::MessageInfo;
+use whatsapp_rust::upload::UploadResponse;
+use whatsapp_rust::{Client, Jid, TokioRuntime, waproto::whatsapp as wa};
+use whatsapp_rust_tokio_transport::TokioWebSocketTransportFactory;
 
-const BRIDGE_PACKAGE_JSON: &str = include_str!("whatsapp_web/package.json");
-const BRIDGE_PACKAGE_LOCK_JSON: &str = include_str!("whatsapp_web/package-lock.json");
-const BRIDGE_MJS: &str = include_str!("whatsapp_web/bridge.mjs");
-
-const BRIDGE_INSTALL_TIMEOUT: Duration = Duration::from_secs(10 * 60);
-const BRIDGE_SEND_TIMEOUT: Duration = Duration::from_secs(30);
+const STORE_FILE_NAME: &str = "session.sqlite3";
+const LOGOUT_MARKER_FILE_NAME: &str = "pending-logout";
+const MAX_ATTACHMENT_BYTES: u64 = 20 * 1024 * 1024;
+const RECENT_LIMIT: usize = 256;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -90,95 +97,210 @@ pub enum WhatsAppWebControl {
     Logout,
 }
 
-#[derive(Debug, Deserialize)]
-struct NodeIncomingAttachment {
-    kind: String,
-    filename: String,
-    #[serde(default)]
-    mime_type: Option<String>,
-    #[serde(default)]
-    caption: Option<String>,
-    data_b64: String,
+#[derive(Debug, Clone)]
+pub enum WhatsAppBridgeCommand {
+    Logout,
 }
 
-#[derive(Debug, Deserialize)]
-struct NodeIncomingMessage {
-    sender_id: String,
-    #[serde(default)]
-    sender_display_name: Option<String>,
-    chat_id: String,
-    #[serde(default)]
-    message_id: Option<String>,
-    timestamp_ms: i64,
-    text: String,
-    #[serde(default)]
-    attachments: Vec<NodeIncomingAttachment>,
+#[derive(Debug, Clone)]
+struct CachedMessage {
+    info: MessageInfo,
+    message: Box<wa::Message>,
+}
+
+#[derive(Debug, Default)]
+struct RecentMessageCache {
+    entries: HashMap<String, CachedMessage>,
+    order: VecDeque<String>,
+}
+
+impl RecentMessageCache {
+    fn insert(&mut self, id: String, message: CachedMessage) {
+        self.order.retain(|existing| existing != &id);
+        self.entries.insert(id.clone(), message);
+        self.order.push_back(id);
+        while self.order.len() > RECENT_LIMIT {
+            if let Some(oldest) = self.order.pop_front() {
+                self.entries.remove(&oldest);
+            }
+        }
+    }
+
+    fn get(&self, id: &str) -> Option<&CachedMessage> {
+        self.entries.get(id)
+    }
+}
+
+#[derive(Debug, Default)]
+struct RecentIdCache {
+    entries: HashSet<String>,
+    order: VecDeque<String>,
+}
+
+impl RecentIdCache {
+    fn insert(&mut self, id: String) {
+        if self.entries.insert(id.clone()) {
+            self.order.push_back(id);
+        }
+        while self.order.len() > RECENT_LIMIT {
+            if let Some(oldest) = self.order.pop_front() {
+                self.entries.remove(&oldest);
+            }
+        }
+    }
+
+    fn take(&mut self, id: &str) -> bool {
+        if !self.entries.remove(id) {
+            return false;
+        }
+        self.order.retain(|existing| existing != id);
+        true
+    }
 }
 
 #[derive(Clone)]
 pub(crate) struct WhatsAppWebAdapter {
-    node: NodeBridgeClient,
+    client: Arc<Client>,
+    recent_messages: Arc<Mutex<RecentMessageCache>>,
+    sent_message_ids: Arc<Mutex<RecentIdCache>>,
 }
 
 impl WhatsAppWebAdapter {
-    async fn send_ping(&self) -> anyhow::Result<serde_json::Value> {
-        self.node.send_ping().await
+    fn new(client: Arc<Client>) -> Self {
+        Self {
+            client,
+            recent_messages: Arc::new(Mutex::new(RecentMessageCache::default())),
+            sent_message_ids: Arc::new(Mutex::new(RecentIdCache::default())),
+        }
+    }
+
+    async fn cache_message(&self, id: &str, message: &wa::Message, info: &MessageInfo) {
+        let mut guard = self.recent_messages.lock().await;
+        guard.insert(
+            id.to_string(),
+            CachedMessage {
+                info: info.clone(),
+                message: Box::new(message.clone()),
+            },
+        );
+    }
+
+    async fn quote_context(&self, chat_id: &Jid, reply_to: &str) -> Option<wa::ContextInfo> {
+        let cached = {
+            let guard = self.recent_messages.lock().await;
+            guard.get(reply_to).cloned()
+        }?;
+
+        if cached.info.source.chat.to_non_ad() != chat_id.to_non_ad() {
+            return None;
+        }
+
+        Some(proto_helpers::build_quote_context_with_info(
+            &cached.info.id,
+            &cached.info.source.sender,
+            &cached.info.source.chat,
+            cached.message.as_ref(),
+        ))
+    }
+
+    async fn remember_sent_message_id(&self, id: &str) {
+        let mut guard = self.sent_message_ids.lock().await;
+        guard.insert(id.to_string());
+    }
+
+    async fn take_sent_message_id(&self, id: &str) -> bool {
+        let mut guard = self.sent_message_ids.lock().await;
+        guard.take(id)
     }
 }
 
 #[async_trait::async_trait]
 impl ChatAdapter for WhatsAppWebAdapter {
-    async fn send_message(
-        &self,
-        msg: super::adapter::OutgoingMessage,
-    ) -> anyhow::Result<super::adapter::SentMessage> {
-        let id = uuid::Uuid::new_v4().to_string();
-        let attachments: Vec<_> = msg
-            .attachments
-            .iter()
-            .map(|att| {
-                serde_json::json!({
-                    "filename": att.filename,
-                    "mime_type": att.mime_type,
-                    "data_b64": base64::engine::general_purpose::STANDARD.encode(&att.data),
-                })
-            })
-            .collect();
+    async fn send_message(&self, msg: OutgoingMessage) -> anyhow::Result<SentMessage> {
+        let chat_id: Jid = msg
+            .chat_id
+            .parse()
+            .with_context(|| format!("parse whatsapp chat_id failed: {}", msg.chat_id))?;
 
-        let result = self
-            .node
-            .send_request(serde_json::json!({
-                "id": id,
-                "type": "send",
-                "chat_id": msg.chat_id,
-                "reply_to": msg.reply_to,
-                "content": msg.content,
-                "attachments": attachments,
-            }))
-            .await?;
-
-        let Some(message_id) = result
-            .get("message_id")
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string())
-        else {
-            anyhow::bail!("whatsapp web bridge returned no message_id");
+        let quote_context = match msg.reply_to.as_deref() {
+            Some(reply_to) => self.quote_context(&chat_id, reply_to).await,
+            None => None,
         };
 
-        Ok(super::adapter::SentMessage { message_id })
+        let mut first_message_id = None;
+
+        if !msg.content.trim().is_empty() {
+            let outgoing = build_text_message(&msg.content, quote_context.clone());
+            let message_id = self
+                .client
+                .send_message(chat_id.clone(), outgoing)
+                .await
+                .context("send whatsapp text message failed")?;
+            self.remember_sent_message_id(&message_id).await;
+            first_message_id = Some(message_id);
+        }
+
+        for (index, attachment) in msg.attachments.iter().enumerate() {
+            let include_quote = first_message_id.is_none() && index == 0;
+            let outgoing = build_attachment_message(
+                &self.client,
+                attachment,
+                include_quote.then_some(quote_context.clone()).flatten(),
+            )
+            .await?;
+            let message_id = self
+                .client
+                .send_message(chat_id.clone(), outgoing)
+                .await
+                .with_context(|| {
+                    format!("send whatsapp attachment failed: {}", attachment.filename)
+                })?;
+            self.remember_sent_message_id(&message_id).await;
+            if first_message_id.is_none() {
+                first_message_id = Some(message_id);
+            }
+        }
+
+        let Some(message_id) = first_message_id else {
+            anyhow::bail!("outgoing message is empty");
+        };
+
+        Ok(SentMessage { message_id })
     }
 
     async fn edit_message(
         &self,
-        _chat_id: &str,
-        _message_id: &str,
-        _content: &str,
+        chat_id: &str,
+        message_id: &str,
+        content: &str,
     ) -> anyhow::Result<()> {
-        anyhow::bail!("whatsapp adapter does not support editing messages")
+        let chat_id: Jid = chat_id
+            .parse()
+            .with_context(|| format!("parse whatsapp chat_id failed: {chat_id}"))?;
+        let message = wa::Message {
+            extended_text_message: Some(Box::new(wa::message::ExtendedTextMessage {
+                text: Some(content.to_string()),
+                ..Default::default()
+            })),
+            ..Default::default()
+        };
+        self.client
+            .edit_message(chat_id, message_id.to_string(), message)
+            .await
+            .with_context(|| format!("edit whatsapp message failed: {message_id}"))?;
+        self.remember_sent_message_id(message_id).await;
+        Ok(())
     }
 
-    async fn send_typing(&self, _chat_id: &str) -> anyhow::Result<()> {
-        // WhatsApp Web API via Baileys doesn't provide a reliable typing endpoint we can use safely.
+    async fn send_typing(&self, chat_id: &str) -> anyhow::Result<()> {
+        let chat_id: Jid = chat_id
+            .parse()
+            .with_context(|| format!("parse whatsapp chat_id failed: {chat_id}"))?;
+        self.client
+            .chatstate()
+            .send_composing(&chat_id)
+            .await
+            .context("send whatsapp typing failed")?;
         Ok(())
     }
 
@@ -191,21 +313,147 @@ fn whatsapp_base_dir(data_dir: &Path) -> PathBuf {
     data_dir.join("chat-bridge").join("whatsapp-web")
 }
 
-fn whatsapp_auth_dir(data_dir: &Path) -> PathBuf {
-    whatsapp_base_dir(data_dir).join("auth")
+fn whatsapp_store_path(data_dir: &Path) -> PathBuf {
+    whatsapp_base_dir(data_dir).join(STORE_FILE_NAME)
 }
 
-fn whatsapp_bridge_dir(data_dir: &Path) -> PathBuf {
-    whatsapp_base_dir(data_dir).join("bridge")
+fn whatsapp_logout_marker_path(data_dir: &Path) -> PathBuf {
+    whatsapp_base_dir(data_dir).join(LOGOUT_MARKER_FILE_NAME)
+}
+
+fn clear_local_auth_state(data_dir: &Path) -> anyhow::Result<()> {
+    let base_dir = whatsapp_base_dir(data_dir);
+    if base_dir.exists() {
+        std::fs::remove_dir_all(&base_dir)
+            .with_context(|| format!("remove whatsapp base dir failed: {}", base_dir.display()))?;
+        return Ok(());
+    }
+
+    let marker = whatsapp_logout_marker_path(data_dir);
+    if marker.is_file() {
+        std::fs::remove_file(&marker).with_context(|| {
+            format!("remove whatsapp logout marker failed: {}", marker.display())
+        })?;
+    }
+
+    Ok(())
 }
 
 pub(crate) fn logout_by_clearing_auth_state(data_dir: &Path) -> anyhow::Result<()> {
-    let dir = whatsapp_auth_dir(data_dir);
-    if !dir.is_dir() {
+    let base_dir = whatsapp_base_dir(data_dir);
+    std::fs::create_dir_all(&base_dir)
+        .with_context(|| format!("create whatsapp base dir failed: {}", base_dir.display()))?;
+    std::fs::write(whatsapp_logout_marker_path(data_dir), b"logout")
+        .with_context(|| "mark whatsapp logout pending failed")?;
+    Ok(())
+}
+
+fn apply_pending_logout(data_dir: &Path) -> anyhow::Result<()> {
+    let marker = whatsapp_logout_marker_path(data_dir);
+    if !marker.is_file() {
         return Ok(());
     }
-    std::fs::remove_dir_all(&dir)
-        .with_context(|| format!("remove whatsapp web auth dir failed: {}", dir.display()))?;
+
+    clear_local_auth_state(data_dir)
+}
+
+#[derive(Clone)]
+struct ReqwestHttpClient {
+    async_client: reqwest::Client,
+    blocking_client: reqwest::blocking::Client,
+}
+
+impl ReqwestHttpClient {
+    fn new(async_client: reqwest::Client) -> anyhow::Result<Self> {
+        let blocking_client = reqwest::blocking::Client::builder()
+            .build()
+            .context("build blocking reqwest client for whatsapp failed")?;
+        Ok(Self {
+            async_client,
+            blocking_client,
+        })
+    }
+}
+
+#[async_trait::async_trait]
+impl whatsapp_rust::http::HttpClient for ReqwestHttpClient {
+    async fn execute(
+        &self,
+        request: whatsapp_rust::http::HttpRequest,
+    ) -> anyhow::Result<whatsapp_rust::http::HttpResponse> {
+        let mut builder = match request.method.as_str() {
+            "GET" => self.async_client.get(&request.url),
+            "POST" => self.async_client.post(&request.url),
+            method => anyhow::bail!("unsupported HTTP method: {method}"),
+        };
+
+        for (key, value) in &request.headers {
+            builder = builder.header(key, value);
+        }
+        if let Some(body) = request.body {
+            builder = builder.body(body);
+        }
+
+        let response = builder.send().await?;
+        let status_code = response.status().as_u16();
+        let body = response.bytes().await?.to_vec();
+        Ok(whatsapp_rust::http::HttpResponse { status_code, body })
+    }
+
+    fn execute_streaming(
+        &self,
+        request: whatsapp_rust::http::HttpRequest,
+    ) -> anyhow::Result<wacore::net::StreamingHttpResponse> {
+        let mut builder = match request.method.as_str() {
+            "GET" => self.blocking_client.get(&request.url),
+            "POST" => self.blocking_client.post(&request.url),
+            method => anyhow::bail!("unsupported HTTP method: {method}"),
+        };
+
+        for (key, value) in &request.headers {
+            builder = builder.header(key, value);
+        }
+        if let Some(body) = request.body {
+            builder = builder.body(body);
+        }
+
+        let response = builder.send()?;
+        let status_code = response.status().as_u16();
+        Ok(wacore::net::StreamingHttpResponse {
+            status_code,
+            body: Box::new(response),
+        })
+    }
+}
+
+fn logout_target_jid(pn: Option<Jid>, lid: Option<Jid>) -> Option<Jid> {
+    pn.filter(|jid| jid.device != 0)
+        .or_else(|| lid.filter(|jid| jid.device != 0))
+}
+
+async fn logout_active_session(client: &Client) -> anyhow::Result<()> {
+    let Some(target_jid) = logout_target_jid(client.get_pn().await, client.get_lid().await) else {
+        return Ok(());
+    };
+
+    let query = InfoQuery::set(
+        "md",
+        Jid::new("", SERVER_JID),
+        Some(NodeContent::Nodes(vec![
+            whatsapp_rust::NodeBuilder::new("remove-companion-device")
+                .attrs([
+                    ("jid", target_jid.to_string()),
+                    ("reason", "user_initiated".to_string()),
+                ])
+                .build(),
+        ])),
+    )
+    .with_timeout(std::time::Duration::from_secs(15));
+
+    client
+        .send_iq(query)
+        .await
+        .context("send whatsapp remove-companion-device IQ failed")?;
     Ok(())
 }
 
@@ -245,376 +493,652 @@ pub(crate) fn qr_image_data_uri(raw: &str) -> anyhow::Result<String> {
     ))
 }
 
-async fn ensure_bridge_files(bridge_dir: &Path) -> anyhow::Result<()> {
-    tokio::fs::create_dir_all(bridge_dir)
-        .await
-        .with_context(|| {
-            format!(
-                "create whatsapp bridge dir failed: {}",
-                bridge_dir.display()
-            )
-        })?;
-    tokio::fs::write(bridge_dir.join("package.json"), BRIDGE_PACKAGE_JSON)
-        .await
-        .with_context(|| "write whatsapp bridge package.json failed")?;
-    tokio::fs::write(
-        bridge_dir.join("package-lock.json"),
-        BRIDGE_PACKAGE_LOCK_JSON,
-    )
-    .await
-    .with_context(|| "write whatsapp bridge package-lock.json failed")?;
-    tokio::fs::write(bridge_dir.join("bridge.mjs"), BRIDGE_MJS)
-        .await
-        .with_context(|| "write whatsapp bridge bridge.mjs failed")?;
-    Ok(())
-}
-
-fn is_bridge_deps_installed(bridge_dir: &Path) -> bool {
-    bridge_dir
-        .join("node_modules")
-        .join("@whiskeysockets")
-        .join("baileys")
-        .join("package.json")
-        .is_file()
-}
-
-fn npm_install_bridge(env: &CliExecEnv, bridge_dir: &Path) -> anyhow::Result<()> {
-    let Some(mut cmd) = env.command_for("npm") else {
-        anyhow::bail!("npm is not available");
-    };
-    cmd.current_dir(bridge_dir);
-    cmd.args(["ci", "--omit=dev", "--no-audit", "--no-fund", "--silent"]);
-    cmd.env("npm_config_update_notifier", "false");
-    cmd.env("npm_config_loglevel", "error");
-    let out = process::command_output_with_timeout(&mut cmd, BRIDGE_INSTALL_TIMEOUT)
-        .context("run npm install for whatsapp bridge failed")?;
-    if out.status.success() {
-        return Ok(());
-    }
-    let stdout = String::from_utf8_lossy(&out.stdout).trim().to_string();
-    let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
-    anyhow::bail!(
-        "npm install for whatsapp bridge failed: exit={:?} stdout={} stderr={}",
-        out.status.code(),
-        stdout,
-        stderr
-    );
-}
-
-async fn ensure_node_env(
-    http_client: &reqwest::Client,
-    data_dir: &Path,
-    settings: &crate::storage::AppSettings,
-) -> anyhow::Result<CliExecEnv> {
-    let mut env = CliExecEnv::new(
-        settings.cli_tools_npm_path.as_deref(),
-        settings.cli_tools_node_path.as_deref(),
-    );
-
-    if env.command_for("node").is_some() && env.command_for("npm").is_some() {
-        return Ok(env);
-    }
-
-    let paths = nodejs::ensure_npm_env_installed(http_client, data_dir).await?;
-    let npm_path = paths.npm_path.to_string_lossy().to_string();
-    let node_path = paths.node_path.to_string_lossy().to_string();
-    env = CliExecEnv::new(Some(&npm_path), Some(&node_path));
-    Ok(env)
-}
-
-fn decode_incoming_attachment(att: NodeIncomingAttachment) -> anyhow::Result<IncomingAttachment> {
-    let data = base64::engine::general_purpose::STANDARD
-        .decode(att.data_b64.as_bytes())
-        .context("decode whatsapp attachment base64 failed")?;
-
-    let kind = match att.kind.as_str() {
-        "image" => IncomingAttachmentKind::Image,
-        "file" => IncomingAttachmentKind::File,
-        other => {
-            tracing::debug!(kind = %other, "ignore unsupported whatsapp attachment kind");
-            IncomingAttachmentKind::File
-        }
-    };
-
-    Ok(IncomingAttachment {
-        kind,
-        filename: att.filename,
-        mime_type: att.mime_type,
-        data: Arc::from(data.into_boxed_slice()),
-        caption: att.caption,
-    })
-}
-
 pub(super) async fn run_whatsapp_web_bridge(
     runtime: super::ChatBridgeRuntime,
     http_client: reqwest::Client,
     status_tx: watch::Sender<WhatsAppWebStatus>,
+    mut control_rx: mpsc::UnboundedReceiver<WhatsAppBridgeCommand>,
 ) {
     let _ = status_tx.send(WhatsAppWebStatus::starting());
 
     let data_dir = runtime.data_dir();
-    let auth_dir = whatsapp_auth_dir(&data_dir);
-    let bridge_dir = whatsapp_bridge_dir(&data_dir);
-
-    if let Err(err) = ensure_bridge_files(&bridge_dir).await {
+    if let Err(err) = apply_pending_logout(&data_dir) {
         let _ = status_tx.send(WhatsAppWebStatus::error(err.to_string()));
         return;
     }
 
-    let settings = runtime.settings_snapshot();
-    let env = match ensure_node_env(&http_client, &data_dir, settings.as_ref()).await {
-        Ok(v) => v,
+    let base_dir = whatsapp_base_dir(&data_dir);
+    if let Err(err) = tokio::fs::create_dir_all(&base_dir).await {
+        let _ = status_tx.send(WhatsAppWebStatus::error(format!(
+            "create whatsapp base dir failed: {err}"
+        )));
+        return;
+    }
+
+    let store_path = whatsapp_store_path(&data_dir);
+    let store = match SqliteStore::new(store_path.to_string_lossy().as_ref()).await {
+        Ok(store) => Arc::new(store),
+        Err(err) => {
+            let _ = status_tx.send(WhatsAppWebStatus::error(format!(
+                "open whatsapp sqlite store failed: {err}"
+            )));
+            return;
+        }
+    };
+
+    let http_client = match ReqwestHttpClient::new(http_client) {
+        Ok(client) => client,
         Err(err) => {
             let _ = status_tx.send(WhatsAppWebStatus::error(err.to_string()));
             return;
         }
     };
 
-    if !is_bridge_deps_installed(&bridge_dir) {
-        let env2 = env.clone();
-        let bridge_dir2 = bridge_dir.clone();
-        let install =
-            tokio::task::spawn_blocking(move || npm_install_bridge(&env2, &bridge_dir2)).await;
-        match install {
-            Ok(Ok(())) => {}
-            Ok(Err(err)) => {
-                let _ = status_tx.send(WhatsAppWebStatus::error(err.to_string()));
-                return;
+    let (event_tx, mut event_rx) = mpsc::unbounded_channel::<Event>();
+    let mut bot = match Bot::builder()
+        .with_backend(store)
+        .with_transport_factory(TokioWebSocketTransportFactory::new())
+        .with_http_client(http_client)
+        .with_runtime(TokioRuntime)
+        .with_push_name("CliSwitch")
+        .with_device_props(
+            Some(current_os_name().to_string()),
+            None,
+            Some(wa::device_props::PlatformType::Desktop),
+        )
+        .skip_history_sync()
+        .on_event(move |event, _client| {
+            let event_tx = event_tx.clone();
+            async move {
+                let _ = event_tx.send(event);
             }
-            Err(err) => {
-                let _ = status_tx.send(WhatsAppWebStatus::error(format!(
-                    "whatsapp bridge install task failed: {err}"
-                )));
-                return;
-            }
-        }
-    }
-
-    let Some(node_path) = env.find_executable("node") else {
-        let _ = status_tx.send(WhatsAppWebStatus::error("node is not available"));
-        return;
-    };
-
-    let script_path = bridge_dir.join("bridge.mjs");
-
-    let mut cmd = tokio::process::Command::new(node_path);
-    cmd.current_dir(&bridge_dir);
-    cmd.arg(&script_path);
-    cmd.env("CLISWITCH_WHATSAPP_AUTH_DIR", auth_dir);
-    cmd.env("CLISWITCH_WHATSAPP_LOG_LEVEL", "silent");
-    cmd.env(
-        "CLISWITCH_WHATSAPP_BRIDGE_VERSION",
-        env!("CARGO_PKG_VERSION"),
-    );
-    cmd.stdin(std::process::Stdio::piped());
-    cmd.stdout(std::process::Stdio::piped());
-    cmd.stderr(std::process::Stdio::piped());
-
-    #[cfg(unix)]
+        })
+        .build()
+        .await
     {
-        // Ensure the node process has its own process group so we can kill the whole tree on abort.
-        unsafe {
-            cmd.pre_exec(|| {
-                if libc::setpgid(0, 0) != 0 {
-                    return Err(std::io::Error::last_os_error());
-                }
-                Ok(())
-            });
-        }
-    }
-
-    let mut child = match cmd.spawn() {
-        Ok(c) => c,
+        Ok(bot) => bot,
         Err(err) => {
             let _ = status_tx.send(WhatsAppWebStatus::error(format!(
-                "spawn whatsapp web bridge failed: {err}"
+                "build whatsapp runtime failed: {err}"
             )));
             return;
         }
     };
 
-    let _kill_guard = KillProcessOnDrop { pid: child.id() };
+    let client = bot.client();
+    let adapter = Arc::new(WhatsAppWebAdapter::new(client.clone()));
 
-    let Some(child_stdin) = child.stdin.take() else {
-        let _ = status_tx.send(WhatsAppWebStatus::error(
-            "whatsapp web bridge child stdin unavailable",
-        ));
-        return;
+    let bot_handle = match bot.run().await {
+        Ok(handle) => handle,
+        Err(err) => {
+            let _ = status_tx.send(WhatsAppWebStatus::error(format!(
+                "start whatsapp runtime failed: {err}"
+            )));
+            return;
+        }
     };
-    let Some(child_stdout) = child.stdout.take() else {
-        let _ = status_tx.send(WhatsAppWebStatus::error(
-            "whatsapp web bridge child stdout unavailable",
-        ));
-        return;
-    };
-    let child_stderr = child.stderr.take();
+    tokio::pin!(bot_handle);
+    let mut logout_requested = false;
 
-    let (req_tx, req_rx) = mpsc::channel(128);
-    let node = NodeBridgeClient::new(req_tx, "whatsapp web bridge", BRIDGE_SEND_TIMEOUT);
-    let adapter = WhatsAppWebAdapter { node };
-    let pending = new_pending_responses();
-
-    let stdin_task = spawn_stdin_task(child_stdin, req_rx, pending.clone(), "whatsapp web bridge");
-
-    let status_tx_reader = status_tx.clone();
-    let adapter_for_inbound = adapter.clone();
-    let runtime_for_inbound = runtime.clone();
-    let stdout_task = spawn_stdout_task(
-        child_stdout,
-        pending.clone(),
-        "whatsapp web bridge",
-        move |parsed| {
-            let status_tx_reader = status_tx_reader.clone();
-            let adapter_for_inbound = adapter_for_inbound.clone();
-            let runtime_for_inbound = runtime_for_inbound.clone();
-            async move {
-                let Some(event) = parsed.get("event").and_then(|v| v.as_str()) else {
-                    return;
+    loop {
+        tokio::select! {
+            maybe_event = event_rx.recv() => {
+                let Some(event) = maybe_event else {
+                    break;
                 };
-
-                match event {
-                    "qr" => {
-                        if let Some(qr) = parsed.get("qr").and_then(|v| v.as_str()) {
-                            let next = WhatsAppWebStatus {
-                                state: WhatsAppWebState::AwaitingQr,
-                                connected: false,
-                                me: None,
-                                qr: Some(qr.to_string()),
-                                qr_image: qr_image_data_uri(qr).ok(),
-                                last_error: None,
-                            };
-                            let _ = status_tx_reader.send(next);
+                handle_runtime_event(event, &runtime, &adapter, &client, &status_tx).await;
+            }
+            cmd = control_rx.recv() => {
+                let Some(cmd) = cmd else {
+                    continue;
+                };
+                match cmd {
+                    WhatsAppBridgeCommand::Logout => {
+                        logout_requested = true;
+                        if let Err(err) = logout_active_session(&client).await {
+                            tracing::warn!(err = %err, "whatsapp active logout failed");
                         }
-                    }
-                    "ready" => {
-                        let me = parsed
-                            .get("me")
-                            .and_then(|v| v.as_str())
-                            .map(|s| s.to_string());
-                        let next = WhatsAppWebStatus {
-                            state: WhatsAppWebState::Connected,
-                            connected: true,
-                            me,
-                            qr: None,
-                            qr_image: None,
-                            last_error: None,
-                        };
-                        let _ = status_tx_reader.send(next);
-                    }
-                    "connection" => {
-                        let conn = parsed
-                            .get("connection")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("-");
-                        if conn == "open" {
-                            // ready will follow with the `me` field, keep it optimistic here.
-                            let mut cur = status_tx_reader.borrow().clone();
-                            cur.state = WhatsAppWebState::Connected;
-                            cur.connected = true;
-                            cur.qr = None;
-                            cur.qr_image = None;
-                            cur.last_error = None;
-                            let _ = status_tx_reader.send(cur);
-                        } else if conn == "close" {
-                            let mut cur = status_tx_reader.borrow().clone();
-                            cur.connected = false;
-                            cur.state = WhatsAppWebState::Starting;
-                            cur.qr = None;
-                            cur.qr_image = None;
-                            let _ = status_tx_reader.send(cur);
+                        client.disconnect().await;
+                        if let Err(err) = (&mut bot_handle).await {
+                            tracing::warn!(err = %err, "whatsapp runtime task failed during logout");
                         }
-                    }
-                    "message" => {
-                        let msg: NodeIncomingMessage = match serde_json::from_value(
-                            parsed
-                                .get("message")
-                                .cloned()
-                                .unwrap_or_else(|| serde_json::json!({})),
-                        ) {
-                            Ok(v) => v,
-                            Err(err) => {
-                                tracing::warn!(
-                                    err = %err,
-                                    "decode whatsapp bridge inbound message failed"
-                                );
-                                return;
-                            }
-                        };
-
-                        let mut attachments = Vec::new();
-                        for att in msg.attachments {
-                            match decode_incoming_attachment(att) {
-                                Ok(v) => attachments.push(v),
-                                Err(err) => {
-                                    tracing::warn!(
-                                        err = %err,
-                                        "decode whatsapp bridge attachment failed"
-                                    );
-                                }
-                            }
-                        }
-
-                        let incoming = super::adapter::IncomingMessage {
-                            platform: crate::storage::ChatPlatform::WhatsApp,
-                            sender_id: msg.sender_id,
-                            sender_display_name: msg.sender_display_name,
-                            chat_id: msg.chat_id,
-                            text: msg.text,
-                            attachments,
-                            message_id: msg.message_id,
-                            timestamp_ms: msg.timestamp_ms,
-                        };
-
-                        let runtime = runtime_for_inbound.clone();
-                        let sender: Arc<dyn ChatAdapter> = Arc::new(adapter_for_inbound.clone());
-                        tokio::spawn(async move {
-                            runtime.handle_message(sender, incoming).await;
-                        });
-                    }
-                    "error" => {
-                        let scope = parsed
-                            .get("scope")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("unknown");
-                        let err = parsed
-                            .get("error")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("unknown");
-                        tracing::warn!(scope, err, "whatsapp bridge error event");
-                    }
-                    "fatal" => {
-                        let err = parsed
-                            .get("error")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("unknown");
-                        let _ = status_tx_reader.send(WhatsAppWebStatus::error(err));
-                    }
-                    other => {
-                        tracing::debug!(event = %other, "ignore whatsapp bridge event");
+                        break;
                     }
                 }
             }
-        },
-    );
-
-    if let Some(stderr) = child_stderr {
-        spawn_stderr_task(stderr, "whatsapp web bridge");
-    }
-
-    // Keep the adapter alive for as long as stdout task is running.
-    let _ = adapter.send_ping().await;
-
-    tokio::select! {
-        _ = stdin_task => {}
-        _ = stdout_task => {}
-        status = child.wait() => {
-            if let Ok(status) = status {
-                tracing::warn!(code = ?status.code(), "whatsapp bridge exited");
+            result = &mut bot_handle => {
+                if let Err(err) = result {
+                    tracing::warn!(err = %err, "whatsapp runtime task failed");
+                }
+                break;
             }
         }
     }
 
-    // Avoid dangling waiters on shutdown.
-    close_pending_responses(&pending, "whatsapp web bridge").await;
+    if logout_requested {
+        if let Err(err) = clear_local_auth_state(&data_dir) {
+            if let Err(mark_err) = logout_by_clearing_auth_state(&data_dir) {
+                tracing::warn!(err = %mark_err, "mark whatsapp logout pending failed");
+            }
+            let _ = status_tx.send(WhatsAppWebStatus::error(err.to_string()));
+        }
+        return;
+    }
+
     let _ = status_tx.send(WhatsAppWebStatus::error("whatsapp bridge stopped"));
+}
+
+async fn handle_runtime_event(
+    event: Event,
+    runtime: &super::ChatBridgeRuntime,
+    adapter: &Arc<WhatsAppWebAdapter>,
+    client: &Arc<Client>,
+    status_tx: &watch::Sender<WhatsAppWebStatus>,
+) {
+    match event {
+        Event::PairingQrCode { code, .. } => {
+            let _ = status_tx.send(WhatsAppWebStatus {
+                state: WhatsAppWebState::AwaitingQr,
+                connected: false,
+                me: None,
+                qr_image: qr_image_data_uri(&code).ok(),
+                qr: Some(code),
+                last_error: None,
+            });
+        }
+        Event::Connected(_) => {
+            let _ = status_tx.send(WhatsAppWebStatus {
+                state: WhatsAppWebState::Connected,
+                connected: true,
+                me: current_me(client).await,
+                qr: None,
+                qr_image: None,
+                last_error: None,
+            });
+        }
+        Event::Disconnected(_) => {
+            let mut current = status_tx.borrow().clone();
+            // whatsapp-rust keeps its own reconnect loop; this only reflects transient state.
+            current.state = WhatsAppWebState::Starting;
+            current.connected = false;
+            current.qr = None;
+            current.qr_image = None;
+            let _ = status_tx.send(current);
+        }
+        Event::LoggedOut(info) => {
+            let _ = status_tx.send(WhatsAppWebStatus::error(format!(
+                "logged out: {}",
+                connect_failure_reason_label(info.reason)
+            )));
+        }
+        Event::ConnectFailure(failure) => {
+            let _ = status_tx.send(WhatsAppWebStatus::error(format!(
+                "connect failure: {} ({})",
+                failure.message,
+                connect_failure_reason_label(failure.reason)
+            )));
+        }
+        Event::ClientOutdated(_) => {
+            let _ = status_tx.send(WhatsAppWebStatus::error("client outdated"));
+        }
+        Event::StreamError(err) => {
+            let _ = status_tx.send(WhatsAppWebStatus::error(format!(
+                "stream error: {}",
+                err.code
+            )));
+        }
+        Event::Message(message, info) => {
+            if adapter.take_sent_message_id(&info.id).await
+                || info.source.is_from_me
+                || (info.source.chat.server == "broadcast" && info.source.chat.user == "status")
+                || info.source.chat.server == "newsletter"
+            {
+                return;
+            }
+
+            adapter
+                .cache_message(&info.id, message.as_ref(), &info)
+                .await;
+
+            let incoming = super::adapter::IncomingMessage {
+                platform: crate::storage::ChatPlatform::WhatsApp,
+                sender_id: info.source.sender.to_non_ad().to_string(),
+                sender_display_name: display_name_from_info(&info),
+                chat_id: info.source.chat.to_non_ad().to_string(),
+                text: message.text_content().unwrap_or_default().to_string(),
+                attachments: extract_incoming_attachments(client, &info, message.as_ref()).await,
+                message_id: Some(info.id.clone()),
+                timestamp_ms: info.timestamp.timestamp_millis(),
+            };
+
+            let runtime = runtime.clone();
+            let sender: Arc<dyn ChatAdapter> = adapter.clone();
+            tokio::spawn(async move {
+                runtime.handle_message(sender, incoming).await;
+            });
+        }
+        _ => {}
+    }
+}
+
+fn display_name_from_info(info: &MessageInfo) -> Option<String> {
+    let name = info.push_name.trim();
+    if name.is_empty() {
+        None
+    } else {
+        Some(name.to_string())
+    }
+}
+
+async fn current_me(client: &Client) -> Option<String> {
+    if let Some(pn) = client.get_pn().await {
+        return Some(pn.to_non_ad().to_string());
+    }
+    client
+        .get_lid()
+        .await
+        .map(|jid| jid.to_non_ad().to_string())
+}
+
+fn connect_failure_reason_label(reason: ConnectFailureReason) -> String {
+    match reason {
+        ConnectFailureReason::Generic => "generic".to_string(),
+        ConnectFailureReason::LoggedOut => "logged_out".to_string(),
+        ConnectFailureReason::TempBanned => "temp_banned".to_string(),
+        ConnectFailureReason::MainDeviceGone => "main_device_gone".to_string(),
+        ConnectFailureReason::UnknownLogout => "unknown_logout".to_string(),
+        ConnectFailureReason::ClientOutdated => "client_outdated".to_string(),
+        ConnectFailureReason::BadUserAgent => "bad_user_agent".to_string(),
+        ConnectFailureReason::CatExpired => "cat_expired".to_string(),
+        ConnectFailureReason::CatInvalid => "cat_invalid".to_string(),
+        ConnectFailureReason::NotFound => "not_found".to_string(),
+        ConnectFailureReason::ClientUnknown => "client_unknown".to_string(),
+        ConnectFailureReason::InternalServerError => "internal_server_error".to_string(),
+        ConnectFailureReason::Experimental => "experimental".to_string(),
+        ConnectFailureReason::ServiceUnavailable => "service_unavailable".to_string(),
+        ConnectFailureReason::Unknown(code) => format!("unknown_{code}"),
+    }
+}
+
+fn current_os_name() -> &'static str {
+    match std::env::consts::OS {
+        "macos" => "macOS",
+        "windows" => "Windows",
+        "linux" => "Linux",
+        other => other,
+    }
+}
+
+fn build_text_message(content: &str, context_info: Option<wa::ContextInfo>) -> wa::Message {
+    match context_info {
+        Some(context_info) => wa::Message {
+            extended_text_message: Some(Box::new(wa::message::ExtendedTextMessage {
+                text: Some(content.to_string()),
+                context_info: Some(Box::new(context_info)),
+                ..Default::default()
+            })),
+            ..Default::default()
+        },
+        None => wa::Message {
+            conversation: Some(content.to_string()),
+            ..Default::default()
+        },
+    }
+}
+
+fn ensure_attachment_size_within_limit(attachment: &Attachment) -> anyhow::Result<()> {
+    let size = u64::try_from(attachment.data.len()).unwrap_or(u64::MAX);
+    if size > MAX_ATTACHMENT_BYTES {
+        anyhow::bail!(
+            "whatsapp attachment too large: {} bytes > {} bytes",
+            size,
+            MAX_ATTACHMENT_BYTES
+        );
+    }
+    Ok(())
+}
+
+macro_rules! uploaded_media_message {
+    ($ty:path, $uploaded:expr $(, $field:ident = $value:expr )* $(,)?) => {{
+        let uploaded = &$uploaded;
+        $ty {
+            url: Some(uploaded.url.clone()),
+            direct_path: Some(uploaded.direct_path.clone()),
+            media_key: Some(uploaded.media_key.clone()),
+            file_sha256: Some(uploaded.file_sha256.clone()),
+            file_enc_sha256: Some(uploaded.file_enc_sha256.clone()),
+            file_length: Some(uploaded.file_length),
+            mimetype: Some(uploaded.mimetype.clone()),
+            context_info: uploaded.context_info.clone(),
+            $($field: $value,)*
+            ..Default::default()
+        }
+    }};
+}
+
+async fn build_attachment_message(
+    client: &Client,
+    attachment: &Attachment,
+    context_info: Option<wa::ContextInfo>,
+) -> anyhow::Result<wa::Message> {
+    ensure_attachment_size_within_limit(attachment)?;
+
+    let media_kind = outgoing_media_kind(&attachment.mime_type);
+    let upload = client
+        .upload(attachment.data.clone(), media_kind.media_type())
+        .await
+        .with_context(|| format!("upload whatsapp attachment failed: {}", attachment.filename))?;
+    let uploaded = UploadedMediaFields::new(&upload, attachment, context_info);
+
+    Ok(match media_kind {
+        OutgoingMediaKind::Image => wa::Message {
+            image_message: Some(Box::new(uploaded_media_message!(
+                wa::message::ImageMessage,
+                uploaded
+            ))),
+            ..Default::default()
+        },
+        OutgoingMediaKind::Video => wa::Message {
+            video_message: Some(Box::new(uploaded_media_message!(
+                wa::message::VideoMessage,
+                uploaded
+            ))),
+            ..Default::default()
+        },
+        OutgoingMediaKind::Audio => wa::Message {
+            audio_message: Some(Box::new(uploaded_media_message!(
+                wa::message::AudioMessage,
+                uploaded,
+                ptt = Some(false)
+            ))),
+            ..Default::default()
+        },
+        OutgoingMediaKind::Document => wa::Message {
+            document_message: Some(Box::new(uploaded_media_message!(
+                wa::message::DocumentMessage,
+                uploaded,
+                file_name = Some(attachment.filename.clone())
+            ))),
+            ..Default::default()
+        },
+    })
+}
+
+struct UploadedMediaFields {
+    url: String,
+    direct_path: String,
+    media_key: Vec<u8>,
+    file_sha256: Vec<u8>,
+    file_enc_sha256: Vec<u8>,
+    file_length: u64,
+    mimetype: String,
+    context_info: Option<Box<wa::ContextInfo>>,
+}
+
+impl UploadedMediaFields {
+    fn new(
+        upload: &UploadResponse,
+        attachment: &Attachment,
+        context_info: Option<wa::ContextInfo>,
+    ) -> Self {
+        Self {
+            url: upload.url.clone(),
+            direct_path: upload.direct_path.clone(),
+            media_key: upload.media_key.clone(),
+            file_sha256: upload.file_sha256.clone(),
+            file_enc_sha256: upload.file_enc_sha256.clone(),
+            file_length: upload.file_length,
+            mimetype: attachment.mime_type.clone(),
+            context_info: context_info.map(Box::new),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum OutgoingMediaKind {
+    Image,
+    Video,
+    Audio,
+    Document,
+}
+
+impl OutgoingMediaKind {
+    fn media_type(self) -> MediaType {
+        match self {
+            Self::Image => MediaType::Image,
+            Self::Video => MediaType::Video,
+            Self::Audio => MediaType::Audio,
+            Self::Document => MediaType::Document,
+        }
+    }
+}
+
+fn outgoing_media_kind(mime_type: &str) -> OutgoingMediaKind {
+    let mime = mime_type.to_ascii_lowercase();
+    if mime.starts_with("image/") {
+        return OutgoingMediaKind::Image;
+    }
+    if mime.starts_with("video/") {
+        return OutgoingMediaKind::Video;
+    }
+    if mime.starts_with("audio/") {
+        return OutgoingMediaKind::Audio;
+    }
+    OutgoingMediaKind::Document
+}
+
+async fn extract_incoming_attachments(
+    client: &Client,
+    info: &MessageInfo,
+    message: &wa::Message,
+) -> Vec<IncomingAttachment> {
+    let base = message.get_base_message();
+    let mut attachments = Vec::new();
+
+    if let Some(image) = &base.image_message
+        && let Some(att) = download_attachment(
+            client,
+            image.as_ref() as &dyn Downloadable,
+            image.file_length,
+            IncomingAttachmentKind::Image,
+            image
+                .mimetype
+                .clone()
+                .unwrap_or_else(|| "image/jpeg".to_string()),
+            image.caption.clone(),
+            format!(
+                "image-{}.{}",
+                info.id,
+                infer_extension_from_mime(image.mimetype.as_deref()).unwrap_or("jpg")
+            ),
+        )
+        .await
+    {
+        attachments.push(att);
+    }
+
+    if let Some(video) = &base.video_message
+        && let Some(att) = download_attachment(
+            client,
+            video.as_ref() as &dyn Downloadable,
+            video.file_length,
+            IncomingAttachmentKind::File,
+            video
+                .mimetype
+                .clone()
+                .unwrap_or_else(|| "video/mp4".to_string()),
+            video.caption.clone(),
+            format!(
+                "video-{}.{}",
+                info.id,
+                infer_extension_from_mime(video.mimetype.as_deref()).unwrap_or("mp4")
+            ),
+        )
+        .await
+    {
+        attachments.push(att);
+    }
+
+    if let Some(audio) = &base.audio_message
+        && let Some(att) = download_attachment(
+            client,
+            audio.as_ref() as &dyn Downloadable,
+            audio.file_length,
+            IncomingAttachmentKind::File,
+            audio
+                .mimetype
+                .clone()
+                .unwrap_or_else(|| "audio/mpeg".to_string()),
+            None,
+            format!(
+                "audio-{}.{}",
+                info.id,
+                infer_extension_from_mime(audio.mimetype.as_deref()).unwrap_or("bin")
+            ),
+        )
+        .await
+    {
+        attachments.push(att);
+    }
+
+    if let Some(document) = &base.document_message
+        && let Some(att) = download_attachment(
+            client,
+            document.as_ref() as &dyn Downloadable,
+            document.file_length,
+            IncomingAttachmentKind::File,
+            document
+                .mimetype
+                .clone()
+                .unwrap_or_else(|| "application/octet-stream".to_string()),
+            document.caption.clone(),
+            document
+                .file_name
+                .clone()
+                .unwrap_or_else(|| format!("file-{}", info.id)),
+        )
+        .await
+    {
+        attachments.push(att);
+    }
+
+    attachments
+}
+
+async fn download_attachment(
+    client: &Client,
+    downloadable: &dyn Downloadable,
+    file_length: Option<u64>,
+    kind: IncomingAttachmentKind,
+    mime_type: String,
+    caption: Option<String>,
+    filename: String,
+) -> Option<IncomingAttachment> {
+    if file_length.is_some_and(|len| len > MAX_ATTACHMENT_BYTES) {
+        tracing::warn!(
+            filename = %filename,
+            size = ?file_length,
+            "skip whatsapp attachment larger than configured limit"
+        );
+        return None;
+    }
+
+    match client.download(downloadable).await {
+        Ok(data) => Some(IncomingAttachment {
+            kind,
+            filename,
+            mime_type: Some(mime_type),
+            data: Arc::from(data.into_boxed_slice()),
+            caption,
+        }),
+        Err(err) => {
+            tracing::warn!(err = %err, "download whatsapp attachment failed");
+            None
+        }
+    }
+}
+
+fn infer_extension_from_mime(mime: Option<&str>) -> Option<&'static str> {
+    let mime = mime?;
+    let mime = mime.to_ascii_lowercase();
+    match mime.as_str() {
+        "image/jpeg" | "image/jpg" => Some("jpg"),
+        "image/png" => Some("png"),
+        "image/webp" => Some("webp"),
+        "image/gif" => Some("gif"),
+        "application/pdf" => Some("pdf"),
+        "audio/mpeg" | "audio/mp3" => Some("mp3"),
+        "audio/ogg" | "audio/opus" => Some("ogg"),
+        "video/mp4" => Some("mp4"),
+        _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn outgoing_media_kind_uses_mime_prefix() {
+        assert_eq!(outgoing_media_kind("image/png"), OutgoingMediaKind::Image);
+        assert_eq!(outgoing_media_kind("video/mp4"), OutgoingMediaKind::Video);
+        assert_eq!(outgoing_media_kind("audio/mpeg"), OutgoingMediaKind::Audio);
+        assert_eq!(
+            outgoing_media_kind("application/pdf"),
+            OutgoingMediaKind::Document
+        );
+    }
+
+    #[test]
+    fn infer_extension_from_mime_maps_known_types() {
+        assert_eq!(infer_extension_from_mime(Some("image/jpeg")), Some("jpg"));
+        assert_eq!(
+            infer_extension_from_mime(Some("application/pdf")),
+            Some("pdf")
+        );
+        assert_eq!(infer_extension_from_mime(Some("audio/ogg")), Some("ogg"));
+        assert_eq!(infer_extension_from_mime(Some("unknown/type")), None);
+    }
+
+    #[test]
+    fn infer_extension_from_mime_does_not_confuse_video_mpeg_with_audio() {
+        assert_eq!(infer_extension_from_mime(Some("audio/mpeg")), Some("mp3"));
+        assert_eq!(infer_extension_from_mime(Some("video/mpeg")), None);
+    }
+
+    #[test]
+    fn recent_message_cache_reinserting_same_id_does_not_duplicate_order() {
+        let mut cache = RecentMessageCache::default();
+        let first = CachedMessage {
+            info: MessageInfo::default(),
+            message: Box::default(),
+        };
+        let second = CachedMessage {
+            info: MessageInfo::default(),
+            message: Box::default(),
+        };
+
+        cache.insert("abc".to_string(), first);
+        cache.insert("abc".to_string(), second);
+
+        assert_eq!(cache.order.len(), 1);
+        assert_eq!(cache.order.front().map(String::as_str), Some("abc"));
+        assert!(cache.entries.contains_key("abc"));
+    }
+
+    #[test]
+    fn logout_target_jid_prefers_companion_device() {
+        let primary = Jid::pn("15551234567").with_device(0);
+        let companion = Jid::pn_device("15551234567", 33);
+
+        assert_eq!(
+            logout_target_jid(Some(primary.clone()), Some(companion.clone())),
+            Some(companion.clone())
+        );
+        assert_eq!(logout_target_jid(Some(primary), None), None);
+        assert_eq!(
+            logout_target_jid(None, Some(companion.clone())),
+            Some(companion)
+        );
+    }
 }
