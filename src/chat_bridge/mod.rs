@@ -1380,45 +1380,53 @@ fn format_channels_list(channels: &[storage::Channel], now_ms: i64, locale: AppL
         return t(locale, "channel.none");
     }
 
-    let rows = channels
-        .iter()
-        .map(|channel| {
-            let status = if storage::channel_is_auto_disabled(channel, now_ms) {
-                format!(
-                    "{} ({})",
-                    channel_status_label(channel, now_ms, locale),
-                    format_local_timestamp_with_relative(
-                        now_ms,
-                        channel.auto_disabled_until_ms,
-                        locale
-                    )
-                )
-            } else {
-                channel_status_label(channel, now_ms, locale)
-            };
+    let mut lines = vec![t(locale, "channel.list_title")];
+    let mut current_protocol = None;
+    let mut section_index = 0usize;
 
-            vec![
-                channel.name.clone(),
-                channel.protocol.as_str().to_string(),
-                status,
-                channel.priority.to_string(),
-                short_id(&channel.id).to_string(),
-            ]
-        })
-        .collect::<Vec<_>>();
+    for channel in channels {
+        if current_protocol != Some(channel.protocol) {
+            if current_protocol.is_some() {
+                lines.push(String::new());
+            }
+            lines.push(format!(
+                "【{}】",
+                channel_protocol_display_label(channel.protocol)
+            ));
+            current_protocol = Some(channel.protocol);
+            section_index = 0;
+        }
 
-    let table = format_text_table(
-        vec![
-            t(locale, "channel.name_label"),
-            t(locale, "channel.protocol_label"),
+        section_index += 1;
+        lines.push(format!("{section_index}. {}", channel.name));
+        lines.push(format!(
+            "   {}: {} · {}: {} · {}: {}",
             t(locale, "channel.status_label"),
+            channel_status_label(channel, now_ms, locale),
             t(locale, "channel.priority_label"),
+            channel.priority,
             t(locale, "channel.id_label"),
-        ],
-        rows,
-    );
+            short_id(&channel.id)
+        ));
 
-    format!("{}\n{}", t(locale, "channel.list_title"), table)
+        if storage::channel_is_auto_disabled(channel, now_ms) {
+            lines.push(format!(
+                "   {}: {}",
+                t(locale, "channel.auto_disabled_until_label"),
+                format_local_timestamp_ms(channel.auto_disabled_until_ms)
+            ));
+        }
+    }
+
+    lines.join("\n")
+}
+
+fn channel_protocol_display_label(protocol: storage::Protocol) -> &'static str {
+    match protocol {
+        storage::Protocol::Openai => "OpenAI",
+        storage::Protocol::Anthropic => "Anthropic",
+        storage::Protocol::Gemini => "Gemini",
+    }
 }
 
 fn format_routes_list(
@@ -1495,84 +1503,71 @@ fn format_usage_report(
     channel_stats: &[storage::ChannelStats],
     locale: AppLocale,
 ) -> String {
-    let mut lines = vec![
-        t(locale, "stats.usage_title"),
-        format_key_value_table(
-            locale,
-            vec![
-                (
-                    t(locale, "stats.range_label"),
-                    stats_range_label(range, locale),
-                ),
-                (
-                    t(locale, "stats.requests_label"),
-                    summary.requests.to_string(),
-                ),
-                (
-                    t(locale, "stats.success_label"),
-                    summary.success.to_string(),
-                ),
-                (t(locale, "stats.failed_label"), summary.failed.to_string()),
-                (
-                    t(locale, "stats.avg_latency_label"),
-                    format_avg_latency(summary.avg_latency_ms),
-                ),
-                (
-                    t(locale, "stats.prompt_tokens_label"),
-                    summary.prompt_tokens.to_string(),
-                ),
-                (
-                    t(locale, "stats.completion_tokens_label"),
-                    summary.completion_tokens.to_string(),
-                ),
-                (
-                    t(locale, "stats.total_tokens_label"),
-                    summary.total_tokens.to_string(),
-                ),
-                (
-                    t(locale, "stats.estimated_cost_label"),
-                    format_cost_usd(summary.estimated_cost_usd.as_deref()),
-                ),
-            ],
+    let mut lines = vec![t(locale, "stats.usage_title")];
+    lines.extend(format_key_value_lines(vec![
+        (
+            t(locale, "stats.range_label"),
+            stats_range_label(range, locale),
         ),
-        String::new(),
-        t(locale, "stats.by_channel_label"),
-    ];
+        (
+            t(locale, "stats.requests_label"),
+            summary.requests.to_string(),
+        ),
+        (
+            t(locale, "stats.success_label"),
+            summary.success.to_string(),
+        ),
+        (t(locale, "stats.failed_label"), summary.failed.to_string()),
+        (
+            t(locale, "stats.avg_latency_label"),
+            format_avg_latency(summary.avg_latency_ms),
+        ),
+        (
+            t(locale, "stats.prompt_tokens_label"),
+            summary.prompt_tokens.to_string(),
+        ),
+        (
+            t(locale, "stats.completion_tokens_label"),
+            summary.completion_tokens.to_string(),
+        ),
+        (
+            t(locale, "stats.total_tokens_label"),
+            summary.total_tokens.to_string(),
+        ),
+        (
+            t(locale, "stats.estimated_cost_label"),
+            format_cost_usd(summary.estimated_cost_usd.as_deref()),
+        ),
+    ]));
+    lines.push(String::new());
+    lines.push(t(locale, "stats.by_channel_label"));
 
-    let active_channels = channel_stats
-        .iter()
-        .filter(|item| item.requests > 0)
-        .collect::<Vec<_>>();
+    let active_channels = active_channel_stats(channel_stats);
     if active_channels.is_empty() {
         lines.push(t(locale, "stats.by_channel_empty"));
         return lines.join("\n");
     }
 
-    lines.push(format_text_table(
+    lines.extend(format_grouped_channel_stats(active_channels, |item| {
         vec![
-            t(locale, "stats.channel_label"),
-            t(locale, "stats.protocol_label"),
-            t(locale, "stats.requests_label"),
-            t(locale, "stats.success_label"),
-            t(locale, "stats.failed_label"),
-            t(locale, "stats.total_tokens_label"),
-            t(locale, "stats.estimated_cost_short_label"),
-        ],
-        active_channels
-            .into_iter()
-            .map(|item| {
-                vec![
-                    item.name.clone(),
-                    item.protocol.as_str().to_string(),
-                    item.requests.to_string(),
-                    item.success.to_string(),
-                    item.failed.to_string(),
-                    item.total_tokens.to_string(),
-                    format_cost_usd(item.estimated_cost_usd.as_deref()),
-                ]
-            })
-            .collect(),
-    ));
+            format!(
+                "{}: {} · {}: {} · {}: {}",
+                t(locale, "stats.requests_label"),
+                item.requests,
+                t(locale, "stats.success_label"),
+                item.success,
+                t(locale, "stats.failed_label"),
+                item.failed
+            ),
+            format!(
+                "{}: {} · {}: {}",
+                t(locale, "stats.total_tokens_label"),
+                item.total_tokens,
+                t(locale, "stats.estimated_cost_short_label"),
+                format_cost_usd(item.estimated_cost_usd.as_deref())
+            ),
+        ]
+    }));
 
     lines.join("\n")
 }
@@ -1584,119 +1579,120 @@ fn format_costs_report(
     pricing: &storage::PricingStatus,
     locale: AppLocale,
 ) -> String {
-    let mut lines = vec![
-        t(locale, "stats.costs_title"),
-        format_key_value_table(
-            locale,
-            vec![
-                (
-                    t(locale, "stats.range_label"),
-                    stats_range_label(range, locale),
-                ),
-                (
-                    t(locale, "stats.estimated_cost_label"),
-                    format_cost_usd(summary.estimated_cost_usd.as_deref()),
-                ),
-                (
-                    t(locale, "stats.total_tokens_label"),
-                    summary.total_tokens.to_string(),
-                ),
-                (
-                    t(locale, "stats.pricing_models_label"),
-                    pricing.count.to_string(),
-                ),
-                (
-                    t(locale, "stats.last_sync_label"),
-                    pricing
-                        .last_sync_ms
-                        .map(|value| {
-                            format_local_timestamp_with_relative(storage::now_ms(), value, locale)
-                        })
-                        .unwrap_or_else(|| t(locale, "stats.not_synced")),
-                ),
-            ],
+    let mut lines = vec![t(locale, "stats.costs_title")];
+    lines.extend(format_key_value_lines(vec![
+        (
+            t(locale, "stats.range_label"),
+            stats_range_label(range, locale),
         ),
-    ];
+        (
+            t(locale, "stats.estimated_cost_label"),
+            format_cost_usd(summary.estimated_cost_usd.as_deref()),
+        ),
+        (
+            t(locale, "stats.total_tokens_label"),
+            summary.total_tokens.to_string(),
+        ),
+        (
+            t(locale, "stats.pricing_models_label"),
+            pricing.count.to_string(),
+        ),
+        (
+            t(locale, "stats.last_sync_label"),
+            pricing
+                .last_sync_ms
+                .map(|value| format_local_timestamp_with_relative(storage::now_ms(), value, locale))
+                .unwrap_or_else(|| t(locale, "stats.not_synced")),
+        ),
+    ]));
 
     if pricing.count == 0 {
+        lines.push(String::new());
         lines.push(t(locale, "stats.pricing_missing_hint"));
     }
 
     lines.push(String::new());
     lines.push(t(locale, "stats.by_channel_label"));
 
-    let active_channels = channel_stats
-        .iter()
-        .filter(|item| item.requests > 0)
-        .collect::<Vec<_>>();
+    let active_channels = active_channel_stats(channel_stats);
     if active_channels.is_empty() {
         lines.push(t(locale, "stats.by_channel_empty"));
         return lines.join("\n");
     }
 
-    lines.push(format_text_table(
-        vec![
-            t(locale, "stats.channel_label"),
-            t(locale, "stats.protocol_label"),
+    lines.extend(format_grouped_channel_stats(active_channels, |item| {
+        vec![format!(
+            "{}: {} · {}: {} · {}: {}",
             t(locale, "stats.estimated_cost_short_label"),
+            format_cost_usd(item.estimated_cost_usd.as_deref()),
             t(locale, "stats.requests_label"),
+            item.requests,
             t(locale, "stats.total_tokens_label"),
-        ],
-        active_channels
-            .into_iter()
-            .map(|item| {
-                vec![
-                    item.name.clone(),
-                    item.protocol.as_str().to_string(),
-                    format_cost_usd(item.estimated_cost_usd.as_deref()),
-                    item.requests.to_string(),
-                    item.total_tokens.to_string(),
-                ]
-            })
-            .collect(),
-    ));
+            item.total_tokens
+        )]
+    }));
 
     lines.join("\n")
 }
 
-fn format_key_value_table(locale: AppLocale, rows: Vec<(String, String)>) -> String {
-    format_text_table(
-        vec![
-            t(locale, "stats.metric_label"),
-            t(locale, "stats.value_label"),
-        ],
-        rows.into_iter()
-            .map(|(key, value)| vec![key, value])
-            .collect(),
-    )
+fn format_key_value_lines(rows: Vec<(String, String)>) -> Vec<String> {
+    rows.into_iter()
+        .map(|(key, value)| format!("- {key}: {value}"))
+        .collect()
 }
 
-fn format_text_table(headers: Vec<String>, rows: Vec<Vec<String>>) -> String {
-    let mut lines = Vec::with_capacity(rows.len().saturating_add(3));
-    lines.push(format_table_row(headers.iter().map(|cell| cell.as_str())));
-    lines.push(format_table_row(std::iter::repeat_n("---", headers.len())));
-    for row in rows {
-        lines.push(format_table_row(row.iter().map(|cell| cell.as_str())));
+fn active_channel_stats(channel_stats: &[storage::ChannelStats]) -> Vec<&storage::ChannelStats> {
+    let mut items = channel_stats
+        .iter()
+        .filter(|item| item.requests > 0)
+        .collect::<Vec<_>>();
+    items.sort_by(|left, right| {
+        protocol_sort_order(left.protocol)
+            .cmp(&protocol_sort_order(right.protocol))
+            .then_with(|| left.name.cmp(&right.name))
+    });
+    items
+}
+
+fn format_grouped_channel_stats<F>(
+    channel_stats: Vec<&storage::ChannelStats>,
+    detail_lines: F,
+) -> Vec<String>
+where
+    F: Fn(&storage::ChannelStats) -> Vec<String>,
+{
+    let mut lines = Vec::new();
+    let mut current_protocol = None;
+    let mut section_index = 0usize;
+
+    for item in channel_stats {
+        if current_protocol != Some(item.protocol) {
+            if current_protocol.is_some() {
+                lines.push(String::new());
+            }
+            lines.push(format!(
+                "【{}】",
+                channel_protocol_display_label(item.protocol)
+            ));
+            current_protocol = Some(item.protocol);
+            section_index = 0;
+        }
+
+        section_index += 1;
+        lines.push(format!("{section_index}. {}", item.name));
+        for detail in detail_lines(item) {
+            lines.push(format!("   {detail}"));
+        }
     }
 
-    format!("```text\n{}\n```", lines.join("\n"))
+    lines
 }
 
-fn format_table_row<'a>(cells: impl IntoIterator<Item = &'a str>) -> String {
-    let rendered = cells
-        .into_iter()
-        .map(sanitize_table_cell)
-        .collect::<Vec<_>>()
-        .join(" | ");
-    format!("| {rendered} |")
-}
-
-fn sanitize_table_cell(value: &str) -> String {
-    let trimmed = value.trim().replace('\n', " ").replace('|', "¦");
-    if trimmed.is_empty() {
-        "-".to_string()
-    } else {
-        trimmed
+fn protocol_sort_order(protocol: storage::Protocol) -> u8 {
+    match protocol {
+        storage::Protocol::Openai => 0,
+        storage::Protocol::Anthropic => 1,
+        storage::Protocol::Gemini => 2,
     }
 }
 
@@ -3035,7 +3031,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn channels_command_renders_table() {
+    async fn channels_command_renders_grouped_list() {
         let db_path = temp_db_path();
         remove_sqlite_artifacts(&db_path);
         storage::init_db(&db_path).expect("init db");
@@ -3059,15 +3055,72 @@ mod tests {
 
         let output = adapter.calls().join("\n");
         assert!(output.contains("渠道状态："), "{output}");
-        assert!(output.contains("```text"), "{output}");
-        assert!(
-            output.contains("| 名称 | 协议 | 状态 | 优先级 | ID |"),
-            "{output}"
-        );
-        assert!(
-            output.contains("| openai-main | openai | 启用 | 10 |"),
-            "{output}"
-        );
+        assert!(output.contains("【OpenAI】"), "{output}");
+        assert!(!output.contains("```text"), "{output}");
+        assert!(output.contains("1. openai-main"), "{output}");
+        assert!(output.contains("状态: 启用 · 优先级: 10 · ID:"), "{output}");
+        remove_sqlite_artifacts(&db_path);
+    }
+
+    #[tokio::test]
+    async fn channels_command_renders_grouped_list_for_weixin() {
+        let db_path = temp_db_path();
+        remove_sqlite_artifacts(&db_path);
+        storage::init_db(&db_path).expect("init db");
+        bind_test_user(
+            &db_path,
+            ChatPlatform::Weixin,
+            "wx-user-2-list",
+            AppLocale::ZhCN,
+        )
+        .await;
+        create_test_channel(&db_path, "openai-main", Protocol::Openai).await;
+
+        let runtime = test_runtime(&db_path).await;
+        let adapter = FakeAdapter::new(false);
+        runtime
+            .handle_message(
+                Arc::new(adapter.clone()),
+                test_message(ChatPlatform::Weixin, "wx-user-2-list", "/channels"),
+            )
+            .await;
+
+        let output = adapter.calls().join("\n");
+        assert!(output.contains("渠道状态："), "{output}");
+        assert!(output.contains("【OpenAI】"), "{output}");
+        assert!(!output.contains("```text"), "{output}");
+        assert!(output.contains("1. openai-main"), "{output}");
+        remove_sqlite_artifacts(&db_path);
+    }
+
+    #[tokio::test]
+    async fn channels_command_renders_grouped_list_for_discord() {
+        let db_path = temp_db_path();
+        remove_sqlite_artifacts(&db_path);
+        storage::init_db(&db_path).expect("init db");
+        bind_test_user(
+            &db_path,
+            ChatPlatform::Discord,
+            "discord-user-2-list",
+            AppLocale::ZhCN,
+        )
+        .await;
+        create_test_channel(&db_path, "openai-main", Protocol::Openai).await;
+
+        let runtime = test_runtime(&db_path).await;
+        let adapter = FakeAdapter::new(false);
+        runtime
+            .handle_message(
+                Arc::new(adapter.clone()),
+                test_message(ChatPlatform::Discord, "discord-user-2-list", "/channels"),
+            )
+            .await;
+
+        let output = adapter.calls().join("\n");
+        assert!(output.contains("渠道状态："), "{output}");
+        assert!(output.contains("【OpenAI】"), "{output}");
+        assert!(!output.contains("```text"), "{output}");
+        assert!(output.contains("1. openai-main"), "{output}");
         remove_sqlite_artifacts(&db_path);
     }
 
@@ -3165,23 +3218,128 @@ mod tests {
 
         let output = adapter.calls().join("\n");
         assert!(output.contains("用量统计："), "{output}");
-        assert!(output.contains("```text"), "{output}");
-        assert!(output.contains("| 指标 | 值 |"), "{output}");
-        assert!(output.contains("| 请求数 | 1 |"), "{output}");
-        assert!(output.contains("| 预估成本 | $0.12 |"), "{output}");
+        assert!(!output.contains("```text"), "{output}");
+        assert!(output.contains("- 请求数: 1"), "{output}");
+        assert!(output.contains("- 预估成本: $0.12"), "{output}");
+        assert!(output.contains("按渠道："), "{output}");
+        assert!(output.contains("【OpenAI】"), "{output}");
+        assert!(output.contains("1. openai-main"), "{output}");
+        assert!(output.contains("请求数: 1 · 成功: 1 · 失败: 0"), "{output}");
         assert!(
-            output.contains("| 渠道 | 协议 | 请求数 | 成功 | 失败 | Total Tokens | 成本 |"),
-            "{output}"
-        );
-        assert!(
-            output.contains("| openai-main | openai | 1 | 1 | 0 | 15 | $0.12 |"),
+            output.contains("Total Tokens: 15 · 成本: $0.12"),
             "{output}"
         );
         remove_sqlite_artifacts(&db_path);
     }
 
     #[tokio::test]
-    async fn costs_command_reports_table() {
+    async fn usage_command_reports_today_summary_for_weixin() {
+        let db_path = temp_db_path();
+        remove_sqlite_artifacts(&db_path);
+        storage::init_db(&db_path).expect("init db");
+        bind_test_user(&db_path, ChatPlatform::Weixin, "wx-user-4", AppLocale::ZhCN).await;
+        let channel = create_test_channel(&db_path, "openai-main", Protocol::Openai).await;
+        storage::insert_usage_event(
+            db_path.clone(),
+            storage::CreateUsageEvent {
+                request_id: None,
+                ts_ms: storage::now_ms(),
+                protocol: Protocol::Openai,
+                route_id: None,
+                channel_id: channel.id,
+                model: Some("gpt-4o".to_string()),
+                success: true,
+                http_status: Some(200),
+                error_kind: None,
+                error_detail: None,
+                latency_ms: 120,
+                ttft_ms: Some(30),
+                prompt_tokens: Some(10),
+                completion_tokens: Some(5),
+                total_tokens: Some(15),
+                cache_read_tokens: None,
+                cache_write_tokens: None,
+                estimated_cost_usd: Some("0.12".to_string()),
+            },
+        )
+        .await
+        .expect("insert usage event");
+
+        let runtime = test_runtime(&db_path).await;
+        let adapter = FakeAdapter::new(false);
+        runtime
+            .handle_message(
+                Arc::new(adapter.clone()),
+                test_message(ChatPlatform::Weixin, "wx-user-4", "/usage"),
+            )
+            .await;
+
+        let output = adapter.calls().join("\n");
+        assert!(output.contains("用量统计："), "{output}");
+        assert!(!output.contains("```text"), "{output}");
+        assert!(output.contains("【OpenAI】"), "{output}");
+        assert!(output.contains("1. openai-main"), "{output}");
+        remove_sqlite_artifacts(&db_path);
+    }
+
+    #[tokio::test]
+    async fn usage_command_reports_today_summary_for_discord() {
+        let db_path = temp_db_path();
+        remove_sqlite_artifacts(&db_path);
+        storage::init_db(&db_path).expect("init db");
+        bind_test_user(
+            &db_path,
+            ChatPlatform::Discord,
+            "discord-user-4",
+            AppLocale::ZhCN,
+        )
+        .await;
+        let channel = create_test_channel(&db_path, "openai-main", Protocol::Openai).await;
+        storage::insert_usage_event(
+            db_path.clone(),
+            storage::CreateUsageEvent {
+                request_id: None,
+                ts_ms: storage::now_ms(),
+                protocol: Protocol::Openai,
+                route_id: None,
+                channel_id: channel.id,
+                model: Some("gpt-4o".to_string()),
+                success: true,
+                http_status: Some(200),
+                error_kind: None,
+                error_detail: None,
+                latency_ms: 120,
+                ttft_ms: Some(30),
+                prompt_tokens: Some(10),
+                completion_tokens: Some(5),
+                total_tokens: Some(15),
+                cache_read_tokens: None,
+                cache_write_tokens: None,
+                estimated_cost_usd: Some("0.12".to_string()),
+            },
+        )
+        .await
+        .expect("insert usage event");
+
+        let runtime = test_runtime(&db_path).await;
+        let adapter = FakeAdapter::new(false);
+        runtime
+            .handle_message(
+                Arc::new(adapter.clone()),
+                test_message(ChatPlatform::Discord, "discord-user-4", "/usage"),
+            )
+            .await;
+
+        let output = adapter.calls().join("\n");
+        assert!(output.contains("用量统计："), "{output}");
+        assert!(!output.contains("```text"), "{output}");
+        assert!(output.contains("【OpenAI】"), "{output}");
+        assert!(output.contains("1. openai-main"), "{output}");
+        remove_sqlite_artifacts(&db_path);
+    }
+
+    #[tokio::test]
+    async fn costs_command_reports_summary() {
         let db_path = temp_db_path();
         remove_sqlite_artifacts(&db_path);
         storage::init_db(&db_path).expect("init db");
@@ -3230,18 +3388,126 @@ mod tests {
 
         let output = adapter.calls().join("\n");
         assert!(output.contains("费用报告："), "{output}");
-        assert!(output.contains("```text"), "{output}");
-        assert!(output.contains("| 指标 | 值 |"), "{output}");
-        assert!(output.contains("| 预估成本 | $0.12 |"), "{output}");
-        assert!(output.contains("| 价格模型数 | 0 |"), "{output}");
+        assert!(!output.contains("```text"), "{output}");
+        assert!(output.contains("- 预估成本: $0.12"), "{output}");
+        assert!(output.contains("- 价格模型数: 0"), "{output}");
         assert!(
-            output.contains("| 渠道 | 协议 | 成本 | 请求数 | Total Tokens |"),
+            output.contains("当前没有价格模型数据，预估成本可能为空。"),
             "{output}"
         );
+        assert!(output.contains("按渠道："), "{output}");
+        assert!(output.contains("【OpenAI】"), "{output}");
+        assert!(output.contains("1. openai-main"), "{output}");
         assert!(
-            output.contains("| openai-main | openai | $0.12 | 1 | 15 |"),
+            output.contains("成本: $0.12 · 请求数: 1 · Total Tokens: 15"),
             "{output}"
         );
+        remove_sqlite_artifacts(&db_path);
+    }
+
+    #[tokio::test]
+    async fn costs_command_reports_summary_for_weixin() {
+        let db_path = temp_db_path();
+        remove_sqlite_artifacts(&db_path);
+        storage::init_db(&db_path).expect("init db");
+        bind_test_user(&db_path, ChatPlatform::Weixin, "wx-user-5", AppLocale::ZhCN).await;
+        let channel = create_test_channel(&db_path, "openai-main", Protocol::Openai).await;
+        storage::insert_usage_event(
+            db_path.clone(),
+            storage::CreateUsageEvent {
+                request_id: None,
+                ts_ms: storage::now_ms(),
+                protocol: Protocol::Openai,
+                route_id: None,
+                channel_id: channel.id,
+                model: Some("gpt-4o".to_string()),
+                success: true,
+                http_status: Some(200),
+                error_kind: None,
+                error_detail: None,
+                latency_ms: 120,
+                ttft_ms: Some(30),
+                prompt_tokens: Some(10),
+                completion_tokens: Some(5),
+                total_tokens: Some(15),
+                cache_read_tokens: None,
+                cache_write_tokens: None,
+                estimated_cost_usd: Some("0.12".to_string()),
+            },
+        )
+        .await
+        .expect("insert usage event");
+
+        let runtime = test_runtime(&db_path).await;
+        let adapter = FakeAdapter::new(false);
+        runtime
+            .handle_message(
+                Arc::new(adapter.clone()),
+                test_message(ChatPlatform::Weixin, "wx-user-5", "/costs"),
+            )
+            .await;
+
+        let output = adapter.calls().join("\n");
+        assert!(output.contains("费用报告："), "{output}");
+        assert!(!output.contains("```text"), "{output}");
+        assert!(output.contains("【OpenAI】"), "{output}");
+        assert!(output.contains("1. openai-main"), "{output}");
+        remove_sqlite_artifacts(&db_path);
+    }
+
+    #[tokio::test]
+    async fn costs_command_reports_summary_for_discord() {
+        let db_path = temp_db_path();
+        remove_sqlite_artifacts(&db_path);
+        storage::init_db(&db_path).expect("init db");
+        bind_test_user(
+            &db_path,
+            ChatPlatform::Discord,
+            "discord-user-5",
+            AppLocale::ZhCN,
+        )
+        .await;
+        let channel = create_test_channel(&db_path, "openai-main", Protocol::Openai).await;
+        storage::insert_usage_event(
+            db_path.clone(),
+            storage::CreateUsageEvent {
+                request_id: None,
+                ts_ms: storage::now_ms(),
+                protocol: Protocol::Openai,
+                route_id: None,
+                channel_id: channel.id,
+                model: Some("gpt-4o".to_string()),
+                success: true,
+                http_status: Some(200),
+                error_kind: None,
+                error_detail: None,
+                latency_ms: 120,
+                ttft_ms: Some(30),
+                prompt_tokens: Some(10),
+                completion_tokens: Some(5),
+                total_tokens: Some(15),
+                cache_read_tokens: None,
+                cache_write_tokens: None,
+                estimated_cost_usd: Some("0.12".to_string()),
+            },
+        )
+        .await
+        .expect("insert usage event");
+
+        let runtime = test_runtime(&db_path).await;
+        let adapter = FakeAdapter::new(false);
+        runtime
+            .handle_message(
+                Arc::new(adapter.clone()),
+                test_message(ChatPlatform::Discord, "discord-user-5", "/costs"),
+            )
+            .await;
+
+        let output = adapter.calls().join("\n");
+        assert!(output.contains("费用报告："), "{output}");
+        assert!(!output.contains("```text"), "{output}");
+        assert!(output.contains("【OpenAI】"), "{output}");
+        assert!(output.contains("1. openai-main"), "{output}");
         remove_sqlite_artifacts(&db_path);
     }
 }
