@@ -9,7 +9,7 @@ use super::super::i18n::{args, t, t_args};
 use super::super::router::format_session_label;
 use super::super::{
     ActiveTurnRegistration, ChatBridgeRuntime, MESSAGE_CHAR_LIMIT, STREAM_UPDATE_INTERVAL,
-    StreamChunk, StreamKind, TURN_EXECUTION_TIMEOUT, TYPING_INTERVAL, read_stream,
+    StreamChunk, StreamKind, TYPING_INTERVAL, read_stream,
 };
 use super::format::{
     RenderedMessage, build_live_output, compose_final_output, format_streaming_message,
@@ -359,7 +359,14 @@ impl ChatBridgeRuntime {
         typing_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         let mut stream_interval = tokio::time::interval(STREAM_UPDATE_INTERVAL);
         stream_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-        let mut timeout_fut = Box::pin(tokio::time::sleep(TURN_EXECUTION_TIMEOUT));
+        let turn_execution_timeout = self.settings_snapshot().chat_bridge_turn_timeout();
+        let timeout_secs = turn_execution_timeout.map(|timeout| timeout.as_secs());
+        let mut timeout_fut = Box::pin(async move {
+            match turn_execution_timeout {
+                Some(timeout) => tokio::time::sleep(timeout).await,
+                None => std::future::pending::<()>().await,
+            }
+        });
 
         let mut pending_message = if cancelled {
             None
@@ -443,11 +450,13 @@ impl ChatBridgeRuntime {
                 }
                 _ = &mut timeout_fut, if exit_status.is_none() && !timed_out && !cancelled => {
                     timed_out = true;
-                    tracing::warn!(
-                        session_id = session.id,
-                        timeout_secs = TURN_EXECUTION_TIMEOUT.as_secs(),
-                        "chat bridge turn timed out; killing child process"
-                    );
+                    if let Some(timeout_secs) = timeout_secs {
+                        tracing::warn!(
+                            session_id = session.id,
+                            timeout_secs,
+                            "chat bridge turn timed out; killing child process"
+                        );
+                    }
                     crate::process::kill_process_tree_best_effort(child_pid);
                 }
                 _ = typing_interval.tick(), if !cancelled => {

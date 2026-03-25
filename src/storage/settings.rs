@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
+use std::time::Duration;
 
 use crate::i18n::AppLocale;
 use crate::logging::LogLevel;
@@ -36,7 +37,9 @@ const KEY_CHAT_BRIDGE_DISCORD_ENABLED: &str = "chat_bridge_discord_enabled";
 const KEY_CHAT_BRIDGE_DISCORD_BOT_TOKEN: &str = "chat_bridge_discord_bot_token";
 const KEY_CHAT_BRIDGE_WHATSAPP_ENABLED: &str = "chat_bridge_whatsapp_enabled";
 const KEY_CHAT_BRIDGE_WEIXIN_ENABLED: &str = "chat_bridge_weixin_enabled";
+const KEY_CHAT_BRIDGE_TURN_TIMEOUT_MINUTES: &str = "chat_bridge_turn_timeout_minutes";
 const KEY_CHAT_BRIDGE_ALLOW_NEW_PROJECTS: &str = "chat_bridge_allow_new_projects";
+const DEFAULT_CHAT_BRIDGE_TURN_TIMEOUT_MINUTES: i64 = 10;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -105,6 +108,7 @@ pub struct AppSettings {
     pub chat_bridge_discord_bot_token_configured: bool,
     pub chat_bridge_whatsapp_enabled: bool,
     pub chat_bridge_weixin_enabled: bool,
+    pub chat_bridge_turn_timeout_minutes: i64,
     pub chat_bridge_allow_new_projects: bool,
     #[serde(default)]
     pub has_invalid_values: bool,
@@ -142,9 +146,25 @@ impl Default for AppSettings {
             chat_bridge_discord_bot_token_configured: false,
             chat_bridge_whatsapp_enabled: false,
             chat_bridge_weixin_enabled: false,
+            chat_bridge_turn_timeout_minutes: DEFAULT_CHAT_BRIDGE_TURN_TIMEOUT_MINUTES,
             chat_bridge_allow_new_projects: false,
             has_invalid_values: false,
         }
+    }
+}
+
+impl AppSettings {
+    pub fn chat_bridge_turn_timeout(&self) -> Option<Duration> {
+        if self.chat_bridge_turn_timeout_minutes == 0 {
+            return None;
+        }
+
+        let minutes = u64::try_from(self.chat_bridge_turn_timeout_minutes)
+            .ok()
+            .filter(|minutes| *minutes >= 1)
+            .unwrap_or(DEFAULT_CHAT_BRIDGE_TURN_TIMEOUT_MINUTES as u64);
+
+        Some(Duration::from_secs(minutes.saturating_mul(60)))
     }
 }
 
@@ -177,6 +197,7 @@ pub struct AppSettingsPatch {
     pub chat_bridge_discord_bot_token: Option<String>,
     pub chat_bridge_whatsapp_enabled: Option<bool>,
     pub chat_bridge_weixin_enabled: Option<bool>,
+    pub chat_bridge_turn_timeout_minutes: Option<i64>,
     pub chat_bridge_allow_new_projects: Option<bool>,
 }
 
@@ -442,6 +463,22 @@ pub async fn get_app_settings(db_path: PathBuf) -> anyhow::Result<AppSettings> {
             out.chat_bridge_weixin_enabled =
                 parse_bool_setting(KEY_CHAT_BRIDGE_WEIXIN_ENABLED, &v, &mut has_invalid_values);
         }
+        if let Some(v) = get_setting(conn, KEY_CHAT_BRIDGE_TURN_TIMEOUT_MINUTES)?
+            && let Some(n) = parse_i64_setting(
+                KEY_CHAT_BRIDGE_TURN_TIMEOUT_MINUTES,
+                &v,
+                &mut has_invalid_values,
+            )
+        {
+            if n >= 0 {
+                out.chat_bridge_turn_timeout_minutes = n;
+            } else {
+                has_invalid_values = true;
+                warn_invalid_setting_once(KEY_CHAT_BRIDGE_TURN_TIMEOUT_MINUTES, &v, || {
+                    "must be >= 0".to_string()
+                });
+            }
+        }
         if let Some(v) = get_setting(conn, KEY_CHAT_BRIDGE_ALLOW_NEW_PROJECTS)? {
             out.chat_bridge_allow_new_projects = parse_bool_setting(
                 KEY_CHAT_BRIDGE_ALLOW_NEW_PROJECTS,
@@ -641,6 +678,14 @@ pub async fn update_app_settings(
                 conn,
                 KEY_CHAT_BRIDGE_WEIXIN_ENABLED,
                 if v { "true" } else { "false" },
+                updated_at_ms,
+            )?;
+        }
+        if let Some(v) = patch.chat_bridge_turn_timeout_minutes {
+            set_setting(
+                conn,
+                KEY_CHAT_BRIDGE_TURN_TIMEOUT_MINUTES,
+                &v.to_string(),
                 updated_at_ms,
             )?;
         }

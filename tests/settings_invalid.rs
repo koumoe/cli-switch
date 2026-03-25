@@ -40,6 +40,7 @@ async fn get_app_settings_keeps_defaults_on_invalid_values() {
     upsert_setting(&conn, "server_lan_accessible", "maybe");
     upsert_setting(&conn, "log_level", "verbose");
     upsert_setting(&conn, "log_retention_days", "NaN");
+    upsert_setting(&conn, "chat_bridge_turn_timeout_minutes", "-1");
 
     drop(conn);
 
@@ -50,6 +51,37 @@ async fn get_app_settings_keeps_defaults_on_invalid_values() {
     assert!(!settings.server_lan_accessible);
     assert_eq!(settings.log_level, logging::LogLevel::Warning);
     assert_eq!(settings.log_retention_days, 30);
+    assert_eq!(settings.chat_bridge_turn_timeout_minutes, 10);
+
+    remove_sqlite_artifacts(&db_path);
+}
+
+#[tokio::test]
+async fn update_app_settings_persists_chat_bridge_turn_timeout_settings() {
+    let db_path = std::env::temp_dir().join(format!(
+        "cliswitch-test-settings-timeout-{}.sqlite",
+        uuid::Uuid::new_v4()
+    ));
+    remove_sqlite_artifacts(&db_path);
+
+    storage::init_db(&db_path).unwrap();
+
+    let updated = storage::update_app_settings(
+        db_path.clone(),
+        storage::AppSettingsPatch {
+            chat_bridge_turn_timeout_minutes: Some(0),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(updated.chat_bridge_turn_timeout_minutes, 0);
+    assert_eq!(updated.chat_bridge_turn_timeout(), None);
+
+    let reread = storage::get_app_settings(db_path.clone()).await.unwrap();
+    assert_eq!(reread.chat_bridge_turn_timeout_minutes, 0);
+    assert_eq!(reread.chat_bridge_turn_timeout(), None);
 
     remove_sqlite_artifacts(&db_path);
 }

@@ -228,10 +228,18 @@ export function SettingsPage() {
 
   async function saveChatBridgeBaseConfig() {
     if (!appSettings) return;
+    const rawTimeoutMinutes = appSettings.chat_bridge_turn_timeout_minutes;
+    const timeoutMinutesValid = Number.isFinite(rawTimeoutMinutes) && rawTimeoutMinutes >= 0;
+    if (!timeoutMinutesValid) {
+      toast.error(t("settings.chatBridge.turnTimeoutInvalid"));
+      return;
+    }
+    const timeoutMinutes = timeoutMinutesValid ? Math.floor(rawTimeoutMinutes) : 10;
     setChatBridgeSaving(true);
     try {
       const next = await updateSettings({
         chat_bridge_enabled: appSettings.chat_bridge_enabled,
+        chat_bridge_turn_timeout_minutes: timeoutMinutes,
         chat_bridge_allow_new_projects: appSettings.chat_bridge_allow_new_projects,
       });
       setAppSettings(next);
@@ -842,6 +850,31 @@ export function SettingsPage() {
               onCheckedChange={(v) => {
                 setAppSettings((prev) => (prev ? { ...prev, chat_bridge_allow_new_projects: v } : prev));
               }}
+              disabled={!appSettings || chatBridgeSaving}
+            />
+          </div>
+
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <div className="font-medium text-sm">{t("settings.chatBridge.turnTimeoutMinutes")}</div>
+              <div className="text-xs text-muted-foreground">{t("settings.chatBridge.turnTimeoutMinutesHint")}</div>
+            </div>
+            <Input
+              type="number"
+              min={0}
+              value={appSettings?.chat_bridge_turn_timeout_minutes ?? 10}
+              onChange={(e) => {
+                const n = Number(e.target.value);
+                setAppSettings((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        chat_bridge_turn_timeout_minutes: Number.isFinite(n) ? Math.floor(n) : 10,
+                      }
+                    : prev
+                );
+              }}
+              className="w-[140px] h-8"
               disabled={!appSettings || chatBridgeSaving}
             />
           </div>

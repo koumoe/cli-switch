@@ -16,6 +16,7 @@
     "settings_auto_disable_failure_times_out_of_range": "Auto-disable failure times must be >= 1",
     "settings_auto_disable_disable_minutes_out_of_range": "Auto-disable duration minutes must be >= 1",
     "settings_log_retention_days_out_of_range": "Log retention days must be between 1 and 3650",
+    "settings_chat_bridge_turn_timeout_minutes_out_of_range": "Messaging CLI execution timeout must be >= 0 minutes",
     "settings_autostart_set_failed": "Failed to update auto-start",
     "settings_autostart_args_update_failed": "Failed to update auto-start args",
     "stats_missing_start_ms": "start_ms is required for custom stats ranges",
