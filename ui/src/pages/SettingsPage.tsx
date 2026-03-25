@@ -1074,17 +1074,16 @@ export function SettingsPage() {
                   />
                 </div>
 
-                <div className="rounded-lg border bg-muted/20 px-4 py-3 flex items-center justify-between gap-4">
-                  <div className="space-y-1">
-                    <div className="font-medium text-sm">{t("settings.chatBridge.whatsapp.qrTitle")}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {whatsappConnected
-                        ? t("settings.chatBridge.whatsapp.connectionConnected")
-                        : t("settings.chatBridge.whatsapp.connectionDisconnected")}
+                <div className="rounded-lg border bg-muted/20 px-4 py-3 space-y-3">
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="space-y-1">
+                      <div className="font-medium text-sm">{t("settings.chatBridge.whatsapp.qrTitle")}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {whatsappConnected
+                          ? t("settings.chatBridge.whatsapp.connectionConnected")
+                          : t("settings.chatBridge.whatsapp.connectionDisconnected")}
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Badge variant={whatsappStatusTone}>{whatsappStatusLabel}</Badge>
                     <Button
                       size="sm"
                       onClick={() => openChatBridgeLoginDialog("whatsapp")}
@@ -1093,6 +1092,9 @@ export function SettingsPage() {
                       {t("settings.chatBridge.whatsapp.dialogAction")}
                     </Button>
                   </div>
+                  <Badge variant={whatsappStatusTone} className="w-fit">
+                    {whatsappStatusLabel}
+                  </Badge>
                 </div>
 
                 <div className="flex items-center justify-between gap-4 rounded-lg border bg-muted/30 px-3 py-3">
@@ -1148,17 +1150,16 @@ export function SettingsPage() {
                   />
                 </div>
 
-                <div className="rounded-lg border bg-muted/20 px-4 py-3 flex items-center justify-between gap-4">
-                  <div className="space-y-1">
-                    <div className="font-medium text-sm">{t("settings.chatBridge.weixin.qrTitle")}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {weixinConnected
-                        ? t("settings.chatBridge.weixin.connectionConnected")
-                        : t("settings.chatBridge.weixin.connectionDisconnected")}
+                <div className="rounded-lg border bg-muted/20 px-4 py-3 space-y-3">
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="space-y-1">
+                      <div className="font-medium text-sm">{t("settings.chatBridge.weixin.qrTitle")}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {weixinConnected
+                          ? t("settings.chatBridge.weixin.connectionConnected")
+                          : t("settings.chatBridge.weixin.connectionDisconnected")}
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Badge variant={weixinStatusTone}>{weixinStatusLabel}</Badge>
                     <Button
                       size="sm"
                       onClick={() => openChatBridgeLoginDialog("weixin")}
@@ -1167,6 +1168,9 @@ export function SettingsPage() {
                       {t("settings.chatBridge.weixin.dialogAction")}
                     </Button>
                   </div>
+                  <Badge variant={weixinStatusTone} className="w-fit">
+                    {weixinStatusLabel}
+                  </Badge>
                 </div>
 
                 <div className="flex items-center justify-between gap-4 rounded-lg border bg-muted/30 px-3 py-3">
