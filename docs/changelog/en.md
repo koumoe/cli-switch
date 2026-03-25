@@ -1,3 +1,12 @@
+## [0.46.0](https://github.com/koumoe/cli-switch/compare/v0.45.3...v0.46.0) (2026-03-25)
+
+### Features
+
+* move chat bridge QR login into dialogs ([92866b9](https://github.com/koumoe/cli-switch/commit/92866b946a101120af00072576efbf76b6e40ed9))
+
+### Bug Fixes
+
+* enable whatsapp pseudo streaming ([7285196](https://github.com/koumoe/cli-switch/commit/72851963a4a96d5b19121294c82fd746a194f3fc))
 ## [0.45.3](https://github.com/koumoe/cli-switch/compare/v0.45.2...v0.45.3) (2026-03-25)
 
 ### Bug Fixes
