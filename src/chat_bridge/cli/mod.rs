@@ -121,6 +121,7 @@ fn base_async_command(program_path: &Path, settings: &AppSettings) -> TokioComma
                 cmd.env("PATH", path);
             }
             crate::process::command_silent(cmd.as_std_mut());
+            crate::process::configure_process_group(cmd.as_std_mut());
             return cmd;
         }
     }
@@ -131,6 +132,7 @@ fn base_async_command(program_path: &Path, settings: &AppSettings) -> TokioComma
         cmd.env("PATH", path);
     }
     crate::process::command_silent(cmd.as_std_mut());
+    crate::process::configure_process_group(cmd.as_std_mut());
     cmd
 }
 

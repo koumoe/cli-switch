@@ -1,5 +1,6 @@
 use anyhow::Context as _;
 use std::sync::Arc;
+use std::time::Duration;
 
 use super::super::adapter::{
     Attachment, ChatAdapter, IncomingMessage, OutgoingMessage, SentMessage, StreamingMessage,
@@ -9,7 +10,7 @@ use super::super::i18n::{args, t, t_args};
 use super::super::router::format_session_label;
 use super::super::{
     ActiveTurnRegistration, ChatBridgeRuntime, MESSAGE_CHAR_LIMIT, STREAM_UPDATE_INTERVAL,
-    StreamChunk, StreamKind, TURN_EXECUTION_TIMEOUT, TYPING_INTERVAL, read_stream,
+    StreamChunk, StreamKind, TYPING_INTERVAL, read_stream,
 };
 use super::format::{
     RenderedMessage, build_live_output, compose_final_output, format_streaming_message,
@@ -346,20 +347,27 @@ impl ChatBridgeRuntime {
         active_turn
             .child_pid
             .store(child_pid, std::sync::atomic::Ordering::Relaxed);
-        let mut wait_fut = Box::pin(child.wait());
         let mut exit_status = None;
         let mut stream_closed = false;
-        let mut timed_out = false;
         let mut cancelled = *active_turn.cancel_rx.borrow();
-        if cancelled && child_pid != 0 {
-            crate::process::kill_process_tree_best_effort(child_pid);
+        if cancelled {
+            terminate_turn_child(&mut child, child_pid);
         }
 
+        let mut child_poll_interval = tokio::time::interval(Duration::from_millis(100));
+        child_poll_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         let mut typing_interval = tokio::time::interval(TYPING_INTERVAL);
         typing_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         let mut stream_interval = tokio::time::interval(STREAM_UPDATE_INTERVAL);
         stream_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-        let mut timeout_fut = Box::pin(tokio::time::sleep(TURN_EXECUTION_TIMEOUT));
+        let turn_execution_timeout = self.settings_snapshot().chat_bridge_turn_timeout();
+        let timeout_secs = turn_execution_timeout.map(|timeout| timeout.as_secs());
+        let mut timeout_fut = Box::pin(async move {
+            match turn_execution_timeout {
+                Some(timeout) => tokio::time::sleep(timeout).await,
+                None => std::future::pending::<()>().await,
+            }
+        });
 
         let mut pending_message = if cancelled {
             None
@@ -419,10 +427,12 @@ impl ChatBridgeRuntime {
                         }
                     }
                 }
-                status = &mut wait_fut, if exit_status.is_none() => {
-                    exit_status = Some(status.context("wait child process failed")?);
-                    if stream_closed {
-                        break;
+                _ = child_poll_interval.tick(), if exit_status.is_none() => {
+                    if let Some(status) = child.try_wait().context("wait child process failed")? {
+                        exit_status = Some(status);
+                        if stream_closed {
+                            break;
+                        }
                     }
                 }
                 changed = active_turn.cancel_rx.changed(), if exit_status.is_none() && !cancelled => {
@@ -430,8 +440,8 @@ impl ChatBridgeRuntime {
                         cancelled = true;
                         if child_pid != 0 {
                             tracing::info!(session_id = session.id, child_pid, "chat bridge turn cancelled");
-                            crate::process::kill_process_tree_best_effort(child_pid);
                         }
+                        terminate_turn_child(&mut child, child_pid);
                     }
                 }
                 _ = stream_interval.tick(), if use_streaming && !cancelled => {
@@ -441,14 +451,47 @@ impl ChatBridgeRuntime {
                         let _ = reply.update(&content).await;
                     }
                 }
-                _ = &mut timeout_fut, if exit_status.is_none() && !timed_out && !cancelled => {
-                    timed_out = true;
-                    tracing::warn!(
-                        session_id = session.id,
-                        timeout_secs = TURN_EXECUTION_TIMEOUT.as_secs(),
-                        "chat bridge turn timed out; killing child process"
-                    );
-                    crate::process::kill_process_tree_best_effort(child_pid);
+                _ = &mut timeout_fut, if exit_status.is_none() && !cancelled => {
+                    if let Some(timeout_secs) = timeout_secs {
+                        tracing::warn!(
+                            session_id = session.id,
+                            timeout_secs,
+                            "chat bridge turn timed out; killing child process"
+                        );
+                    }
+                    terminate_turn_child(&mut child, child_pid);
+                    let timeout_text = t(locale, "turn.timeout");
+                    if let Some(reply) = live_reply.as_mut() {
+                        reply.finish(&timeout_text).await?;
+                    } else {
+                        self.send_labeled_text(
+                            adapter.clone(),
+                            &msg.chat_id,
+                            &label,
+                            &timeout_text,
+                            msg.message_id.as_deref(),
+                            locale,
+                        )
+                        .await?;
+                        if let Some(sent) = pending_message.take() {
+                            delete_message_best_effort(&adapter, &msg.chat_id, &sent.message_id)
+                                .await;
+                        }
+                    }
+
+                    stdout_task.abort();
+                    stderr_task.abort();
+                    if let Some(path) = invocation.final_output_path.take() {
+                        let _ = tokio::fs::remove_file(path).await;
+                    }
+                    tokio::spawn(async move {
+                        let _ = child.wait().await;
+                    });
+
+                    return Ok(TurnExecutionResult {
+                        success: false,
+                        stdout: stdout_buf,
+                    });
                 }
                 _ = typing_interval.tick(), if !cancelled => {
                     let _ = adapter.send_typing(&msg.chat_id).await;
@@ -484,7 +527,7 @@ impl ChatBridgeRuntime {
 
         let final_text = compose_final_output(
             status.success(),
-            timed_out,
+            false,
             file_output.as_deref(),
             &stdout_buf,
             &stderr_buf,
@@ -522,7 +565,7 @@ impl ChatBridgeRuntime {
         }
 
         Ok(TurnExecutionResult {
-            success: status.success() && !timed_out,
+            success: status.success(),
             stdout: stdout_buf,
         })
     }
@@ -551,6 +594,13 @@ impl ChatBridgeRuntime {
     ) -> anyhow::Result<()> {
         send_or_replace_labeled_text(&adapter, chat_id, label, text, reply_to, locale, None).await
     }
+}
+
+fn terminate_turn_child(child: &mut tokio::process::Child, child_pid: u32) {
+    if child_pid != 0 {
+        crate::process::kill_process_tree_best_effort(child_pid);
+    }
+    let _ = child.start_kill();
 }
 
 async fn send_processing_notice(

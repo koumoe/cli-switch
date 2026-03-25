@@ -19,20 +19,15 @@ pub(crate) fn command_silent(cmd: &mut Command) {
     }
 }
 
-pub(crate) fn command_output_with_timeout(
-    cmd: &mut Command,
-    timeout: Duration,
-) -> anyhow::Result<Output> {
+pub(crate) fn configure_process_group(cmd: &mut Command) {
     #[cfg(unix)]
     {
         use std::os::unix::process::CommandExt as _;
 
-        // Create a new process group so we can kill the whole tree on timeout (npm frequently
-        // spawns child processes; killing only the parent can leave children holding stdout/stderr
-        // open forever, which would otherwise deadlock our reader threads).
+        // Create a new process group so timeout / cancel paths can kill the whole tree instead
+        // of relying on the parent shell's process group layout.
         unsafe {
             cmd.pre_exec(|| {
-                // setpgid(0, 0) => new process group where PGID == PID.
                 if libc::setpgid(0, 0) != 0 {
                     return Err(std::io::Error::last_os_error());
                 }
@@ -40,6 +35,17 @@ pub(crate) fn command_output_with_timeout(
             });
         }
     }
+    #[cfg(not(unix))]
+    {
+        let _ = cmd;
+    }
+}
+
+pub(crate) fn command_output_with_timeout(
+    cmd: &mut Command,
+    timeout: Duration,
+) -> anyhow::Result<Output> {
+    configure_process_group(cmd);
 
     // Ensure we don't accidentally block on stdin.
     cmd.stdin(Stdio::null());

@@ -44,6 +44,7 @@ export type AppSettings = {
   chat_bridge_discord_bot_token_configured: boolean;
   chat_bridge_whatsapp_enabled: boolean;
   chat_bridge_weixin_enabled: boolean;
+  chat_bridge_turn_timeout_minutes: number;
   chat_bridge_allow_new_projects: boolean;
 };
 

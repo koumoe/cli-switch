@@ -44,6 +44,7 @@ pub(in crate::server) struct UpdateSettingsInput {
     chat_bridge_discord_bot_token: Option<String>,
     chat_bridge_whatsapp_enabled: Option<bool>,
     chat_bridge_weixin_enabled: Option<bool>,
+    chat_bridge_turn_timeout_minutes: Option<i64>,
     chat_bridge_allow_new_projects: Option<bool>,
 }
 
@@ -135,6 +136,10 @@ pub(in crate::server) async fn update_settings(
             input.chat_bridge_weixin_enabled.is_some(),
         ),
         (
+            "chat_bridge_turn_timeout_minutes",
+            input.chat_bridge_turn_timeout_minutes.is_some(),
+        ),
+        (
             "chat_bridge_allow_new_projects",
             input.chat_bridge_allow_new_projects.is_some(),
         ),
@@ -181,6 +186,14 @@ pub(in crate::server) async fn update_settings(
         return Err(ApiError::bad_request(
             "settings_log_retention_days_out_of_range",
             "log_retention_days must be between 1 and 3650",
+        ));
+    }
+    if let Some(v) = input.chat_bridge_turn_timeout_minutes
+        && v < 0
+    {
+        return Err(ApiError::bad_request(
+            "settings_chat_bridge_turn_timeout_minutes_out_of_range",
+            "chat_bridge_turn_timeout_minutes must be >= 0",
         ));
     }
 
@@ -234,6 +247,7 @@ pub(in crate::server) async fn update_settings(
             chat_bridge_discord_bot_token: input.chat_bridge_discord_bot_token,
             chat_bridge_whatsapp_enabled: input.chat_bridge_whatsapp_enabled,
             chat_bridge_weixin_enabled: input.chat_bridge_weixin_enabled,
+            chat_bridge_turn_timeout_minutes: input.chat_bridge_turn_timeout_minutes,
             chat_bridge_allow_new_projects: input.chat_bridge_allow_new_projects,
             ..Default::default()
         },

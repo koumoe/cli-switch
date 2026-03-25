@@ -61,7 +61,6 @@ use crate::storage::{self, BridgeSessionStatus, ChatPlatform, StorageError};
 
 const STREAM_UPDATE_INTERVAL: Duration = Duration::from_millis(1200);
 const TYPING_INTERVAL: Duration = Duration::from_secs(4);
-const TURN_EXECUTION_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 #[allow(dead_code)]
 const MESSAGE_CHAR_LIMIT: usize = 3900;
 const MAX_DISPLAY_JSON_DEPTH: usize = 24;
