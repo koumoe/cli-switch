@@ -39,7 +39,7 @@ const KEY_CHAT_BRIDGE_WHATSAPP_ENABLED: &str = "chat_bridge_whatsapp_enabled";
 const KEY_CHAT_BRIDGE_WEIXIN_ENABLED: &str = "chat_bridge_weixin_enabled";
 const KEY_CHAT_BRIDGE_TURN_TIMEOUT_MINUTES: &str = "chat_bridge_turn_timeout_minutes";
 const KEY_CHAT_BRIDGE_ALLOW_NEW_PROJECTS: &str = "chat_bridge_allow_new_projects";
-const DEFAULT_CHAT_BRIDGE_TURN_TIMEOUT_MINUTES: i64 = 10;
+const DEFAULT_CHAT_BRIDGE_TURN_TIMEOUT_MINUTES: i64 = 0;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -159,12 +159,15 @@ impl AppSettings {
             return None;
         }
 
-        let minutes = u64::try_from(self.chat_bridge_turn_timeout_minutes)
+        u64::try_from(self.chat_bridge_turn_timeout_minutes)
             .ok()
             .filter(|minutes| *minutes >= 1)
-            .unwrap_or(DEFAULT_CHAT_BRIDGE_TURN_TIMEOUT_MINUTES as u64);
-
-        Some(Duration::from_secs(minutes.saturating_mul(60)))
+            .or_else(|| {
+                u64::try_from(DEFAULT_CHAT_BRIDGE_TURN_TIMEOUT_MINUTES)
+                    .ok()
+                    .filter(|minutes| *minutes >= 1)
+            })
+            .map(|minutes| Duration::from_secs(minutes.saturating_mul(60)))
     }
 }
 

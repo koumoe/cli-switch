@@ -51,7 +51,25 @@ async fn get_app_settings_keeps_defaults_on_invalid_values() {
     assert!(!settings.server_lan_accessible);
     assert_eq!(settings.log_level, logging::LogLevel::Warning);
     assert_eq!(settings.log_retention_days, 30);
-    assert_eq!(settings.chat_bridge_turn_timeout_minutes, 10);
+    assert_eq!(settings.chat_bridge_turn_timeout_minutes, 0);
+    assert_eq!(settings.chat_bridge_turn_timeout(), None);
+
+    remove_sqlite_artifacts(&db_path);
+}
+
+#[tokio::test]
+async fn default_chat_bridge_turn_timeout_is_disabled() {
+    let db_path = std::env::temp_dir().join(format!(
+        "cliswitch-test-settings-timeout-default-{}.sqlite",
+        uuid::Uuid::new_v4()
+    ));
+    remove_sqlite_artifacts(&db_path);
+
+    storage::init_db(&db_path).unwrap();
+
+    let settings = storage::get_app_settings(db_path.clone()).await.unwrap();
+    assert_eq!(settings.chat_bridge_turn_timeout_minutes, 0);
+    assert_eq!(settings.chat_bridge_turn_timeout(), None);
 
     remove_sqlite_artifacts(&db_path);
 }

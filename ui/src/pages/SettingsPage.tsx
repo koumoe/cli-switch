@@ -234,7 +234,7 @@ export function SettingsPage() {
       toast.error(t("settings.chatBridge.turnTimeoutInvalid"));
       return;
     }
-    const timeoutMinutes = timeoutMinutesValid ? Math.floor(rawTimeoutMinutes) : 10;
+    const timeoutMinutes = timeoutMinutesValid ? Math.floor(rawTimeoutMinutes) : 0;
     setChatBridgeSaving(true);
     try {
       const next = await updateSettings({
@@ -862,14 +862,14 @@ export function SettingsPage() {
             <Input
               type="number"
               min={0}
-              value={appSettings?.chat_bridge_turn_timeout_minutes ?? 10}
+              value={appSettings?.chat_bridge_turn_timeout_minutes ?? 0}
               onChange={(e) => {
                 const n = Number(e.target.value);
                 setAppSettings((prev) =>
                   prev
                     ? {
                         ...prev,
-                        chat_bridge_turn_timeout_minutes: Number.isFinite(n) ? Math.floor(n) : 10,
+                        chat_bridge_turn_timeout_minutes: Number.isFinite(n) ? Math.floor(n) : 0,
                       }
                     : prev
                 );
