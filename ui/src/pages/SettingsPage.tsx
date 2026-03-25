@@ -70,6 +70,8 @@ function normalizeQrImageSrc(src: string | null | undefined): string | null {
   return null;
 }
 
+type ChatBridgeQrPlatform = "whatsapp" | "weixin";
+
 export function SettingsPage() {
   const { theme, setTheme } = useTheme();
   const { locale, setLocale, locales, t } = useI18n();
@@ -124,6 +126,7 @@ export function SettingsPage() {
   const [chatBridgePlatformTab, setChatBridgePlatformTab] = useState<ChatPlatform>("weixin");
   const [chatBridgePairingDialogOpen, setChatBridgePairingDialogOpen] = useState(false);
   const [chatBridgeBindingsDialogPlatform, setChatBridgeBindingsDialogPlatform] = useState<ChatPlatform | null>(null);
+  const [chatBridgeLoginDialogPlatform, setChatBridgeLoginDialogPlatform] = useState<ChatBridgeQrPlatform | null>(null);
   const [chatBridgeWhatsAppStatus, setChatBridgeWhatsAppStatus] = useState<ChatBridgeWhatsAppStatus | null>(null);
   const [chatBridgeWhatsAppStatusLoading, setChatBridgeWhatsAppStatusLoading] = useState(false);
   const [chatBridgeWhatsAppActionBusy, setChatBridgeWhatsAppActionBusy] = useState(false);
@@ -496,6 +499,15 @@ export function SettingsPage() {
     void refreshChatBridgeBindings();
   }
 
+  function openChatBridgeLoginDialog(platform: ChatBridgeQrPlatform) {
+    setChatBridgeLoginDialogPlatform(platform);
+    if (platform === "whatsapp") {
+      void refreshChatBridgeWhatsAppStatus({ silent: true });
+      return;
+    }
+    void refreshChatBridgeWeixinStatus({ silent: true });
+  }
+
   useEffect(() => {
     getHealth()
       .then(setHealth)
@@ -657,7 +669,9 @@ export function SettingsPage() {
     const whatsappEnabled =
       (appSettings?.chat_bridge_enabled ?? false) &&
       (appSettings?.chat_bridge_whatsapp_enabled ?? false);
-    if (chatBridgePlatformTab !== "whatsapp" || !whatsappEnabled) {
+    const whatsappPollingActive =
+      chatBridgePlatformTab === "whatsapp" || chatBridgeLoginDialogPlatform === "whatsapp";
+    if (!whatsappPollingActive || !whatsappEnabled) {
       return;
     }
 
@@ -690,6 +704,7 @@ export function SettingsPage() {
   }, [
     appSettings?.chat_bridge_enabled,
     appSettings?.chat_bridge_whatsapp_enabled,
+    chatBridgeLoginDialogPlatform,
     chatBridgePlatformTab,
   ]);
 
@@ -697,7 +712,9 @@ export function SettingsPage() {
     const weixinEnabled =
       (appSettings?.chat_bridge_enabled ?? false) &&
       (appSettings?.chat_bridge_weixin_enabled ?? false);
-    if (chatBridgePlatformTab !== "weixin" || !weixinEnabled) {
+    const weixinPollingActive =
+      chatBridgePlatformTab === "weixin" || chatBridgeLoginDialogPlatform === "weixin";
+    if (!weixinPollingActive || !weixinEnabled) {
       return;
     }
 
@@ -730,6 +747,7 @@ export function SettingsPage() {
   }, [
     appSettings?.chat_bridge_enabled,
     appSettings?.chat_bridge_weixin_enabled,
+    chatBridgeLoginDialogPlatform,
     chatBridgePlatformTab,
   ]);
 
@@ -754,6 +772,40 @@ export function SettingsPage() {
     : weixinConnected
       ? "success"
       : "secondary";
+  const chatBridgeLoginDialogStatus = chatBridgeLoginDialogPlatform === "whatsapp"
+    ? chatBridgeWhatsAppStatus
+    : chatBridgeLoginDialogPlatform === "weixin"
+      ? chatBridgeWeixinStatus
+      : null;
+  const chatBridgeLoginDialogStatusLoading = chatBridgeLoginDialogPlatform === "whatsapp"
+    ? chatBridgeWhatsAppStatusLoading
+    : chatBridgeLoginDialogPlatform === "weixin"
+      ? chatBridgeWeixinStatusLoading
+      : false;
+  const chatBridgeLoginDialogActionBusy = chatBridgeLoginDialogPlatform === "whatsapp"
+    ? chatBridgeWhatsAppActionBusy
+    : chatBridgeLoginDialogPlatform === "weixin"
+      ? chatBridgeWeixinActionBusy
+      : false;
+  const chatBridgeLoginDialogConnected = chatBridgeLoginDialogStatus?.connected ?? false;
+  const chatBridgeLoginDialogStatusTone = chatBridgeLoginDialogPlatform === "whatsapp"
+    ? whatsappStatusTone
+    : chatBridgeLoginDialogPlatform === "weixin"
+      ? weixinStatusTone
+      : "secondary";
+  const chatBridgeLoginDialogStatusLabel = chatBridgeLoginDialogPlatform
+    ? t(`settings.chatBridge.${chatBridgeLoginDialogPlatform}.state.${chatBridgeLoginDialogStatus?.state ?? "disabled"}`)
+    : "";
+  const chatBridgeLoginDialogQrImageSrc = chatBridgeLoginDialogPlatform === "whatsapp"
+    ? whatsappQrImageSrc
+    : chatBridgeLoginDialogPlatform === "weixin"
+      ? weixinQrImageSrc
+      : null;
+  const chatBridgeLoginDialogLastErrorMessage = chatBridgeLoginDialogPlatform === "whatsapp"
+    ? whatsappLastErrorMessage
+    : chatBridgeLoginDialogPlatform === "weixin"
+      ? chatBridgeWeixinStatus?.last_error ?? null
+      : null;
 
   const chatBridgeTab = (
     <>
@@ -825,14 +877,6 @@ export function SettingsPage() {
 
             <TabsContent value="telegram" className="mt-4">
               <div className="rounded-lg border p-4 space-y-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="space-y-1">
-                    <div className="font-medium text-sm">{t("settings.chatBridge.telegramConfigTitle")}</div>
-                    <div className="text-xs text-muted-foreground">{t("settings.chatBridge.telegramConfigHint")}</div>
-                  </div>
-                  <Badge variant="secondary">{t("settings.chatBridge.supportReady")}</Badge>
-                </div>
-
                 <div className="flex items-center justify-between gap-4">
                   <div>
                     <div className="font-medium text-sm">{t("settings.chatBridge.telegramEnable")}</div>
@@ -908,14 +952,6 @@ export function SettingsPage() {
 
             <TabsContent value="discord" className="mt-4">
               <div className="rounded-lg border p-4 space-y-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="space-y-1">
-                    <div className="font-medium text-sm">{t("settings.chatBridge.discordConfigTitle")}</div>
-                    <div className="text-xs text-muted-foreground">{t("settings.chatBridge.discordConfigHint")}</div>
-                  </div>
-                  <Badge variant="secondary">{t("settings.chatBridge.supportReady")}</Badge>
-                </div>
-
                 <div className="flex items-center justify-between gap-4">
                   <div>
                     <div className="font-medium text-sm">{t("settings.chatBridge.discordEnable")}</div>
@@ -991,14 +1027,6 @@ export function SettingsPage() {
 
             <TabsContent value="whatsapp" className="mt-4">
               <div className="rounded-lg border p-4 space-y-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="space-y-1">
-                    <div className="font-medium text-sm">{t("settings.chatBridge.whatsappConfigTitle")}</div>
-                    <div className="text-xs text-muted-foreground">{t("settings.chatBridge.whatsappConfigHint")}</div>
-                  </div>
-                  <Badge variant="secondary">{t("settings.chatBridge.supportReady")}</Badge>
-                </div>
-
                 <div className="flex items-center justify-between gap-4">
                   <div>
                     <div className="font-medium text-sm">{t("settings.chatBridge.whatsappEnable")}</div>
@@ -1013,84 +1041,23 @@ export function SettingsPage() {
                   />
                 </div>
 
-                <div className="rounded-lg border bg-muted/20 p-4 space-y-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="space-y-1">
-                      <div className="font-medium text-sm">{t("settings.chatBridge.whatsapp.runtimeTitle")}</div>
-                      <div className="text-xs text-muted-foreground">{t("settings.chatBridge.whatsapp.runtimeHint")}</div>
+                <div className="rounded-lg border bg-muted/20 px-4 py-3 flex items-center justify-between gap-4">
+                  <div className="space-y-1">
+                    <div className="font-medium text-sm">{t("settings.chatBridge.whatsapp.qrTitle")}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {whatsappConnected
+                        ? t("settings.chatBridge.whatsapp.connectionConnected")
+                        : t("settings.chatBridge.whatsapp.connectionDisconnected")}
                     </div>
+                  </div>
+                  <div className="flex items-center gap-2">
                     <Badge variant={whatsappStatusTone}>{whatsappStatusLabel}</Badge>
-                  </div>
-
-                  <div className="grid gap-3 md:grid-cols-2">
-                    <div className="rounded-lg border bg-background px-3 py-3 space-y-1">
-                      <div className="text-xs text-muted-foreground">{t("settings.chatBridge.whatsapp.connectionLabel")}</div>
-                      <div className="text-sm font-medium">
-                        {whatsappConnected
-                          ? t("settings.chatBridge.whatsapp.connectionConnected")
-                          : t("settings.chatBridge.whatsapp.connectionDisconnected")}
-                      </div>
-                    </div>
-                    <div className="rounded-lg border bg-background px-3 py-3 space-y-1">
-                      <div className="text-xs text-muted-foreground">{t("settings.chatBridge.whatsapp.accountLabel")}</div>
-                      <div className="text-sm font-medium break-all">
-                        {chatBridgeWhatsAppStatus?.me || t("settings.chatBridge.whatsapp.accountEmpty")}
-                      </div>
-                    </div>
-                  </div>
-
-                  {whatsappLastErrorMessage ? (
-                    <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-3 space-y-1">
-                      <div className="text-xs text-muted-foreground">{t("settings.chatBridge.whatsapp.lastErrorLabel")}</div>
-                      <div className="text-sm break-words">{whatsappLastErrorMessage}</div>
-                    </div>
-                  ) : null}
-
-                  <div className="rounded-lg border bg-background px-3 py-3 space-y-3">
-                    <div className="space-y-1">
-                      <div className="font-medium text-sm">{t("settings.chatBridge.whatsapp.qrTitle")}</div>
-                      <div className="text-xs text-muted-foreground">{t("settings.chatBridge.whatsapp.qrHint")}</div>
-                    </div>
-                    {whatsappQrImageSrc ? (
-                      <div className="flex justify-center">
-                        <img
-                          src={whatsappQrImageSrc}
-                          alt={t("settings.chatBridge.whatsapp.qrAlt")}
-                          className="h-56 w-56 rounded-lg border bg-white p-3"
-                        />
-                      </div>
-                    ) : (
-                      <div className="rounded-lg border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
-                        {chatBridgeWhatsAppStatusLoading
-                          ? t("common.loading")
-                          : t("settings.chatBridge.whatsapp.qrEmpty")}
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="flex flex-wrap gap-2">
                     <Button
                       size="sm"
-                      onClick={() => void beginWhatsAppLogin()}
-                      disabled={!appSettings || chatBridgeSaving || chatBridgeWhatsAppActionBusy}
+                      onClick={() => openChatBridgeLoginDialog("whatsapp")}
+                      disabled={chatBridgeWhatsAppActionBusy}
                     >
-                      {t("settings.chatBridge.whatsapp.loginAction")}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => void disconnectWhatsApp()}
-                      disabled={!appSettings || chatBridgeSaving || chatBridgeWhatsAppActionBusy}
-                    >
-                      {t("settings.chatBridge.whatsapp.logoutAction")}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => void refreshChatBridgeWhatsAppStatus()}
-                      disabled={chatBridgeWhatsAppStatusLoading || chatBridgeWhatsAppActionBusy}
-                    >
-                      {t("common.refresh")}
+                      {t("settings.chatBridge.whatsapp.dialogAction")}
                     </Button>
                   </div>
                 </div>
@@ -1134,14 +1101,6 @@ export function SettingsPage() {
 
             <TabsContent value="weixin" className="mt-4">
               <div className="rounded-lg border p-4 space-y-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="space-y-1">
-                    <div className="font-medium text-sm">{t("settings.chatBridge.weixinConfigTitle")}</div>
-                    <div className="text-xs text-muted-foreground">{t("settings.chatBridge.weixinConfigHint")}</div>
-                  </div>
-                  <Badge variant="secondary">{t("settings.chatBridge.supportReady")}</Badge>
-                </div>
-
                 <div className="flex items-center justify-between gap-4">
                   <div>
                     <div className="font-medium text-sm">{t("settings.chatBridge.weixinEnable")}</div>
@@ -1156,84 +1115,23 @@ export function SettingsPage() {
                   />
                 </div>
 
-                <div className="rounded-lg border bg-muted/20 p-4 space-y-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="space-y-1">
-                      <div className="font-medium text-sm">{t("settings.chatBridge.weixin.runtimeTitle")}</div>
-                      <div className="text-xs text-muted-foreground">{t("settings.chatBridge.weixin.runtimeHint")}</div>
+                <div className="rounded-lg border bg-muted/20 px-4 py-3 flex items-center justify-between gap-4">
+                  <div className="space-y-1">
+                    <div className="font-medium text-sm">{t("settings.chatBridge.weixin.qrTitle")}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {weixinConnected
+                        ? t("settings.chatBridge.weixin.connectionConnected")
+                        : t("settings.chatBridge.weixin.connectionDisconnected")}
                     </div>
+                  </div>
+                  <div className="flex items-center gap-2">
                     <Badge variant={weixinStatusTone}>{weixinStatusLabel}</Badge>
-                  </div>
-
-                  <div className="grid gap-3 md:grid-cols-2">
-                    <div className="rounded-lg border bg-background px-3 py-3 space-y-1">
-                      <div className="text-xs text-muted-foreground">{t("settings.chatBridge.weixin.connectionLabel")}</div>
-                      <div className="text-sm font-medium">
-                        {weixinConnected
-                          ? t("settings.chatBridge.weixin.connectionConnected")
-                          : t("settings.chatBridge.weixin.connectionDisconnected")}
-                      </div>
-                    </div>
-                    <div className="rounded-lg border bg-background px-3 py-3 space-y-1">
-                      <div className="text-xs text-muted-foreground">{t("settings.chatBridge.weixin.accountLabel")}</div>
-                      <div className="text-sm font-medium break-all">
-                        {chatBridgeWeixinStatus?.me || t("settings.chatBridge.weixin.accountEmpty")}
-                      </div>
-                    </div>
-                  </div>
-
-                  {chatBridgeWeixinStatus?.last_error ? (
-                    <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-3 space-y-1">
-                      <div className="text-xs text-muted-foreground">{t("settings.chatBridge.weixin.lastErrorLabel")}</div>
-                      <div className="text-sm break-words">{chatBridgeWeixinStatus.last_error}</div>
-                    </div>
-                  ) : null}
-
-                  <div className="rounded-lg border bg-background px-3 py-3 space-y-3">
-                    <div className="space-y-1">
-                      <div className="font-medium text-sm">{t("settings.chatBridge.weixin.qrTitle")}</div>
-                      <div className="text-xs text-muted-foreground">{t("settings.chatBridge.weixin.qrHint")}</div>
-                    </div>
-                    {weixinQrImageSrc ? (
-                      <div className="flex justify-center">
-                        <img
-                          src={weixinQrImageSrc}
-                          alt={t("settings.chatBridge.weixin.qrAlt")}
-                          className="h-56 w-56 rounded-lg border bg-white p-3"
-                        />
-                      </div>
-                    ) : (
-                      <div className="rounded-lg border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
-                        {chatBridgeWeixinStatusLoading
-                          ? t("common.loading")
-                          : t("settings.chatBridge.weixin.qrEmpty")}
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="flex flex-wrap gap-2">
                     <Button
                       size="sm"
-                      onClick={() => void beginWeixinLogin()}
-                      disabled={!appSettings || chatBridgeSaving || chatBridgeWeixinActionBusy}
+                      onClick={() => openChatBridgeLoginDialog("weixin")}
+                      disabled={chatBridgeWeixinActionBusy}
                     >
-                      {t("settings.chatBridge.weixin.loginAction")}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => void disconnectWeixin()}
-                      disabled={!appSettings || chatBridgeSaving || chatBridgeWeixinActionBusy}
-                    >
-                      {t("settings.chatBridge.weixin.logoutAction")}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => void refreshChatBridgeWeixinStatus()}
-                      disabled={chatBridgeWeixinStatusLoading || chatBridgeWeixinActionBusy}
-                    >
-                      {t("common.refresh")}
+                      {t("settings.chatBridge.weixin.dialogAction")}
                     </Button>
                   </div>
                 </div>
@@ -1277,6 +1175,160 @@ export function SettingsPage() {
           </Tabs>
         </CardContent>
       </Card>
+
+      <Dialog
+        open={!!chatBridgeLoginDialogPlatform}
+        onOpenChange={(open) => {
+          if (!open) {
+            setChatBridgeLoginDialogPlatform(null);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-[560px]">
+          <DialogHeader>
+            <DialogTitle>
+              {chatBridgeLoginDialogPlatform
+                ? t(`settings.chatBridge.${chatBridgeLoginDialogPlatform}.qrTitle`)
+                : ""}
+            </DialogTitle>
+            <DialogDescription>
+              {chatBridgeLoginDialogPlatform
+                ? t(`settings.chatBridge.${chatBridgeLoginDialogPlatform}.dialogHint`)
+                : ""}
+            </DialogDescription>
+          </DialogHeader>
+
+          {chatBridgeLoginDialogPlatform ? (
+            <div className="space-y-4">
+              <div className="rounded-lg border bg-muted/20 p-4 space-y-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="space-y-1">
+                    <div className="font-medium text-sm">
+                      {t(`settings.chatBridge.${chatBridgeLoginDialogPlatform}.runtimeTitle`)}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {t(`settings.chatBridge.${chatBridgeLoginDialogPlatform}.runtimeHint`)}
+                    </div>
+                  </div>
+                  <Badge variant={chatBridgeLoginDialogStatusTone}>{chatBridgeLoginDialogStatusLabel}</Badge>
+                </div>
+
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div className="rounded-lg border bg-background px-3 py-3 space-y-1">
+                    <div className="text-xs text-muted-foreground">
+                      {t(`settings.chatBridge.${chatBridgeLoginDialogPlatform}.connectionLabel`)}
+                    </div>
+                    <div className="text-sm font-medium">
+                      {chatBridgeLoginDialogConnected
+                        ? t(`settings.chatBridge.${chatBridgeLoginDialogPlatform}.connectionConnected`)
+                        : t(`settings.chatBridge.${chatBridgeLoginDialogPlatform}.connectionDisconnected`)}
+                    </div>
+                  </div>
+                  <div className="rounded-lg border bg-background px-3 py-3 space-y-1">
+                    <div className="text-xs text-muted-foreground">
+                      {t(`settings.chatBridge.${chatBridgeLoginDialogPlatform}.accountLabel`)}
+                    </div>
+                    <div className="text-sm font-medium break-all">
+                      {chatBridgeLoginDialogStatus?.me || t(`settings.chatBridge.${chatBridgeLoginDialogPlatform}.accountEmpty`)}
+                    </div>
+                  </div>
+                </div>
+
+                {chatBridgeLoginDialogLastErrorMessage ? (
+                  <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-3 space-y-1">
+                    <div className="text-xs text-muted-foreground">
+                      {t(`settings.chatBridge.${chatBridgeLoginDialogPlatform}.lastErrorLabel`)}
+                    </div>
+                    <div className="text-sm break-words">{chatBridgeLoginDialogLastErrorMessage}</div>
+                  </div>
+                ) : null}
+
+                <div className="rounded-lg border bg-background px-3 py-3 space-y-3">
+                  <div className="space-y-1">
+                    <div className="font-medium text-sm">
+                      {t(`settings.chatBridge.${chatBridgeLoginDialogPlatform}.qrTitle`)}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {t(`settings.chatBridge.${chatBridgeLoginDialogPlatform}.qrHint`)}
+                    </div>
+                  </div>
+                  {chatBridgeLoginDialogQrImageSrc ? (
+                    <div className="flex justify-center">
+                      <img
+                        src={chatBridgeLoginDialogQrImageSrc}
+                        alt={t(`settings.chatBridge.${chatBridgeLoginDialogPlatform}.qrAlt`)}
+                        className="h-56 w-56 rounded-lg border bg-white p-3"
+                      />
+                    </div>
+                  ) : (
+                    <div className="rounded-lg border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
+                      {chatBridgeLoginDialogStatusLoading
+                        ? t("common.loading")
+                        : t(`settings.chatBridge.${chatBridgeLoginDialogPlatform}.qrEmpty`)}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          <DialogFooter className="gap-2 sm:justify-between">
+            <Button
+              variant="outline"
+              onClick={() => setChatBridgeLoginDialogPlatform(null)}
+            >
+              {t("common.cancel")}
+            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                onClick={() => {
+                  if (chatBridgeLoginDialogPlatform === "whatsapp") {
+                    void beginWhatsAppLogin();
+                  } else if (chatBridgeLoginDialogPlatform === "weixin") {
+                    void beginWeixinLogin();
+                  }
+                }}
+                disabled={!chatBridgeLoginDialogPlatform || !appSettings || chatBridgeSaving || chatBridgeLoginDialogActionBusy}
+              >
+                {chatBridgeLoginDialogPlatform
+                  ? t(`settings.chatBridge.${chatBridgeLoginDialogPlatform}.loginAction`)
+                  : ""}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  if (chatBridgeLoginDialogPlatform === "whatsapp") {
+                    void disconnectWhatsApp();
+                  } else if (chatBridgeLoginDialogPlatform === "weixin") {
+                    void disconnectWeixin();
+                  }
+                }}
+                disabled={!chatBridgeLoginDialogPlatform || !appSettings || chatBridgeSaving || chatBridgeLoginDialogActionBusy}
+              >
+                {chatBridgeLoginDialogPlatform
+                  ? t(`settings.chatBridge.${chatBridgeLoginDialogPlatform}.logoutAction`)
+                  : ""}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  if (chatBridgeLoginDialogPlatform === "whatsapp") {
+                    void refreshChatBridgeWhatsAppStatus();
+                  } else if (chatBridgeLoginDialogPlatform === "weixin") {
+                    void refreshChatBridgeWeixinStatus();
+                  }
+                }}
+                disabled={!chatBridgeLoginDialogPlatform || chatBridgeLoginDialogStatusLoading || chatBridgeLoginDialogActionBusy}
+              >
+                {t("common.refresh")}
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={chatBridgePairingDialogOpen}
