@@ -1,3 +1,7 @@
+## [0.46.1](https://github.com/koumoe/cli-switch/compare/v0.46.0...v0.46.1) (2026-03-25)
+
+### 修复
+* 发布前过滤发布资源文件 ([afefbdb](https://github.com/koumoe/cli-switch/commit/afefbdb480b8dc7c58c1f2decfa932df3155689f))
 ## [0.46.0](https://github.com/koumoe/cli-switch/compare/v0.45.3...v0.46.0) (2026-03-25)
 
 ### 功能
