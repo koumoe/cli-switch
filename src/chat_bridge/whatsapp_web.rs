@@ -18,6 +18,7 @@ use whatsapp_rust::bot::Bot;
 use whatsapp_rust::download::{Downloadable, MediaType};
 use whatsapp_rust::proto_helpers::{self, MessageExt as _};
 use whatsapp_rust::request::InfoQuery;
+use whatsapp_rust::send::RevokeType;
 use whatsapp_rust::store::SqliteStore;
 use whatsapp_rust::types::events::{ConnectFailureReason, Event};
 use whatsapp_rust::types::message::MessageInfo;
@@ -305,6 +306,17 @@ impl ChatAdapter for WhatsAppWebAdapter {
             .await
             .with_context(|| format!("edit whatsapp message failed: {message_id}"))?;
         self.remember_sent_message_id(message_id).await;
+        Ok(())
+    }
+
+    async fn delete_message(&self, chat_id: &str, message_id: &str) -> anyhow::Result<()> {
+        let chat_id: Jid = chat_id
+            .parse()
+            .with_context(|| format!("parse whatsapp chat_id failed: {chat_id}"))?;
+        self.client
+            .revoke_message(chat_id, message_id.to_string(), RevokeType::Sender)
+            .await
+            .with_context(|| format!("delete whatsapp message failed: {message_id}"))?;
         Ok(())
     }
 
