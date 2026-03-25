@@ -1,3 +1,11 @@
+## [0.47.0](https://github.com/koumoe/cli-switch/compare/v0.46.1...v0.47.0) (2026-03-25)
+
+### 功能
+* 支持配置消息互联执行超时 ([01ba138](https://github.com/koumoe/cli-switch/commit/01ba138c5e79e18adf160bb71b47e42522055c55))
+
+### 修复
+* 强制停止超时的消息互联任务 ([a1f1f70](https://github.com/koumoe/cli-switch/commit/a1f1f70bafd43d25dbbbde3706638b9c0b1a6198))
+* 将消息互联状态徽标下移 ([1a6af6e](https://github.com/koumoe/cli-switch/commit/1a6af6eb4ae9d3155532fab020a765436e2d4758))
 ## [0.46.1](https://github.com/koumoe/cli-switch/compare/v0.46.0...v0.46.1) (2026-03-25)
 
 ### 修复

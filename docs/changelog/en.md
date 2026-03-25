@@ -1,3 +1,13 @@
+## [0.47.0](https://github.com/koumoe/cli-switch/compare/v0.46.1...v0.47.0) (2026-03-25)
+
+### Features
+
+* add configurable chat bridge turn timeout ([01ba138](https://github.com/koumoe/cli-switch/commit/01ba138c5e79e18adf160bb71b47e42522055c55))
+
+### Bug Fixes
+
+* hard-stop timed out chat bridge turns ([a1f1f70](https://github.com/koumoe/cli-switch/commit/a1f1f70bafd43d25dbbbde3706638b9c0b1a6198))
+* move chat bridge status badge below summary ([1a6af6e](https://github.com/koumoe/cli-switch/commit/1a6af6eb4ae9d3155532fab020a765436e2d4758))
 ## [0.46.1](https://github.com/koumoe/cli-switch/compare/v0.46.0...v0.46.1) (2026-03-25)
 
 ### Bug Fixes
