@@ -171,11 +171,13 @@ impl StreamingReply {
                     self.stream = Some(stream);
                 }
                 Ok(None) => {
-                    let sent = self
-                        .adapter
-                        .send_message(self.outgoing_message(rendered.clone()))
-                        .await?;
-                    self.message = Some(sent);
+                    if !self.promote_pending_message(&rendered).await? {
+                        let sent = self
+                            .adapter
+                            .send_message(self.outgoing_message(rendered.clone()))
+                            .await?;
+                        self.message = Some(sent);
+                    }
                 }
                 Err(err) => {
                     tracing::warn!(
@@ -183,11 +185,13 @@ impl StreamingReply {
                         err = %err,
                         "chat adapter native streaming setup failed; falling back to send/edit"
                     );
-                    let sent = self
-                        .adapter
-                        .send_message(self.outgoing_message(rendered.clone()))
-                        .await?;
-                    self.message = Some(sent);
+                    if !self.promote_pending_message(&rendered).await? {
+                        let sent = self
+                            .adapter
+                            .send_message(self.outgoing_message(rendered.clone()))
+                            .await?;
+                        self.message = Some(sent);
+                    }
                 }
             }
         }
@@ -247,6 +251,20 @@ impl StreamingReply {
             return Ok(());
         }
 
+        if let Some(sent) = self.pending_message.take() {
+            send_or_replace_labeled_text(
+                &self.adapter,
+                &self.chat_id,
+                &self.label,
+                body,
+                self.reply_to.as_deref(),
+                self.locale,
+                Some(&sent.message_id),
+            )
+            .await?;
+            return Ok(());
+        }
+
         let sent = self
             .adapter
             .send_message(self.outgoing_message(self.render_content(body)))
@@ -254,6 +272,18 @@ impl StreamingReply {
         self.message = Some(sent);
         self.clear_pending_message().await;
         Ok(())
+    }
+
+    async fn promote_pending_message(&mut self, content: &str) -> anyhow::Result<bool> {
+        let Some(sent) = self.pending_message.as_ref() else {
+            return Ok(false);
+        };
+
+        self.adapter
+            .edit_message(&self.chat_id, &sent.message_id, content)
+            .await?;
+        self.message = self.pending_message.take();
+        Ok(true)
     }
 
     async fn clear_pending_message(&mut self) {

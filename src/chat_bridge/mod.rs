@@ -2804,7 +2804,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn streaming_reply_keeps_pending_notice_until_send_edit_finishes() {
+    async fn streaming_reply_reuses_pending_notice_for_send_edit_streaming() {
         let adapter = FakeAdapter::new(false);
         let adapter_trait: Arc<dyn ChatAdapter> = Arc::new(adapter.clone());
         let mut reply = StreamingReply::with_pending_message(
@@ -2825,11 +2825,33 @@ mod tests {
         assert_eq!(
             adapter.calls(),
             vec![
-                "send:label\npartial one".to_string(),
+                "edit:label\npartial one".to_string(),
                 "edit:label\npartial two".to_string(),
                 "edit:label\nfinal answer".to_string(),
-                "delete:pending-message".to_string(),
             ]
+        );
+    }
+
+    #[tokio::test]
+    async fn streaming_reply_reuses_pending_notice_for_final_only_reply() {
+        let adapter = FakeAdapter::new(false);
+        let adapter_trait: Arc<dyn ChatAdapter> = Arc::new(adapter.clone());
+        let mut reply = StreamingReply::with_pending_message(
+            adapter_trait,
+            "chat-1".to_string(),
+            Some("reply-1".to_string()),
+            "label".to_string(),
+            AppLocale::ZhCN,
+            Some(SentMessage {
+                message_id: "pending-message".to_string(),
+            }),
+        );
+
+        reply.finish("final answer").await.expect("finish");
+
+        assert_eq!(
+            adapter.calls(),
+            vec!["edit:label\nfinal answer".to_string()]
         );
     }
 
@@ -2848,7 +2870,7 @@ mod tests {
             }),
         );
 
-        reply.update("partial one").await.expect("send");
+        reply.update("partial one").await.expect("update");
         reply
             .clear_progress_message()
             .await
@@ -2857,8 +2879,7 @@ mod tests {
         assert_eq!(
             adapter.calls(),
             vec![
-                "send:label\npartial one".to_string(),
-                "delete:sent-message".to_string(),
+                "edit:label\npartial one".to_string(),
                 "delete:pending-message".to_string(),
             ]
         );
