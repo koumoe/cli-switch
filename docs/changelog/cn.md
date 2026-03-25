@@ -1,3 +1,9 @@
+## [0.45.3](https://github.com/koumoe/cli-switch/compare/v0.45.2...v0.45.3) (2026-03-25)
+
+### 修复
+* 修复 WhatsApp 自聊绑定失效 ([58eba04](https://github.com/koumoe/cli-switch/commit/58eba04cee15791d39f1523dce8d20e9deefb7e1))
+* 区分无会话与无默认会话提示 ([6fbf145](https://github.com/koumoe/cli-switch/commit/6fbf145ac5aa6d487a47f839b31a11ee7bd6e9cf))
+* 优化聊天桥命令布局 ([4bc9730](https://github.com/koumoe/cli-switch/commit/4bc9730ada422c53b836165369f4dffc1d99a80c))
 ## [0.45.2](https://github.com/koumoe/cli-switch/compare/v0.45.1...v0.45.2) (2026-03-24)
 
 ### 修复
