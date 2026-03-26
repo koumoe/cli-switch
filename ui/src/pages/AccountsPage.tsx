@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useReducer, useRef, useState } from "react";
+import React, { useEffect, useReducer, useRef, useState } from "react";
 import { Plus, Pencil, Trash2, RefreshCw, KeyRound, GripVertical } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -193,7 +193,14 @@ export function AccountsPage() {
   const [managedLoadingGroups, setManagedLoadingGroups] = useState(false);
   const [managedCreating, setManagedCreating] = useState(false);
 
-  const today = useMemo(() => ymdLocal(Date.now()), []);
+  const [today, setToday] = useState(() => ymdLocal(Date.now()));
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setToday(ymdLocal(Date.now()));
+    }, 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   async function refreshAll() {
     setLoading(true);
@@ -362,7 +369,7 @@ export function AccountsPage() {
       toast.error(t("accounts.toast.actionFail"), { description: t("accounts.toast.pageCheckinUrlRequired") });
       return;
     }
-    if (draft.checkin_mode !== "page_open" && !effectiveHasCredentials) {
+    if (draft.checkin_mode === "system_api" && !effectiveHasCredentials) {
       toast.error(t("accounts.toast.actionFail"), { description: t("accounts.toast.credentialsRequiredForSystem") });
       return;
     }
@@ -650,7 +657,7 @@ export function AccountsPage() {
                         dragOverId === item.id ? "bg-accent/30" : "",
                       ].filter(Boolean).join(" ")}
                     >
-                      <TableCell>
+                      <TableCell className="text-center align-middle">
                         <button
                           className="text-muted-foreground hover:text-foreground cursor-grab active:cursor-grabbing"
                           draggable={!reordering}
@@ -707,7 +714,7 @@ export function AccountsPage() {
                           </Badge>
                         )}
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="text-center align-middle">
                         <div className="flex items-center justify-center gap-1">
                           <Button
                             variant="ghost"
@@ -1020,14 +1027,26 @@ export function AccountsPage() {
                 <div className="text-sm font-medium">{t("accounts.deleteDialog.deleteManagedChannels")}</div>
                 <div className="text-xs text-muted-foreground">{t("accounts.deleteDialog.deleteManagedChannelsHint")}</div>
               </div>
-              <Switch checked={deleteManagedChannels} onCheckedChange={setDeleteManagedChannels} />
+              <Switch
+                checked={deleteManagedChannels}
+                onCheckedChange={(checked) => {
+                  setDeleteManagedChannels(checked);
+                  if (!checked) setDeleteSyncRemote(false);
+                }}
+              />
             </div>
             <div className="flex items-center justify-between rounded-md border p-3">
               <div className="space-y-1">
                 <div className="text-sm font-medium">{t("accounts.deleteDialog.syncDeleteRemote")}</div>
                 <div className="text-xs text-muted-foreground">{t("accounts.deleteDialog.syncDeleteRemoteHint")}</div>
               </div>
-              <Switch checked={deleteSyncRemote} onCheckedChange={setDeleteSyncRemote} />
+              <Switch
+                checked={deleteSyncRemote}
+                onCheckedChange={(checked) => {
+                  setDeleteSyncRemote(checked);
+                  if (checked) setDeleteManagedChannels(true);
+                }}
+              />
             </div>
           </div>
           <DialogFooter>

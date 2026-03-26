@@ -221,7 +221,7 @@ export type Channel = {
   real_multiplier: number;
   enabled: boolean;
   auto_disabled_until_ms: number;
-  managed_by_newapi?: boolean;
+  managed_by_newapi: boolean;
   newapi_account_id?: string | null;
   newapi_channel_id?: number | null;
   newapi_token_id?: number | null;

@@ -408,40 +408,6 @@ fn auto_checkin_due(now: time::OffsetDateTime, configured: &str) -> anyhow::Resu
     Ok(now.time() >= scheduled)
 }
 
-fn newapi_account_has_user_api_credentials(account: &storage::NewApiAccount) -> bool {
-    !account.user_id.trim().is_empty()
-        && account
-            .user_token
-            .as_deref()
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .is_some()
-}
-
-fn build_newapi_snapshot(
-    overview: &newapi::NewApiAccountOverview,
-) -> storage::NewApiAccountRemoteSnapshot {
-    storage::NewApiAccountRemoteSnapshot {
-        replace_remote_state: true,
-        remote_role: overview.remote_role,
-        remote_username: overview.remote_username.clone(),
-        remote_display_name: overview.remote_display_name.clone(),
-        remote_group: overview.remote_group.clone(),
-        quota_display_type: Some(overview.quota_display_type.clone()),
-        quota_per_unit: Some(overview.quota_per_unit),
-        usd_exchange_rate: Some(overview.usd_exchange_rate),
-        custom_currency_symbol: overview.custom_currency_symbol.clone(),
-        custom_currency_exchange_rate: Some(overview.custom_currency_exchange_rate),
-        remote_checkin_enabled: Some(overview.remote_checkin_enabled),
-        remote_turnstile_check_enabled: Some(overview.remote_turnstile_check_enabled),
-        last_quota: overview.last_quota,
-        last_used_quota: overview.last_used_quota,
-        last_balance_amount: overview.last_balance_amount,
-        last_sync_error: None,
-        last_synced_at_ms: Some(storage::now_ms()),
-    }
-}
-
 async fn persist_newapi_overview(
     db_path: PathBuf,
     account_id: &str,
@@ -451,7 +417,7 @@ async fn persist_newapi_overview(
     storage::update_newapi_account_remote_snapshot(
         db_path.clone(),
         account_id.to_string(),
-        build_newapi_snapshot(overview),
+        newapi::build_remote_snapshot(overview),
     )
     .await?;
     if overview.checked_in_today {
@@ -521,7 +487,7 @@ pub(crate) async fn newapi_accounts_maintenance_loop(
             };
 
         for mut account in accounts {
-            if !newapi_account_has_user_api_credentials(&account) {
+            if !newapi::account_has_user_api_credentials(&account) {
                 if account.low_balance_alert_notified {
                     let _ = storage::set_newapi_account_balance_alert_notified(
                         db_path.clone(),
@@ -587,7 +553,13 @@ pub(crate) async fn newapi_accounts_maintenance_loop(
             };
 
             if auto_due && !completed_ids.contains(&account.id) {
-                match newapi::perform_system_checkin(&http_client, &account).await {
+                match newapi::perform_system_checkin_with_overview(
+                    &http_client,
+                    &account,
+                    latest_overview.as_ref(),
+                )
+                .await
+                {
                     Ok(result) => {
                         let method = if result.already_checked_in {
                             "remote_detected"
@@ -606,28 +578,45 @@ pub(crate) async fn newapi_accounts_maintenance_loop(
                             completed_ids.insert(account.id.clone());
                         }
 
-                        match newapi::fetch_account_overview(&http_client, &account).await {
-                            Ok(overview) => {
-                                if let Err(err) = persist_newapi_overview(
+                        if result.already_checked_in && latest_overview.is_some() {
+                            if let Some(overview) = latest_overview.as_ref()
+                                && let Err(err) = persist_newapi_overview(
                                     db_path.clone(),
                                     &account.id,
-                                    &overview,
+                                    overview,
                                     &mut completed_ids,
                                 )
                                 .await
-                                {
-                                    tracing::warn!(account_id = %account.id, err = %err, "persist newapi overview after system checkin failed");
-                                }
-                                latest_overview = Some(overview);
+                            {
+                                tracing::warn!(account_id = %account.id, err = %err, "persist cached newapi overview after already checked in");
                             }
-                            Err(err) => {
-                                latest_overview = None;
-                                tracing::warn!(account_id = %account.id, err = %err, "refresh newapi overview after system checkin failed");
-                                if let Err(update_err) =
-                                    persist_newapi_sync_failure(db_path.clone(), &account.id, &err)
-                                        .await
-                                {
-                                    tracing::warn!(account_id = %account.id, err = %update_err, "persist newapi sync failure after system checkin failed");
+                        } else {
+                            match newapi::fetch_account_overview(&http_client, &account).await {
+                                Ok(overview) => {
+                                    if let Err(err) = persist_newapi_overview(
+                                        db_path.clone(),
+                                        &account.id,
+                                        &overview,
+                                        &mut completed_ids,
+                                    )
+                                    .await
+                                    {
+                                        tracing::warn!(account_id = %account.id, err = %err, "persist newapi overview after system checkin failed");
+                                    }
+                                    latest_overview = Some(overview);
+                                }
+                                Err(err) => {
+                                    latest_overview = None;
+                                    tracing::warn!(account_id = %account.id, err = %err, "refresh newapi overview after system checkin failed");
+                                    if let Err(update_err) = persist_newapi_sync_failure(
+                                        db_path.clone(),
+                                        &account.id,
+                                        &err,
+                                    )
+                                    .await
+                                    {
+                                        tracing::warn!(account_id = %account.id, err = %update_err, "persist newapi sync failure after system checkin failed");
+                                    }
                                 }
                             }
                         }

@@ -3,7 +3,7 @@ use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
 use serde::Deserialize;
 use serde_json::Value;
 
-use crate::storage::{NewApiAccount, NewApiAccountCheckinMode};
+use crate::storage::{NewApiAccount, NewApiAccountCheckinMode, NewApiAccountRemoteSnapshot};
 
 const NEW_API_USER_HEADER: &str = "New-Api-User";
 
@@ -24,6 +24,38 @@ pub struct NewApiAccountOverview {
     pub last_used_quota: Option<i64>,
     pub last_balance_amount: Option<f64>,
     pub checked_in_today: bool,
+}
+
+pub fn account_has_user_api_credentials(account: &NewApiAccount) -> bool {
+    !account.user_id.trim().is_empty()
+        && account
+            .user_token
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .is_some()
+}
+
+pub fn build_remote_snapshot(overview: &NewApiAccountOverview) -> NewApiAccountRemoteSnapshot {
+    NewApiAccountRemoteSnapshot {
+        replace_remote_state: true,
+        remote_role: overview.remote_role,
+        remote_username: overview.remote_username.clone(),
+        remote_display_name: overview.remote_display_name.clone(),
+        remote_group: overview.remote_group.clone(),
+        quota_display_type: Some(overview.quota_display_type.clone()),
+        quota_per_unit: Some(overview.quota_per_unit),
+        usd_exchange_rate: Some(overview.usd_exchange_rate),
+        custom_currency_symbol: overview.custom_currency_symbol.clone(),
+        custom_currency_exchange_rate: Some(overview.custom_currency_exchange_rate),
+        remote_checkin_enabled: Some(overview.remote_checkin_enabled),
+        remote_turnstile_check_enabled: Some(overview.remote_turnstile_check_enabled),
+        last_quota: overview.last_quota,
+        last_used_quota: overview.last_used_quota,
+        last_balance_amount: overview.last_balance_amount,
+        last_sync_error: None,
+        last_synced_at_ms: Some(crate::storage::now_ms()),
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -105,6 +137,8 @@ struct TokenListData<T> {
 pub struct TokenSearchItem {
     pub id: i64,
     pub name: String,
+    pub created_time: Option<i64>,
+    pub group: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -342,11 +376,19 @@ pub async fn list_groups(
     Ok(groups)
 }
 
-pub async fn perform_system_checkin(
+pub async fn perform_system_checkin_with_overview(
     http_client: &reqwest::Client,
     account: &NewApiAccount,
+    overview: Option<&NewApiAccountOverview>,
 ) -> anyhow::Result<NewApiSystemCheckinResult> {
-    let overview = fetch_account_overview(http_client, account).await?;
+    let fetched_overview = if overview.is_none() {
+        Some(fetch_account_overview(http_client, account).await?)
+    } else {
+        None
+    };
+    let overview = overview
+        .or(fetched_overview.as_ref())
+        .context("missing overview for system checkin")?;
     if !overview.remote_checkin_enabled {
         anyhow::bail!("目标 New API 未启用系统签到");
     }
@@ -412,14 +454,18 @@ async fn create_token(
     token_name: &str,
     group_name: Option<&str>,
 ) -> anyhow::Result<i64> {
+    let request_started_at = time::OffsetDateTime::now_utc()
+        .unix_timestamp()
+        .saturating_sub(1);
     let headers = auth_headers(account)?;
     let url = join_url(&account.base_url, "/api/token");
+    let requested_group = group_name.unwrap_or("").trim().to_string();
     let payload = serde_json::json!({
         "name": token_name,
         "expired_time": -1,
         "unlimited_quota": true,
         "remain_quota": 0,
-        "group": group_name.unwrap_or(""),
+        "group": requested_group.clone(),
         "cross_group_retry": false,
         "model_limits_enabled": false,
         "model_limits": "",
@@ -438,15 +484,30 @@ async fn create_token(
         http_client.get(search_url).headers(headers).query(&[
             ("keyword", token_name),
             ("p", "1"),
-            ("page_size", "20"),
+            ("page_size", "100"),
+            ("size", "100"),
         ]),
     )
     .await?;
 
-    data.items
+    let exact_matches = data
+        .items
         .into_iter()
-        .filter(|item| item.name == token_name)
-        .max_by_key(|item| item.id)
+        .filter(|item| {
+            item.name == token_name
+                && item.group.as_deref().map(str::trim).unwrap_or("") == requested_group
+        })
+        .collect::<Vec<_>>();
+
+    exact_matches
+        .iter()
+        .filter(|item| item.created_time.unwrap_or(i64::MIN) >= request_started_at)
+        .max_by_key(|item| (item.created_time.unwrap_or(i64::MIN), item.id))
+        .or_else(|| {
+            exact_matches
+                .iter()
+                .max_by_key(|item| (item.created_time.unwrap_or(i64::MIN), item.id))
+        })
         .map(|item| item.id)
         .with_context(|| format!("创建 token 后未找到：{token_name}"))
 }

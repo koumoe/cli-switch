@@ -116,9 +116,6 @@ fn request_endpoint_template(method: &Method, path: &str) -> Option<&'static str
                 {
                     Some("/api/newapi/accounts/{id}/checkins/system")
                 }
-                ["api", "newapi", "accounts", _, "managed_channels"] if method == Method::POST => {
-                    Some("/api/newapi/accounts/{id}/managed_channels")
-                }
                 ["api", "newapi", "accounts", _, "managed_channel"] if method == Method::POST => {
                     Some("/api/newapi/accounts/{id}/managed_channel")
                 }
@@ -230,9 +227,6 @@ fn request_purpose(method: &Method, path: &str) -> &'static str {
                     if method == Method::POST =>
                 {
                     "handlers::perform_newapi_account_system_checkin"
-                }
-                ["api", "newapi", "accounts", _, "managed_channels"] if method == Method::POST => {
-                    "handlers::create_newapi_managed_channel"
                 }
                 ["api", "newapi", "accounts", _, "managed_channel"] if method == Method::POST => {
                     "handlers::create_newapi_managed_channel"
@@ -404,10 +398,6 @@ fn build_app(state: AppState) -> Router {
         .route(
             "/api/newapi/accounts/{id}/checkins/system",
             post(handlers::perform_newapi_account_system_checkin),
-        )
-        .route(
-            "/api/newapi/accounts/{id}/managed_channels",
-            post(handlers::create_newapi_managed_channel),
         )
         .route(
             "/api/newapi/accounts/{id}/managed_channel",

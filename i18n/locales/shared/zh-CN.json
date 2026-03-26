@@ -71,6 +71,7 @@
     "newapi_managed_name_required": "名称不能为空",
     "newapi_page_checkin_url_required": "页面打开签到模式必须填写页面签到地址",
     "newapi_remote_delete_failed": "删除 New API 远端资源失败",
+    "newapi_remote_delete_partial_failed": "删除远端资源时部分失败，部分托管渠道已保留",
     "newapi_sync_failed": "同步 New API 账号信息失败",
     "route_name_required": "路由名称不能为空",
     "route_not_found": "路由不存在",

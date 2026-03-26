@@ -1,3 +1,4 @@
+use anyhow::Context as _;
 use axum::Json;
 use axum::extract::State;
 use axum::response::IntoResponse;
@@ -34,16 +35,6 @@ fn validate_optional_http_url(
     }
 }
 
-fn account_has_user_api_credentials(account: &storage::NewApiAccount) -> bool {
-    !account.user_id.trim().is_empty()
-        && account
-            .user_token
-            .as_deref()
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .is_some()
-}
-
 fn validate_account_candidate(account: &storage::NewApiAccount) -> Result<(), ApiError> {
     let _ = validate_http_url(&account.base_url, "newapi_base_url_required")?;
     if !account.low_balance_alert_threshold.is_finite() || account.low_balance_alert_threshold < 0.0
@@ -62,8 +53,9 @@ fn validate_account_candidate(account: &storage::NewApiAccount) -> Result<(), Ap
             format!("Invalid auto_checkin_time: {e}"),
         )
     })?;
-    let has_credentials = account_has_user_api_credentials(account);
+    let has_credentials = newapi_client::account_has_user_api_credentials(account);
     if !has_credentials
+        && account.auto_checkin_enabled
         && matches!(
             account.checkin_mode,
             storage::NewApiAccountCheckinMode::SystemApi
@@ -71,7 +63,7 @@ fn validate_account_candidate(account: &storage::NewApiAccount) -> Result<(), Ap
     {
         return Err(ApiError::bad_request(
             "newapi_credentials_required_for_system_checkin",
-            "user_id and user_token are required for system_api mode",
+            "user_id and user_token are required when system_api auto check-in is enabled",
         ));
     }
     if matches!(
@@ -190,30 +182,6 @@ fn build_candidate_from_update(
     Ok(next)
 }
 
-fn build_remote_snapshot(
-    overview: &newapi_client::NewApiAccountOverview,
-) -> storage::NewApiAccountRemoteSnapshot {
-    storage::NewApiAccountRemoteSnapshot {
-        replace_remote_state: true,
-        remote_role: overview.remote_role,
-        remote_username: overview.remote_username.clone(),
-        remote_display_name: overview.remote_display_name.clone(),
-        remote_group: overview.remote_group.clone(),
-        quota_display_type: Some(overview.quota_display_type.clone()),
-        quota_per_unit: Some(overview.quota_per_unit),
-        usd_exchange_rate: Some(overview.usd_exchange_rate),
-        custom_currency_symbol: overview.custom_currency_symbol.clone(),
-        custom_currency_exchange_rate: Some(overview.custom_currency_exchange_rate),
-        remote_checkin_enabled: Some(overview.remote_checkin_enabled),
-        remote_turnstile_check_enabled: Some(overview.remote_turnstile_check_enabled),
-        last_quota: overview.last_quota,
-        last_used_quota: overview.last_used_quota,
-        last_balance_amount: overview.last_balance_amount,
-        last_sync_error: None,
-        last_synced_at_ms: Some(storage::now_ms()),
-    }
-}
-
 async fn apply_account_overview(
     state: &AppState,
     account_id: String,
@@ -222,7 +190,7 @@ async fn apply_account_overview(
     storage::update_newapi_account_remote_snapshot(
         state.db_path(),
         account_id.clone(),
-        build_remote_snapshot(overview),
+        newapi_client::build_remote_snapshot(overview),
     )
     .await?;
     if overview.checked_in_today {
@@ -275,7 +243,7 @@ async fn sync_account_if_possible(
     account_id: String,
     account: &storage::NewApiAccount,
 ) -> Result<storage::NewApiAccount, ApiError> {
-    if !account_has_user_api_credentials(account) {
+    if !newapi_client::account_has_user_api_credentials(account) {
         return clear_account_remote_state(state, account_id).await;
     }
     let overview = newapi_client::fetch_account_overview(&state.http_client, account)
@@ -309,13 +277,6 @@ fn sync_error(err: anyhow::Error) -> ApiError {
     )
 }
 
-fn remote_delete_error(err: anyhow::Error) -> ApiError {
-    ApiError::bad_gateway(
-        "newapi_remote_delete_failed",
-        format!("Failed to delete remote New API resource: {err}"),
-    )
-}
-
 fn validate_managed_channel_name(name: &str) -> Result<String, ApiError> {
     let name = name.trim();
     if name.is_empty() {
@@ -343,16 +304,26 @@ async fn delete_remote_managed_channel_resources(
     state: &AppState,
     account: &storage::NewApiAccount,
     channel: &storage::Channel,
-) -> Result<(), ApiError> {
+) -> anyhow::Result<()> {
     if let Some(remote_channel_id) = channel.newapi_channel_id {
         newapi_client::delete_channel(&state.http_client, account, remote_channel_id)
             .await
-            .map_err(remote_delete_error)?;
+            .with_context(|| {
+                format!(
+                    "delete remote channel {} for local channel {} failed",
+                    remote_channel_id, channel.id
+                )
+            })?;
     }
     if let Some(remote_token_id) = channel.newapi_token_id {
         newapi_client::delete_token(&state.http_client, account, remote_token_id)
             .await
-            .map_err(remote_delete_error)?;
+            .with_context(|| {
+                format!(
+                    "delete remote token {} for local channel {} failed",
+                    remote_token_id, channel.id
+                )
+            })?;
     }
     Ok(())
 }
@@ -490,7 +461,7 @@ pub(in crate::server) async fn refresh_newapi_account(
 ) -> Result<impl IntoResponse, ApiError> {
     let account =
         storage::get_newapi_account_with_secret(state.db_path(), account_id.clone()).await?;
-    if !account_has_user_api_credentials(&account) {
+    if !newapi_client::account_has_user_api_credentials(&account) {
         return clear_account_remote_state(&state, account_id)
             .await
             .map(Json);
@@ -511,7 +482,7 @@ pub(in crate::server) async fn list_newapi_account_groups(
     axum::extract::Path(account_id): axum::extract::Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
     let account = storage::get_newapi_account_with_secret(state.db_path(), account_id).await?;
-    if !account_has_user_api_credentials(&account) {
+    if !newapi_client::account_has_user_api_credentials(&account) {
         return Err(ApiError::bad_request(
             "newapi_credentials_required",
             "user_id and user_token are required for this action",
@@ -554,7 +525,7 @@ pub(in crate::server) async fn perform_newapi_account_system_checkin(
 ) -> Result<impl IntoResponse, ApiError> {
     let account =
         storage::get_newapi_account_with_secret(state.db_path(), account_id.clone()).await?;
-    if !account_has_user_api_credentials(&account) {
+    if !newapi_client::account_has_user_api_credentials(&account) {
         return Err(ApiError::bad_request(
             "newapi_credentials_required",
             "user_id and user_token are required for this action",
@@ -569,38 +540,32 @@ pub(in crate::server) async fn perform_newapi_account_system_checkin(
             }
         };
     let _ = apply_account_overview(&state, account_id.clone(), &overview_before).await?;
-    if !overview_before.remote_checkin_enabled {
-        return Err(ApiError::bad_request(
-            "newapi_checkin_disabled",
-            "Remote New API check-in is not enabled",
-        ));
-    }
-    if overview_before.remote_turnstile_check_enabled {
-        return Err(ApiError::bad_request(
-            "newapi_checkin_turnstile_enabled",
-            "Remote New API uses Turnstile, please switch to page_open mode",
-        ));
-    }
+    let checkin_result = newapi_client::perform_system_checkin_with_overview(
+        &state.http_client,
+        &account,
+        Some(&overview_before),
+    )
+    .await
+    .map_err(|err| {
+        let message = err.to_string();
+        if message.contains("Turnstile") || message.contains("未启用系统签到") {
+            ApiError::bad_request("newapi_checkin_unavailable", message)
+        } else {
+            ApiError::bad_gateway("newapi_checkin_failed", message)
+        }
+    })?;
 
-    let checkin_result = newapi_client::perform_system_checkin(&state.http_client, &account)
-        .await
-        .map_err(|err| {
-            let message = err.to_string();
-            if message.contains("Turnstile") || message.contains("未启用系统签到") {
-                ApiError::bad_request("newapi_checkin_unavailable", message)
-            } else {
-                ApiError::bad_gateway("newapi_checkin_failed", message)
-            }
-        })?;
-
-    let overview_after =
+    let overview_after = if checkin_result.already_checked_in {
+        overview_before
+    } else {
         match newapi_client::fetch_account_overview(&state.http_client, &account).await {
             Ok(overview) => overview,
             Err(err) => {
                 let _ = record_account_sync_failure(&state, account_id.clone(), &err).await;
                 return Err(sync_error(err));
             }
-        };
+        }
+    };
     let account = apply_account_overview(&state, account_id.clone(), &overview_after).await?;
     storage::complete_newapi_account_checkin_today(
         state.db_path(),
@@ -628,7 +593,7 @@ pub(in crate::server) async fn create_newapi_managed_channel(
 ) -> Result<impl IntoResponse, ApiError> {
     let account =
         storage::get_newapi_account_with_secret(state.db_path(), account_id.clone()).await?;
-    if !account_has_user_api_credentials(&account) {
+    if !newapi_client::account_has_user_api_credentials(&account) {
         return Err(ApiError::bad_request(
             "newapi_credentials_required",
             "user_id and user_token are required for this action",
@@ -737,8 +702,33 @@ pub(in crate::server) async fn delete_newapi_account(
                     && channel.newapi_account_id.as_deref() == Some(account_id.as_str())
             })
             .collect::<Vec<_>>();
+        let mut deleted_channel_ids = Vec::new();
+        let mut failures = Vec::new();
         for channel in &channels {
-            delete_remote_managed_channel_resources(&state, &account, channel).await?;
+            match delete_remote_managed_channel_resources(&state, &account, channel).await {
+                Ok(()) => deleted_channel_ids.push(channel.id.clone()),
+                Err(err) => failures.push(format!("{} ({}): {err}", channel.name, channel.id)),
+            }
+        }
+        if !deleted_channel_ids.is_empty() && !failures.is_empty() {
+            for channel_id in &deleted_channel_ids {
+                storage::delete_channel(state.db_path(), channel_id.clone()).await?;
+            }
+            state.channels_cache.send_modify(|cur| {
+                let deleted = deleted_channel_ids.clone();
+                let mut next = (**cur).clone();
+                next.retain(|channel| !deleted.contains(&channel.id));
+                *cur = std::sync::Arc::new(next);
+            });
+        }
+        if !failures.is_empty() {
+            return Err(ApiError::bad_gateway(
+                "newapi_remote_delete_partial_failed",
+                format!(
+                    "Remote delete failed for some managed channels; account was kept. {}",
+                    failures.join(" ; ")
+                ),
+            ));
         }
     }
 

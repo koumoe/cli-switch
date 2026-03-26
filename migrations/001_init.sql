@@ -125,12 +125,17 @@ CREATE TABLE IF NOT EXISTS newapi_accounts (
   last_synced_at_ms INTEGER NULL,
   low_balance_alert_notified INTEGER NOT NULL DEFAULT 0,
   last_balance_alert_at_ms INTEGER NULL,
+  sort_order INTEGER NOT NULL DEFAULT 0,
   created_at_ms INTEGER NOT NULL,
   updated_at_ms INTEGER NOT NULL
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_newapi_accounts_base_user
-ON newapi_accounts(base_url, user_id);
+ON newapi_accounts(base_url, user_id)
+WHERE user_id <> '';
+
+CREATE INDEX IF NOT EXISTS idx_channels_newapi_account_id
+ON channels(newapi_account_id);
 
 CREATE TABLE IF NOT EXISTS newapi_account_checkins (
   account_id TEXT NOT NULL,

@@ -69,6 +69,7 @@
     "newapi_managed_name_required": "Name is required",
     "newapi_page_checkin_url_required": "page_checkin_url is required for page-open check-in mode",
     "newapi_remote_delete_failed": "Failed to delete the remote New API resource",
+    "newapi_remote_delete_partial_failed": "Remote deletion partially failed and some managed channels were kept",
     "newapi_sync_failed": "Failed to sync the New API account",
     "route_name_required": "Route name is required",
     "route_not_found": "Route not found",
