@@ -8,6 +8,7 @@ pub mod events;
 pub mod i18n;
 pub mod log_files;
 pub mod logging;
+pub(crate) mod newapi;
 pub mod nodejs;
 pub(crate) mod process;
 pub mod proxy;

@@ -4,6 +4,7 @@ pub(super) mod chat_bridge_weixin;
 pub(super) mod chat_bridge_whatsapp;
 pub(super) mod health;
 pub(super) mod maintenance;
+pub(super) mod newapi;
 pub(super) mod pricing;
 pub(super) mod prompt;
 pub(super) mod proxy;
@@ -30,6 +31,12 @@ pub(super) use chat_bridge_whatsapp::{
 };
 pub(super) use health::health;
 pub(super) use maintenance::{db_size, frontend_log_ingest, logs_clear, logs_size, records_clear};
+pub(super) use newapi::{
+    complete_newapi_account_checkin_today, create_newapi_account, create_newapi_managed_channel,
+    delete_newapi_account, list_newapi_account_groups, list_newapi_accounts,
+    newapi_account_checkins_today, perform_newapi_account_system_checkin, refresh_newapi_account,
+    reorder_newapi_accounts, update_newapi_account,
+};
 pub(super) use pricing::{pricing_models, pricing_status, pricing_sync};
 pub(super) use prompt::{
     delete_prompt_document, delete_prompt_project, get_prompt_document, list_prompt_projects,

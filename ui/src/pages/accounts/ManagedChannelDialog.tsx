@@ -1,0 +1,146 @@
+import React from "react";
+
+import type { NewApiAccount, NewApiGroupOption, Protocol } from "@/api";
+import {
+  Button,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  Input,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui";
+import { useI18n } from "@/lib/i18n";
+
+import { defaultManagedName, type ManagedChannelDraft } from "./shared";
+
+type ManagedChannelDialogProps = {
+  open: boolean;
+  target: NewApiAccount | null;
+  draft: ManagedChannelDraft | null;
+  groups: NewApiGroupOption[];
+  loadingGroups: boolean;
+  creating: boolean;
+  onOpenChange: (open: boolean) => void;
+  setDraft: React.Dispatch<React.SetStateAction<ManagedChannelDraft | null>>;
+  onCreate: () => void | Promise<void>;
+};
+
+export function ManagedChannelDialog({
+  open,
+  target,
+  draft,
+  groups,
+  loadingGroups,
+  creating,
+  onOpenChange,
+  setDraft,
+  onCreate,
+}: ManagedChannelDialogProps) {
+  const { t } = useI18n();
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[560px] max-h-[85vh] overflow-hidden flex flex-col">
+        <DialogHeader>
+          <DialogTitle>{t("accounts.managed.title")}</DialogTitle>
+          <DialogDescription>
+            {t("accounts.managed.description", { name: target?.user_id ?? "" })}
+          </DialogDescription>
+        </DialogHeader>
+        {draft ? (
+          <div className="flex-1 min-h-0 space-y-4 py-2 overflow-y-auto pr-1">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">{t("accounts.managed.name")}</label>
+                <Input
+                  value={draft.name}
+                  onChange={(e) => setDraft((current) => (current ? { ...current, name: e.target.value } : current))}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">{t("accounts.managed.protocol")}</label>
+                <Select
+                  value={draft.protocol}
+                  onValueChange={(value) => {
+                    setDraft((current) => {
+                      if (!current) return current;
+                      const protocol = value as Protocol;
+                      if (!target) return { ...current, protocol };
+                      const oldAuto = defaultManagedName(target, current.protocol);
+                      const nextName = current.name === oldAuto ? defaultManagedName(target, protocol) : current.name;
+                      return { ...current, protocol, name: nextName };
+                    });
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="openai">OpenAI</SelectItem>
+                    <SelectItem value="anthropic">Anthropic</SelectItem>
+                    <SelectItem value="gemini">Gemini</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">{t("accounts.managed.group")}</label>
+              <Select
+                value={draft.group_name}
+                onValueChange={(value) => {
+                  setDraft((current) => (current ? { ...current, group_name: value } : current));
+                }}
+                disabled={loadingGroups}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={t("accounts.managed.groupPlaceholder")} />
+                </SelectTrigger>
+                <SelectContent>
+                  {groups.map((group) => (
+                    <SelectItem key={group.name} value={group.name}>
+                      <div className="flex flex-col">
+                        <span>
+                          {group.name}
+                          {group.ratio !== null && group.ratio !== undefined ? ` (x${group.ratio})` : ""}
+                        </span>
+                        {group.description ? (
+                          <span className="text-xs text-muted-foreground">{group.description}</span>
+                        ) : null}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">{t("accounts.managed.baseUrlOverride")}</label>
+              <Input
+                value={draft.base_url_override}
+                onChange={(e) => {
+                  setDraft((current) => (current ? { ...current, base_url_override: e.target.value } : current));
+                }}
+                placeholder={target?.base_url || "https://new-api.example.com"}
+              />
+              <p className="text-xs text-muted-foreground">{t("accounts.managed.baseUrlOverrideHint")}</p>
+            </div>
+          </div>
+        ) : null}
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={creating}>
+            {t("common.cancel")}
+          </Button>
+          <Button onClick={() => void onCreate()} disabled={creating || !draft}>
+            {t("accounts.managed.create")}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}

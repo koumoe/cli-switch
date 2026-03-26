@@ -448,7 +448,7 @@ struct CliToolSnapshot {
 
 #[derive(Debug, Clone)]
 enum ResolveChannelTargetResult {
-    Exact(storage::Channel),
+    Exact(Box<storage::Channel>),
     Ambiguous(Vec<storage::Channel>),
     NotFound,
 }
@@ -1229,7 +1229,7 @@ impl ChatBridgeRuntime {
         locale: AppLocale,
     ) -> anyhow::Result<Option<storage::Channel>> {
         match resolve_channel_target(channels, target) {
-            ResolveChannelTargetResult::Exact(channel) => Ok(Some(channel)),
+            ResolveChannelTargetResult::Exact(channel) => Ok(Some(*channel)),
             ResolveChannelTargetResult::Ambiguous(items) => {
                 self.send_text(
                     adapter,
@@ -1317,7 +1317,7 @@ fn resolve_channel_target(
     }
 
     if let Some(channel) = channels.iter().find(|item| item.id == trimmed) {
-        return ResolveChannelTargetResult::Exact(channel.clone());
+        return ResolveChannelTargetResult::Exact(Box::new(channel.clone()));
     }
 
     let lowered = trimmed.to_ascii_lowercase();
@@ -1327,9 +1327,9 @@ fn resolve_channel_target(
         .cloned()
         .collect::<Vec<_>>();
     if by_name.len() == 1 {
-        return ResolveChannelTargetResult::Exact(
+        return ResolveChannelTargetResult::Exact(Box::new(
             by_name.into_iter().next().unwrap_or_else(|| unreachable!()),
-        );
+        ));
     }
     if by_name.len() > 1 {
         return ResolveChannelTargetResult::Ambiguous(by_name);
@@ -1342,12 +1342,12 @@ fn resolve_channel_target(
         .collect::<Vec<_>>();
     match by_id_prefix.len() {
         0 => ResolveChannelTargetResult::NotFound,
-        1 => ResolveChannelTargetResult::Exact(
+        1 => ResolveChannelTargetResult::Exact(Box::new(
             by_id_prefix
                 .into_iter()
                 .next()
                 .unwrap_or_else(|| unreachable!()),
-        ),
+        )),
         _ => ResolveChannelTargetResult::Ambiguous(by_id_prefix),
     }
 }
@@ -2492,6 +2492,12 @@ mod tests {
                 recharge_currency: None,
                 real_multiplier: None,
                 enabled: true,
+                managed_by_newapi: None,
+                newapi_account_id: None,
+                newapi_channel_id: None,
+                newapi_token_id: None,
+                newapi_token_name: None,
+                newapi_group: None,
             },
         )
         .await

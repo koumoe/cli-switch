@@ -1,6 +1,7 @@
 use anyhow::Context as _;
 use std::collections::BTreeMap;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::process::Command;
 use std::time::Duration;
 
 use cliswitch::events::AppEvent;
@@ -130,6 +131,90 @@ fn fallback_tray_quit(locale: AppLocale) -> &'static str {
 fn desktop_text(locale: AppLocale, key: &str, fallback: &str) -> String {
     i18n::render_optional(locale, key, &BTreeMap::<String, String>::new())
         .unwrap_or_else(|| fallback.to_string())
+}
+
+fn low_balance_notification_title(locale: AppLocale) -> &'static str {
+    match locale {
+        AppLocale::ZhCN => "CliSwitch 余额告警",
+        AppLocale::EnUS => "CliSwitch Low Balance",
+    }
+}
+
+fn low_balance_notification_body(
+    locale: AppLocale,
+    alert: &cliswitch::events::NewApiLowBalanceAlert,
+) -> String {
+    match locale {
+        AppLocale::ZhCN => format!("{} 余额 {}", alert.base_url, alert.balance_text),
+        AppLocale::EnUS => format!("{} balance {}", alert.base_url, alert.balance_text),
+    }
+}
+
+fn show_system_notification(title: &str, body: &str) -> anyhow::Result<()> {
+    #[cfg(target_os = "macos")]
+    {
+        fn quote(value: &str) -> String {
+            format!("\"{}\"", value.replace('\\', "\\\\").replace('"', "\\\""))
+        }
+
+        let script = format!(
+            "display notification {} with title {}",
+            quote(body),
+            quote(title)
+        );
+        let mut cmd = Command::new("osascript");
+        cmd.args(["-e", &script]);
+        let status = cmd.status().context("spawn osascript failed")?;
+        if !status.success() {
+            anyhow::bail!("osascript exited with status {status}");
+        }
+        return Ok(());
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        let mut cmd = Command::new("notify-send");
+        cmd.args([title, body]);
+        let status = cmd.status().context("spawn notify-send failed")?;
+        if !status.success() {
+            anyhow::bail!("notify-send exited with status {status}");
+        }
+        return Ok(());
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        fn ps_quote(value: &str) -> String {
+            value.replace('\'', "''")
+        }
+
+        let title = ps_quote(title);
+        let body = ps_quote(body);
+        let script = format!(
+            "$title='{title}'; \
+             $body='{body}'; \
+             [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] > $null; \
+             [Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime] > $null; \
+             $xml = New-Object Windows.Data.Xml.Dom.XmlDocument; \
+             $xml.LoadXml(\"<toast><visual><binding template='ToastGeneric'><text>$title</text><text>$body</text></binding></visual></toast>\"); \
+             $toast = [Windows.UI.Notifications.ToastNotification]::new($xml); \
+             $notifier = [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('CliSwitch'); \
+             $notifier.Show($toast);"
+        );
+        let mut cmd = Command::new("powershell");
+        cmd.args(["-NoProfile", "-NonInteractive", "-Command", &script]);
+        let status = cmd.status().context("spawn powershell failed")?;
+        if !status.success() {
+            anyhow::bail!("powershell exited with status {status}");
+        }
+        return Ok(());
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+    {
+        let _ = (title, body);
+        anyhow::bail!("system notification is unsupported on this platform");
+    }
 }
 
 fn apply_desktop_locale(locale: AppLocale, menus: LocalizableMenus<'_>) {
@@ -463,6 +548,14 @@ fn handle_user_event(
             }
         }
         UserEvent::BackendEvent(ev) => {
+            if let AppEvent::NewApiLowBalanceAlert(ref alert) = ev {
+                let title = low_balance_notification_title(state.locale);
+                let body = low_balance_notification_body(state.locale, alert);
+                if let Err(err) = show_system_notification(title, &body) {
+                    tracing::warn!(err = %err, account_id = %alert.account_id, "show low balance system notification failed");
+                }
+            }
+
             if !state.ui_ready {
                 return;
             }
@@ -479,6 +572,9 @@ fn handle_user_event(
                 }
                 AppEvent::NpmEnvInstallProgress(progress) => {
                     dispatch_custom_event(webview, "cliswitch-npm-env-install-progress", &progress);
+                }
+                AppEvent::NewApiLowBalanceAlert(alert) => {
+                    dispatch_custom_event(webview, "cliswitch-newapi-low-balance-alert", &alert);
                 }
             }
         }

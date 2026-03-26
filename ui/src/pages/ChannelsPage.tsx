@@ -52,9 +52,6 @@ import {
   disableChannel,
   testChannel,
   reorderChannels,
-  channelCheckinsToday,
-  completeChannelCheckinToday,
-  openInBrowser,
   type Channel,
   type CreateChannelInput,
   type Protocol,
@@ -198,42 +195,17 @@ export function ChannelsPage() {
   const [testing, setTesting] = useState<Record<string, boolean>>({});
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Channel | null>(null);
+  const [deleteSyncRemote, setDeleteSyncRemote] = useState(true);
   const [deleting, setDeleting] = useState(false);
   const [autoSortOpen, setAutoSortOpen] = useState(false);
   const [autoSortApplying, setAutoSortApplying] = useState(false);
-  const [checkinsDate, setCheckinsDate] = useState<string | null>(null);
-  const [checkinCompleted, setCheckinCompleted] = useState<Record<string, boolean>>({});
-  const [checkinPromptOpen, setCheckinPromptOpen] = useState(false);
-  const [checkinTarget, setCheckinTarget] = useState<Channel | null>(null);
-  const [checkinCompleting, setCheckinCompleting] = useState(false);
-
-  function localYmd(ms: number): string {
-    const d = new Date(ms);
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, "0");
-    const day = String(d.getDate()).padStart(2, "0");
-    return `${y}-${m}-${day}`;
-  }
 
   async function refresh() {
     try {
-      const [cs, checkins] = await Promise.all([
-        listChannels(),
-        channelCheckinsToday().catch(() => null),
-      ]);
+      const cs = await listChannels();
       const by: Record<Protocol, Channel[]> = { openai: [], anthropic: [], gemini: [] };
       for (const c of cs) by[c.protocol].push(c);
       setChannelsByProtocol(by);
-
-      if (checkins) {
-        setCheckinsDate(checkins.date);
-        const completed: Record<string, boolean> = {};
-        for (const id of checkins.completed_channel_ids) completed[id] = true;
-        setCheckinCompleted(completed);
-      } else {
-        setCheckinsDate(null);
-        setCheckinCompleted({});
-      }
     } catch (e) {
       toast.error(t("channels.toast.loadFail"), { description: humanizeApiError(e, t) });
     }
@@ -247,21 +219,6 @@ export function ChannelsPage() {
     const timer = window.setInterval(() => setNowMs(Date.now()), 30_000);
     return () => window.clearInterval(timer);
   }, []);
-
-  useEffect(() => {
-    if (!checkinsDate) return;
-    if (localYmd(nowMs) === checkinsDate) return;
-    void channelCheckinsToday()
-      .then((checkins) => {
-        setCheckinsDate(checkins.date);
-        const completed: Record<string, boolean> = {};
-        for (const id of checkins.completed_channel_ids) completed[id] = true;
-        setCheckinCompleted(completed);
-      })
-      .catch(() => {
-        // ignore: 仅用于跨天刷新签到状态
-      });
-  }, [nowMs, checkinsDate]);
 
   function effectiveCostFactor(c: Channel): number {
     const real = Number(c.real_multiplier ?? 1);
@@ -392,6 +349,7 @@ export function ChannelsPage() {
 
   async function onDelete(c: Channel) {
     setDeleteTarget(c);
+    setDeleteSyncRemote(true);
     setDeleteOpen(true);
   }
 
@@ -399,7 +357,7 @@ export function ChannelsPage() {
     if (!deleteTarget) return;
     setDeleting(true);
     try {
-      await deleteChannel(deleteTarget.id);
+      await deleteChannel(deleteTarget.id, { sync_remote_delete: deleteSyncRemote });
       toast.success(t("channels.toast.deletedOk", { name: deleteTarget.name }));
       setDeleteOpen(false);
       setDeleteTarget(null);
@@ -525,7 +483,6 @@ export function ChannelsPage() {
       priority: "w-20",
       realMultiplier: "w-24",
       status: "w-20",
-      updatedAt: "w-44",
       actions: "w-32",
     } as const;
     return (
@@ -544,9 +501,6 @@ export function ChannelsPage() {
                 </TableHead>
                 <TableHead className={colClass.status}>
                   {t("channels.table.status")}
-                </TableHead>
-                <TableHead className={colClass.updatedAt}>
-                  {t("channels.table.checkin")}
                 </TableHead>
                 <TableHead className={colClass.actions}>{t("common.actions")}</TableHead>
               </TableRow>
@@ -574,7 +528,7 @@ export function ChannelsPage() {
               {tabChannels.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={7}
+                    colSpan={6}
                     className="text-center text-muted-foreground py-8"
                   >
                     {t("channels.table.empty")}
@@ -589,30 +543,9 @@ export function ChannelsPage() {
                     1,
                     Math.ceil(((c.auto_disabled_until_ms ?? 0) - nowMs) / 60000)
                   );
-                  const checkinUrl = (c.checkin_url ?? "").trim();
-                  const checkinDone = !!checkinCompleted[c.id];
                   const realMultiplierDisplay = getRealMultiplierDisplay(
                     c.real_multiplier
                   );
-
-                  const checkinStatus = (() => {
-                    if (checkinUrl.length === 0)
-                      return {
-                        variant: "secondary" as const,
-                        text: t("channels.checkin.status.none"),
-                      };
-                    if (checkinDone)
-                      return {
-                        variant: "success" as const,
-                        text: t("channels.checkin.status.done"),
-                      };
-                    return {
-                      variant: "destructive" as const,
-                      text: t("channels.checkin.status.todo"),
-                    };
-                  })();
-
-                  const checkinClickable = checkinUrl.length > 0 && !checkinDone;
 
                   return (
                     <TableRow
@@ -717,35 +650,6 @@ export function ChannelsPage() {
                           {c.enabled ? t("common.enabled") : t("common.disabled")}
                         </Badge>
                       )}
-                    </TableCell>
-                    <TableCell>
-                      <button
-                        type="button"
-                        className="inline-flex"
-                        disabled={!checkinClickable}
-                        title={checkinClickable ? t("channels.actions.checkin") : undefined}
-                        onClick={() => {
-                          if (!checkinClickable) return;
-                          void (async () => {
-                            try {
-                              await openInBrowser(checkinUrl);
-                              setCheckinTarget(c);
-                              setCheckinPromptOpen(true);
-                            } catch (e) {
-                              toast.error(t("channels.toast.actionFail"), {
-                                description: humanizeApiError(e, t),
-                              });
-                            }
-                          })();
-                        }}
-                      >
-                        <Badge
-                          variant={checkinStatus.variant}
-                          className={checkinClickable ? "cursor-pointer hover:opacity-90" : ""}
-                        >
-                          {checkinStatus.text}
-                        </Badge>
-                      </button>
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center justify-center gap-1">
@@ -1047,53 +951,6 @@ export function ChannelsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* 签到确认 */}
-      <Dialog open={checkinPromptOpen} onOpenChange={setCheckinPromptOpen}>
-        <DialogContent className="sm:max-w-[420px]">
-          <DialogHeader>
-            <DialogTitle>{t("channels.checkin.dialog.title")}</DialogTitle>
-            <DialogDescription>
-              {t("channels.checkin.dialog.description", { name: checkinTarget?.name ?? "" })}
-            </DialogDescription>
-          </DialogHeader>
-
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setCheckinPromptOpen(false);
-                setCheckinTarget(null);
-              }}
-              disabled={checkinCompleting}
-            >
-              {t("channels.checkin.dialog.notDone")}
-            </Button>
-            <Button
-              onClick={() => {
-                if (!checkinTarget) return;
-                void (async () => {
-                  setCheckinCompleting(true);
-                  try {
-                    await completeChannelCheckinToday(checkinTarget.id);
-                    setCheckinCompleted((m) => ({ ...m, [checkinTarget.id]: true }));
-                    toast.success(t("channels.checkin.toast.done", { name: checkinTarget.name }));
-                    setCheckinPromptOpen(false);
-                    setCheckinTarget(null);
-                  } catch (e) {
-                    toast.error(t("channels.toast.actionFail"), { description: humanizeApiError(e, t) });
-                  } finally {
-                    setCheckinCompleting(false);
-                  }
-                })();
-              }}
-              disabled={checkinCompleting}
-            >
-              {t("channels.checkin.dialog.done")}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       {/* 自动排序预览 */}
       <Dialog open={autoSortOpen} onOpenChange={setAutoSortOpen}>
         <DialogContent className="sm:max-w-[720px]">
@@ -1176,6 +1033,17 @@ export function ChannelsPage() {
                 : t("channels.deleteDialog.confirm")}
             </DialogDescription>
           </DialogHeader>
+          {deleteTarget?.managed_by_newapi ? (
+            <div className="flex items-center justify-between rounded-md border p-3">
+              <div className="space-y-1">
+                <div className="text-sm font-medium">{t("channels.deleteDialog.syncDeleteRemote")}</div>
+                <div className="text-xs text-muted-foreground">
+                  {t("channels.deleteDialog.syncDeleteRemoteHint")}
+                </div>
+              </div>
+              <Switch checked={deleteSyncRemote} onCheckedChange={setDeleteSyncRemote} />
+            </div>
+          ) : null}
           <DialogFooter>
             <Button
               variant="outline"
