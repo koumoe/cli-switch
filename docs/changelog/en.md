@@ -1,3 +1,12 @@
+## [0.48.0](https://github.com/koumoe/cli-switch/compare/v0.47.0...v0.48.0) (2026-03-26)
+
+### Features
+
+* add new-api account management ([1930bbc](https://github.com/koumoe/cli-switch/commit/1930bbc82b4b6bad0d69a26b931713d5c527862a))
+
+### Bug Fixes
+
+* address new-api account review issues ([cbe949a](https://github.com/koumoe/cli-switch/commit/cbe949adfd3fb8d37f9c6100606cb7e91a6e516b))
 ## [0.47.0](https://github.com/koumoe/cli-switch/compare/v0.46.1...v0.47.0) (2026-03-25)
 
 ### Features
