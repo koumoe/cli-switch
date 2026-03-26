@@ -6,6 +6,7 @@
   "nav": {
     "overview": "Overview",
     "channels": "Channel Management",
+    "accounts": "Account Management",
     "prompts": "Project Management",
     "routes": "Routes",
     "monitor": "Channel Statistics",
@@ -225,7 +226,9 @@
     "deleteDialog": {
       "title": "Delete Channel",
       "confirmWithName": "Delete channel \"{{name}}\"? This action cannot be undone.",
-      "confirm": "Delete this channel? This action cannot be undone."
+      "confirm": "Delete this channel? This action cannot be undone.",
+      "syncDeleteRemote": "Sync delete remote new-api resources",
+      "syncDeleteRemoteHint": "Only applies to platform-managed channels"
     },
     "toast": {
       "loadFail": "Failed to load channels",
@@ -246,6 +249,110 @@
       "testReachableBadTitle": "{{name}} reachable but returned an error",
       "testUnreachableTitle": "Cannot reach {{name}}",
       "testTimeout": "Connection timed out",
+      "reorderOk": "Order saved",
+      "reorderFail": "Failed to save order"
+    }
+  },
+  "accounts": {
+    "title": "Account Management",
+    "new": "New Account",
+    "table": {
+      "account": "Account",
+      "baseUrl": "Base URL",
+      "role": "Role",
+      "balance": "Balance",
+      "checkin": "Check-in",
+      "alert": "Alert",
+      "empty": "No accounts yet. Click 'New Account' to add one.",
+      "lastSync": "Last sync: {{value}}",
+      "group": "Group: {{name}}, ratio: {{ratio}}"
+    },
+    "checkin": {
+      "modeDisabled": "No check-in",
+      "modeSystem": "New API auto check-in",
+      "modePage": "Open page check-in",
+      "done": "Checked in",
+      "todo": "Not checked in",
+      "none": "No check-in",
+      "autoOn": "Auto check-in time: {{time}}",
+      "dialog": {
+        "title": "Check-in Confirmation",
+        "description": "Opened the check-in page for {{name}}. Is check-in completed?",
+        "notDone": "Not yet",
+        "done": "Completed"
+      }
+    },
+    "alert": {
+      "enabled": "Low-balance alert: {{value}}",
+      "disabled": "Low-balance alert: Off",
+      "notified": "Alert already triggered"
+    },
+    "actions": {
+      "drag": "Drag to reorder",
+      "refresh": "Refresh",
+      "systemCheckin": "System check-in",
+      "manualCheckin": "Manual check-in",
+      "createManaged": "Create key and channel",
+      "edit": "Edit account",
+      "delete": "Delete account"
+    },
+    "editor": {
+      "createTitle": "New Account",
+      "editTitle": "Edit Account",
+      "description": "Configure new-api account and check-in",
+      "baseUrl": "Base URL",
+      "userId": "User ID",
+      "userToken": "User Token",
+      "userTokenKeepHint": "Leave empty to keep existing token",
+      "pageCheckinUrl": "Page check-in URL",
+      "checkinMode": "Check-in mode",
+      "autoCheckinTime": "Auto check-in time",
+      "lowBalanceThreshold": "Low-balance alert threshold",
+      "lowBalanceHint": "0 disables alerts; >0 sends system notifications below threshold"
+    },
+    "managed": {
+      "title": "Create Key and Channel",
+      "description": "Create a new-api token for {{name}} and sync the local channel",
+      "name": "Name",
+      "protocol": "Protocol",
+      "group": "Group",
+      "groupPlaceholder": "Select a group",
+      "baseUrlOverride": "Dedicated Base URL",
+      "baseUrlOverrideHint": "Leave empty to use the account Base URL",
+      "create": "Create and sync"
+    },
+    "deleteDialog": {
+      "title": "Delete Account",
+      "descriptionWithName": "Delete account {{name}}?",
+      "description": "Delete this account?",
+      "deleteManagedChannels": "Delete managed channels",
+      "deleteManagedChannelsHint": "Only channels created and managed by this account",
+      "syncDeleteRemote": "Sync delete remote new-api token/channel",
+      "syncDeleteRemoteHint": "If disabled, only local records are removed"
+    },
+    "toast": {
+      "loadFail": "Failed to load accounts",
+      "actionFail": "Operation failed",
+      "baseUrlRequired": "Base URL is required",
+      "userIdRequired": "User ID is required",
+      "userTokenRequired": "User Token is required",
+      "thresholdInvalid": "Threshold must be a finite number >= 0",
+      "createOk": "Account created",
+      "updateOk": "Account updated",
+      "refreshOk": "Account refreshed",
+      "refreshFail": "Failed to refresh account",
+      "systemCheckinOk": "System check-in completed",
+      "systemCheckinFail": "System check-in failed",
+      "pageCheckinUrlRequired": "Please configure page check-in URL first",
+      "manualCheckinOk": "{{name}} check-in completed",
+      "deleteOk": "Account deleted",
+      "deleteFail": "Failed to delete account",
+      "loadGroupsFail": "Failed to load groups",
+      "managedRequired": "Name and group are required",
+      "credentialsRequiredForSystem": "User ID and User Token are required for New API auto check-in",
+      "credentialsRequiredForManaged": "User ID and User Token are required to create a key",
+      "createManagedOk": "Channel created and synced",
+      "createManagedFail": "Failed to create channel",
       "reorderOk": "Order saved",
       "reorderFail": "Failed to save order"
     }

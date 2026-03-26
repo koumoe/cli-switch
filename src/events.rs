@@ -15,11 +15,19 @@ pub struct NpmEnvInstallProgress {
     pub message: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct NewApiLowBalanceAlert {
+    pub account_id: String,
+    pub base_url: String,
+    pub balance_text: String,
+}
+
 #[derive(Debug, Clone)]
 pub enum AppEvent {
     UpdateStatus(update::UpdateStatus),
     UsageChanged { at_ms: i64 },
     NpmEnvInstallProgress(NpmEnvInstallProgress),
+    NewApiLowBalanceAlert(NewApiLowBalanceAlert),
 }
 
 fn sender() -> &'static broadcast::Sender<AppEvent> {

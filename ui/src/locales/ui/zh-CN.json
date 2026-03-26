@@ -6,6 +6,7 @@
   "nav": {
     "overview": "概览",
     "channels": "渠道管理",
+    "accounts": "账号管理",
     "prompts": "项目管理",
     "routes": "路由",
     "monitor": "渠道统计",
@@ -225,7 +226,9 @@
     "deleteDialog": {
       "title": "删除渠道",
       "confirmWithName": "确定删除渠道 \"{{name}}\"？此操作不可恢复。",
-      "confirm": "确定删除该渠道？此操作不可恢复。"
+      "confirm": "确定删除该渠道？此操作不可恢复。",
+      "syncDeleteRemote": "同步删除 new-api 远端资源",
+      "syncDeleteRemoteHint": "仅对平台托管创建的渠道生效"
     },
     "toast": {
       "loadFail": "加载渠道失败",
@@ -246,6 +249,110 @@
       "testReachableBadTitle": "{{name}} 可达但返回异常",
       "testUnreachableTitle": "{{name}} 无法连接",
       "testTimeout": "连接超时",
+      "reorderOk": "排序已保存",
+      "reorderFail": "保存排序失败"
+    }
+  },
+  "accounts": {
+    "title": "账号管理",
+    "new": "新增账号",
+    "table": {
+      "account": "账号",
+      "baseUrl": "Base URL",
+      "role": "角色",
+      "balance": "余额",
+      "checkin": "签到",
+      "alert": "告警",
+      "empty": "暂无账号，点击「新增账号」添加",
+      "lastSync": "最近同步：{{value}}",
+      "group": "分组：{{name}}，倍率：{{ratio}}"
+    },
+    "checkin": {
+      "modeDisabled": "不签到",
+      "modeSystem": "newapi 自动签到",
+      "modePage": "页面打开签到",
+      "done": "已签到",
+      "todo": "未签到",
+      "none": "无签到",
+      "autoOn": "自动签到时间：{{time}}",
+      "dialog": {
+        "title": "签到确认",
+        "description": "已打开 {{name}} 的签到页面，是否已完成签到？",
+        "notDone": "未完成",
+        "done": "已完成"
+      }
+    },
+    "alert": {
+      "enabled": "低余额告警：{{value}}",
+      "disabled": "低余额告警：关闭",
+      "notified": "已触发告警"
+    },
+    "actions": {
+      "drag": "拖拽排序",
+      "refresh": "刷新余额",
+      "systemCheckin": "系统签到",
+      "manualCheckin": "手动签到",
+      "createManaged": "创建 key 与渠道",
+      "edit": "编辑账号",
+      "delete": "删除账号"
+    },
+    "editor": {
+      "createTitle": "新增账号",
+      "editTitle": "编辑账号",
+      "description": "配置 new-api 账号信息和签到",
+      "baseUrl": "Base URL",
+      "userId": "User ID",
+      "userToken": "User Token",
+      "userTokenKeepHint": "留空表示保持原 token 不变",
+      "pageCheckinUrl": "页面签到地址",
+      "checkinMode": "签到模式",
+      "autoCheckinTime": "自动签到时间",
+      "lowBalanceThreshold": "低余额告警金额",
+      "lowBalanceHint": "0 表示关闭，>0 时低于阈值触发系统通知"
+    },
+    "managed": {
+      "title": "创建 key 与渠道",
+      "description": "为 {{name}} 创建 new-api token 并同步本地渠道",
+      "name": "名称",
+      "protocol": "协议",
+      "group": "分组",
+      "groupPlaceholder": "请选择分组",
+      "baseUrlOverride": "独立 Base URL",
+      "baseUrlOverrideHint": "不填则默认使用账号的 Base URL",
+      "create": "创建并同步"
+    },
+    "deleteDialog": {
+      "title": "删除账号",
+      "descriptionWithName": "确定删除账号 {{name}}？",
+      "description": "确定删除该账号？",
+      "deleteManagedChannels": "删除关联托管渠道",
+      "deleteManagedChannelsHint": "仅删除由该账号创建并托管的渠道",
+      "syncDeleteRemote": "同步删除 new-api 远端 token/channel",
+      "syncDeleteRemoteHint": "关闭后仅删除本地记录，远端资源保留"
+    },
+    "toast": {
+      "loadFail": "加载账号失败",
+      "actionFail": "操作失败",
+      "baseUrlRequired": "Base URL 不能为空",
+      "userIdRequired": "User ID 不能为空",
+      "userTokenRequired": "User Token 不能为空",
+      "thresholdInvalid": "低余额阈值必须是 >= 0 的数字",
+      "createOk": "账号创建成功",
+      "updateOk": "账号更新成功",
+      "refreshOk": "账号信息已刷新",
+      "refreshFail": "刷新账号失败",
+      "systemCheckinOk": "系统签到成功",
+      "systemCheckinFail": "系统签到失败",
+      "pageCheckinUrlRequired": "请先配置页面签到地址",
+      "manualCheckinOk": "{{name}} 签到完成",
+      "deleteOk": "账号已删除",
+      "deleteFail": "删除账号失败",
+      "loadGroupsFail": "加载分组失败",
+      "managedRequired": "请填写名称和分组",
+      "credentialsRequiredForSystem": "newapi 自动签到需要同时填写 User ID 和 User Token",
+      "credentialsRequiredForManaged": "创建 key 需要同时填写 User ID 和 User Token",
+      "createManagedOk": "渠道已创建并同步",
+      "createManagedFail": "创建渠道失败",
       "reorderOk": "排序已保存",
       "reorderFail": "保存排序失败"
     }

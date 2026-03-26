@@ -6,6 +6,12 @@ pub enum StorageError {
     #[error("channel not found: {channel_id}")]
     ChannelNotFound { channel_id: String },
 
+    #[error("newapi account not found: {account_id}")]
+    NewApiAccountNotFound { account_id: String },
+
+    #[error("newapi account already exists: base_url={base_url} user_id={user_id}")]
+    NewApiAccountAlreadyExists { base_url: String, user_id: String },
+
     #[error("channel protocol mismatch: route={route_protocol} channel={channel_protocol}")]
     ChannelProtocolMismatch {
         route_protocol: String,
@@ -14,6 +20,9 @@ pub enum StorageError {
 
     #[error("channel reorder mismatch: {reason}")]
     ChannelReorderMismatch { reason: &'static str },
+
+    #[error("newapi account reorder mismatch: {reason}")]
+    NewApiAccountReorderMismatch { reason: &'static str },
 
     #[error("prompt project not found: {project_id}")]
     PromptProjectNotFound { project_id: String },

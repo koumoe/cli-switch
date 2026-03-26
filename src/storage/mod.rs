@@ -9,6 +9,7 @@ mod channel;
 mod chat_bridge;
 mod checkin;
 mod error;
+mod newapi;
 mod pricing;
 mod prompt;
 mod protocol;
@@ -40,6 +41,18 @@ pub use chat_bridge::{
 };
 pub use checkin::{
     ChannelCheckinsToday, complete_channel_checkin_today, get_channel_checkins_today,
+};
+pub use newapi::{
+    CreateNewApiAccount, DeleteNewApiAccountResult, NewApiAccount, NewApiAccountCheckinMode,
+    NewApiAccountCheckinsToday, NewApiAccountRemoteSnapshot, UpdateNewApiAccount,
+    complete_newapi_account_checkin_today, create_newapi_account, delete_newapi_account,
+    detach_channels_from_newapi_account, get_newapi_account, get_newapi_account_for_secret_use,
+    get_newapi_account_with_secret, get_newapi_account_with_secret_optional,
+    get_newapi_account_without_secret, get_newapi_account_without_secret_optional,
+    get_newapi_accounts_checkins_today, list_channels_by_newapi_account, list_newapi_accounts,
+    list_newapi_accounts_with_secret, reorder_newapi_accounts,
+    set_newapi_account_balance_alert_notified, update_newapi_account,
+    update_newapi_account_remote_snapshot,
 };
 pub use pricing::{
     PricingModel, PricingStatus, UpsertPricingModel, pricing_status, search_pricing_models,
@@ -80,6 +93,7 @@ fn open_conn(db_path: &Path) -> anyhow::Result<Connection> {
 
 fn ensure_schema_upgrades(conn: &Connection) -> anyhow::Result<()> {
     chat_bridge::ensure_chat_bridge_schema(conn)?;
+    newapi::ensure_newapi_schema(conn)?;
     Ok(())
 }
 

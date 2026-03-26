@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   LayoutGrid,
   Radio,
+  User,
   Activity,
   ScrollText,
   FileText,
@@ -48,14 +49,16 @@ import { MonitorPage } from "./pages/MonitorPage";
 import { LogsPage } from "./pages/LogsPage";
 import { PromptsPage } from "./pages/PromptsPage";
 import { SettingsPage } from "./pages/SettingsPage";
+import { AccountsPage } from "./pages/AccountsPage";
 
-type AppRoute = "overview" | "channels" | "prompts" | "monitor" | "logs" | "settings";
+type AppRoute = "overview" | "channels" | "accounts" | "prompts" | "monitor" | "logs" | "settings";
 
-const AUTO_HEIGHT_ROUTES: AppRoute[] = ["overview", "channels", "settings"];
+const AUTO_HEIGHT_ROUTES: AppRoute[] = ["overview", "channels", "accounts", "settings"];
 
 const NAV_ITEMS: { route: AppRoute; labelKey: string; icon: React.ElementType }[] = [
   { route: "overview", labelKey: "nav.overview", icon: LayoutGrid },
   { route: "channels", labelKey: "nav.channels", icon: Radio },
+  { route: "accounts", labelKey: "nav.accounts", icon: User },
   { route: "prompts", labelKey: "nav.prompts", icon: FileText },
   { route: "monitor", labelKey: "nav.monitor", icon: Activity },
   { route: "logs", labelKey: "nav.logs", icon: ScrollText },
@@ -69,6 +72,7 @@ const CLI_TOOLS_ONBOARDING_SHOWN_KEY = "cliswitch-cli-tools-onboarding-shown";
 function routeFromPath(pathname: string): AppRoute {
   if (pathname === "/") return "overview";
   if (pathname.startsWith("/channels")) return "channels";
+  if (pathname.startsWith("/accounts")) return "accounts";
   if (pathname.startsWith("/prompts")) return "prompts";
   if (pathname.startsWith("/monitor")) return "monitor";
   if (pathname.startsWith("/logs")) return "logs";
@@ -728,6 +732,8 @@ export default function App() {
               <OverviewPage />
             ) : route === "channels" ? (
               <ChannelsPage />
+            ) : route === "accounts" ? (
+              <AccountsPage />
             ) : route === "prompts" ? (
               <PromptsPage />
             ) : route === "monitor" ? (

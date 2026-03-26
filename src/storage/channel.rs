@@ -62,6 +62,12 @@ pub struct Channel {
     pub priority: i64,
     pub recharge_currency: RechargeCurrency,
     pub real_multiplier: f64,
+    pub managed_by_newapi: bool,
+    pub newapi_account_id: Option<String>,
+    pub newapi_channel_id: Option<i64>,
+    pub newapi_token_id: Option<i64>,
+    pub newapi_token_name: Option<String>,
+    pub newapi_group: Option<String>,
     pub enabled: bool,
     pub auto_disabled_until_ms: i64,
     pub created_at_ms: i64,
@@ -146,7 +152,9 @@ pub async fn list_channels(db_path: PathBuf) -> anyhow::Result<Vec<Channel>> {
     with_conn(db_path, |conn| {
         let mut stmt = conn.prepare(
             r#"
-            SELECT id, name, protocol, base_url, auth_type, auth_ref, checkin_url, priority, recharge_currency, real_multiplier, enabled, auto_disabled_until_ms, created_at_ms, updated_at_ms
+            SELECT id, name, protocol, base_url, auth_type, auth_ref, checkin_url, priority, recharge_currency, real_multiplier,
+                   managed_by_newapi, newapi_account_id, newapi_channel_id, newapi_token_id, newapi_token_name, newapi_group,
+                   enabled, auto_disabled_until_ms, created_at_ms, updated_at_ms
             FROM channels
             ORDER BY CASE protocol
               WHEN 'openai' THEN 0
@@ -170,10 +178,16 @@ pub async fn list_channels(db_path: PathBuf) -> anyhow::Result<Vec<Channel>> {
                 priority: row.get(7)?,
                 recharge_currency: row.get(8)?,
                 real_multiplier: row.get(9)?,
-                enabled: row.get::<_, i64>(10)? != 0,
-                auto_disabled_until_ms: row.get(11)?,
-                created_at_ms: row.get(12)?,
-                updated_at_ms: row.get(13)?,
+                managed_by_newapi: row.get::<_, i64>(10)? != 0,
+                newapi_account_id: row.get(11)?,
+                newapi_channel_id: row.get(12)?,
+                newapi_token_id: row.get(13)?,
+                newapi_token_name: row.get(14)?,
+                newapi_group: row.get(15)?,
+                enabled: row.get::<_, i64>(16)? != 0,
+                auto_disabled_until_ms: row.get(17)?,
+                created_at_ms: row.get(18)?,
+                updated_at_ms: row.get(19)?,
             })
         })?;
 
@@ -196,6 +210,13 @@ pub struct CreateChannel {
     pub recharge_currency: Option<RechargeCurrency>,
     pub real_multiplier: Option<f64>,
     pub enabled: bool,
+    #[serde(default)]
+    pub managed_by_newapi: Option<bool>,
+    pub newapi_account_id: Option<String>,
+    pub newapi_channel_id: Option<i64>,
+    pub newapi_token_id: Option<i64>,
+    pub newapi_token_name: Option<String>,
+    pub newapi_group: Option<String>,
 }
 
 pub async fn create_channel(db_path: PathBuf, input: CreateChannel) -> anyhow::Result<Channel> {
@@ -214,10 +235,27 @@ pub async fn create_channel(db_path: PathBuf, input: CreateChannel) -> anyhow::R
             .filter(|s| !s.is_empty());
         let recharge_currency = input.recharge_currency.unwrap_or(RechargeCurrency::Cny);
         let real_multiplier = input.real_multiplier.unwrap_or(1.0);
+        let managed_by_newapi = input.managed_by_newapi.unwrap_or(false);
+        let newapi_account_id = input
+            .newapi_account_id
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty());
+        let newapi_token_name = input
+            .newapi_token_name
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty());
+        let newapi_group = input
+            .newapi_group
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty());
         conn.execute(
             r#"
-            INSERT INTO channels (id, name, protocol, base_url, auth_type, auth_ref, checkin_url, priority, recharge_currency, real_multiplier, enabled, created_at_ms, updated_at_ms)
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
+            INSERT INTO channels (
+                id, name, protocol, base_url, auth_type, auth_ref, checkin_url, priority, recharge_currency, real_multiplier,
+                managed_by_newapi, newapi_account_id, newapi_channel_id, newapi_token_id, newapi_token_name, newapi_group,
+                enabled, created_at_ms, updated_at_ms
+            )
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)
             "#,
             params![
                 id,
@@ -230,6 +268,12 @@ pub async fn create_channel(db_path: PathBuf, input: CreateChannel) -> anyhow::R
                 input.priority,
                 recharge_currency.as_str(),
                 real_multiplier,
+                if managed_by_newapi { 1 } else { 0 },
+                newapi_account_id,
+                input.newapi_channel_id,
+                input.newapi_token_id,
+                newapi_token_name,
+                newapi_group,
                 if input.enabled { 1 } else { 0 },
                 ts,
                 ts,
@@ -247,6 +291,12 @@ pub async fn create_channel(db_path: PathBuf, input: CreateChannel) -> anyhow::R
             priority: input.priority,
             recharge_currency,
             real_multiplier,
+            managed_by_newapi,
+            newapi_account_id,
+            newapi_channel_id: input.newapi_channel_id,
+            newapi_token_id: input.newapi_token_id,
+            newapi_token_name,
+            newapi_group,
             enabled: input.enabled,
             auto_disabled_until_ms: 0,
             created_at_ms: ts,
@@ -281,7 +331,9 @@ pub async fn update_channel(
         let mut channel: Channel = {
             let mut stmt = conn.prepare(
                 r#"
-                SELECT id, name, protocol, base_url, auth_type, auth_ref, checkin_url, priority, recharge_currency, real_multiplier, enabled, auto_disabled_until_ms, created_at_ms, updated_at_ms
+                SELECT id, name, protocol, base_url, auth_type, auth_ref, checkin_url, priority, recharge_currency, real_multiplier,
+                       managed_by_newapi, newapi_account_id, newapi_channel_id, newapi_token_id, newapi_token_name, newapi_group,
+                       enabled, auto_disabled_until_ms, created_at_ms, updated_at_ms
                 FROM channels
                 WHERE id = ?1
                 "#,
@@ -300,10 +352,16 @@ pub async fn update_channel(
                     priority: row.get(7)?,
                     recharge_currency: row.get(8)?,
                     real_multiplier: row.get(9)?,
-                    enabled: row.get::<_, i64>(10)? != 0,
-                    auto_disabled_until_ms: row.get(11)?,
-                    created_at_ms: row.get(12)?,
-                    updated_at_ms: row.get(13)?,
+                    managed_by_newapi: row.get::<_, i64>(10)? != 0,
+                    newapi_account_id: row.get(11)?,
+                    newapi_channel_id: row.get(12)?,
+                    newapi_token_id: row.get(13)?,
+                    newapi_token_name: row.get(14)?,
+                    newapi_group: row.get(15)?,
+                    enabled: row.get::<_, i64>(16)? != 0,
+                    auto_disabled_until_ms: row.get(17)?,
+                    created_at_ms: row.get(18)?,
+                    updated_at_ms: row.get(19)?,
                 })
             });
 
@@ -355,7 +413,9 @@ pub async fn update_channel(
         tx.execute(
             r#"
             UPDATE channels
-            SET name = ?2, base_url = ?3, auth_type = ?4, auth_ref = ?5, checkin_url = ?6, priority = ?7, recharge_currency = ?8, real_multiplier = ?9, enabled = ?10, auto_disabled_until_ms = ?11, updated_at_ms = ?12
+            SET name = ?2, base_url = ?3, auth_type = ?4, auth_ref = ?5, checkin_url = ?6, priority = ?7, recharge_currency = ?8, real_multiplier = ?9,
+                managed_by_newapi = ?10, newapi_account_id = ?11, newapi_channel_id = ?12, newapi_token_id = ?13, newapi_token_name = ?14, newapi_group = ?15,
+                enabled = ?16, auto_disabled_until_ms = ?17, updated_at_ms = ?18
             WHERE id = ?1
             "#,
             params![
@@ -368,6 +428,12 @@ pub async fn update_channel(
                 channel.priority,
                 channel.recharge_currency.as_str(),
                 channel.real_multiplier,
+                if channel.managed_by_newapi { 1 } else { 0 },
+                channel.newapi_account_id,
+                channel.newapi_channel_id,
+                channel.newapi_token_id,
+                channel.newapi_token_name,
+                channel.newapi_group,
                 if channel.enabled { 1 } else { 0 },
                 channel.auto_disabled_until_ms,
                 channel.updated_at_ms,
@@ -436,7 +502,9 @@ pub async fn get_channel(db_path: PathBuf, channel_id: String) -> anyhow::Result
     with_conn(db_path, move |conn| {
         let mut stmt = conn.prepare(
             r#"
-            SELECT id, name, protocol, base_url, auth_type, auth_ref, checkin_url, priority, recharge_currency, real_multiplier, enabled, auto_disabled_until_ms, created_at_ms, updated_at_ms
+            SELECT id, name, protocol, base_url, auth_type, auth_ref, checkin_url, priority, recharge_currency, real_multiplier,
+                   managed_by_newapi, newapi_account_id, newapi_channel_id, newapi_token_id, newapi_token_name, newapi_group,
+                   enabled, auto_disabled_until_ms, created_at_ms, updated_at_ms
             FROM channels
             WHERE id = ?1
             "#,
@@ -456,10 +524,16 @@ pub async fn get_channel(db_path: PathBuf, channel_id: String) -> anyhow::Result
                 priority: row.get(7)?,
                 recharge_currency: row.get(8)?,
                 real_multiplier: row.get(9)?,
-                enabled: row.get::<_, i64>(10)? != 0,
-                auto_disabled_until_ms: row.get(11)?,
-                created_at_ms: row.get(12)?,
-                updated_at_ms: row.get(13)?,
+                managed_by_newapi: row.get::<_, i64>(10)? != 0,
+                newapi_account_id: row.get(11)?,
+                newapi_channel_id: row.get(12)?,
+                newapi_token_id: row.get(13)?,
+                newapi_token_name: row.get(14)?,
+                newapi_group: row.get(15)?,
+                enabled: row.get::<_, i64>(16)? != 0,
+                auto_disabled_until_ms: row.get(17)?,
+                created_at_ms: row.get(18)?,
+                updated_at_ms: row.get(19)?,
             })
         })
         .optional()
