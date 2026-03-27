@@ -37,6 +37,33 @@ fn sort_channels(channels: &mut [storage::Channel]) {
     });
 }
 
+fn compact_protocol_priorities(
+    channels: &mut [storage::Channel],
+    protocol: storage::Protocol,
+    ts: i64,
+) -> bool {
+    let total = channels
+        .iter()
+        .filter(|channel| channel.protocol == protocol)
+        .count() as i64;
+    let mut next_priority = total;
+    let mut changed = false;
+
+    for channel in channels
+        .iter_mut()
+        .filter(|channel| channel.protocol == protocol)
+    {
+        if channel.priority != next_priority {
+            channel.priority = next_priority;
+            channel.updated_at_ms = ts;
+            changed = true;
+        }
+        next_priority -= 1;
+    }
+
+    changed
+}
+
 fn update_channels_cache(state: &AppState, f: impl FnOnce(&mut Vec<storage::Channel>) -> bool) {
     state.channels_cache.send_modify(|cur| {
         let mut next = (**cur).clone();
@@ -296,66 +323,67 @@ pub(in crate::server) async fn delete_channel(
     axum::extract::Path(channel_id): axum::extract::Path<String>,
     input: Option<Json<DeleteChannelInput>>,
 ) -> Result<impl IntoResponse, ApiError> {
+    let Some(channel) = storage::get_channel(state.db_path(), channel_id.clone()).await? else {
+        return Err(ApiError::not_found(
+            "channel_not_found",
+            "Channel not found",
+        ));
+    };
     let sync_remote_delete = input
         .map(|Json(input)| input.sync_remote_delete.unwrap_or(false))
         .unwrap_or(false);
 
-    if sync_remote_delete {
-        let Some(channel) = storage::get_channel(state.db_path(), channel_id.clone()).await? else {
-            return Err(ApiError::not_found(
-                "channel_not_found",
-                "Channel not found",
-            ));
-        };
-        if channel.managed_by_newapi {
-            let account_id = channel.newapi_account_id.clone().ok_or_else(|| {
-                ApiError::bad_request(
+    if sync_remote_delete && channel.managed_by_newapi {
+        let account_id = channel.newapi_account_id.clone().ok_or_else(|| {
+            ApiError::bad_request(
+                "channel_newapi_account_missing",
+                "Managed channel is missing linked New API account",
+            )
+        })?;
+        let account = storage::get_newapi_account_with_secret(state.db_path(), account_id)
+            .await
+            .map_err(|e| match e.downcast_ref::<storage::StorageError>() {
+                Some(storage::StorageError::NewApiAccountNotFound { .. }) => ApiError::bad_request(
                     "channel_newapi_account_missing",
-                    "Managed channel is missing linked New API account",
-                )
+                    "Linked New API account not found",
+                ),
+                _ => ApiError::Internal(e),
             })?;
-            let account = storage::get_newapi_account_with_secret(state.db_path(), account_id)
-                .await
-                .map_err(|e| match e.downcast_ref::<storage::StorageError>() {
-                    Some(storage::StorageError::NewApiAccountNotFound { .. }) => {
-                        ApiError::bad_request(
-                            "channel_newapi_account_missing",
-                            "Linked New API account not found",
-                        )
-                    }
-                    _ => ApiError::Internal(e),
-                })?;
 
-            if let Some(remote_channel_id) = channel.newapi_channel_id {
-                newapi_client::delete_channel(&state.http_client, &account, remote_channel_id)
-                    .await
-                    .map_err(|e| {
-                        ApiError::bad_gateway(
-                            "newapi_remote_delete_failed",
-                            format!("Failed to delete remote New API channel: {e}"),
-                        )
-                    })?;
-            }
-            if let Some(remote_token_id) = channel.newapi_token_id {
-                newapi_client::delete_token(&state.http_client, &account, remote_token_id)
-                    .await
-                    .map_err(|e| {
-                        ApiError::bad_gateway(
-                            "newapi_remote_delete_failed",
-                            format!("Failed to delete remote New API token: {e}"),
-                        )
-                    })?;
-            }
+        if let Some(remote_channel_id) = channel.newapi_channel_id {
+            newapi_client::delete_channel(&state.http_client, &account, remote_channel_id)
+                .await
+                .map_err(|e| {
+                    ApiError::bad_gateway(
+                        "newapi_remote_delete_failed",
+                        format!("Failed to delete remote New API channel: {e}"),
+                    )
+                })?;
+        }
+        if let Some(remote_token_id) = channel.newapi_token_id {
+            newapi_client::delete_token(&state.http_client, &account, remote_token_id)
+                .await
+                .map_err(|e| {
+                    ApiError::bad_gateway(
+                        "newapi_remote_delete_failed",
+                        format!("Failed to delete remote New API token: {e}"),
+                    )
+                })?;
         }
     }
 
     let channel_id2 = channel_id.clone();
+    let deleted_protocol = channel.protocol;
     let res = storage::delete_channel(state.db_path(), channel_id).await;
     if res.is_ok() {
+        let ts = storage::now_ms();
         update_channels_cache(&state, move |channels| {
             let before = channels.len();
             channels.retain(|c| c.id != channel_id2);
-            before != channels.len()
+            if before == channels.len() {
+                return false;
+            }
+            compact_protocol_priorities(channels, deleted_protocol, ts) || before != channels.len()
         });
     }
     map_storage_unit_no_content_err(res, |e| {

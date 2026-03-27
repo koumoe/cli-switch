@@ -542,6 +542,45 @@ pub async fn get_channel(db_path: PathBuf, channel_id: String) -> anyhow::Result
     .await
 }
 
+fn compact_protocol_priorities(
+    tx: &rusqlite::Transaction<'_>,
+    protocol: Protocol,
+    ts: i64,
+) -> anyhow::Result<()> {
+    let ordered = {
+        let mut stmt = tx.prepare(
+            r#"
+            SELECT id, priority
+            FROM channels
+            WHERE protocol = ?1
+            ORDER BY priority DESC, name ASC, created_at_ms ASC, id ASC
+            "#,
+        )?;
+        let rows = stmt.query_map([protocol.as_str()], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+        })?;
+        rows.collect::<rusqlite::Result<Vec<_>>>()?
+    };
+
+    let total = ordered.len() as i64;
+    for (idx, (channel_id, current_priority)) in ordered.into_iter().enumerate() {
+        let next_priority = total - (idx as i64);
+        if current_priority == next_priority {
+            continue;
+        }
+        tx.execute(
+            r#"
+            UPDATE channels
+            SET priority = ?2, updated_at_ms = ?3
+            WHERE id = ?1
+            "#,
+            params![channel_id, next_priority, ts],
+        )?;
+    }
+
+    Ok(())
+}
+
 pub async fn reorder_channels(
     db_path: PathBuf,
     protocol: Option<Protocol>,
@@ -612,20 +651,119 @@ pub async fn reorder_channels(
 pub async fn delete_channel(db_path: PathBuf, channel_id: String) -> anyhow::Result<()> {
     with_conn(db_path, move |conn| {
         let tx = conn.unchecked_transaction()?;
+        let protocol: Protocol = match tx.query_row(
+            r#"SELECT protocol FROM channels WHERE id = ?1"#,
+            params![&channel_id],
+            |row| row.get(0),
+        ) {
+            Ok(protocol) => protocol,
+            Err(rusqlite::Error::QueryReturnedNoRows) => {
+                return Err(StorageError::ChannelNotFound { channel_id }.into());
+            }
+            Err(err) => return Err(err.into()),
+        };
+
         tx.execute(
             r#"DELETE FROM route_channels WHERE channel_id = ?1"#,
-            params![channel_id],
+            params![&channel_id],
         )?;
-        let deleted = tx.execute(r#"DELETE FROM channels WHERE id = ?1"#, params![channel_id])?;
+        let deleted = tx.execute(
+            r#"DELETE FROM channels WHERE id = ?1"#,
+            params![&channel_id],
+        )?;
+        compact_protocol_priorities(&tx, protocol, now_ms())?;
         tx.commit()?;
 
         if deleted == 0 {
-            return Err(StorageError::ChannelNotFound {
-                channel_id: channel_id.clone(),
-            }
-            .into());
+            return Err(StorageError::ChannelNotFound { channel_id }.into());
         }
         Ok(())
     })
     .await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::storage;
+    use std::path::{Path, PathBuf};
+
+    fn remove_sqlite_artifacts(path: &Path) {
+        let _ = std::fs::remove_file(path);
+        let _ = std::fs::remove_file(PathBuf::from(format!("{}-wal", path.display())));
+        let _ = std::fs::remove_file(PathBuf::from(format!("{}-shm", path.display())));
+    }
+
+    fn temp_db_path() -> PathBuf {
+        std::env::temp_dir().join(format!(
+            "cliswitch-test-channel-priority-{}.sqlite",
+            uuid::Uuid::new_v4()
+        ))
+    }
+
+    fn make_channel(name: &str, priority: i64) -> CreateChannel {
+        CreateChannel {
+            name: name.to_string(),
+            protocol: Protocol::Openai,
+            base_url: "https://api.openai.com".to_string(),
+            auth_type: Some("auto".to_string()),
+            auth_ref: format!("sk-{name}"),
+            checkin_url: None,
+            priority,
+            recharge_currency: Some(RechargeCurrency::Cny),
+            real_multiplier: Some(1.0),
+            enabled: true,
+            managed_by_newapi: Some(false),
+            newapi_account_id: None,
+            newapi_channel_id: None,
+            newapi_token_id: None,
+            newapi_token_name: None,
+            newapi_group: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn delete_channel_compacts_priorities_without_reordering_remaining_channels() {
+        let db_path = temp_db_path();
+        remove_sqlite_artifacts(&db_path);
+        storage::init_db(&db_path).unwrap();
+
+        let c1 = create_channel(db_path.clone(), make_channel("alpha", 5))
+            .await
+            .unwrap();
+        let c2 = create_channel(db_path.clone(), make_channel("bravo", 4))
+            .await
+            .unwrap();
+        let c3 = create_channel(db_path.clone(), make_channel("charlie", 2))
+            .await
+            .unwrap();
+        let c4 = create_channel(db_path.clone(), make_channel("delta", 1))
+            .await
+            .unwrap();
+
+        delete_channel(db_path.clone(), c2.id).await.unwrap();
+
+        let channels = list_channels(db_path.clone()).await.unwrap();
+        let openai = channels
+            .into_iter()
+            .filter(|channel| channel.protocol == Protocol::Openai)
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            openai
+                .iter()
+                .map(|channel| channel.name.as_str())
+                .collect::<Vec<_>>(),
+            vec![c1.name.as_str(), c3.name.as_str(), c4.name.as_str()]
+        );
+        assert_eq!(
+            openai
+                .iter()
+                .map(|channel| channel.priority)
+                .collect::<Vec<_>>(),
+            vec![3, 2, 1]
+        );
+
+        remove_sqlite_artifacts(&db_path);
+    }
 }
