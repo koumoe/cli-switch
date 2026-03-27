@@ -1,3 +1,8 @@
+## [0.48.1](https://github.com/koumoe/cli-switch/compare/v0.48.0...v0.48.1) (2026-03-27)
+
+### Bug Fixes
+
+* improve select dropdown layout and add recharge currency (#160) ([#160](https://github.com/koumoe/cli-switch/issues/160)) ([16aa012](https://github.com/koumoe/cli-switch/commit/16aa0120231b124e6925c8ac9fa920cb7ab83e1e))
 ## [0.48.0](https://github.com/koumoe/cli-switch/compare/v0.47.0...v0.48.0) (2026-03-26)
 
 ### Features

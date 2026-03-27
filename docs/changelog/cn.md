@@ -1,3 +1,7 @@
+## [0.48.1](https://github.com/koumoe/cli-switch/compare/v0.48.0...v0.48.1) (2026-03-27)
+
+### 修复
+* 优化下拉框布局并新增充值货币字段 (#160) ([#160](https://github.com/koumoe/cli-switch/issues/160)) ([16aa012](https://github.com/koumoe/cli-switch/commit/16aa0120231b124e6925c8ac9fa920cb7ab83e1e))
 ## [0.48.0](https://github.com/koumoe/cli-switch/compare/v0.47.0...v0.48.0) (2026-03-26)
 
 ### 功能
