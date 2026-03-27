@@ -37,9 +37,31 @@ import {
   TooltipTrigger,
 } from "@/components/ui";
 import { toast } from "sonner";
-import { deleteChannel, disableChannel, downloadUpdate, getCliToolsStatus, getHealth, getSettings, getUpdateChangelog, ignoreUpdate, pricingStatus, pricingSync, updateSettings, type ChangelogSection, type CliToolId, type CliToolsStatus, type NewApiManagedChannelMissingPrompt } from "./api";
+import {
+  deleteChannel,
+  disableChannel,
+  downloadUpdate,
+  getCliToolsStatus,
+  getHealth,
+  getSettings,
+  getUpdateChangelog,
+  ignoreUpdate,
+  pricingStatus,
+  pricingSync,
+  updateChannel,
+  updateSettings,
+  type ChangelogSection,
+  type CliToolId,
+  type CliToolsStatus,
+  type NewApiManagedChannelMissingPrompt,
+  type NewApiManagedChannelMultiplierPrompt,
+} from "./api";
 import { logger, setLogLevel } from "@/lib/logger";
-import type { CliswitchNewApiManagedChannelMissingEvent, CliswitchUpdateStatusEvent } from "@/lib/cliswitchEvents";
+import type {
+  CliswitchNewApiManagedChannelMissingEvent,
+  CliswitchNewApiManagedChannelMultiplierEvent,
+  CliswitchUpdateStatusEvent,
+} from "@/lib/cliswitchEvents";
 import { isUpdateReadyShown, markUpdateReadyShown } from "@/lib/updateReadyPrompt";
 import { UpdatePromptDialog } from "@/components/UpdatePromptDialog";
 
@@ -68,6 +90,11 @@ const NAV_ITEMS: { route: AppRoute; labelKey: string; icon: React.ElementType }[
 const SIDEBAR_KEY = "cliswitch-sidebar-collapsed";
 const PRICING_ONBOARDING_SHOWN_KEY = "cliswitch-pricing-onboarding-shown";
 const CLI_TOOLS_ONBOARDING_SHOWN_KEY = "cliswitch-cli-tools-onboarding-shown";
+
+function formatMultiplier(value: number): string {
+  if (!Number.isFinite(value)) return "-";
+  return `×${value.toFixed(2)}`;
+}
 
 function routeFromPath(pathname: string): AppRoute {
   if (pathname === "/") return "overview";
@@ -225,9 +252,12 @@ export default function App() {
   const [closeDecisionSent, setCloseDecisionSent] = useState(false);
   const [managedMissingQueue, setManagedMissingQueue] = useState<NewApiManagedChannelMissingPrompt[]>([]);
   const [managedMissingBusyAction, setManagedMissingBusyAction] = useState<"disable" | "delete" | null>(null);
+  const [managedMultiplierQueue, setManagedMultiplierQueue] = useState<NewApiManagedChannelMultiplierPrompt[]>([]);
+  const [managedMultiplierBusy, setManagedMultiplierBusy] = useState(false);
   const updatePromptOpenRef = useRef(false);
   const updatePromptedVersionRef = useRef<string | null>(null);
   const activeManagedMissing = managedMissingQueue[0] ?? null;
+  const activeManagedMultiplier = managedMultiplierQueue[0] ?? null;
 
   useEffect(() => {
     updatePromptOpenRef.current = updatePromptOpen;
@@ -405,8 +435,9 @@ export default function App() {
       const detail = (e as CliswitchNewApiManagedChannelMissingEvent).detail;
       if (!detail?.channel_id) return;
       setManagedMissingQueue((current) => {
-        if (current.some((item) => item.channel_id === detail.channel_id)) {
-          return current;
+        const idx = current.findIndex((item) => item.channel_id === detail.channel_id);
+        if (idx >= 0) {
+          return current.map((item, itemIdx) => (itemIdx === idx ? detail : item));
         }
         return [...current, detail];
       });
@@ -423,6 +454,30 @@ export default function App() {
     };
   }, []);
 
+  useEffect(() => {
+    const onManagedMultiplier = (e: Event) => {
+      const detail = (e as CliswitchNewApiManagedChannelMultiplierEvent).detail;
+      if (!detail?.channel_id) return;
+      setManagedMultiplierQueue((current) => {
+        const idx = current.findIndex((item) => item.channel_id === detail.channel_id);
+        if (idx >= 0) {
+          return current.map((item, itemIdx) => (itemIdx === idx ? detail : item));
+        }
+        return [...current, detail];
+      });
+    };
+    window.addEventListener(
+      "cliswitch-newapi-managed-channel-multiplier",
+      onManagedMultiplier as EventListener,
+    );
+    return () => {
+      window.removeEventListener(
+        "cliswitch-newapi-managed-channel-multiplier",
+        onManagedMultiplier as EventListener,
+      );
+    };
+  }, []);
+
   const sendCloseDecision = (action: "minimize_to_tray" | "quit" | "cancel", remember: boolean) => {
     setCloseDecisionSent(true);
     postIpc({ type: "close-decision", action, remember });
@@ -431,6 +486,10 @@ export default function App() {
 
   const dismissManagedMissing = () => {
     setManagedMissingQueue((current) => current.slice(1));
+  };
+
+  const dismissManagedMultiplier = () => {
+    setManagedMultiplierQueue((current) => current.slice(1));
   };
 
   const resolveManagedMissing = async (action: "disable" | "delete") => {
@@ -454,6 +513,37 @@ export default function App() {
       });
     } finally {
       setManagedMissingBusyAction(null);
+    }
+  };
+
+  const resolveManagedMultiplier = async (applyUpdate: boolean) => {
+    if (!activeManagedMultiplier) return;
+    if (!applyUpdate) {
+      dismissManagedMultiplier();
+      return;
+    }
+
+    setManagedMultiplierBusy(true);
+    try {
+      await updateChannel(activeManagedMultiplier.channel_id, {
+        real_multiplier: activeManagedMultiplier.remote_multiplier,
+      });
+      toast.success(t("channels.remoteMultiplier.updateOk", { name: activeManagedMultiplier.channel_name }), {
+        description: t("channels.remoteMultiplier.updateOkDescription", {
+          from: formatMultiplier(activeManagedMultiplier.current_multiplier),
+          to: formatMultiplier(activeManagedMultiplier.remote_multiplier),
+        }),
+      });
+      window.dispatchEvent(
+        new CustomEvent("cliswitch-channels-changed", { detail: { at_ms: Date.now() } }),
+      );
+      dismissManagedMultiplier();
+    } catch (e) {
+      toast.error(t("channels.remoteMultiplier.actionFail"), {
+        description: humanizeApiError(e, t),
+      });
+    } finally {
+      setManagedMultiplierBusy(false);
     }
   };
 
@@ -639,6 +729,75 @@ export default function App() {
               disabled={!!managedMissingBusyAction}
             >
               {t("channels.remoteMissing.delete")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!activeManagedMultiplier}
+        onOpenChange={(open) => {
+          if (!open && !managedMultiplierBusy) {
+            dismissManagedMultiplier();
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-[560px]">
+          <DialogHeader>
+            <DialogTitle>{t("channels.remoteMultiplier.title")}</DialogTitle>
+            <DialogDescription>
+              {t("channels.remoteMultiplier.description", {
+                name: activeManagedMultiplier?.channel_name ?? "",
+              })}
+            </DialogDescription>
+          </DialogHeader>
+
+          {activeManagedMultiplier ? (
+            <div className="space-y-3 text-sm">
+              <div className="rounded-md border p-3 space-y-1">
+                <div className="font-medium">{activeManagedMultiplier.channel_name}</div>
+                <div className="text-xs text-muted-foreground">
+                  {t("channels.remoteMultiplier.baseUrl", {
+                    value: activeManagedMultiplier.account_base_url,
+                  })}
+                </div>
+                {activeManagedMultiplier.group_name ? (
+                  <div className="text-xs text-muted-foreground">
+                    {t("channels.remoteMultiplier.group", {
+                      value: activeManagedMultiplier.group_name,
+                    })}
+                  </div>
+                ) : null}
+                <div className="text-xs text-muted-foreground">
+                  {t("channels.remoteMultiplier.current", {
+                    value: formatMultiplier(activeManagedMultiplier.current_multiplier),
+                  })}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {t("channels.remoteMultiplier.remote", {
+                    value: formatMultiplier(activeManagedMultiplier.remote_multiplier),
+                  })}
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {t("channels.remoteMultiplier.hint")}
+              </p>
+            </div>
+          ) : null}
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => void resolveManagedMultiplier(false)}
+              disabled={managedMultiplierBusy}
+            >
+              {t("channels.remoteMultiplier.keep")}
+            </Button>
+            <Button
+              onClick={() => void resolveManagedMultiplier(true)}
+              disabled={managedMultiplierBusy}
+            >
+              {t("channels.remoteMultiplier.apply")}
             </Button>
           </DialogFooter>
         </DialogContent>

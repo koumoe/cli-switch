@@ -64,6 +64,9 @@ struct DesktopState {
     close_prompt_open: bool,
     locale: AppLocale,
     ui_ready: bool,
+    pending_managed_channel_missing: Vec<cliswitch::events::NewApiManagedChannelMissingPrompt>,
+    pending_managed_channel_multiplier:
+        Vec<cliswitch::events::NewApiManagedChannelMultiplierPrompt>,
 }
 
 fn dispatch_custom_event<T: Serialize>(webview: &wry::WebView, name: &str, detail: &T) {
@@ -152,8 +155,8 @@ fn low_balance_notification_body(
 
 fn managed_channel_notification_title(locale: AppLocale) -> &'static str {
     match locale {
-        AppLocale::ZhCN => "CliSwitch 渠道通知",
-        AppLocale::EnUS => "CliSwitch Channel Notice",
+        AppLocale::ZhCN => "CliSwitch 渠道变更通知",
+        AppLocale::EnUS => "CliSwitch Channel Change",
     }
 }
 
@@ -188,6 +191,50 @@ fn managed_channel_deleted_body(
             event.channel_name
         ),
     }
+}
+
+fn managed_channel_multiplier_body(
+    locale: AppLocale,
+    event: &cliswitch::events::NewApiManagedChannelMultiplierPrompt,
+) -> String {
+    match locale {
+        AppLocale::ZhCN => format!(
+            "检测到渠道 {} 的倍率不一致：本地 ×{:.2}，远端 ×{:.2}，请确认是否更新",
+            event.channel_name, event.current_multiplier, event.remote_multiplier
+        ),
+        AppLocale::EnUS => format!(
+            "Channel {} multiplier mismatch: local ×{:.2}, remote ×{:.2}. Please confirm the update.",
+            event.channel_name, event.current_multiplier, event.remote_multiplier
+        ),
+    }
+}
+
+fn upsert_pending_missing_prompt(
+    queue: &mut Vec<cliswitch::events::NewApiManagedChannelMissingPrompt>,
+    prompt: &cliswitch::events::NewApiManagedChannelMissingPrompt,
+) {
+    if let Some(existing) = queue
+        .iter_mut()
+        .find(|item| item.channel_id == prompt.channel_id)
+    {
+        *existing = prompt.clone();
+        return;
+    }
+    queue.push(prompt.clone());
+}
+
+fn upsert_pending_multiplier_prompt(
+    queue: &mut Vec<cliswitch::events::NewApiManagedChannelMultiplierPrompt>,
+    prompt: &cliswitch::events::NewApiManagedChannelMultiplierPrompt,
+) {
+    if let Some(existing) = queue
+        .iter_mut()
+        .find(|item| item.channel_id == prompt.channel_id)
+    {
+        *existing = prompt.clone();
+        return;
+    }
+    queue.push(prompt.clone());
 }
 
 fn show_system_notification(title: &str, body: &str) -> anyhow::Result<()> {
@@ -584,6 +631,20 @@ fn handle_user_event(
                         let _ = proxy
                             .send_event(UserEvent::BackendEvent(AppEvent::UpdateStatus(status)));
                     }
+                    for prompt in std::mem::take(&mut state.pending_managed_channel_missing) {
+                        dispatch_custom_event(
+                            webview,
+                            "cliswitch-newapi-managed-channel-missing",
+                            &prompt,
+                        );
+                    }
+                    for prompt in std::mem::take(&mut state.pending_managed_channel_multiplier) {
+                        dispatch_custom_event(
+                            webview,
+                            "cliswitch-newapi-managed-channel-multiplier",
+                            &prompt,
+                        );
+                    }
                 }
             }
         }
@@ -608,9 +669,33 @@ fn handle_user_event(
                 if let Err(err) = show_system_notification(title, &body) {
                     tracing::warn!(err = %err, channel_id = %prompt.channel_id, "show managed channel deleted system notification failed");
                 }
+                apply_window_visible(window, state, tray_show, tray_hide, true, true);
+            }
+            if let AppEvent::NewApiManagedChannelMultiplierPrompt(ref prompt) = ev {
+                let title = managed_channel_notification_title(state.locale);
+                let body = managed_channel_multiplier_body(state.locale, prompt);
+                if let Err(err) = show_system_notification(title, &body) {
+                    tracing::warn!(err = %err, channel_id = %prompt.channel_id, "show managed channel multiplier system notification failed");
+                }
+                apply_window_visible(window, state, tray_show, tray_hide, true, true);
             }
 
             if !state.ui_ready {
+                match ev {
+                    AppEvent::NewApiManagedChannelMissingPrompt(ref prompt) => {
+                        upsert_pending_missing_prompt(
+                            &mut state.pending_managed_channel_missing,
+                            prompt,
+                        );
+                    }
+                    AppEvent::NewApiManagedChannelMultiplierPrompt(ref prompt) => {
+                        upsert_pending_multiplier_prompt(
+                            &mut state.pending_managed_channel_multiplier,
+                            prompt,
+                        );
+                    }
+                    _ => {}
+                }
                 return;
             }
             match ev {
@@ -642,6 +727,13 @@ fn handle_user_event(
                     dispatch_custom_event(
                         webview,
                         "cliswitch-newapi-managed-channel-missing",
+                        &prompt,
+                    );
+                }
+                AppEvent::NewApiManagedChannelMultiplierPrompt(prompt) => {
+                    dispatch_custom_event(
+                        webview,
+                        "cliswitch-newapi-managed-channel-multiplier",
                         &prompt,
                     );
                 }
@@ -870,6 +962,8 @@ pub async fn run(
         close_prompt_open: false,
         locale: initial_locale,
         ui_ready: false,
+        pending_managed_channel_missing: Vec::new(),
+        pending_managed_channel_multiplier: Vec::new(),
     };
     tray_show.set_enabled(!state.window_visible);
     tray_hide.set_enabled(state.window_visible);

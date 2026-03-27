@@ -350,6 +350,16 @@ export type NewApiManagedChannelMissingPrompt = {
   token_name: string | null;
 };
 
+export type NewApiManagedChannelMultiplierPrompt = {
+  channel_id: string;
+  channel_name: string;
+  account_id: string;
+  account_base_url: string;
+  group_name: string | null;
+  current_multiplier: number;
+  remote_multiplier: number;
+};
+
 export type CreateNewApiManagedChannelInput = {
   name: string;
   protocol: Protocol;

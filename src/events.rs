@@ -42,6 +42,17 @@ pub struct NewApiManagedChannelCreated {
     pub token_name: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct NewApiManagedChannelMultiplierPrompt {
+    pub channel_id: String,
+    pub channel_name: String,
+    pub account_id: String,
+    pub account_base_url: String,
+    pub group_name: Option<String>,
+    pub current_multiplier: f64,
+    pub remote_multiplier: f64,
+}
+
 #[derive(Debug, Clone)]
 pub enum AppEvent {
     UpdateStatus(update::UpdateStatus),
@@ -51,6 +62,7 @@ pub enum AppEvent {
     NewApiLowBalanceAlert(NewApiLowBalanceAlert),
     NewApiManagedChannelCreated(NewApiManagedChannelCreated),
     NewApiManagedChannelMissingPrompt(NewApiManagedChannelMissingPrompt),
+    NewApiManagedChannelMultiplierPrompt(NewApiManagedChannelMultiplierPrompt),
 }
 
 fn sender() -> &'static broadcast::Sender<AppEvent> {

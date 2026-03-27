@@ -265,6 +265,20 @@
       "disableOk": "{{name}} 已禁用",
       "deleteOk": "{{name}} 已删除",
       "actionFail": "处理失效托管渠道失败"
+    },
+    "remoteMultiplier": {
+      "title": "托管渠道倍率变更",
+      "description": "检测到 {{name}} 的远端倍率发生变化，是否修改本地真实倍率？",
+      "baseUrl": "账号 Base URL：{{value}}",
+      "group": "分组：{{value}}",
+      "current": "当前真实倍率：{{value}}",
+      "remote": "远端分组倍率：{{value}}",
+      "hint": "只有在你确认后才会更新本地真实倍率；如果暂不修改，下次巡检发现差异时会再次提醒。",
+      "keep": "暂不修改",
+      "apply": "修改倍率",
+      "updateOk": "{{name}} 倍率已更新",
+      "updateOkDescription": "已将真实倍率从 {{from}} 更新为 {{to}}",
+      "actionFail": "更新托管渠道倍率失败"
     }
   },
   "accounts": {
@@ -582,11 +596,11 @@
     },
     "newApiManaged": {
       "title": "New API 托管渠道",
-      "subtitle": "管理托管渠道的失效提醒与倍率同步策略",
-      "missingPrompt": "新增删除渠道通知",
-      "missingPromptHint": "开启后，新增托管渠道会发送系统通知；检测到远端 token 被删除时，会发送系统通知并弹框提示禁用或删除",
+      "subtitle": "管理托管渠道的变更提醒与倍率同步确认",
+      "missingPrompt": "渠道变更通知",
+      "missingPromptHint": "开启后，新增托管渠道会发送系统通知；检测到远端 token 被删除时，会发送系统通知、打开窗口并弹框提示禁用或删除",
       "syncMultiplier": "同步渠道倍率",
-      "syncMultiplierHint": "开启后每 30 分钟根据远端分组倍率更新本地真实倍率",
+      "syncMultiplierHint": "开启后每 30 分钟检查远端分组倍率；发现差异时会先发送系统通知、打开窗口并询问是否修改本地真实倍率",
       "ignoreFreeMultiplier": "忽略免费倍率",
       "ignoreFreeMultiplierHint": "开启后，本地真实倍率为 0 的渠道不受远端倍率同步管理",
       "saved": "New API 托管渠道设置已保存",
