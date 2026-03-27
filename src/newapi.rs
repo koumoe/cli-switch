@@ -398,12 +398,15 @@ pub async fn list_tokens(
     for page in 1..=MAX_PAGES {
         let page_s = page.to_string();
         let data = send_json::<TokenListData<TokenSearchItem>>(
-            http_client.get(url.clone()).headers(headers.clone()).query(&[
-                ("keyword", ""),
-                ("p", page_s.as_str()),
-                ("page_size", page_size.as_str()),
-                ("size", page_size.as_str()),
-            ]),
+            http_client
+                .get(url.clone())
+                .headers(headers.clone())
+                .query(&[
+                    ("keyword", ""),
+                    ("p", page_s.as_str()),
+                    ("page_size", page_size.as_str()),
+                    ("size", page_size.as_str()),
+                ]),
         )
         .await?;
 

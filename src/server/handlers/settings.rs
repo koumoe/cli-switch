@@ -148,15 +148,20 @@ pub(in crate::server) async fn update_settings(
         ),
         (
             "newapi_managed_channel_missing_prompt_enabled",
-            input.newapi_managed_channel_missing_prompt_enabled.is_some(),
+            input
+                .newapi_managed_channel_missing_prompt_enabled
+                .is_some(),
         ),
         (
             "newapi_managed_channel_sync_multiplier_enabled",
-            input.newapi_managed_channel_sync_multiplier_enabled.is_some(),
+            input
+                .newapi_managed_channel_sync_multiplier_enabled
+                .is_some(),
         ),
         (
             "newapi_managed_channel_sync_free_multiplier_enabled",
-            input.newapi_managed_channel_sync_free_multiplier_enabled
+            input
+                .newapi_managed_channel_sync_free_multiplier_enabled
                 .is_some(),
         ),
     ]

@@ -567,8 +567,10 @@ pub async fn get_app_settings(db_path: PathBuf) -> anyhow::Result<AppSettings> {
                 out.newapi_managed_channel_sync_multiplier_enabled,
             );
         }
-        if let Some(v) = get_setting(conn, KEY_NEWAPI_MANAGED_CHANNEL_SYNC_FREE_MULTIPLIER_ENABLED)?
-        {
+        if let Some(v) = get_setting(
+            conn,
+            KEY_NEWAPI_MANAGED_CHANNEL_SYNC_FREE_MULTIPLIER_ENABLED,
+        )? {
             out.newapi_managed_channel_sync_free_multiplier_enabled = parse_bool_setting(
                 KEY_NEWAPI_MANAGED_CHANNEL_SYNC_FREE_MULTIPLIER_ENABLED,
                 &v,

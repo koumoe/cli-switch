@@ -725,11 +725,13 @@ pub(crate) async fn newapi_accounts_maintenance_loop(
                                 &overview.quota_display_type,
                                 overview.custom_currency_symbol.as_deref(),
                             );
-                            events::publish(AppEvent::NewApiLowBalanceAlert(NewApiLowBalanceAlert {
-                                account_id: account.id.clone(),
-                                base_url: account.base_url.clone(),
-                                balance_text,
-                            }));
+                            events::publish(AppEvent::NewApiLowBalanceAlert(
+                                NewApiLowBalanceAlert {
+                                    account_id: account.id.clone(),
+                                    base_url: account.base_url.clone(),
+                                    balance_text,
+                                },
+                            ));
                             if let Err(err) = storage::set_newapi_account_balance_alert_notified(
                                 db_path.clone(),
                                 account.id.clone(),

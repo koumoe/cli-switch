@@ -163,7 +163,10 @@ fn managed_channel_created_body(
 ) -> String {
     let group = event.group_name.as_deref().unwrap_or("-");
     match locale {
-        AppLocale::ZhCN => format!("已新增渠道 {}，分组 {}，来源 {}", event.channel_name, group, event.account_base_url),
+        AppLocale::ZhCN => format!(
+            "已新增渠道 {}，分组 {}，来源 {}",
+            event.channel_name, group, event.account_base_url
+        ),
         AppLocale::EnUS => format!(
             "Added channel {}, group {}, from {}",
             event.channel_name, group, event.account_base_url
