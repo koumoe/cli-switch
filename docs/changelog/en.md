@@ -1,3 +1,16 @@
+## [0.50.0](https://github.com/koumoe/cli-switch/compare/v0.49.1...v0.50.0) (2026-03-27)
+
+### Features
+
+* add account api url fallback for managed channels ([9143850](https://github.com/koumoe/cli-switch/commit/914385066f5ced7eadc25f2b0c6a60b65f80a842))
+
+### Bug Fixes
+
+* avoid forcing window open for multiplier sync prompts ([95b7bd8](https://github.com/koumoe/cli-switch/commit/95b7bd8dd73f0a98f93d23fc6fd6daee682a4d4a))
+* compact channel priorities after deletion ([5e50bf9](https://github.com/koumoe/cli-switch/commit/5e50bf948da8761255827ea9766c9e3cbb0cd85c))
+* keep channel auto-sort dialog within viewport ([80ddb40](https://github.com/koumoe/cli-switch/commit/80ddb406df2ffc789f24cbc9b5fe22c5ec43d2d3))
+* require explicit managed channel protocol selection ([93e2749](https://github.com/koumoe/cli-switch/commit/93e2749232c0baceb76f3c93149a42a5df40bf45))
+* satisfy clippy in channel delete handler ([1511ff5](https://github.com/koumoe/cli-switch/commit/1511ff5a94923e2c3ff5c91ec152814d2a997988))
 ## [0.49.1](https://github.com/koumoe/cli-switch/compare/v0.49.0...v0.49.1) (2026-03-27)
 
 ### Bug Fixes

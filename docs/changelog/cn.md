@@ -1,3 +1,14 @@
+## [0.50.0](https://github.com/koumoe/cli-switch/compare/v0.49.1...v0.50.0) (2026-03-27)
+
+### 功能
+* 新增账号 API 地址用于托管渠道回退 ([9143850](https://github.com/koumoe/cli-switch/commit/914385066f5ced7eadc25f2b0c6a60b65f80a842))
+
+### 修复
+* 修复倍率同步提醒强制拉起窗口 ([95b7bd8](https://github.com/koumoe/cli-switch/commit/95b7bd8dd73f0a98f93d23fc6fd6daee682a4d4a))
+* 删除渠道后压缩优先级 ([5e50bf9](https://github.com/koumoe/cli-switch/commit/5e50bf948da8761255827ea9766c9e3cbb0cd85c))
+* 修复渠道倍率排序弹窗超出窗体 ([80ddb40](https://github.com/koumoe/cli-switch/commit/80ddb406df2ffc789f24cbc9b5fe22c5ec43d2d3))
+* 修复托管渠道必须显式选择协议 ([93e2749](https://github.com/koumoe/cli-switch/commit/93e2749232c0baceb76f3c93149a42a5df40bf45))
+* 修复渠道删除处理的 clippy 检查 ([1511ff5](https://github.com/koumoe/cli-switch/commit/1511ff5a94923e2c3ff5c91ec152814d2a997988))
 ## [0.49.1](https://github.com/koumoe/cli-switch/compare/v0.49.0...v0.49.1) (2026-03-27)
 
 ### 修复
