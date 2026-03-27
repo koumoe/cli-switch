@@ -43,6 +43,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { useI18n } from "@/lib/i18n";
 import { humanizeApiError, humanizeIssue } from "@/lib/error";
 import { useCurrency } from "@/lib/currency";
+import { useWindowEvent } from "@/lib/useWindowEvent";
 import {
   listChannels,
   createChannel,
@@ -214,6 +215,10 @@ export function ChannelsPage() {
   useEffect(() => {
     refresh();
   }, []);
+
+  useWindowEvent("cliswitch-channels-changed", () => {
+    void refresh();
+  });
 
   useEffect(() => {
     const timer = window.setInterval(() => setNowMs(Date.now()), 30_000);

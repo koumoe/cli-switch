@@ -4,6 +4,7 @@ use axum::extract::State;
 use axum::response::IntoResponse;
 use serde::{Deserialize, Serialize};
 
+use crate::events::{self, AppEvent, NewApiManagedChannelCreated};
 use crate::newapi as newapi_client;
 use crate::server::AppState;
 use crate::server::error::{ApiError, map_storage_unit_no_content_err};
@@ -355,6 +356,7 @@ pub(in crate::server) struct NewApiGroupResponse {
     pub name: String,
     pub ratio: Option<f64>,
     pub description: Option<String>,
+    pub managed_channel_count: usize,
 }
 
 #[derive(Debug, Serialize)]
@@ -492,10 +494,27 @@ pub(in crate::server) async fn list_newapi_account_groups(
     let groups = newapi_client::list_groups(&state.http_client, &account)
         .await
         .map_err(sync_error)?;
+    let managed_counts = storage::list_channels(state.db_path())
+        .await?
+        .into_iter()
+        .filter(|channel| {
+            channel.managed_by_newapi
+                && channel.newapi_account_id.as_deref() == Some(account.id.as_str())
+        })
+        .fold(
+            std::collections::HashMap::<String, usize>::new(),
+            |mut acc, channel| {
+                if let Some(group) = channel.newapi_group.as_deref() {
+                    *acc.entry(group.to_string()).or_default() += 1;
+                }
+                acc
+            },
+        );
     Ok(Json(
         groups
             .into_iter()
             .map(|item| NewApiGroupResponse {
+                managed_channel_count: managed_counts.get(&item.name).copied().unwrap_or(0),
                 name: item.name,
                 ratio: item.ratio,
                 description: item.description,
@@ -670,6 +689,21 @@ pub(in crate::server) async fn create_newapi_managed_channel(
         });
         *cur = std::sync::Arc::new(next);
     });
+    if state
+        .settings_snapshot()
+        .newapi_managed_channel_missing_prompt_enabled
+    {
+        events::publish(AppEvent::NewApiManagedChannelCreated(
+            NewApiManagedChannelCreated {
+                channel_id: channel.id.clone(),
+                channel_name: channel.name.clone(),
+                account_id: account.id.clone(),
+                account_base_url: account.base_url.clone(),
+                group_name: channel.newapi_group.clone(),
+                token_name: channel.newapi_token_name.clone(),
+            },
+        ));
+    }
 
     Ok((
         axum::http::StatusCode::CREATED,

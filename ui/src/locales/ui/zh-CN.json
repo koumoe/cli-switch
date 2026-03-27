@@ -251,6 +251,20 @@
       "testTimeout": "连接超时",
       "reorderOk": "排序已保存",
       "reorderFail": "保存排序失败"
+    },
+    "remoteMissing": {
+      "title": "托管渠道已失效",
+      "description": "检测到 {{name}} 对应的 New API token 已不存在，请选择处理方式。",
+      "baseUrl": "账号 Base URL：{{value}}",
+      "group": "分组：{{value}}",
+      "token": "Token 名称：{{value}}",
+      "hint": "禁用后会保留本地配置但停止使用；删除会移除本地渠道记录。",
+      "later": "稍后处理",
+      "disable": "禁用",
+      "delete": "删除",
+      "disableOk": "{{name}} 已禁用",
+      "deleteOk": "{{name}} 已删除",
+      "actionFail": "处理失效托管渠道失败"
     }
   },
   "accounts": {
@@ -321,6 +335,7 @@
       "name": "名称",
       "protocol": "协议",
       "group": "分组",
+      "groupAdded": "已有 {{count}} 个渠道",
       "groupPlaceholder": "请选择分组",
       "baseUrlOverride": "独立 Base URL",
       "baseUrlOverrideHint": "不填则默认使用账号的 Base URL",
@@ -564,6 +579,18 @@
       "invalid": "渠道保护参数不合法",
       "saved": "设置已保存",
       "saveFail": "保存失败"
+    },
+    "newApiManaged": {
+      "title": "New API 托管渠道",
+      "subtitle": "管理托管渠道的失效提醒与倍率同步策略",
+      "missingPrompt": "新增删除渠道通知",
+      "missingPromptHint": "开启后，新增托管渠道会发送系统通知；检测到远端 token 被删除时，会发送系统通知并弹框提示禁用或删除",
+      "syncMultiplier": "同步渠道倍率",
+      "syncMultiplierHint": "开启后每 30 分钟根据远端分组倍率更新本地真实倍率",
+      "ignoreFreeMultiplier": "忽略免费倍率",
+      "ignoreFreeMultiplierHint": "开启后，本地真实倍率为 0 的渠道不受远端倍率同步管理",
+      "saved": "New API 托管渠道设置已保存",
+      "saveFail": "保存 New API 托管渠道设置失败"
     },
     "pricingData": {
       "title": "定价数据",

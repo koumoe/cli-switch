@@ -383,6 +383,43 @@ pub async fn list_groups(
     Ok(groups)
 }
 
+pub async fn list_tokens(
+    http_client: &reqwest::Client,
+    account: &NewApiAccount,
+) -> anyhow::Result<Vec<TokenSearchItem>> {
+    const PAGE_SIZE: usize = 100;
+    const MAX_PAGES: usize = 100;
+
+    let headers = auth_headers(account)?;
+    let url = join_url(&account.base_url, "/api/token/search");
+    let mut all = Vec::new();
+    let page_size = PAGE_SIZE.to_string();
+
+    for page in 1..=MAX_PAGES {
+        let page_s = page.to_string();
+        let data = send_json::<TokenListData<TokenSearchItem>>(
+            http_client
+                .get(url.clone())
+                .headers(headers.clone())
+                .query(&[
+                    ("keyword", ""),
+                    ("p", page_s.as_str()),
+                    ("page_size", page_size.as_str()),
+                    ("size", page_size.as_str()),
+                ]),
+        )
+        .await?;
+
+        let fetched = data.items.len();
+        all.extend(data.items);
+        if fetched < PAGE_SIZE {
+            break;
+        }
+    }
+
+    Ok(all)
+}
+
 pub async fn perform_system_checkin_with_overview(
     http_client: &reqwest::Client,
     account: &NewApiAccount,

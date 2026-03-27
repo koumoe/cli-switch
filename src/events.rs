@@ -22,12 +22,35 @@ pub struct NewApiLowBalanceAlert {
     pub balance_text: String,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct NewApiManagedChannelMissingPrompt {
+    pub channel_id: String,
+    pub channel_name: String,
+    pub account_id: String,
+    pub account_base_url: String,
+    pub group_name: Option<String>,
+    pub token_name: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct NewApiManagedChannelCreated {
+    pub channel_id: String,
+    pub channel_name: String,
+    pub account_id: String,
+    pub account_base_url: String,
+    pub group_name: Option<String>,
+    pub token_name: Option<String>,
+}
+
 #[derive(Debug, Clone)]
 pub enum AppEvent {
     UpdateStatus(update::UpdateStatus),
     UsageChanged { at_ms: i64 },
+    ChannelsChanged { at_ms: i64 },
     NpmEnvInstallProgress(NpmEnvInstallProgress),
     NewApiLowBalanceAlert(NewApiLowBalanceAlert),
+    NewApiManagedChannelCreated(NewApiManagedChannelCreated),
+    NewApiManagedChannelMissingPrompt(NewApiManagedChannelMissingPrompt),
 }
 
 fn sender() -> &'static broadcast::Sender<AppEvent> {

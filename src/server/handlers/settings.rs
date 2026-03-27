@@ -46,6 +46,9 @@ pub(in crate::server) struct UpdateSettingsInput {
     chat_bridge_weixin_enabled: Option<bool>,
     chat_bridge_turn_timeout_minutes: Option<i64>,
     chat_bridge_allow_new_projects: Option<bool>,
+    newapi_managed_channel_missing_prompt_enabled: Option<bool>,
+    newapi_managed_channel_sync_multiplier_enabled: Option<bool>,
+    newapi_managed_channel_sync_free_multiplier_enabled: Option<bool>,
 }
 
 pub(in crate::server) async fn update_settings(
@@ -142,6 +145,24 @@ pub(in crate::server) async fn update_settings(
         (
             "chat_bridge_allow_new_projects",
             input.chat_bridge_allow_new_projects.is_some(),
+        ),
+        (
+            "newapi_managed_channel_missing_prompt_enabled",
+            input
+                .newapi_managed_channel_missing_prompt_enabled
+                .is_some(),
+        ),
+        (
+            "newapi_managed_channel_sync_multiplier_enabled",
+            input
+                .newapi_managed_channel_sync_multiplier_enabled
+                .is_some(),
+        ),
+        (
+            "newapi_managed_channel_sync_free_multiplier_enabled",
+            input
+                .newapi_managed_channel_sync_free_multiplier_enabled
+                .is_some(),
         ),
     ]
     .into_iter()
@@ -249,6 +270,12 @@ pub(in crate::server) async fn update_settings(
             chat_bridge_weixin_enabled: input.chat_bridge_weixin_enabled,
             chat_bridge_turn_timeout_minutes: input.chat_bridge_turn_timeout_minutes,
             chat_bridge_allow_new_projects: input.chat_bridge_allow_new_projects,
+            newapi_managed_channel_missing_prompt_enabled: input
+                .newapi_managed_channel_missing_prompt_enabled,
+            newapi_managed_channel_sync_multiplier_enabled: input
+                .newapi_managed_channel_sync_multiplier_enabled,
+            newapi_managed_channel_sync_free_multiplier_enabled: input
+                .newapi_managed_channel_sync_free_multiplier_enabled,
             ..Default::default()
         },
     )

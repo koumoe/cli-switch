@@ -46,9 +46,15 @@ export function ManagedChannelDialog({
   const { t } = useI18n();
   const selectedGroup = draft ? groups.find((group) => group.name === draft.group_name) ?? null : null;
   const selectedGroupLabel = selectedGroup ? formatGroupLabel(selectedGroup) : "";
+  const selectedGroupAddedLabel = selectedGroup && selectedGroup.managed_channel_count > 0
+    ? t("accounts.managed.groupAdded", { count: selectedGroup.managed_channel_count })
+    : "";
   const selectedGroupDescription = selectedGroup?.description?.trim() ?? "";
-  const selectedGroupTitle = selectedGroupDescription
-    ? `${selectedGroupLabel}\n${selectedGroupDescription}`
+  const selectedGroupMeta = [selectedGroupDescription, selectedGroupAddedLabel]
+    .filter((value) => !!value)
+    .join(" · ");
+  const selectedGroupTitle = selectedGroupMeta
+    ? `${selectedGroupLabel}\n${selectedGroupMeta}`
     : selectedGroupLabel;
 
   return (
@@ -57,7 +63,7 @@ export function ManagedChannelDialog({
         <DialogHeader>
           <DialogTitle>{t("accounts.managed.title")}</DialogTitle>
           <DialogDescription>
-            {t("accounts.managed.description", { name: target?.user_id ?? "" })}
+            {t("accounts.managed.description", { name: target?.base_url ?? "" })}
           </DialogDescription>
         </DialogHeader>
         {draft ? (
@@ -116,8 +122,8 @@ export function ManagedChannelDialog({
                     {selectedGroup ? (
                       <div className="min-w-0">
                         <div className="truncate">{selectedGroupLabel}</div>
-                        {selectedGroupDescription ? (
-                          <div className="line-clamp-1 text-xs text-muted-foreground">{selectedGroupDescription}</div>
+                        {selectedGroupMeta ? (
+                          <div className="line-clamp-1 text-xs text-muted-foreground">{selectedGroupMeta}</div>
                         ) : null}
                       </div>
                     ) : undefined}
@@ -133,9 +139,17 @@ export function ManagedChannelDialog({
                   {groups.map((group) => (
                     <SelectItem key={group.name} value={group.name}>
                       <div className="min-w-0 flex flex-col pr-2">
-                        <span>{formatGroupLabel(group)}</span>
-                        {group.description ? (
-                          <span className="text-xs text-muted-foreground">{group.description}</span>
+                        <span className="truncate">{formatGroupLabel(group)}</span>
+                        {[group.description, group.managed_channel_count > 0
+                          ? t("accounts.managed.groupAdded", { count: group.managed_channel_count })
+                          : "",
+                        ].filter((value) => !!value).join(" · ") ? (
+                          <span className="text-xs text-muted-foreground">
+                            {[group.description, group.managed_channel_count > 0
+                              ? t("accounts.managed.groupAdded", { count: group.managed_channel_count })
+                              : "",
+                            ].filter((value) => !!value).join(" · ")}
+                          </span>
                         ) : null}
                       </div>
                     </SelectItem>

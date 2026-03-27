@@ -306,7 +306,7 @@ pub async fn create_channel(db_path: PathBuf, input: CreateChannel) -> anyhow::R
     .await
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Default)]
 pub struct UpdateChannel {
     pub name: Option<String>,
     pub base_url: Option<String>,

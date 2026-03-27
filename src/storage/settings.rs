@@ -39,6 +39,12 @@ const KEY_CHAT_BRIDGE_WHATSAPP_ENABLED: &str = "chat_bridge_whatsapp_enabled";
 const KEY_CHAT_BRIDGE_WEIXIN_ENABLED: &str = "chat_bridge_weixin_enabled";
 const KEY_CHAT_BRIDGE_TURN_TIMEOUT_MINUTES: &str = "chat_bridge_turn_timeout_minutes";
 const KEY_CHAT_BRIDGE_ALLOW_NEW_PROJECTS: &str = "chat_bridge_allow_new_projects";
+const KEY_NEWAPI_MANAGED_CHANNEL_MISSING_PROMPT_ENABLED: &str =
+    "newapi_managed_channel_missing_prompt_enabled";
+const KEY_NEWAPI_MANAGED_CHANNEL_SYNC_MULTIPLIER_ENABLED: &str =
+    "newapi_managed_channel_sync_multiplier_enabled";
+const KEY_NEWAPI_MANAGED_CHANNEL_SYNC_FREE_MULTIPLIER_ENABLED: &str =
+    "newapi_managed_channel_sync_free_multiplier_enabled";
 const DEFAULT_CHAT_BRIDGE_TURN_TIMEOUT_MINUTES: i64 = 0;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -110,6 +116,9 @@ pub struct AppSettings {
     pub chat_bridge_weixin_enabled: bool,
     pub chat_bridge_turn_timeout_minutes: i64,
     pub chat_bridge_allow_new_projects: bool,
+    pub newapi_managed_channel_missing_prompt_enabled: bool,
+    pub newapi_managed_channel_sync_multiplier_enabled: bool,
+    pub newapi_managed_channel_sync_free_multiplier_enabled: bool,
     #[serde(default)]
     pub has_invalid_values: bool,
 }
@@ -148,6 +157,9 @@ impl Default for AppSettings {
             chat_bridge_weixin_enabled: false,
             chat_bridge_turn_timeout_minutes: DEFAULT_CHAT_BRIDGE_TURN_TIMEOUT_MINUTES,
             chat_bridge_allow_new_projects: false,
+            newapi_managed_channel_missing_prompt_enabled: true,
+            newapi_managed_channel_sync_multiplier_enabled: true,
+            newapi_managed_channel_sync_free_multiplier_enabled: false,
             has_invalid_values: false,
         }
     }
@@ -202,6 +214,9 @@ pub struct AppSettingsPatch {
     pub chat_bridge_weixin_enabled: Option<bool>,
     pub chat_bridge_turn_timeout_minutes: Option<i64>,
     pub chat_bridge_allow_new_projects: Option<bool>,
+    pub newapi_managed_channel_missing_prompt_enabled: Option<bool>,
+    pub newapi_managed_channel_sync_multiplier_enabled: Option<bool>,
+    pub newapi_managed_channel_sync_free_multiplier_enabled: Option<bool>,
 }
 
 fn get_setting(conn: &Connection, key: &str) -> rusqlite::Result<Option<String>> {
@@ -251,7 +266,12 @@ fn warn_invalid_setting_once(key: &'static str, raw_value: &str, reason: impl Fn
     );
 }
 
-fn parse_bool_setting(key: &'static str, raw_value: &str, invalid: &mut bool) -> bool {
+fn parse_bool_setting(
+    key: &'static str,
+    raw_value: &str,
+    invalid: &mut bool,
+    default: bool,
+) -> bool {
     let v = raw_value.trim();
     if v == "1" || v.eq_ignore_ascii_case("true") {
         return true;
@@ -261,7 +281,7 @@ fn parse_bool_setting(key: &'static str, raw_value: &str, invalid: &mut bool) ->
     }
     *invalid = true;
     warn_invalid_setting_once(key, raw_value, || "invalid bool".to_string());
-    false
+    default
 }
 
 fn parse_i64_setting(key: &'static str, raw_value: &str, invalid: &mut bool) -> Option<i64> {
@@ -282,8 +302,12 @@ pub async fn get_app_settings(db_path: PathBuf) -> anyhow::Result<AppSettings> {
         let mut has_invalid_values = false;
 
         if let Some(v) = get_setting(conn, KEY_PRICING_AUTO_UPDATE_ENABLED)? {
-            out.pricing_auto_update_enabled =
-                parse_bool_setting(KEY_PRICING_AUTO_UPDATE_ENABLED, &v, &mut has_invalid_values);
+            out.pricing_auto_update_enabled = parse_bool_setting(
+                KEY_PRICING_AUTO_UPDATE_ENABLED,
+                &v,
+                &mut has_invalid_values,
+                out.pricing_auto_update_enabled,
+            );
         }
         if let Some(v) = get_setting(conn, KEY_PRICING_AUTO_UPDATE_INTERVAL_HOURS)?
             && let Some(n) = parse_i64_setting(
@@ -308,8 +332,12 @@ pub async fn get_app_settings(db_path: PathBuf) -> anyhow::Result<AppSettings> {
             }
         }
         if let Some(v) = get_setting(conn, KEY_AUTO_START_ENABLED)? {
-            out.auto_start_enabled =
-                parse_bool_setting(KEY_AUTO_START_ENABLED, &v, &mut has_invalid_values);
+            out.auto_start_enabled = parse_bool_setting(
+                KEY_AUTO_START_ENABLED,
+                &v,
+                &mut has_invalid_values,
+                out.auto_start_enabled,
+            );
         }
         if let Some(v) = get_setting(conn, KEY_AUTO_START_LAUNCH_MODE)? {
             match v.trim() {
@@ -326,21 +354,30 @@ pub async fn get_app_settings(db_path: PathBuf) -> anyhow::Result<AppSettings> {
             }
         }
         if let Some(v) = get_setting(conn, KEY_SERVER_LAN_ACCESSIBLE)? {
-            out.server_lan_accessible =
-                parse_bool_setting(KEY_SERVER_LAN_ACCESSIBLE, &v, &mut has_invalid_values);
+            out.server_lan_accessible = parse_bool_setting(
+                KEY_SERVER_LAN_ACCESSIBLE,
+                &v,
+                &mut has_invalid_values,
+                out.server_lan_accessible,
+            );
         }
         if let Some(v) = get_setting(conn, KEY_UI_LOCALE)? {
             out.ui_locale = AppLocale::parse_or_default(&v);
         }
         if let Some(v) = get_setting(conn, KEY_APP_AUTO_UPDATE_ENABLED)? {
-            out.app_auto_update_enabled =
-                parse_bool_setting(KEY_APP_AUTO_UPDATE_ENABLED, &v, &mut has_invalid_values);
+            out.app_auto_update_enabled = parse_bool_setting(
+                KEY_APP_AUTO_UPDATE_ENABLED,
+                &v,
+                &mut has_invalid_values,
+                out.app_auto_update_enabled,
+            );
         }
         if let Some(v) = get_setting(conn, KEY_GEMINI_CLI_AUTO_UPDATE_ENABLED)? {
             out.gemini_cli_auto_update_enabled = parse_bool_setting(
                 KEY_GEMINI_CLI_AUTO_UPDATE_ENABLED,
                 &v,
                 &mut has_invalid_values,
+                out.gemini_cli_auto_update_enabled,
             );
         }
         if let Some(v) = get_setting(conn, KEY_CLAUDE_CODE_AUTO_UPDATE_ENABLED)? {
@@ -348,11 +385,16 @@ pub async fn get_app_settings(db_path: PathBuf) -> anyhow::Result<AppSettings> {
                 KEY_CLAUDE_CODE_AUTO_UPDATE_ENABLED,
                 &v,
                 &mut has_invalid_values,
+                out.claude_code_auto_update_enabled,
             );
         }
         if let Some(v) = get_setting(conn, KEY_CODEX_AUTO_UPDATE_ENABLED)? {
-            out.codex_auto_update_enabled =
-                parse_bool_setting(KEY_CODEX_AUTO_UPDATE_ENABLED, &v, &mut has_invalid_values);
+            out.codex_auto_update_enabled = parse_bool_setting(
+                KEY_CODEX_AUTO_UPDATE_ENABLED,
+                &v,
+                &mut has_invalid_values,
+                out.codex_auto_update_enabled,
+            );
         }
         if let Some(v) = get_setting(conn, KEY_CLI_TOOLS_NPM_PATH)? {
             let s = v.trim();
@@ -367,8 +409,12 @@ pub async fn get_app_settings(db_path: PathBuf) -> anyhow::Result<AppSettings> {
             }
         }
         if let Some(v) = get_setting(conn, KEY_AUTO_DISABLE_ENABLED)? {
-            out.auto_disable_enabled =
-                parse_bool_setting(KEY_AUTO_DISABLE_ENABLED, &v, &mut has_invalid_values);
+            out.auto_disable_enabled = parse_bool_setting(
+                KEY_AUTO_DISABLE_ENABLED,
+                &v,
+                &mut has_invalid_values,
+                out.auto_disable_enabled,
+            );
         }
         if let Some(v) = get_setting(conn, KEY_AUTO_DISABLE_WINDOW_MINUTES)?
             && let Some(n) =
@@ -396,6 +442,7 @@ pub async fn get_app_settings(db_path: PathBuf) -> anyhow::Result<AppSettings> {
                 KEY_ANTHROPIC_COUNT_TOKENS_MOCK_ENABLED,
                 &v,
                 &mut has_invalid_values,
+                out.anthropic_count_tokens_mock_enabled,
             );
         }
         if let Some(v) = get_setting(conn, KEY_LOG_LEVEL)? {
@@ -419,14 +466,19 @@ pub async fn get_app_settings(db_path: PathBuf) -> anyhow::Result<AppSettings> {
             out.log_retention_days = n;
         }
         if let Some(v) = get_setting(conn, KEY_CHAT_BRIDGE_ENABLED)? {
-            out.chat_bridge_enabled =
-                parse_bool_setting(KEY_CHAT_BRIDGE_ENABLED, &v, &mut has_invalid_values);
+            out.chat_bridge_enabled = parse_bool_setting(
+                KEY_CHAT_BRIDGE_ENABLED,
+                &v,
+                &mut has_invalid_values,
+                out.chat_bridge_enabled,
+            );
         }
         if let Some(v) = get_setting(conn, KEY_CHAT_BRIDGE_TELEGRAM_ENABLED)? {
             out.chat_bridge_telegram_enabled = parse_bool_setting(
                 KEY_CHAT_BRIDGE_TELEGRAM_ENABLED,
                 &v,
                 &mut has_invalid_values,
+                out.chat_bridge_telegram_enabled,
             );
         }
         if let Some(v) = get_setting(conn, KEY_CHAT_BRIDGE_TELEGRAM_BOT_TOKEN)? {
@@ -441,8 +493,12 @@ pub async fn get_app_settings(db_path: PathBuf) -> anyhow::Result<AppSettings> {
             .map(str::trim)
             .is_some_and(|value| !value.is_empty());
         if let Some(v) = get_setting(conn, KEY_CHAT_BRIDGE_DISCORD_ENABLED)? {
-            out.chat_bridge_discord_enabled =
-                parse_bool_setting(KEY_CHAT_BRIDGE_DISCORD_ENABLED, &v, &mut has_invalid_values);
+            out.chat_bridge_discord_enabled = parse_bool_setting(
+                KEY_CHAT_BRIDGE_DISCORD_ENABLED,
+                &v,
+                &mut has_invalid_values,
+                out.chat_bridge_discord_enabled,
+            );
         }
         if let Some(v) = get_setting(conn, KEY_CHAT_BRIDGE_DISCORD_BOT_TOKEN)? {
             let s = v.trim();
@@ -460,11 +516,16 @@ pub async fn get_app_settings(db_path: PathBuf) -> anyhow::Result<AppSettings> {
                 KEY_CHAT_BRIDGE_WHATSAPP_ENABLED,
                 &v,
                 &mut has_invalid_values,
+                out.chat_bridge_whatsapp_enabled,
             );
         }
         if let Some(v) = get_setting(conn, KEY_CHAT_BRIDGE_WEIXIN_ENABLED)? {
-            out.chat_bridge_weixin_enabled =
-                parse_bool_setting(KEY_CHAT_BRIDGE_WEIXIN_ENABLED, &v, &mut has_invalid_values);
+            out.chat_bridge_weixin_enabled = parse_bool_setting(
+                KEY_CHAT_BRIDGE_WEIXIN_ENABLED,
+                &v,
+                &mut has_invalid_values,
+                out.chat_bridge_weixin_enabled,
+            );
         }
         if let Some(v) = get_setting(conn, KEY_CHAT_BRIDGE_TURN_TIMEOUT_MINUTES)?
             && let Some(n) = parse_i64_setting(
@@ -487,6 +548,34 @@ pub async fn get_app_settings(db_path: PathBuf) -> anyhow::Result<AppSettings> {
                 KEY_CHAT_BRIDGE_ALLOW_NEW_PROJECTS,
                 &v,
                 &mut has_invalid_values,
+                out.chat_bridge_allow_new_projects,
+            );
+        }
+        if let Some(v) = get_setting(conn, KEY_NEWAPI_MANAGED_CHANNEL_MISSING_PROMPT_ENABLED)? {
+            out.newapi_managed_channel_missing_prompt_enabled = parse_bool_setting(
+                KEY_NEWAPI_MANAGED_CHANNEL_MISSING_PROMPT_ENABLED,
+                &v,
+                &mut has_invalid_values,
+                out.newapi_managed_channel_missing_prompt_enabled,
+            );
+        }
+        if let Some(v) = get_setting(conn, KEY_NEWAPI_MANAGED_CHANNEL_SYNC_MULTIPLIER_ENABLED)? {
+            out.newapi_managed_channel_sync_multiplier_enabled = parse_bool_setting(
+                KEY_NEWAPI_MANAGED_CHANNEL_SYNC_MULTIPLIER_ENABLED,
+                &v,
+                &mut has_invalid_values,
+                out.newapi_managed_channel_sync_multiplier_enabled,
+            );
+        }
+        if let Some(v) = get_setting(
+            conn,
+            KEY_NEWAPI_MANAGED_CHANNEL_SYNC_FREE_MULTIPLIER_ENABLED,
+        )? {
+            out.newapi_managed_channel_sync_free_multiplier_enabled = parse_bool_setting(
+                KEY_NEWAPI_MANAGED_CHANNEL_SYNC_FREE_MULTIPLIER_ENABLED,
+                &v,
+                &mut has_invalid_values,
+                out.newapi_managed_channel_sync_free_multiplier_enabled,
             );
         }
 
@@ -696,6 +785,30 @@ pub async fn update_app_settings(
             set_setting(
                 conn,
                 KEY_CHAT_BRIDGE_ALLOW_NEW_PROJECTS,
+                if v { "true" } else { "false" },
+                updated_at_ms,
+            )?;
+        }
+        if let Some(v) = patch.newapi_managed_channel_missing_prompt_enabled {
+            set_setting(
+                conn,
+                KEY_NEWAPI_MANAGED_CHANNEL_MISSING_PROMPT_ENABLED,
+                if v { "true" } else { "false" },
+                updated_at_ms,
+            )?;
+        }
+        if let Some(v) = patch.newapi_managed_channel_sync_multiplier_enabled {
+            set_setting(
+                conn,
+                KEY_NEWAPI_MANAGED_CHANNEL_SYNC_MULTIPLIER_ENABLED,
+                if v { "true" } else { "false" },
+                updated_at_ms,
+            )?;
+        }
+        if let Some(v) = patch.newapi_managed_channel_sync_free_multiplier_enabled {
+            set_setting(
+                conn,
+                KEY_NEWAPI_MANAGED_CHANNEL_SYNC_FREE_MULTIPLIER_ENABLED,
                 if v { "true" } else { "false" },
                 updated_at_ms,
             )?;

@@ -41,6 +41,21 @@ async fn get_app_settings_keeps_defaults_on_invalid_values() {
     upsert_setting(&conn, "log_level", "verbose");
     upsert_setting(&conn, "log_retention_days", "NaN");
     upsert_setting(&conn, "chat_bridge_turn_timeout_minutes", "-1");
+    upsert_setting(
+        &conn,
+        "newapi_managed_channel_missing_prompt_enabled",
+        "maybe",
+    );
+    upsert_setting(
+        &conn,
+        "newapi_managed_channel_sync_multiplier_enabled",
+        "maybe",
+    );
+    upsert_setting(
+        &conn,
+        "newapi_managed_channel_sync_free_multiplier_enabled",
+        "maybe",
+    );
 
     drop(conn);
 
@@ -53,6 +68,9 @@ async fn get_app_settings_keeps_defaults_on_invalid_values() {
     assert_eq!(settings.log_retention_days, 30);
     assert_eq!(settings.chat_bridge_turn_timeout_minutes, 0);
     assert_eq!(settings.chat_bridge_turn_timeout(), None);
+    assert!(settings.newapi_managed_channel_missing_prompt_enabled);
+    assert!(settings.newapi_managed_channel_sync_multiplier_enabled);
+    assert!(!settings.newapi_managed_channel_sync_free_multiplier_enabled);
 
     remove_sqlite_artifacts(&db_path);
 }
@@ -70,6 +88,9 @@ async fn default_chat_bridge_turn_timeout_is_disabled() {
     let settings = storage::get_app_settings(db_path.clone()).await.unwrap();
     assert_eq!(settings.chat_bridge_turn_timeout_minutes, 0);
     assert_eq!(settings.chat_bridge_turn_timeout(), None);
+    assert!(settings.newapi_managed_channel_missing_prompt_enabled);
+    assert!(settings.newapi_managed_channel_sync_multiplier_enabled);
+    assert!(!settings.newapi_managed_channel_sync_free_multiplier_enabled);
 
     remove_sqlite_artifacts(&db_path);
 }
