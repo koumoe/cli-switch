@@ -100,6 +100,7 @@ CREATE INDEX IF NOT EXISTS idx_channel_checkins_date ON channel_checkins(date, c
 CREATE TABLE IF NOT EXISTS newapi_accounts (
   id TEXT PRIMARY KEY,
   base_url TEXT NOT NULL,
+  api_url TEXT NULL,
   user_id TEXT NOT NULL,
   user_token TEXT NOT NULL,
   page_checkin_url TEXT NULL,

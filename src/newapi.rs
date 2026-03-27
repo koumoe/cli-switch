@@ -481,12 +481,7 @@ pub async fn create_managed_channel(
         Some(&request.group_name),
     )
     .await?;
-    let token_key = match created_token
-        .key
-        .as_deref()
-        .map(str::trim)
-        .filter(|v| !v.is_empty())
-    {
+    let token_key = match usable_token_key(created_token.key.as_deref()) {
         Some(key) => key.to_owned(),
         None => get_token_key(http_client, account, created_token.id).await?,
     };
@@ -567,6 +562,14 @@ async fn create_token(
         .with_context(|| format!("创建 token 后未找到：{token_name}"))
 }
 
+fn usable_token_key(key: Option<&str>) -> Option<&str> {
+    let key = key?.trim();
+    if key.is_empty() || key.contains('*') {
+        return None;
+    }
+    Some(key)
+}
+
 async fn get_token_key(
     http_client: &reqwest::Client,
     account: &NewApiAccount,
@@ -596,4 +599,30 @@ pub async fn delete_token(
     let headers = auth_headers(account)?;
     let url = join_url(&account.base_url, &format!("/api/token/{token_id}"));
     send_no_data(http_client.delete(url).headers(headers)).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::usable_token_key;
+
+    #[test]
+    fn accepts_full_token_key() {
+        assert_eq!(
+            usable_token_key(Some("sk-test-key-1234567890")),
+            Some("sk-test-key-1234567890")
+        );
+    }
+
+    #[test]
+    fn rejects_empty_or_blank_token_key() {
+        assert_eq!(usable_token_key(None), None);
+        assert_eq!(usable_token_key(Some("")), None);
+        assert_eq!(usable_token_key(Some("   ")), None);
+    }
+
+    #[test]
+    fn rejects_masked_token_key() {
+        assert_eq!(usable_token_key(Some("QKJv**********ie8s")), None);
+        assert_eq!(usable_token_key(Some("  a4Q1**********jOUN  ")), None);
+    }
 }

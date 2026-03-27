@@ -60,6 +60,15 @@ export function AccountEditorDialog({
             />
           </div>
           <div className="space-y-2">
+            <label className="text-sm font-medium">{t("accounts.editor.apiUrl")}</label>
+            <Input
+              value={draft.api_url}
+              onChange={(e) => setDraft((d) => ({ ...d, api_url: e.target.value }))}
+              placeholder="https://api.example.com/v1"
+            />
+            <p className="text-xs text-muted-foreground">{t("accounts.editor.apiUrlHint")}</p>
+          </div>
+          <div className="space-y-2">
             <label className="text-sm font-medium">{t("accounts.editor.userId")}</label>
             <Input
               value={draft.user_id}

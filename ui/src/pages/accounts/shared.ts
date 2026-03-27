@@ -4,6 +4,7 @@ export type AccountCheckinModeOption = "disabled" | NewApiAccountCheckinMode;
 
 export type AccountDraft = {
   base_url: string;
+  api_url: string;
   user_id: string;
   user_token: string;
   page_checkin_url: string;
@@ -23,6 +24,7 @@ export type ManagedChannelDraft = {
 export function emptyAccountDraft(): AccountDraft {
   return {
     base_url: "",
+    api_url: "",
     user_id: "",
     user_token: "",
     page_checkin_url: "",

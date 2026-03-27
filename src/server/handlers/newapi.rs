@@ -92,6 +92,7 @@ fn build_candidate_from_create(
         input.page_checkin_url.as_deref(),
         "newapi_page_checkin_url_invalid",
     )?;
+    let api_url = validate_optional_http_url(input.api_url.as_deref(), "newapi_api_url_invalid")?;
     let checkin_mode = input
         .checkin_mode
         .unwrap_or(storage::NewApiAccountCheckinMode::SystemApi);
@@ -100,6 +101,7 @@ fn build_candidate_from_create(
     let account = storage::NewApiAccount {
         id: "<candidate>".to_string(),
         base_url: validate_http_url(&input.base_url, "newapi_base_url_required")?,
+        api_url,
         user_id: input.user_id.trim().to_string(),
         user_token: Some(input.user_token.trim().to_string()).filter(|value| !value.is_empty()),
         user_token_configured: !input.user_token.trim().is_empty(),
@@ -144,6 +146,10 @@ fn build_candidate_from_update(
     let mut next = current.clone();
     if let Some(value) = input.base_url.as_deref() {
         next.base_url = validate_http_url(value, "newapi_base_url_required")?;
+    }
+    if input.api_url.is_some() {
+        next.api_url =
+            validate_optional_http_url(input.api_url.as_deref(), "newapi_api_url_invalid")?;
     }
     if let Some(value) = input.user_id.as_deref() {
         next.user_id = value.trim().to_string();
@@ -295,6 +301,15 @@ fn validate_managed_channel_name(name: &str) -> Result<String, ApiError> {
 
 fn managed_channel_recharge_currency(account: &storage::NewApiAccount) -> RechargeCurrency {
     account.recharge_currency
+}
+
+fn managed_channel_base_url(
+    account: &storage::NewApiAccount,
+    base_url_override: Option<String>,
+) -> String {
+    base_url_override
+        .or_else(|| account.api_url.clone())
+        .unwrap_or_else(|| account.base_url.clone())
 }
 
 fn notify_background_tasks(state: &AppState) {
@@ -648,7 +663,7 @@ pub(in crate::server) async fn create_newapi_managed_channel(
     let create_local = storage::CreateChannel {
         name,
         protocol: input.protocol,
-        base_url: base_url_override.unwrap_or_else(|| account.base_url.clone()),
+        base_url: managed_channel_base_url(&account, base_url_override),
         auth_type: Some("auto".to_string()),
         auth_ref: remote.token_key.clone(),
         checkin_url: None,

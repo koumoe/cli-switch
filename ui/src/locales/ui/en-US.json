@@ -329,6 +329,8 @@
       "editTitle": "Edit Account",
       "description": "Configure new-api account and check-in",
       "baseUrl": "Base URL",
+      "apiUrl": "API URL",
+      "apiUrlHint": "Leave empty to fall back to Base URL when creating channels",
       "userId": "User ID",
       "userToken": "User Token",
       "userTokenKeepHint": "Leave empty to keep existing token",
@@ -352,7 +354,7 @@
       "groupAdded": "{{count}} existing channels",
       "groupPlaceholder": "Select a group",
       "baseUrlOverride": "Dedicated Base URL",
-      "baseUrlOverrideHint": "Leave empty to use the account Base URL",
+      "baseUrlOverrideHint": "Leave empty to prefer the account API URL, then fall back to the account Base URL",
       "create": "Create and sync"
     },
     "deleteDialog": {
@@ -600,7 +602,7 @@
       "missingPrompt": "Managed channel change notifications",
       "missingPromptHint": "When enabled, newly added managed channels send system notifications; deleted remote tokens send system notifications, open the window, and show a disable/delete prompt",
       "syncMultiplier": "Sync channel multipliers",
-      "syncMultiplierHint": "When enabled, check remote group ratios every 30 minutes; when a mismatch is found, send a system notification, open the window, and ask whether to update the local real multiplier",
+      "syncMultiplierHint": "When enabled, check remote group ratios every 30 minutes; when a mismatch is found, send a system notification, ask immediately if the window is already open, or wait until you open the window to ask whether to update the local real multiplier",
       "ignoreFreeMultiplier": "Ignore free multipliers",
       "ignoreFreeMultiplierHint": "When enabled, channels with local real multiplier 0 are not managed by remote multiplier sync",
       "saved": "New API managed channel settings saved",

@@ -329,6 +329,8 @@
       "editTitle": "编辑账号",
       "description": "配置 new-api 账号信息和签到",
       "baseUrl": "Base URL",
+      "apiUrl": "API 地址",
+      "apiUrlHint": "留空则创建渠道时回退到 Base URL",
       "userId": "User ID",
       "userToken": "User Token",
       "userTokenKeepHint": "留空表示保持原 token 不变",
@@ -352,7 +354,7 @@
       "groupAdded": "已有 {{count}} 个渠道",
       "groupPlaceholder": "请选择分组",
       "baseUrlOverride": "独立 Base URL",
-      "baseUrlOverrideHint": "不填则默认使用账号的 Base URL",
+      "baseUrlOverrideHint": "不填则优先使用账号 API 地址，否则使用账号 Base URL",
       "create": "创建并同步"
     },
     "deleteDialog": {
@@ -600,7 +602,7 @@
       "missingPrompt": "渠道变更通知",
       "missingPromptHint": "开启后，新增托管渠道会发送系统通知；检测到远端 token 被删除时，会发送系统通知、打开窗口并弹框提示禁用或删除",
       "syncMultiplier": "同步渠道倍率",
-      "syncMultiplierHint": "开启后每 30 分钟检查远端分组倍率；发现差异时会先发送系统通知、打开窗口并询问是否修改本地真实倍率",
+      "syncMultiplierHint": "开启后每 30 分钟检查远端分组倍率；发现差异时会先发送系统通知，若窗口已打开则直接弹窗，未打开则在你主动打开窗口后询问是否修改本地真实倍率",
       "ignoreFreeMultiplier": "忽略免费倍率",
       "ignoreFreeMultiplierHint": "开启后，本地真实倍率为 0 的渠道不受远端倍率同步管理",
       "saved": "New API 托管渠道设置已保存",

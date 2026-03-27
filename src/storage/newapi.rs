@@ -50,6 +50,7 @@ impl rusqlite::types::FromSql for NewApiAccountCheckinMode {
 pub struct NewApiAccount {
     pub id: String,
     pub base_url: String,
+    pub api_url: Option<String>,
     pub user_id: String,
     #[serde(skip_serializing)]
     pub user_token: Option<String>,
@@ -85,6 +86,7 @@ pub struct NewApiAccount {
 #[derive(Debug, Clone, Deserialize)]
 pub struct CreateNewApiAccount {
     pub base_url: String,
+    pub api_url: Option<String>,
     pub user_id: String,
     pub user_token: String,
     pub page_checkin_url: Option<String>,
@@ -98,6 +100,7 @@ pub struct CreateNewApiAccount {
 #[derive(Debug, Clone, Deserialize, Default)]
 pub struct UpdateNewApiAccount {
     pub base_url: Option<String>,
+    pub api_url: Option<String>,
     pub user_id: Option<String>,
     pub user_token: Option<String>,
     pub page_checkin_url: Option<String>,
@@ -145,6 +148,11 @@ fn normalize_newapi_base_url(raw: &str) -> String {
     raw.trim().trim_end_matches('/').to_string()
 }
 
+fn normalize_optional_newapi_base_url(raw: Option<String>) -> Option<String> {
+    raw.map(|value| normalize_newapi_base_url(&value))
+        .filter(|value| !value.is_empty())
+}
+
 fn normalize_optional_text(raw: Option<String>) -> Option<String> {
     raw.map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
@@ -166,7 +174,7 @@ fn account_from_row(
     row: &rusqlite::Row<'_>,
     include_secret: bool,
 ) -> rusqlite::Result<NewApiAccount> {
-    let user_token_raw: String = row.get(3)?;
+    let user_token_raw: String = row.get(4)?;
     let user_token = if include_secret {
         Some(user_token_raw.clone()).filter(|value| token_configured(value))
     } else {
@@ -175,35 +183,36 @@ fn account_from_row(
     Ok(NewApiAccount {
         id: row.get(0)?,
         base_url: row.get(1)?,
-        user_id: row.get(2)?,
+        api_url: row.get(2)?,
+        user_id: row.get(3)?,
         user_token,
         user_token_configured: token_configured(&user_token_raw),
-        page_checkin_url: row.get(4)?,
-        checkin_mode: row.get(5)?,
-        auto_checkin_enabled: row.get::<_, i64>(6)? != 0,
-        auto_checkin_time: row.get(7)?,
-        low_balance_alert_threshold: row.get(8)?,
-        recharge_currency: row.get(9)?,
-        remote_role: row.get(10)?,
-        remote_username: row.get(11)?,
-        remote_display_name: row.get(12)?,
-        remote_group: row.get(13)?,
-        quota_display_type: row.get(14)?,
-        quota_per_unit: row.get(15)?,
-        usd_exchange_rate: row.get(16)?,
-        custom_currency_symbol: row.get(17)?,
-        custom_currency_exchange_rate: row.get(18)?,
-        remote_checkin_enabled: row.get::<_, i64>(19)? != 0,
-        remote_turnstile_check_enabled: row.get::<_, i64>(20)? != 0,
-        last_quota: row.get(21)?,
-        last_used_quota: row.get(22)?,
-        last_balance_amount: row.get(23)?,
-        last_sync_error: row.get(24)?,
-        last_synced_at_ms: row.get(25)?,
-        low_balance_alert_notified: row.get::<_, i64>(26)? != 0,
-        last_balance_alert_at_ms: row.get(27)?,
-        created_at_ms: row.get(28)?,
-        updated_at_ms: row.get(29)?,
+        page_checkin_url: row.get(5)?,
+        checkin_mode: row.get(6)?,
+        auto_checkin_enabled: row.get::<_, i64>(7)? != 0,
+        auto_checkin_time: row.get(8)?,
+        low_balance_alert_threshold: row.get(9)?,
+        recharge_currency: row.get(10)?,
+        remote_role: row.get(11)?,
+        remote_username: row.get(12)?,
+        remote_display_name: row.get(13)?,
+        remote_group: row.get(14)?,
+        quota_display_type: row.get(15)?,
+        quota_per_unit: row.get(16)?,
+        usd_exchange_rate: row.get(17)?,
+        custom_currency_symbol: row.get(18)?,
+        custom_currency_exchange_rate: row.get(19)?,
+        remote_checkin_enabled: row.get::<_, i64>(20)? != 0,
+        remote_turnstile_check_enabled: row.get::<_, i64>(21)? != 0,
+        last_quota: row.get(22)?,
+        last_used_quota: row.get(23)?,
+        last_balance_amount: row.get(24)?,
+        last_sync_error: row.get(25)?,
+        last_synced_at_ms: row.get(26)?,
+        low_balance_alert_notified: row.get::<_, i64>(27)? != 0,
+        last_balance_alert_at_ms: row.get(28)?,
+        created_at_ms: row.get(29)?,
+        updated_at_ms: row.get(30)?,
     })
 }
 
@@ -220,6 +229,7 @@ pub fn ensure_newapi_schema(conn: &rusqlite::Connection) -> anyhow::Result<()> {
         CREATE TABLE IF NOT EXISTS newapi_accounts (
           id TEXT PRIMARY KEY,
           base_url TEXT NOT NULL,
+          api_url TEXT NULL,
           user_id TEXT NOT NULL,
           user_token TEXT NOT NULL,
           page_checkin_url TEXT NULL,
@@ -262,6 +272,7 @@ pub fn ensure_newapi_schema(conn: &rusqlite::Connection) -> anyhow::Result<()> {
     )?;
 
     ensure_newapi_account_column(conn, "sort_order", "INTEGER NOT NULL DEFAULT 0")?;
+    ensure_newapi_account_column(conn, "api_url", "TEXT NULL")?;
     ensure_newapi_account_recharge_currency_column(conn)?;
     conn.execute(r#"DROP INDEX IF EXISTS idx_newapi_accounts_base_user"#, [])?;
     conn.execute(
@@ -394,7 +405,7 @@ async fn list_newapi_accounts_impl(
     with_conn(db_path, move |conn| {
         let mut stmt = conn.prepare(
             r#"
-            SELECT id, base_url, user_id, user_token, page_checkin_url, checkin_mode, auto_checkin_enabled, auto_checkin_time,
+            SELECT id, base_url, api_url, user_id, user_token, page_checkin_url, checkin_mode, auto_checkin_enabled, auto_checkin_time,
                    low_balance_alert_threshold, recharge_currency, remote_role, remote_username, remote_display_name, remote_group,
                    quota_display_type, quota_per_unit, usd_exchange_rate, custom_currency_symbol, custom_currency_exchange_rate,
                    remote_checkin_enabled, remote_turnstile_check_enabled, last_quota, last_used_quota, last_balance_amount,
@@ -471,7 +482,7 @@ async fn get_newapi_account_impl(
     with_conn(db_path, move |conn| {
         let mut stmt = conn.prepare(
             r#"
-            SELECT id, base_url, user_id, user_token, page_checkin_url, checkin_mode, auto_checkin_enabled, auto_checkin_time,
+            SELECT id, base_url, api_url, user_id, user_token, page_checkin_url, checkin_mode, auto_checkin_enabled, auto_checkin_time,
                    low_balance_alert_threshold, recharge_currency, remote_role, remote_username, remote_display_name, remote_group,
                    quota_display_type, quota_per_unit, usd_exchange_rate, custom_currency_symbol, custom_currency_exchange_rate,
                    remote_checkin_enabled, remote_turnstile_check_enabled, last_quota, last_used_quota, last_balance_amount,
@@ -495,6 +506,7 @@ pub async fn create_newapi_account(
         let ts = now_ms();
         let id = Uuid::new_v4().to_string();
         let base_url = normalize_newapi_base_url(&input.base_url);
+        let api_url = normalize_optional_newapi_base_url(input.api_url);
         let user_id = input.user_id.trim().to_string();
         let user_token = normalize_optional_text(Some(input.user_token));
         let page_checkin_url = normalize_optional_text(input.page_checkin_url);
@@ -511,14 +523,15 @@ pub async fn create_newapi_account(
         conn.execute(
             r#"
             INSERT INTO newapi_accounts (
-                id, base_url, user_id, user_token, page_checkin_url, checkin_mode, auto_checkin_enabled, auto_checkin_time,
+                id, base_url, api_url, user_id, user_token, page_checkin_url, checkin_mode, auto_checkin_enabled, auto_checkin_time,
                 low_balance_alert_threshold, recharge_currency, sort_order, created_at_ms, updated_at_ms
             )
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
             "#,
             params![
                 id,
                 base_url,
+                api_url,
                 user_id,
                 user_token.as_deref().unwrap_or(""),
                 page_checkin_url,
@@ -536,6 +549,7 @@ pub async fn create_newapi_account(
         Ok(NewApiAccount {
             id,
             base_url,
+            api_url,
             user_id,
             user_token: user_token.clone(),
             user_token_configured: user_token.is_some(),
@@ -585,6 +599,9 @@ pub async fn update_newapi_account(
         if let Some(value) = input.base_url {
             account.base_url = normalize_newapi_base_url(&value);
         }
+        if input.api_url.is_some() {
+            account.api_url = normalize_optional_newapi_base_url(input.api_url);
+        }
         if let Some(value) = input.user_id {
             account.user_id = value.trim().to_string();
         }
@@ -622,13 +639,14 @@ pub async fn update_newapi_account(
         conn.execute(
             r#"
             UPDATE newapi_accounts
-            SET base_url = ?2, user_id = ?3, user_token = ?4, page_checkin_url = ?5, checkin_mode = ?6,
-                auto_checkin_enabled = ?7, auto_checkin_time = ?8, low_balance_alert_threshold = ?9, recharge_currency = ?10, updated_at_ms = ?11
+            SET base_url = ?2, api_url = ?3, user_id = ?4, user_token = ?5, page_checkin_url = ?6, checkin_mode = ?7,
+                auto_checkin_enabled = ?8, auto_checkin_time = ?9, low_balance_alert_threshold = ?10, recharge_currency = ?11, updated_at_ms = ?12
             WHERE id = ?1
             "#,
             params![
                 account.id,
                 account.base_url,
+                account.api_url,
                 account.user_id,
                 account.user_token.as_deref().unwrap_or(""),
                 account.page_checkin_url,
@@ -684,8 +702,8 @@ fn get_account_row(
     account_id: &str,
 ) -> anyhow::Result<Option<NewApiAccount>> {
     let mut stmt = conn.prepare(
-        r#"
-        SELECT id, base_url, user_id, user_token, page_checkin_url, checkin_mode, auto_checkin_enabled, auto_checkin_time,
+            r#"
+        SELECT id, base_url, api_url, user_id, user_token, page_checkin_url, checkin_mode, auto_checkin_enabled, auto_checkin_time,
                low_balance_alert_threshold, recharge_currency, remote_role, remote_username, remote_display_name, remote_group,
                quota_display_type, quota_per_unit, usd_exchange_rate, custom_currency_symbol, custom_currency_exchange_rate,
                remote_checkin_enabled, remote_turnstile_check_enabled, last_quota, last_used_quota, last_balance_amount,
