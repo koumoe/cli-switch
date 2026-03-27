@@ -333,6 +333,8 @@ fn ensure_table_column(
     column_name: &str,
     column_ddl: &str,
 ) -> anyhow::Result<()> {
+    let table_name = checked_sql_identifier(table_name)?;
+    let column_name = checked_sql_identifier(column_name)?;
     let exists = table_has_column(conn, table_name, column_name)?;
     if !exists {
         conn.execute(
@@ -348,6 +350,8 @@ fn table_has_column(
     table_name: &str,
     column_name: &str,
 ) -> anyhow::Result<bool> {
+    let table_name = checked_sql_identifier(table_name)?;
+    let column_name = checked_sql_identifier(column_name)?;
     let mut stmt = conn.prepare(&format!("PRAGMA table_info({table_name})"))?;
     let mut rows = stmt.query([])?;
     while let Some(row) = rows.next()? {
@@ -357,6 +361,20 @@ fn table_has_column(
         }
     }
     Ok(false)
+}
+
+fn checked_sql_identifier(name: &str) -> anyhow::Result<&str> {
+    let mut chars = name.chars();
+    let Some(first) = chars.next() else {
+        anyhow::bail!("SQL 标识符不能为空");
+    };
+    if !(first == '_' || first.is_ascii_alphabetic()) {
+        anyhow::bail!("非法 SQL 标识符：{name}");
+    }
+    if !chars.all(|ch| ch == '_' || ch.is_ascii_alphanumeric()) {
+        anyhow::bail!("非法 SQL 标识符：{name}");
+    }
+    Ok(name)
 }
 
 pub async fn list_newapi_accounts(db_path: PathBuf) -> anyhow::Result<Vec<NewApiAccount>> {
