@@ -125,6 +125,8 @@ export function ManagedChannelDialog({
                 </SelectTrigger>
                 <SelectContent
                   side="bottom"
+                  align="start"
+                  avoidCollisions={false}
                   collisionPadding={16}
                   className="max-w-[min(32rem,calc(100vw-2rem))]"
                 >
