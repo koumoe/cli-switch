@@ -946,59 +946,61 @@ export function ChannelsPage() {
 
       {/* 自动排序预览 */}
       <Dialog open={autoSortOpen} onOpenChange={setAutoSortOpen}>
-        <DialogContent className="sm:max-w-[720px]">
-          <DialogHeader>
+        <DialogContent className="sm:max-w-[720px] max-h-[85vh] overflow-hidden flex flex-col">
+          <DialogHeader className="shrink-0">
             <DialogTitle>{t("channels.autoSort.title")}</DialogTitle>
             <DialogDescription>
               {t("channels.autoSort.description", { terminal: protocolLabel(t, activeProtocol) })}
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-3">
+          <div className="flex-1 min-h-0 space-y-3 overflow-y-auto pr-1">
             {!autoSortChanged ? (
               <div className="text-sm text-muted-foreground">
                 {t("channels.autoSort.noChange")}
               </div>
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-14">{t("channels.autoSort.headers.from")}</TableHead>
-                    <TableHead className="w-14">{t("channels.autoSort.headers.to")}</TableHead>
-                    <TableHead>{t("channels.autoSort.headers.channel")}</TableHead>
-                    <TableHead className="w-36">{t("channels.autoSort.headers.factor")}</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {autoSortSuggested.map((c, newIdx) => {
-                    const oldIdx = autoSortCurrent.findIndex((x) => x.id === c.id);
-                    const factor = effectiveCostFactor(c);
-                    return (
-                      <TableRow key={c.id}>
-                        <TableCell className="font-mono text-xs">{oldIdx >= 0 ? oldIdx + 1 : "-"}</TableCell>
-                        <TableCell className="font-mono text-xs">{newIdx + 1}</TableCell>
-                        <TableCell className="min-w-0">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <span className="truncate">{c.name}</span>
-                            {!c.enabled && (
-                              <Badge variant="outline" className="text-[10px] px-1 py-0">
-                                {t("common.disabled")}
-                              </Badge>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell className="font-mono text-xs text-muted-foreground">
-                          {Number.isFinite(factor) ? formatFixed2(factor) : "-"}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-14">{t("channels.autoSort.headers.from")}</TableHead>
+                      <TableHead className="w-14">{t("channels.autoSort.headers.to")}</TableHead>
+                      <TableHead>{t("channels.autoSort.headers.channel")}</TableHead>
+                      <TableHead className="w-36">{t("channels.autoSort.headers.factor")}</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {autoSortSuggested.map((c, newIdx) => {
+                      const oldIdx = autoSortCurrent.findIndex((x) => x.id === c.id);
+                      const factor = effectiveCostFactor(c);
+                      return (
+                        <TableRow key={c.id}>
+                          <TableCell className="font-mono text-xs">{oldIdx >= 0 ? oldIdx + 1 : "-"}</TableCell>
+                          <TableCell className="font-mono text-xs">{newIdx + 1}</TableCell>
+                          <TableCell className="min-w-0">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="truncate">{c.name}</span>
+                              {!c.enabled && (
+                                <Badge variant="outline" className="text-[10px] px-1 py-0">
+                                  {t("common.disabled")}
+                                </Badge>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell className="font-mono text-xs text-muted-foreground">
+                            {Number.isFinite(factor) ? formatFixed2(factor) : "-"}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
             )}
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="shrink-0">
             <Button variant="outline" onClick={() => setAutoSortOpen(false)} disabled={autoSortApplying}>
               {t("common.cancel")}
             </Button>
