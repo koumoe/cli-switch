@@ -160,23 +160,6 @@ fn managed_channel_notification_title(locale: AppLocale) -> &'static str {
     }
 }
 
-fn managed_channel_created_body(
-    locale: AppLocale,
-    event: &cliswitch::events::NewApiManagedChannelCreated,
-) -> String {
-    let group = event.group_name.as_deref().unwrap_or("-");
-    match locale {
-        AppLocale::ZhCN => format!(
-            "已新增渠道 {}，分组 {}，来源 {}",
-            event.channel_name, group, event.account_base_url
-        ),
-        AppLocale::EnUS => format!(
-            "Added channel {}, group {}, from {}",
-            event.channel_name, group, event.account_base_url
-        ),
-    }
-}
-
 fn managed_channel_deleted_body(
     locale: AppLocale,
     event: &cliswitch::events::NewApiManagedChannelMissingPrompt,
@@ -654,13 +637,6 @@ fn handle_user_event(
                 let body = low_balance_notification_body(state.locale, alert);
                 if let Err(err) = show_system_notification(title, &body) {
                     tracing::warn!(err = %err, account_id = %alert.account_id, "show low balance system notification failed");
-                }
-            }
-            if let AppEvent::NewApiManagedChannelCreated(ref event) = ev {
-                let title = managed_channel_notification_title(state.locale);
-                let body = managed_channel_created_body(state.locale, event);
-                if let Err(err) = show_system_notification(title, &body) {
-                    tracing::warn!(err = %err, channel_id = %event.channel_id, "show managed channel created system notification failed");
                 }
             }
             if let AppEvent::NewApiManagedChannelMissingPrompt(ref prompt) = ev {
