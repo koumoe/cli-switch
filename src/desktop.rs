@@ -213,7 +213,10 @@ fn upsert_pending_missing_prompt(
     queue: &mut Vec<cliswitch::events::NewApiManagedChannelMissingPrompt>,
     prompt: &cliswitch::events::NewApiManagedChannelMissingPrompt,
 ) {
-    if let Some(existing) = queue.iter_mut().find(|item| item.channel_id == prompt.channel_id) {
+    if let Some(existing) = queue
+        .iter_mut()
+        .find(|item| item.channel_id == prompt.channel_id)
+    {
         *existing = prompt.clone();
         return;
     }
@@ -224,7 +227,10 @@ fn upsert_pending_multiplier_prompt(
     queue: &mut Vec<cliswitch::events::NewApiManagedChannelMultiplierPrompt>,
     prompt: &cliswitch::events::NewApiManagedChannelMultiplierPrompt,
 ) {
-    if let Some(existing) = queue.iter_mut().find(|item| item.channel_id == prompt.channel_id) {
+    if let Some(existing) = queue
+        .iter_mut()
+        .find(|item| item.channel_id == prompt.channel_id)
+    {
         *existing = prompt.clone();
         return;
     }
