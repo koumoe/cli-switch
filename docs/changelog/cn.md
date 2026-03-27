@@ -1,3 +1,11 @@
+## [0.49.0](https://github.com/koumoe/cli-switch/compare/v0.48.1...v0.49.0) (2026-03-27)
+
+### 功能
+* 新增 New API 托管渠道同步通知 ([356891d](https://github.com/koumoe/cli-switch/commit/356891d8959a87699a03195d50d3d05808c7ed72))
+
+### 修复
+* 调整消息互联扫码状态标签位置 ([1fc230a](https://github.com/koumoe/cli-switch/commit/1fc230af11bce0ab073ebe005c2dd12a042073df))
+* 修复 Rust 格式检查 ([726cf70](https://github.com/koumoe/cli-switch/commit/726cf701e9fe6d4c03cab837b2ea160fa5045767))
 ## [0.48.2](https://github.com/koumoe/cli-switch/compare/v0.48.1...v0.48.2) (2026-03-27)
 
 ### 修复

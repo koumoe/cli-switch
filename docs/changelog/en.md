@@ -1,3 +1,13 @@
+## [0.49.0](https://github.com/koumoe/cli-switch/compare/v0.48.1...v0.49.0) (2026-03-27)
+
+### Features
+
+* add New API managed channel sync notifications ([356891d](https://github.com/koumoe/cli-switch/commit/356891d8959a87699a03195d50d3d05808c7ed72))
+
+### Bug Fixes
+
+* align chat bridge login status badge ([1fc230a](https://github.com/koumoe/cli-switch/commit/1fc230af11bce0ab073ebe005c2dd12a042073df))
+* satisfy rustfmt checks ([726cf70](https://github.com/koumoe/cli-switch/commit/726cf701e9fe6d4c03cab837b2ea160fa5045767))
 ## [0.48.2](https://github.com/koumoe/cli-switch/compare/v0.48.1...v0.48.2) (2026-03-27)
 
 ### Bug Fixes
