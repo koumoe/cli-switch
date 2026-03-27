@@ -79,7 +79,7 @@ export function ManagedChannelDialog({
               <div className="space-y-2">
                 <label className="text-sm font-medium">{t("accounts.managed.protocol")}</label>
                 <Select
-                  value={draft.protocol}
+                  value={draft.protocol ?? ""}
                   onValueChange={(value) => {
                     setDraft((current) => {
                       if (!current) return current;
@@ -92,7 +92,7 @@ export function ManagedChannelDialog({
                   }}
                 >
                   <SelectTrigger>
-                    <SelectValue />
+                    <SelectValue placeholder={t("accounts.managed.protocolPlaceholder")} />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="openai">OpenAI</SelectItem>

@@ -354,7 +354,7 @@ pub(in crate::server) struct DeleteNewApiAccountInput {
 #[derive(Debug, Deserialize)]
 pub(in crate::server) struct CreateManagedChannelInput {
     pub name: String,
-    pub protocol: storage::Protocol,
+    pub protocol: Option<storage::Protocol>,
     pub group_name: String,
     pub base_url_override: Option<String>,
     pub priority: Option<i64>,
@@ -641,6 +641,9 @@ pub(in crate::server) async fn create_newapi_managed_channel(
             "group_name is required",
         ));
     }
+    let protocol = input
+        .protocol
+        .ok_or_else(|| ApiError::bad_request("newapi_protocol_required", "protocol is required"))?;
     let name = validate_managed_channel_name(&input.name)?;
     let base_url_override = validate_optional_http_url(
         input.base_url_override.as_deref(),
@@ -662,7 +665,7 @@ pub(in crate::server) async fn create_newapi_managed_channel(
 
     let create_local = storage::CreateChannel {
         name,
-        protocol: input.protocol,
+        protocol,
         base_url: managed_channel_base_url(&account, base_url_override),
         auth_type: Some("auto".to_string()),
         auth_ref: remote.token_key.clone(),
