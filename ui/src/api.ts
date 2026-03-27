@@ -269,6 +269,7 @@ export type NewApiAccountCheckinMode = "system_api" | "page_open";
 export type NewApiAccount = {
   id: string;
   base_url: string;
+  api_url: string | null;
   user_id: string;
   user_token_configured: boolean;
   page_checkin_url: string | null;
@@ -301,6 +302,7 @@ export type NewApiAccount = {
 
 export type CreateNewApiAccountInput = {
   base_url: string;
+  api_url?: string | null;
   user_id: string;
   user_token: string;
   page_checkin_url?: string | null;
@@ -313,6 +315,7 @@ export type CreateNewApiAccountInput = {
 
 export type UpdateNewApiAccountInput = Partial<{
   base_url: string;
+  api_url: string | null;
   user_id: string;
   user_token: string;
   page_checkin_url: string | null;

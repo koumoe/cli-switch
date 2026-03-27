@@ -329,6 +329,8 @@
       "editTitle": "Edit Account",
       "description": "Configure new-api account and check-in",
       "baseUrl": "Base URL",
+      "apiUrl": "API URL",
+      "apiUrlHint": "Leave empty to fall back to Base URL when creating channels",
       "userId": "User ID",
       "userToken": "User Token",
       "userTokenKeepHint": "Leave empty to keep existing token",
@@ -352,7 +354,7 @@
       "groupAdded": "{{count}} existing channels",
       "groupPlaceholder": "Select a group",
       "baseUrlOverride": "Dedicated Base URL",
-      "baseUrlOverrideHint": "Leave empty to use the account Base URL",
+      "baseUrlOverrideHint": "Leave empty to prefer the account API URL, then fall back to the account Base URL",
       "create": "Create and sync"
     },
     "deleteDialog": {

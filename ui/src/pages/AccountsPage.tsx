@@ -149,6 +149,7 @@ export function AccountsPage() {
     setEditingSource(item);
     setDraft({
       base_url: item.base_url ?? "",
+      api_url: item.api_url ?? "",
       user_id: item.user_id ?? "",
       user_token: "",
       page_checkin_url: item.page_checkin_url ?? "",
@@ -176,6 +177,7 @@ export function AccountsPage() {
 
   async function saveEditor() {
     const baseUrl = draft.base_url.trim();
+    const apiUrl = draft.api_url.trim();
     const userId = draft.user_id.trim();
     const pageUrl = draft.page_checkin_url.trim();
     const token = draft.user_token.trim();
@@ -215,6 +217,7 @@ export function AccountsPage() {
       if (editorMode === "create") {
         await createNewApiAccount({
           base_url: baseUrl,
+          api_url: apiUrl,
           user_id: userId,
           user_token: token,
           page_checkin_url: pageUrl || null,
@@ -229,6 +232,7 @@ export function AccountsPage() {
         if (!editingId) return;
         await updateNewApiAccount(editingId, {
           base_url: baseUrl,
+          api_url: apiUrl,
           user_id: userId,
           user_token: shouldClearStoredToken ? "" : token || undefined,
           page_checkin_url: pageUrl || null,

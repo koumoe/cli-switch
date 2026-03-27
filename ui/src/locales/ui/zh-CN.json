@@ -329,6 +329,8 @@
       "editTitle": "编辑账号",
       "description": "配置 new-api 账号信息和签到",
       "baseUrl": "Base URL",
+      "apiUrl": "API 地址",
+      "apiUrlHint": "留空则创建渠道时回退到 Base URL",
       "userId": "User ID",
       "userToken": "User Token",
       "userTokenKeepHint": "留空表示保持原 token 不变",
@@ -352,7 +354,7 @@
       "groupAdded": "已有 {{count}} 个渠道",
       "groupPlaceholder": "请选择分组",
       "baseUrlOverride": "独立 Base URL",
-      "baseUrlOverrideHint": "不填则默认使用账号的 Base URL",
+      "baseUrlOverrideHint": "不填则优先使用账号 API 地址，否则使用账号 Base URL",
       "create": "创建并同步"
     },
     "deleteDialog": {

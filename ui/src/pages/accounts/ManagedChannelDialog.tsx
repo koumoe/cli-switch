@@ -164,7 +164,7 @@ export function ManagedChannelDialog({
                 onChange={(e) => {
                   setDraft((current) => (current ? { ...current, base_url_override: e.target.value } : current));
                 }}
-                placeholder={target?.base_url || "https://new-api.example.com"}
+                placeholder={target?.api_url || target?.base_url || "https://api.example.com/v1"}
               />
               <p className="text-xs text-muted-foreground">{t("accounts.managed.baseUrlOverrideHint")}</p>
             </div>
