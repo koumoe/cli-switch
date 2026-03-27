@@ -137,8 +137,15 @@ struct TokenListData<T> {
 pub struct TokenSearchItem {
     pub id: i64,
     pub name: String,
+    pub key: Option<String>,
     pub created_time: Option<i64>,
     pub group: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+struct CreatedToken {
+    id: i64,
+    key: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -430,17 +437,25 @@ pub async fn create_managed_channel(
         )
     })?;
 
-    let token_id = create_token(
+    let created_token = create_token(
         http_client,
         account,
         &request.name,
         Some(&request.group_name),
     )
     .await?;
-    let token_key = get_token_key(http_client, account, token_id).await?;
+    let token_key = match created_token
+        .key
+        .as_deref()
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+    {
+        Some(key) => key.to_owned(),
+        None => get_token_key(http_client, account, created_token.id).await?,
+    };
 
     Ok(CreateManagedChannelResult {
-        token_id,
+        token_id: created_token.id,
         token_name: request.name.clone(),
         token_key,
         group_name: request.group_name.clone(),
@@ -453,7 +468,7 @@ async fn create_token(
     account: &NewApiAccount,
     token_name: &str,
     group_name: Option<&str>,
-) -> anyhow::Result<i64> {
+) -> anyhow::Result<CreatedToken> {
     let request_started_at = time::OffsetDateTime::now_utc()
         .unix_timestamp()
         .saturating_sub(1);
@@ -508,7 +523,10 @@ async fn create_token(
                 .iter()
                 .max_by_key(|item| (item.created_time.unwrap_or(i64::MIN), item.id))
         })
-        .map(|item| item.id)
+        .map(|item| CreatedToken {
+            id: item.id,
+            key: item.key.clone(),
+        })
         .with_context(|| format!("创建 token 后未找到：{token_name}"))
 }
 

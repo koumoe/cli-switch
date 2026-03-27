@@ -18,7 +18,7 @@ import {
 } from "@/components/ui";
 import { useI18n } from "@/lib/i18n";
 
-import { defaultManagedName, type ManagedChannelDraft } from "./shared";
+import { defaultManagedName, formatGroupLabel, type ManagedChannelDraft } from "./shared";
 
 type ManagedChannelDialogProps = {
   open: boolean;
@@ -44,6 +44,12 @@ export function ManagedChannelDialog({
   onCreate,
 }: ManagedChannelDialogProps) {
   const { t } = useI18n();
+  const selectedGroup = draft ? groups.find((group) => group.name === draft.group_name) ?? null : null;
+  const selectedGroupLabel = selectedGroup ? formatGroupLabel(selectedGroup) : "";
+  const selectedGroupDescription = selectedGroup?.description?.trim() ?? "";
+  const selectedGroupTitle = selectedGroupDescription
+    ? `${selectedGroupLabel}\n${selectedGroupDescription}`
+    : selectedGroupLabel;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -99,17 +105,35 @@ export function ManagedChannelDialog({
                 }}
                 disabled={loadingGroups}
               >
-                <SelectTrigger>
-                  <SelectValue placeholder={t("accounts.managed.groupPlaceholder")} />
+                <SelectTrigger
+                  title={selectedGroupTitle || undefined}
+                  className="h-auto min-h-[3.5rem] py-2 [&>span]:whitespace-normal"
+                >
+                  <SelectValue
+                    placeholder={t("accounts.managed.groupPlaceholder")}
+                    aria-label={selectedGroupTitle || undefined}
+                  >
+                    {selectedGroup ? (
+                      <div className="min-w-0">
+                        <div className="truncate">{selectedGroupLabel}</div>
+                        {selectedGroupDescription ? (
+                          <div className="line-clamp-1 text-xs text-muted-foreground">{selectedGroupDescription}</div>
+                        ) : null}
+                      </div>
+                    ) : undefined}
+                  </SelectValue>
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent
+                  side="bottom"
+                  align="start"
+                  avoidCollisions={false}
+                  collisionPadding={16}
+                  className="max-w-[min(32rem,calc(100vw-2rem))]"
+                >
                   {groups.map((group) => (
                     <SelectItem key={group.name} value={group.name}>
-                      <div className="flex flex-col">
-                        <span>
-                          {group.name}
-                          {group.ratio !== null && group.ratio !== undefined ? ` (x${group.ratio})` : ""}
-                        </span>
+                      <div className="min-w-0 flex flex-col pr-2">
+                        <span>{formatGroupLabel(group)}</span>
                         {group.description ? (
                           <span className="text-xs text-muted-foreground">{group.description}</span>
                         ) : null}

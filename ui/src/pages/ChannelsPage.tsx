@@ -912,18 +912,6 @@ export function ChannelsPage() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium">{t("channels.modal.checkinUrl")}</label>
-              <Input
-                value={draft.checkin_url ?? ""}
-                onChange={(e) => setDraft((d) => ({ ...d, checkin_url: e.target.value }))}
-                placeholder="https://example.com/checkin"
-              />
-              <p className="text-xs text-muted-foreground">
-                {t("channels.modal.checkinUrlHint")}
-              </p>
-            </div>
-
-            <div className="space-y-2">
               <label className="text-sm font-medium">{t("channels.modal.apiKey")}</label>
               <Input
                 type="password"

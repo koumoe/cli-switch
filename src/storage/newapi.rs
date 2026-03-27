@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use time::Time;
 use uuid::Uuid;
 
-use super::{StorageError, now_ms, with_conn};
+use super::{RechargeCurrency, StorageError, now_ms, with_conn};
 
 const CHECKIN_TIME_FORMAT: &str = "[hour]:[minute]:[second]";
 
@@ -59,6 +59,7 @@ pub struct NewApiAccount {
     pub auto_checkin_enabled: bool,
     pub auto_checkin_time: String,
     pub low_balance_alert_threshold: f64,
+    pub recharge_currency: RechargeCurrency,
     pub remote_role: Option<i64>,
     pub remote_username: Option<String>,
     pub remote_display_name: Option<String>,
@@ -91,6 +92,7 @@ pub struct CreateNewApiAccount {
     pub auto_checkin_enabled: Option<bool>,
     pub auto_checkin_time: Option<String>,
     pub low_balance_alert_threshold: Option<f64>,
+    pub recharge_currency: Option<RechargeCurrency>,
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
@@ -103,6 +105,7 @@ pub struct UpdateNewApiAccount {
     pub auto_checkin_enabled: Option<bool>,
     pub auto_checkin_time: Option<String>,
     pub low_balance_alert_threshold: Option<f64>,
+    pub recharge_currency: Option<RechargeCurrency>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -180,26 +183,27 @@ fn account_from_row(
         auto_checkin_enabled: row.get::<_, i64>(6)? != 0,
         auto_checkin_time: row.get(7)?,
         low_balance_alert_threshold: row.get(8)?,
-        remote_role: row.get(9)?,
-        remote_username: row.get(10)?,
-        remote_display_name: row.get(11)?,
-        remote_group: row.get(12)?,
-        quota_display_type: row.get(13)?,
-        quota_per_unit: row.get(14)?,
-        usd_exchange_rate: row.get(15)?,
-        custom_currency_symbol: row.get(16)?,
-        custom_currency_exchange_rate: row.get(17)?,
-        remote_checkin_enabled: row.get::<_, i64>(18)? != 0,
-        remote_turnstile_check_enabled: row.get::<_, i64>(19)? != 0,
-        last_quota: row.get(20)?,
-        last_used_quota: row.get(21)?,
-        last_balance_amount: row.get(22)?,
-        last_sync_error: row.get(23)?,
-        last_synced_at_ms: row.get(24)?,
-        low_balance_alert_notified: row.get::<_, i64>(25)? != 0,
-        last_balance_alert_at_ms: row.get(26)?,
-        created_at_ms: row.get(27)?,
-        updated_at_ms: row.get(28)?,
+        recharge_currency: row.get(9)?,
+        remote_role: row.get(10)?,
+        remote_username: row.get(11)?,
+        remote_display_name: row.get(12)?,
+        remote_group: row.get(13)?,
+        quota_display_type: row.get(14)?,
+        quota_per_unit: row.get(15)?,
+        usd_exchange_rate: row.get(16)?,
+        custom_currency_symbol: row.get(17)?,
+        custom_currency_exchange_rate: row.get(18)?,
+        remote_checkin_enabled: row.get::<_, i64>(19)? != 0,
+        remote_turnstile_check_enabled: row.get::<_, i64>(20)? != 0,
+        last_quota: row.get(21)?,
+        last_used_quota: row.get(22)?,
+        last_balance_amount: row.get(23)?,
+        last_sync_error: row.get(24)?,
+        last_synced_at_ms: row.get(25)?,
+        low_balance_alert_notified: row.get::<_, i64>(26)? != 0,
+        last_balance_alert_at_ms: row.get(27)?,
+        created_at_ms: row.get(28)?,
+        updated_at_ms: row.get(29)?,
     })
 }
 
@@ -223,6 +227,7 @@ pub fn ensure_newapi_schema(conn: &rusqlite::Connection) -> anyhow::Result<()> {
           auto_checkin_enabled INTEGER NOT NULL DEFAULT 0,
           auto_checkin_time TEXT NOT NULL DEFAULT '00:05:00',
           low_balance_alert_threshold REAL NOT NULL DEFAULT 0,
+          recharge_currency TEXT NOT NULL DEFAULT 'CNY' CHECK(recharge_currency IN ('CNY','USD')),
           remote_role INTEGER NULL,
           remote_username TEXT NULL,
           remote_display_name TEXT NULL,
@@ -257,6 +262,7 @@ pub fn ensure_newapi_schema(conn: &rusqlite::Connection) -> anyhow::Result<()> {
     )?;
 
     ensure_newapi_account_column(conn, "sort_order", "INTEGER NOT NULL DEFAULT 0")?;
+    ensure_newapi_account_recharge_currency_column(conn)?;
     conn.execute(r#"DROP INDEX IF EXISTS idx_newapi_accounts_base_user"#, [])?;
     conn.execute(
         r#"
@@ -297,25 +303,39 @@ fn ensure_newapi_account_column(
     ensure_table_column(conn, "newapi_accounts", column_name, column_ddl)
 }
 
+fn ensure_newapi_account_recharge_currency_column(
+    conn: &rusqlite::Connection,
+) -> anyhow::Result<()> {
+    if table_has_column(conn, "newapi_accounts", "recharge_currency")? {
+        return Ok(());
+    }
+    ensure_newapi_account_column(
+        conn,
+        "recharge_currency",
+        "TEXT NOT NULL DEFAULT 'CNY' CHECK(recharge_currency IN ('CNY','USD'))",
+    )?;
+    conn.execute(
+        r#"
+        UPDATE newapi_accounts
+        SET recharge_currency = CASE
+            WHEN quota_display_type = 'CNY' THEN 'CNY'
+            ELSE 'USD'
+        END
+        "#,
+        [],
+    )?;
+    Ok(())
+}
+
 fn ensure_table_column(
     conn: &rusqlite::Connection,
     table_name: &str,
     column_name: &str,
     column_ddl: &str,
 ) -> anyhow::Result<()> {
-    let exists = {
-        let mut stmt = conn.prepare(&format!("PRAGMA table_info({table_name})"))?;
-        let mut rows = stmt.query([])?;
-        let mut found = false;
-        while let Some(row) = rows.next()? {
-            let name: String = row.get(1)?;
-            if name == column_name {
-                found = true;
-                break;
-            }
-        }
-        found
-    };
+    let table_name = checked_sql_identifier(table_name)?;
+    let column_name = checked_sql_identifier(column_name)?;
+    let exists = table_has_column(conn, table_name, column_name)?;
     if !exists {
         conn.execute(
             &format!("ALTER TABLE {table_name} ADD COLUMN {column_name} {column_ddl}"),
@@ -323,6 +343,38 @@ fn ensure_table_column(
         )?;
     }
     Ok(())
+}
+
+fn table_has_column(
+    conn: &rusqlite::Connection,
+    table_name: &str,
+    column_name: &str,
+) -> anyhow::Result<bool> {
+    let table_name = checked_sql_identifier(table_name)?;
+    let column_name = checked_sql_identifier(column_name)?;
+    let mut stmt = conn.prepare(&format!("PRAGMA table_info({table_name})"))?;
+    let mut rows = stmt.query([])?;
+    while let Some(row) = rows.next()? {
+        let name: String = row.get(1)?;
+        if name == column_name {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+fn checked_sql_identifier(name: &str) -> anyhow::Result<&str> {
+    let mut chars = name.chars();
+    let Some(first) = chars.next() else {
+        anyhow::bail!("SQL 标识符不能为空");
+    };
+    if !(first == '_' || first.is_ascii_alphabetic()) {
+        anyhow::bail!("非法 SQL 标识符：{name}");
+    }
+    if !chars.all(|ch| ch == '_' || ch.is_ascii_alphanumeric()) {
+        anyhow::bail!("非法 SQL 标识符：{name}");
+    }
+    Ok(name)
 }
 
 pub async fn list_newapi_accounts(db_path: PathBuf) -> anyhow::Result<Vec<NewApiAccount>> {
@@ -343,7 +395,7 @@ async fn list_newapi_accounts_impl(
         let mut stmt = conn.prepare(
             r#"
             SELECT id, base_url, user_id, user_token, page_checkin_url, checkin_mode, auto_checkin_enabled, auto_checkin_time,
-                   low_balance_alert_threshold, remote_role, remote_username, remote_display_name, remote_group,
+                   low_balance_alert_threshold, recharge_currency, remote_role, remote_username, remote_display_name, remote_group,
                    quota_display_type, quota_per_unit, usd_exchange_rate, custom_currency_symbol, custom_currency_exchange_rate,
                    remote_checkin_enabled, remote_turnstile_check_enabled, last_quota, last_used_quota, last_balance_amount,
                    last_sync_error, last_synced_at_ms, low_balance_alert_notified, last_balance_alert_at_ms, created_at_ms, updated_at_ms
@@ -420,7 +472,7 @@ async fn get_newapi_account_impl(
         let mut stmt = conn.prepare(
             r#"
             SELECT id, base_url, user_id, user_token, page_checkin_url, checkin_mode, auto_checkin_enabled, auto_checkin_time,
-                   low_balance_alert_threshold, remote_role, remote_username, remote_display_name, remote_group,
+                   low_balance_alert_threshold, recharge_currency, remote_role, remote_username, remote_display_name, remote_group,
                    quota_display_type, quota_per_unit, usd_exchange_rate, custom_currency_symbol, custom_currency_exchange_rate,
                    remote_checkin_enabled, remote_turnstile_check_enabled, last_quota, last_used_quota, last_balance_amount,
                    last_sync_error, last_synced_at_ms, low_balance_alert_notified, last_balance_alert_at_ms, created_at_ms, updated_at_ms
@@ -451,6 +503,7 @@ pub async fn create_newapi_account(
             && matches!(checkin_mode, NewApiAccountCheckinMode::SystemApi);
         let auto_checkin_time = normalize_auto_checkin_time(input.auto_checkin_time)?;
         let low_balance_alert_threshold = input.low_balance_alert_threshold.unwrap_or(0.0);
+        let recharge_currency = input.recharge_currency.unwrap_or(RechargeCurrency::Cny);
         let sort_order = ts;
 
         ensure_unique_account(conn, &base_url, &user_id, None)?;
@@ -459,9 +512,9 @@ pub async fn create_newapi_account(
             r#"
             INSERT INTO newapi_accounts (
                 id, base_url, user_id, user_token, page_checkin_url, checkin_mode, auto_checkin_enabled, auto_checkin_time,
-                low_balance_alert_threshold, sort_order, created_at_ms, updated_at_ms
+                low_balance_alert_threshold, recharge_currency, sort_order, created_at_ms, updated_at_ms
             )
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
             "#,
             params![
                 id,
@@ -473,6 +526,7 @@ pub async fn create_newapi_account(
                 if auto_checkin_enabled { 1 } else { 0 },
                 auto_checkin_time,
                 low_balance_alert_threshold,
+                recharge_currency.as_str(),
                 sort_order,
                 ts,
                 ts,
@@ -490,6 +544,7 @@ pub async fn create_newapi_account(
             auto_checkin_enabled,
             auto_checkin_time,
             low_balance_alert_threshold,
+            recharge_currency,
             remote_role: None,
             remote_username: None,
             remote_display_name: None,
@@ -555,6 +610,9 @@ pub async fn update_newapi_account(
         if let Some(value) = input.low_balance_alert_threshold {
             account.low_balance_alert_threshold = value;
         }
+        if let Some(value) = input.recharge_currency {
+            account.recharge_currency = value;
+        }
         if matches!(account.checkin_mode, NewApiAccountCheckinMode::PageOpen) {
             account.auto_checkin_enabled = false;
         }
@@ -565,7 +623,7 @@ pub async fn update_newapi_account(
             r#"
             UPDATE newapi_accounts
             SET base_url = ?2, user_id = ?3, user_token = ?4, page_checkin_url = ?5, checkin_mode = ?6,
-                auto_checkin_enabled = ?7, auto_checkin_time = ?8, low_balance_alert_threshold = ?9, updated_at_ms = ?10
+                auto_checkin_enabled = ?7, auto_checkin_time = ?8, low_balance_alert_threshold = ?9, recharge_currency = ?10, updated_at_ms = ?11
             WHERE id = ?1
             "#,
             params![
@@ -578,6 +636,7 @@ pub async fn update_newapi_account(
                 if account.auto_checkin_enabled { 1 } else { 0 },
                 account.auto_checkin_time,
                 account.low_balance_alert_threshold,
+                account.recharge_currency.as_str(),
                 ts,
             ],
         )?;
@@ -627,7 +686,7 @@ fn get_account_row(
     let mut stmt = conn.prepare(
         r#"
         SELECT id, base_url, user_id, user_token, page_checkin_url, checkin_mode, auto_checkin_enabled, auto_checkin_time,
-               low_balance_alert_threshold, remote_role, remote_username, remote_display_name, remote_group,
+               low_balance_alert_threshold, recharge_currency, remote_role, remote_username, remote_display_name, remote_group,
                quota_display_type, quota_per_unit, usd_exchange_rate, custom_currency_symbol, custom_currency_exchange_rate,
                remote_checkin_enabled, remote_turnstile_check_enabled, last_quota, last_used_quota, last_balance_amount,
                last_sync_error, last_synced_at_ms, low_balance_alert_notified, last_balance_alert_at_ms, created_at_ms, updated_at_ms

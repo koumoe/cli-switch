@@ -304,6 +304,11 @@
       "userId": "User ID",
       "userToken": "User Token",
       "userTokenKeepHint": "留空表示保持原 token 不变",
+      "rechargeCurrency": "默认充值货币",
+      "rechargeCurrencyOptions": {
+        "cny": "人民币（CNY）",
+        "usd": "美元（USD）"
+      },
       "pageCheckinUrl": "页面签到地址",
       "checkinMode": "签到模式",
       "autoCheckinTime": "自动签到时间",
