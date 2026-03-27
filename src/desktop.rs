@@ -653,7 +653,6 @@ fn handle_user_event(
                 if let Err(err) = show_system_notification(title, &body) {
                     tracing::warn!(err = %err, channel_id = %prompt.channel_id, "show managed channel multiplier system notification failed");
                 }
-                apply_window_visible(window, state, tray_show, tray_hide, true, true);
             }
 
             if !state.ui_ready {
