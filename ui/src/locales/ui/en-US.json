@@ -251,6 +251,20 @@
       "testTimeout": "Connection timed out",
       "reorderOk": "Order saved",
       "reorderFail": "Failed to save order"
+    },
+    "remoteMissing": {
+      "title": "Managed Channel Unavailable",
+      "description": "The New API token linked to {{name}} no longer exists. Choose how to handle the local channel.",
+      "baseUrl": "Account Base URL: {{value}}",
+      "group": "Group: {{value}}",
+      "token": "Token name: {{value}}",
+      "hint": "Disable keeps the local config but stops using it. Delete removes the local channel record.",
+      "later": "Later",
+      "disable": "Disable",
+      "delete": "Delete",
+      "disableOk": "{{name}} disabled",
+      "deleteOk": "{{name}} deleted",
+      "actionFail": "Failed to handle unavailable managed channel"
     }
   },
   "accounts": {
@@ -321,6 +335,7 @@
       "name": "Name",
       "protocol": "Protocol",
       "group": "Group",
+      "groupAdded": "{{count}} existing channels",
       "groupPlaceholder": "Select a group",
       "baseUrlOverride": "Dedicated Base URL",
       "baseUrlOverrideHint": "Leave empty to use the account Base URL",
@@ -564,6 +579,18 @@
       "invalid": "Invalid channel protection parameters",
       "saved": "Saved",
       "saveFail": "Save failed"
+    },
+    "newApiManaged": {
+      "title": "New API Managed Channels",
+      "subtitle": "Control invalid-channel prompts and multiplier sync behavior for managed channels",
+      "missingPrompt": "Managed channel add/delete notifications",
+      "missingPromptHint": "When enabled, newly added managed channels send system notifications; deleted remote tokens send system notifications and open a disable/delete prompt",
+      "syncMultiplier": "Sync channel multipliers",
+      "syncMultiplierHint": "When enabled, refresh local real multipliers from remote group ratios every 30 minutes",
+      "ignoreFreeMultiplier": "Ignore free multipliers",
+      "ignoreFreeMultiplierHint": "When enabled, channels with local real multiplier 0 are not managed by remote multiplier sync",
+      "saved": "New API managed channel settings saved",
+      "saveFail": "Failed to save New API managed channel settings"
     },
     "pricingData": {
       "title": "Pricing Data",

@@ -105,6 +105,7 @@ export function SettingsPage() {
   });
   const [saving, setSaving] = useState(false);
   const [autoDisableSaving, setAutoDisableSaving] = useState(false);
+  const [newApiManagedSaving, setNewApiManagedSaving] = useState(false);
   const [closeSaving, setCloseSaving] = useState(false);
   const [autoStartSaving, setAutoStartSaving] = useState(false);
   const [autoStartLaunchSaving, setAutoStartLaunchSaving] = useState(false);
@@ -1801,6 +1802,96 @@ export function SettingsPage() {
                     }
                   }}
                   disabled={!appSettings || autoDisableSaving}
+                >
+                  {t("common.save")}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Bot className="h-4 w-4" />
+                {t("settings.newApiManaged.title")}
+              </CardTitle>
+              <CardDescription>{t("settings.newApiManaged.subtitle")}</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <div className="font-medium text-sm">{t("settings.newApiManaged.missingPrompt")}</div>
+                  <div className="text-xs text-muted-foreground">{t("settings.newApiManaged.missingPromptHint")}</div>
+                </div>
+                <Switch
+                  checked={appSettings?.newapi_managed_channel_missing_prompt_enabled ?? true}
+                  onCheckedChange={(v) => {
+                    setAppSettings((prev) => (
+                      prev ? { ...prev, newapi_managed_channel_missing_prompt_enabled: v } : prev
+                    ));
+                  }}
+                  disabled={!appSettings}
+                />
+              </div>
+
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <div className="font-medium text-sm">{t("settings.newApiManaged.syncMultiplier")}</div>
+                  <div className="text-xs text-muted-foreground">{t("settings.newApiManaged.syncMultiplierHint")}</div>
+                </div>
+                <Switch
+                  checked={appSettings?.newapi_managed_channel_sync_multiplier_enabled ?? true}
+                  onCheckedChange={(v) => {
+                    setAppSettings((prev) => (
+                      prev ? { ...prev, newapi_managed_channel_sync_multiplier_enabled: v } : prev
+                    ));
+                  }}
+                  disabled={!appSettings}
+                />
+              </div>
+
+              {appSettings?.newapi_managed_channel_sync_multiplier_enabled ? (
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <div className="font-medium text-sm">{t("settings.newApiManaged.ignoreFreeMultiplier")}</div>
+                    <div className="text-xs text-muted-foreground">{t("settings.newApiManaged.ignoreFreeMultiplierHint")}</div>
+                  </div>
+                  <Switch
+                    checked={appSettings?.newapi_managed_channel_sync_free_multiplier_enabled ?? false}
+                    onCheckedChange={(v) => {
+                      setAppSettings((prev) => (
+                        prev ? { ...prev, newapi_managed_channel_sync_free_multiplier_enabled: v } : prev
+                      ));
+                    }}
+                    disabled={!appSettings}
+                  />
+                </div>
+              ) : null}
+
+              <div className="flex justify-end">
+                <Button
+                  size="sm"
+                  onClick={async () => {
+                    if (!appSettings) return;
+                    setNewApiManagedSaving(true);
+                    try {
+                      const next = await updateSettings({
+                        newapi_managed_channel_missing_prompt_enabled:
+                          appSettings.newapi_managed_channel_missing_prompt_enabled,
+                        newapi_managed_channel_sync_multiplier_enabled:
+                          appSettings.newapi_managed_channel_sync_multiplier_enabled,
+                        newapi_managed_channel_sync_free_multiplier_enabled:
+                          appSettings.newapi_managed_channel_sync_free_multiplier_enabled,
+                      });
+                      setAppSettings(next);
+                      toast.success(t("settings.newApiManaged.saved"));
+                    } catch (e) {
+                      toast.error(t("settings.newApiManaged.saveFail"), { description: humanizeApiError(e, t) });
+                    } finally {
+                      setNewApiManagedSaving(false);
+                    }
+                  }}
+                  disabled={!appSettings || newApiManagedSaving}
                 >
                   {t("common.save")}
                 </Button>

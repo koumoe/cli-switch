@@ -37,9 +37,9 @@ import {
   TooltipTrigger,
 } from "@/components/ui";
 import { toast } from "sonner";
-import { downloadUpdate, getCliToolsStatus, getHealth, getSettings, getUpdateChangelog, ignoreUpdate, pricingStatus, pricingSync, updateSettings, type ChangelogSection, type CliToolId, type CliToolsStatus } from "./api";
+import { deleteChannel, disableChannel, downloadUpdate, getCliToolsStatus, getHealth, getSettings, getUpdateChangelog, ignoreUpdate, pricingStatus, pricingSync, updateSettings, type ChangelogSection, type CliToolId, type CliToolsStatus, type NewApiManagedChannelMissingPrompt } from "./api";
 import { logger, setLogLevel } from "@/lib/logger";
-import type { CliswitchUpdateStatusEvent } from "@/lib/cliswitchEvents";
+import type { CliswitchNewApiManagedChannelMissingEvent, CliswitchUpdateStatusEvent } from "@/lib/cliswitchEvents";
 import { isUpdateReadyShown, markUpdateReadyShown } from "@/lib/updateReadyPrompt";
 import { UpdatePromptDialog } from "@/components/UpdatePromptDialog";
 
@@ -223,8 +223,11 @@ export default function App() {
   const [closePromptOpen, setClosePromptOpen] = useState(false);
   const [closeRemember, setCloseRemember] = useState(false);
   const [closeDecisionSent, setCloseDecisionSent] = useState(false);
+  const [managedMissingQueue, setManagedMissingQueue] = useState<NewApiManagedChannelMissingPrompt[]>([]);
+  const [managedMissingBusyAction, setManagedMissingBusyAction] = useState<"disable" | "delete" | null>(null);
   const updatePromptOpenRef = useRef(false);
   const updatePromptedVersionRef = useRef<string | null>(null);
+  const activeManagedMissing = managedMissingQueue[0] ?? null;
 
   useEffect(() => {
     updatePromptOpenRef.current = updatePromptOpen;
@@ -397,10 +400,61 @@ export default function App() {
     };
   }, []);
 
+  useEffect(() => {
+    const onManagedMissing = (e: Event) => {
+      const detail = (e as CliswitchNewApiManagedChannelMissingEvent).detail;
+      if (!detail?.channel_id) return;
+      setManagedMissingQueue((current) => {
+        if (current.some((item) => item.channel_id === detail.channel_id)) {
+          return current;
+        }
+        return [...current, detail];
+      });
+    };
+    window.addEventListener(
+      "cliswitch-newapi-managed-channel-missing",
+      onManagedMissing as EventListener,
+    );
+    return () => {
+      window.removeEventListener(
+        "cliswitch-newapi-managed-channel-missing",
+        onManagedMissing as EventListener,
+      );
+    };
+  }, []);
+
   const sendCloseDecision = (action: "minimize_to_tray" | "quit" | "cancel", remember: boolean) => {
     setCloseDecisionSent(true);
     postIpc({ type: "close-decision", action, remember });
     setClosePromptOpen(false);
+  };
+
+  const dismissManagedMissing = () => {
+    setManagedMissingQueue((current) => current.slice(1));
+  };
+
+  const resolveManagedMissing = async (action: "disable" | "delete") => {
+    if (!activeManagedMissing) return;
+    setManagedMissingBusyAction(action);
+    try {
+      if (action === "disable") {
+        await disableChannel(activeManagedMissing.channel_id);
+        toast.success(t("channels.remoteMissing.disableOk", { name: activeManagedMissing.channel_name }));
+      } else {
+        await deleteChannel(activeManagedMissing.channel_id, { sync_remote_delete: false });
+        toast.success(t("channels.remoteMissing.deleteOk", { name: activeManagedMissing.channel_name }));
+      }
+      window.dispatchEvent(
+        new CustomEvent("cliswitch-channels-changed", { detail: { at_ms: Date.now() } }),
+      );
+      dismissManagedMissing();
+    } catch (e) {
+      toast.error(t("channels.remoteMissing.actionFail"), {
+        description: humanizeApiError(e, t),
+      });
+    } finally {
+      setManagedMissingBusyAction(null);
+    }
   };
 
   return (
@@ -511,6 +565,80 @@ export default function App() {
             </Button>
             <Button onClick={() => sendCloseDecision("quit", closeRemember)}>
               {t("closePrompt.quit")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!activeManagedMissing}
+        onOpenChange={(open) => {
+          if (!open && !managedMissingBusyAction) {
+            dismissManagedMissing();
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-[560px]">
+          <DialogHeader>
+            <DialogTitle>{t("channels.remoteMissing.title")}</DialogTitle>
+            <DialogDescription>
+              {t("channels.remoteMissing.description", {
+                name: activeManagedMissing?.channel_name ?? "",
+              })}
+            </DialogDescription>
+          </DialogHeader>
+
+          {activeManagedMissing ? (
+            <div className="space-y-3 text-sm">
+              <div className="rounded-md border p-3 space-y-1">
+                <div className="font-medium">{activeManagedMissing.channel_name}</div>
+                <div className="text-xs text-muted-foreground">
+                  {t("channels.remoteMissing.baseUrl", {
+                    value: activeManagedMissing.account_base_url,
+                  })}
+                </div>
+                {activeManagedMissing.group_name ? (
+                  <div className="text-xs text-muted-foreground">
+                    {t("channels.remoteMissing.group", {
+                      value: activeManagedMissing.group_name,
+                    })}
+                  </div>
+                ) : null}
+                {activeManagedMissing.token_name ? (
+                  <div className="text-xs text-muted-foreground">
+                    {t("channels.remoteMissing.token", {
+                      value: activeManagedMissing.token_name,
+                    })}
+                  </div>
+                ) : null}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {t("channels.remoteMissing.hint")}
+              </p>
+            </div>
+          ) : null}
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={dismissManagedMissing}
+              disabled={!!managedMissingBusyAction}
+            >
+              {t("channels.remoteMissing.later")}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => void resolveManagedMissing("disable")}
+              disabled={!!managedMissingBusyAction}
+            >
+              {t("channels.remoteMissing.disable")}
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => void resolveManagedMissing("delete")}
+              disabled={!!managedMissingBusyAction}
+            >
+              {t("channels.remoteMissing.delete")}
             </Button>
           </DialogFooter>
         </DialogContent>

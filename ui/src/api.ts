@@ -46,6 +46,9 @@ export type AppSettings = {
   chat_bridge_weixin_enabled: boolean;
   chat_bridge_turn_timeout_minutes: number;
   chat_bridge_allow_new_projects: boolean;
+  newapi_managed_channel_missing_prompt_enabled: boolean;
+  newapi_managed_channel_sync_multiplier_enabled: boolean;
+  newapi_managed_channel_sync_free_multiplier_enabled: boolean;
 };
 
 export type ChatPlatform = "telegram" | "discord" | "whatsapp" | "weixin";
@@ -335,6 +338,16 @@ export type NewApiGroupOption = {
   name: string;
   ratio: number | null;
   description: string | null;
+  managed_channel_count: number;
+};
+
+export type NewApiManagedChannelMissingPrompt = {
+  channel_id: string;
+  channel_name: string;
+  account_id: string;
+  account_base_url: string;
+  group_name: string | null;
+  token_name: string | null;
 };
 
 export type CreateNewApiManagedChannelInput = {

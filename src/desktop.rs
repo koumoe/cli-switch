@@ -150,6 +150,43 @@ fn low_balance_notification_body(
     }
 }
 
+fn managed_channel_notification_title(locale: AppLocale) -> &'static str {
+    match locale {
+        AppLocale::ZhCN => "CliSwitch 渠道通知",
+        AppLocale::EnUS => "CliSwitch Channel Notice",
+    }
+}
+
+fn managed_channel_created_body(
+    locale: AppLocale,
+    event: &cliswitch::events::NewApiManagedChannelCreated,
+) -> String {
+    let group = event.group_name.as_deref().unwrap_or("-");
+    match locale {
+        AppLocale::ZhCN => format!("已新增渠道 {}，分组 {}，来源 {}", event.channel_name, group, event.account_base_url),
+        AppLocale::EnUS => format!(
+            "Added channel {}, group {}, from {}",
+            event.channel_name, group, event.account_base_url
+        ),
+    }
+}
+
+fn managed_channel_deleted_body(
+    locale: AppLocale,
+    event: &cliswitch::events::NewApiManagedChannelMissingPrompt,
+) -> String {
+    match locale {
+        AppLocale::ZhCN => format!(
+            "检测到渠道 {} 对应的远端 token 已被删除，请选择禁用或删除",
+            event.channel_name
+        ),
+        AppLocale::EnUS => format!(
+            "Remote token for channel {} was deleted. Disable or delete the local channel.",
+            event.channel_name
+        ),
+    }
+}
+
 fn show_system_notification(title: &str, body: &str) -> anyhow::Result<()> {
     #[cfg(target_os = "macos")]
     {
@@ -555,6 +592,20 @@ fn handle_user_event(
                     tracing::warn!(err = %err, account_id = %alert.account_id, "show low balance system notification failed");
                 }
             }
+            if let AppEvent::NewApiManagedChannelCreated(ref event) = ev {
+                let title = managed_channel_notification_title(state.locale);
+                let body = managed_channel_created_body(state.locale, event);
+                if let Err(err) = show_system_notification(title, &body) {
+                    tracing::warn!(err = %err, channel_id = %event.channel_id, "show managed channel created system notification failed");
+                }
+            }
+            if let AppEvent::NewApiManagedChannelMissingPrompt(ref prompt) = ev {
+                let title = managed_channel_notification_title(state.locale);
+                let body = managed_channel_deleted_body(state.locale, prompt);
+                if let Err(err) = show_system_notification(title, &body) {
+                    tracing::warn!(err = %err, channel_id = %prompt.channel_id, "show managed channel deleted system notification failed");
+                }
+            }
 
             if !state.ui_ready {
                 return;
@@ -570,11 +621,26 @@ fn handle_user_event(
                         &serde_json::json!({ "at_ms": at_ms }),
                     );
                 }
+                AppEvent::ChannelsChanged { at_ms } => {
+                    dispatch_custom_event(
+                        webview,
+                        "cliswitch-channels-changed",
+                        &serde_json::json!({ "at_ms": at_ms }),
+                    );
+                }
                 AppEvent::NpmEnvInstallProgress(progress) => {
                     dispatch_custom_event(webview, "cliswitch-npm-env-install-progress", &progress);
                 }
                 AppEvent::NewApiLowBalanceAlert(alert) => {
                     dispatch_custom_event(webview, "cliswitch-newapi-low-balance-alert", &alert);
+                }
+                AppEvent::NewApiManagedChannelCreated(_) => {}
+                AppEvent::NewApiManagedChannelMissingPrompt(prompt) => {
+                    dispatch_custom_event(
+                        webview,
+                        "cliswitch-newapi-managed-channel-missing",
+                        &prompt,
+                    );
                 }
             }
         }

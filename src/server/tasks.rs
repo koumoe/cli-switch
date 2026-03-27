@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -6,7 +6,7 @@ use tokio::sync::watch;
 use tokio::time::Duration;
 
 use crate::cli_tools::CLI_TOOLS;
-use crate::events::{self, AppEvent, NewApiLowBalanceAlert};
+use crate::events::{self, AppEvent, NewApiLowBalanceAlert, NewApiManagedChannelMissingPrompt};
 use crate::{autostart, log_files, newapi, nodejs, storage, update};
 
 use super::handlers::pricing::run_pricing_sync;
@@ -449,15 +449,67 @@ async fn persist_newapi_sync_failure(
     .await
 }
 
+fn normalize_remote_multiplier(raw: f64) -> Option<f64> {
+    if !raw.is_finite() || raw < 0.0 {
+        return None;
+    }
+    Some((raw * 100.0).round() / 100.0)
+}
+
+fn update_channels_cache_multipliers(
+    channels_cache: &watch::Sender<Arc<Vec<storage::Channel>>>,
+    updates: &HashMap<String, f64>,
+) -> bool {
+    if updates.is_empty() {
+        return false;
+    }
+
+    let ts = storage::now_ms();
+    let mut changed = false;
+    channels_cache.send_modify(|cur| {
+        let mut next = (**cur).clone();
+        for channel in &mut next {
+            let Some(multiplier) = updates.get(&channel.id) else {
+                continue;
+            };
+            if (channel.real_multiplier - *multiplier).abs() < 1e-9 {
+                continue;
+            }
+            channel.real_multiplier = *multiplier;
+            channel.updated_at_ms = ts;
+            changed = true;
+        }
+        if changed {
+            *cur = Arc::new(next);
+        }
+    });
+    changed
+}
+
 pub(crate) async fn newapi_accounts_maintenance_loop(
     db_path: PathBuf,
     http_client: reqwest::Client,
+    channels_cache: watch::Sender<Arc<Vec<storage::Channel>>>,
     mut notify: watch::Receiver<u64>,
 ) {
-    let interval = Duration::from_secs(60);
+    let interval = Duration::from_secs(30 * 60);
 
     loop {
         let now = local_now();
+        let settings = match storage::get_app_settings(db_path.clone()).await {
+            Ok(settings) => settings,
+            Err(err) => {
+                tracing::warn!(err = %err, "load app settings failed");
+                let changed = tokio::select! {
+                    _ = tokio::time::sleep(Duration::from_secs(30)) => Ok(()),
+                    changed = notify.changed() => changed,
+                };
+                if changed.is_err() {
+                    break;
+                }
+                continue;
+            }
+        };
 
         let accounts = match storage::list_newapi_accounts_with_secret(db_path.clone()).await {
             Ok(accounts) => accounts,
@@ -473,6 +525,32 @@ pub(crate) async fn newapi_accounts_maintenance_loop(
                 continue;
             }
         };
+        let managed_channels_by_account = if settings.newapi_managed_channel_missing_prompt_enabled
+            || settings.newapi_managed_channel_sync_multiplier_enabled
+        {
+            match storage::list_channels(db_path.clone()).await {
+                Ok(channels) => channels
+                    .into_iter()
+                    .filter(|channel| channel.managed_by_newapi)
+                    .filter_map(|channel| {
+                        let account_id = channel.newapi_account_id.clone()?;
+                        Some((account_id, channel))
+                    })
+                    .fold(
+                        HashMap::<String, Vec<storage::Channel>>::new(),
+                        |mut acc, (account_id, channel)| {
+                            acc.entry(account_id).or_default().push(channel);
+                            acc
+                        },
+                    ),
+                Err(err) => {
+                    tracing::warn!(err = %err, "load managed channels failed");
+                    HashMap::new()
+                }
+            }
+        } else {
+            HashMap::new()
+        };
 
         let mut completed_ids =
             match storage::get_newapi_accounts_checkins_today(db_path.clone()).await {
@@ -485,6 +563,7 @@ pub(crate) async fn newapi_accounts_maintenance_loop(
                     HashSet::new()
                 }
             };
+        let mut multiplier_updates = HashMap::<String, f64>::new();
 
         for mut account in accounts {
             if !newapi::account_has_user_api_credentials(&account) {
@@ -627,66 +706,172 @@ pub(crate) async fn newapi_accounts_maintenance_loop(
                 }
             }
 
-            let Some(overview) = latest_overview.as_ref() else {
-                continue;
-            };
-
-            if account.low_balance_alert_threshold <= 0.0 {
-                if account.low_balance_alert_notified {
-                    let _ = storage::set_newapi_account_balance_alert_notified(
-                        db_path.clone(),
-                        account.id.clone(),
-                        false,
-                        None,
-                    )
-                    .await;
+            if let Some(overview) = latest_overview.as_ref() {
+                if account.low_balance_alert_threshold <= 0.0 {
+                    if account.low_balance_alert_notified {
+                        let _ = storage::set_newapi_account_balance_alert_notified(
+                            db_path.clone(),
+                            account.id.clone(),
+                            false,
+                            None,
+                        )
+                        .await;
+                    }
+                } else if let Some(balance_amount) = overview.last_balance_amount {
+                    if balance_amount <= account.low_balance_alert_threshold {
+                        if !account.low_balance_alert_notified {
+                            let balance_text = newapi::format_balance_amount(
+                                balance_amount,
+                                &overview.quota_display_type,
+                                overview.custom_currency_symbol.as_deref(),
+                            );
+                            events::publish(AppEvent::NewApiLowBalanceAlert(NewApiLowBalanceAlert {
+                                account_id: account.id.clone(),
+                                base_url: account.base_url.clone(),
+                                balance_text,
+                            }));
+                            if let Err(err) = storage::set_newapi_account_balance_alert_notified(
+                                db_path.clone(),
+                                account.id.clone(),
+                                true,
+                                Some(storage::now_ms()),
+                            )
+                            .await
+                            {
+                                tracing::warn!(account_id = %account.id, err = %err, "mark newapi low balance alert notified failed");
+                            } else {
+                                account.low_balance_alert_notified = true;
+                            }
+                        }
+                    } else if account.low_balance_alert_notified {
+                        if let Err(err) = storage::set_newapi_account_balance_alert_notified(
+                            db_path.clone(),
+                            account.id.clone(),
+                            false,
+                            None,
+                        )
+                        .await
+                        {
+                            tracing::warn!(account_id = %account.id, err = %err, "clear newapi low balance alert notified failed");
+                        } else {
+                            account.low_balance_alert_notified = false;
+                        }
+                    }
                 }
-                continue;
             }
 
-            let Some(balance_amount) = overview.last_balance_amount else {
-                continue;
-            };
+            let managed_channels = managed_channels_by_account
+                .get(account.id.as_str())
+                .cloned()
+                .unwrap_or_default();
+            if !managed_channels.is_empty()
+                && (settings.newapi_managed_channel_missing_prompt_enabled
+                    || settings.newapi_managed_channel_sync_multiplier_enabled)
+            {
+                let remote_groups = match newapi::list_groups(&http_client, &account).await {
+                    Ok(groups) => Some(
+                        groups
+                            .into_iter()
+                            .filter_map(|group| {
+                                group.ratio.and_then(|ratio| {
+                                    normalize_remote_multiplier(ratio)
+                                        .map(|ratio| (group.name, ratio))
+                                })
+                            })
+                            .collect::<HashMap<String, f64>>(),
+                    ),
+                    Err(err) => {
+                        tracing::warn!(account_id = %account.id, err = %err, "load newapi groups failed");
+                        None
+                    }
+                };
+                let remote_token_ids = if settings.newapi_managed_channel_missing_prompt_enabled {
+                    match newapi::list_tokens(&http_client, &account).await {
+                        Ok(tokens) => Some(
+                            tokens
+                                .into_iter()
+                                .map(|token| token.id)
+                                .collect::<HashSet<i64>>(),
+                        ),
+                        Err(err) => {
+                            tracing::warn!(account_id = %account.id, err = %err, "load newapi tokens failed");
+                            None
+                        }
+                    }
+                } else {
+                    None
+                };
 
-            if balance_amount <= account.low_balance_alert_threshold {
-                if !account.low_balance_alert_notified {
-                    let balance_text = newapi::format_balance_amount(
-                        balance_amount,
-                        &overview.quota_display_type,
-                        overview.custom_currency_symbol.as_deref(),
-                    );
-                    events::publish(AppEvent::NewApiLowBalanceAlert(NewApiLowBalanceAlert {
-                        account_id: account.id.clone(),
-                        base_url: account.base_url.clone(),
-                        balance_text,
-                    }));
-                    if let Err(err) = storage::set_newapi_account_balance_alert_notified(
+                for channel in managed_channels {
+                    if settings.newapi_managed_channel_missing_prompt_enabled
+                        && channel.enabled
+                        && let (Some(token_id), Some(remote_token_ids)) =
+                            (channel.newapi_token_id, remote_token_ids.as_ref())
+                        && !remote_token_ids.contains(&token_id)
+                    {
+                        events::publish(AppEvent::NewApiManagedChannelMissingPrompt(
+                            NewApiManagedChannelMissingPrompt {
+                                channel_id: channel.id.clone(),
+                                channel_name: channel.name.clone(),
+                                account_id: account.id.clone(),
+                                account_base_url: account.base_url.clone(),
+                                group_name: channel.newapi_group.clone(),
+                                token_name: channel.newapi_token_name.clone(),
+                            },
+                        ));
+                    }
+
+                    if !settings.newapi_managed_channel_sync_multiplier_enabled {
+                        continue;
+                    }
+                    let Some(group_name) = channel.newapi_group.as_deref() else {
+                        continue;
+                    };
+                    let Some(remote_groups) = remote_groups.as_ref() else {
+                        continue;
+                    };
+                    let Some(remote_multiplier) = remote_groups.get(group_name).copied() else {
+                        continue;
+                    };
+                    if settings.newapi_managed_channel_sync_free_multiplier_enabled
+                        && channel.real_multiplier.abs() < 1e-9
+                    {
+                        continue;
+                    }
+                    if (channel.real_multiplier - remote_multiplier).abs() < 1e-9 {
+                        continue;
+                    }
+
+                    match storage::update_channel(
                         db_path.clone(),
-                        account.id.clone(),
-                        true,
-                        Some(storage::now_ms()),
+                        channel.id.clone(),
+                        storage::UpdateChannel {
+                            real_multiplier: Some(remote_multiplier),
+                            ..Default::default()
+                        },
                     )
                     .await
                     {
-                        tracing::warn!(account_id = %account.id, err = %err, "mark newapi low balance alert notified failed");
-                    } else {
-                        account.low_balance_alert_notified = true;
+                        Ok(()) => {
+                            multiplier_updates.insert(channel.id.clone(), remote_multiplier);
+                        }
+                        Err(err) => {
+                            tracing::warn!(
+                                account_id = %account.id,
+                                channel_id = %channel.id,
+                                err = %err,
+                                "sync managed channel multiplier failed"
+                            );
+                        }
                     }
                 }
-            } else if account.low_balance_alert_notified {
-                if let Err(err) = storage::set_newapi_account_balance_alert_notified(
-                    db_path.clone(),
-                    account.id.clone(),
-                    false,
-                    None,
-                )
-                .await
-                {
-                    tracing::warn!(account_id = %account.id, err = %err, "clear newapi low balance alert notified failed");
-                } else {
-                    account.low_balance_alert_notified = false;
-                }
             }
+        }
+
+        if update_channels_cache_multipliers(&channels_cache, &multiplier_updates) {
+            events::publish(AppEvent::ChannelsChanged {
+                at_ms: storage::now_ms(),
+            });
         }
 
         tokio::select! {
