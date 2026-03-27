@@ -1,3 +1,9 @@
+## [0.49.1](https://github.com/koumoe/cli-switch/compare/v0.49.0...v0.49.1) (2026-03-27)
+
+### Bug Fixes
+
+* disable managed channel created system notification ([578306c](https://github.com/koumoe/cli-switch/commit/578306c34a64b758395fdcf04eaeb0e24ef7c468))
+* require confirmation for managed channel changes ([913649b](https://github.com/koumoe/cli-switch/commit/913649b0e640e63e230d1a82347ce7530317fc91))
 ## [0.49.0](https://github.com/koumoe/cli-switch/compare/v0.48.1...v0.49.0) (2026-03-27)
 
 ### Features
