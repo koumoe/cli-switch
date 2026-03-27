@@ -333,46 +333,42 @@ pub(in crate::server) async fn delete_channel(
         .map(|Json(input)| input.sync_remote_delete.unwrap_or(false))
         .unwrap_or(false);
 
-    if sync_remote_delete {
-        if channel.managed_by_newapi {
-            let account_id = channel.newapi_account_id.clone().ok_or_else(|| {
-                ApiError::bad_request(
+    if sync_remote_delete && channel.managed_by_newapi {
+        let account_id = channel.newapi_account_id.clone().ok_or_else(|| {
+            ApiError::bad_request(
+                "channel_newapi_account_missing",
+                "Managed channel is missing linked New API account",
+            )
+        })?;
+        let account = storage::get_newapi_account_with_secret(state.db_path(), account_id)
+            .await
+            .map_err(|e| match e.downcast_ref::<storage::StorageError>() {
+                Some(storage::StorageError::NewApiAccountNotFound { .. }) => ApiError::bad_request(
                     "channel_newapi_account_missing",
-                    "Managed channel is missing linked New API account",
-                )
+                    "Linked New API account not found",
+                ),
+                _ => ApiError::Internal(e),
             })?;
-            let account = storage::get_newapi_account_with_secret(state.db_path(), account_id)
-                .await
-                .map_err(|e| match e.downcast_ref::<storage::StorageError>() {
-                    Some(storage::StorageError::NewApiAccountNotFound { .. }) => {
-                        ApiError::bad_request(
-                            "channel_newapi_account_missing",
-                            "Linked New API account not found",
-                        )
-                    }
-                    _ => ApiError::Internal(e),
-                })?;
 
-            if let Some(remote_channel_id) = channel.newapi_channel_id {
-                newapi_client::delete_channel(&state.http_client, &account, remote_channel_id)
-                    .await
-                    .map_err(|e| {
-                        ApiError::bad_gateway(
-                            "newapi_remote_delete_failed",
-                            format!("Failed to delete remote New API channel: {e}"),
-                        )
-                    })?;
-            }
-            if let Some(remote_token_id) = channel.newapi_token_id {
-                newapi_client::delete_token(&state.http_client, &account, remote_token_id)
-                    .await
-                    .map_err(|e| {
-                        ApiError::bad_gateway(
-                            "newapi_remote_delete_failed",
-                            format!("Failed to delete remote New API token: {e}"),
-                        )
-                    })?;
-            }
+        if let Some(remote_channel_id) = channel.newapi_channel_id {
+            newapi_client::delete_channel(&state.http_client, &account, remote_channel_id)
+                .await
+                .map_err(|e| {
+                    ApiError::bad_gateway(
+                        "newapi_remote_delete_failed",
+                        format!("Failed to delete remote New API channel: {e}"),
+                    )
+                })?;
+        }
+        if let Some(remote_token_id) = channel.newapi_token_id {
+            newapi_client::delete_token(&state.http_client, &account, remote_token_id)
+                .await
+                .map_err(|e| {
+                    ApiError::bad_gateway(
+                        "newapi_remote_delete_failed",
+                        format!("Failed to delete remote New API token: {e}"),
+                    )
+                })?;
         }
     }
 
