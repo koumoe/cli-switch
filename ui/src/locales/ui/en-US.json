@@ -265,6 +265,20 @@
       "disableOk": "{{name}} disabled",
       "deleteOk": "{{name}} deleted",
       "actionFail": "Failed to handle unavailable managed channel"
+    },
+    "remoteMultiplier": {
+      "title": "Managed Channel Multiplier Changed",
+      "description": "The remote multiplier for {{name}} changed. Update the local real multiplier?",
+      "baseUrl": "Account Base URL: {{value}}",
+      "group": "Group: {{value}}",
+      "current": "Current real multiplier: {{value}}",
+      "remote": "Remote group multiplier: {{value}}",
+      "hint": "The local real multiplier is updated only after you confirm. If you keep the current value, the next maintenance check will remind you again when the mismatch remains.",
+      "keep": "Keep current",
+      "apply": "Update multiplier",
+      "updateOk": "{{name}} multiplier updated",
+      "updateOkDescription": "Updated real multiplier from {{from}} to {{to}}",
+      "actionFail": "Failed to update managed channel multiplier"
     }
   },
   "accounts": {
@@ -582,11 +596,11 @@
     },
     "newApiManaged": {
       "title": "New API Managed Channels",
-      "subtitle": "Control invalid-channel prompts and multiplier sync behavior for managed channels",
-      "missingPrompt": "Managed channel add/delete notifications",
-      "missingPromptHint": "When enabled, newly added managed channels send system notifications; deleted remote tokens send system notifications and open a disable/delete prompt",
+      "subtitle": "Control managed channel change alerts and multiplier sync confirmations",
+      "missingPrompt": "Managed channel change notifications",
+      "missingPromptHint": "When enabled, newly added managed channels send system notifications; deleted remote tokens send system notifications, open the window, and show a disable/delete prompt",
       "syncMultiplier": "Sync channel multipliers",
-      "syncMultiplierHint": "When enabled, refresh local real multipliers from remote group ratios every 30 minutes",
+      "syncMultiplierHint": "When enabled, check remote group ratios every 30 minutes; when a mismatch is found, send a system notification, open the window, and ask whether to update the local real multiplier",
       "ignoreFreeMultiplier": "Ignore free multipliers",
       "ignoreFreeMultiplierHint": "When enabled, channels with local real multiplier 0 are not managed by remote multiplier sync",
       "saved": "New API managed channel settings saved",

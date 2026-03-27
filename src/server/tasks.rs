@@ -6,7 +6,10 @@ use tokio::sync::watch;
 use tokio::time::Duration;
 
 use crate::cli_tools::CLI_TOOLS;
-use crate::events::{self, AppEvent, NewApiLowBalanceAlert, NewApiManagedChannelMissingPrompt};
+use crate::events::{
+    self, AppEvent, NewApiLowBalanceAlert, NewApiManagedChannelMissingPrompt,
+    NewApiManagedChannelMultiplierPrompt,
+};
 use crate::{autostart, log_files, newapi, nodejs, storage, update};
 
 use super::handlers::pricing::run_pricing_sync;
@@ -456,40 +459,9 @@ fn normalize_remote_multiplier(raw: f64) -> Option<f64> {
     Some((raw * 100.0).round() / 100.0)
 }
 
-fn update_channels_cache_multipliers(
-    channels_cache: &watch::Sender<Arc<Vec<storage::Channel>>>,
-    updates: &HashMap<String, f64>,
-) -> bool {
-    if updates.is_empty() {
-        return false;
-    }
-
-    let ts = storage::now_ms();
-    let mut changed = false;
-    channels_cache.send_modify(|cur| {
-        let mut next = (**cur).clone();
-        for channel in &mut next {
-            let Some(multiplier) = updates.get(&channel.id) else {
-                continue;
-            };
-            if (channel.real_multiplier - *multiplier).abs() < 1e-9 {
-                continue;
-            }
-            channel.real_multiplier = *multiplier;
-            channel.updated_at_ms = ts;
-            changed = true;
-        }
-        if changed {
-            *cur = Arc::new(next);
-        }
-    });
-    changed
-}
-
 pub(crate) async fn newapi_accounts_maintenance_loop(
     db_path: PathBuf,
     http_client: reqwest::Client,
-    channels_cache: watch::Sender<Arc<Vec<storage::Channel>>>,
     mut notify: watch::Receiver<u64>,
 ) {
     let interval = Duration::from_secs(30 * 60);
@@ -563,8 +535,6 @@ pub(crate) async fn newapi_accounts_maintenance_loop(
                     HashSet::new()
                 }
             };
-        let mut multiplier_updates = HashMap::<String, f64>::new();
-
         for mut account in accounts {
             if !newapi::account_has_user_api_credentials(&account) {
                 if account.low_balance_alert_notified {
@@ -844,36 +814,19 @@ pub(crate) async fn newapi_accounts_maintenance_loop(
                         continue;
                     }
 
-                    match storage::update_channel(
-                        db_path.clone(),
-                        channel.id.clone(),
-                        storage::UpdateChannel {
-                            real_multiplier: Some(remote_multiplier),
-                            ..Default::default()
+                    events::publish(AppEvent::NewApiManagedChannelMultiplierPrompt(
+                        NewApiManagedChannelMultiplierPrompt {
+                            channel_id: channel.id.clone(),
+                            channel_name: channel.name.clone(),
+                            account_id: account.id.clone(),
+                            account_base_url: account.base_url.clone(),
+                            group_name: channel.newapi_group.clone(),
+                            current_multiplier: channel.real_multiplier,
+                            remote_multiplier,
                         },
-                    )
-                    .await
-                    {
-                        Ok(()) => {
-                            multiplier_updates.insert(channel.id.clone(), remote_multiplier);
-                        }
-                        Err(err) => {
-                            tracing::warn!(
-                                account_id = %account.id,
-                                channel_id = %channel.id,
-                                err = %err,
-                                "sync managed channel multiplier failed"
-                            );
-                        }
-                    }
+                    ));
                 }
             }
-        }
-
-        if update_channels_cache_multipliers(&channels_cache, &multiplier_updates) {
-            events::publish(AppEvent::ChannelsChanged {
-                at_ms: storage::now_ms(),
-            });
         }
 
         tokio::select! {
