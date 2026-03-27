@@ -1,3 +1,7 @@
+## [0.48.2](https://github.com/koumoe/cli-switch/compare/v0.48.1...v0.48.2) (2026-03-27)
+
+### 修复
+* 调整消息互联扫码状态标签位置 ([1fc230a](https://github.com/koumoe/cli-switch/commit/1fc230af11bce0ab073ebe005c2dd12a042073df))
 ## [0.48.1](https://github.com/koumoe/cli-switch/compare/v0.48.0...v0.48.1) (2026-03-27)
 
 ### 修复
