@@ -64,6 +64,7 @@
     "newapi_credentials_required_for_system_checkin": "User ID and User Token are required for system check-in",
     "newapi_delete_remote_requires_channel_delete": "Remote deletion requires deleting managed channels at the same time",
     "newapi_group_required": "Group is required",
+    "newapi_protocol_required": "Protocol is required",
     "newapi_low_balance_threshold_invalid": "Low-balance alert threshold must be a valid number >= 0",
     "newapi_managed_channel_create_failed": "Failed to create the managed New API channel",
     "newapi_managed_name_required": "Name is required",

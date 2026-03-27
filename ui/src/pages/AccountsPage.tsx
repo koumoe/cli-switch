@@ -382,9 +382,10 @@ export function AccountsPage() {
   async function createManaged() {
     if (!managedTarget || !managedDraft) return;
     const name = managedDraft.name.trim();
+    const protocol = managedDraft.protocol;
     const groupName = managedDraft.group_name.trim();
     const baseUrlOverride = managedDraft.base_url_override.trim();
-    if (!name || !groupName) {
+    if (!name || !groupName || !protocol) {
       toast.error(t("accounts.toast.actionFail"), { description: t("accounts.toast.managedRequired") });
       return;
     }
@@ -392,7 +393,7 @@ export function AccountsPage() {
     try {
       await createNewApiManagedChannel(managedTarget.id, {
         name,
-        protocol: managedDraft.protocol,
+        protocol,
         group_name: groupName,
         base_url_override: baseUrlOverride || null,
       });

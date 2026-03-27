@@ -66,6 +66,7 @@
     "newapi_credentials_required_for_system_checkin": "启用系统签到必须填写 User ID 和 User Token",
     "newapi_delete_remote_requires_channel_delete": "同步删除远端资源时必须同时删除托管渠道",
     "newapi_group_required": "分组不能为空",
+    "newapi_protocol_required": "协议不能为空",
     "newapi_low_balance_threshold_invalid": "低余额告警金额必须是大于等于 0 的有效数字",
     "newapi_managed_channel_create_failed": "创建 New API 托管渠道失败",
     "newapi_managed_name_required": "名称不能为空",

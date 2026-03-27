@@ -16,7 +16,7 @@ export type AccountDraft = {
 
 export type ManagedChannelDraft = {
   name: string;
-  protocol: Protocol;
+  protocol: Protocol | null;
   group_name: string;
   base_url_override: string;
 };
@@ -54,14 +54,15 @@ export function formatAmount(account: NewApiAccount, v: number | null): string {
   return `${symbol}${v.toFixed(2)}`;
 }
 
-export function defaultManagedName(account: NewApiAccount, protocol: Protocol): string {
+export function defaultManagedName(account: NewApiAccount, protocol: Protocol | null): string {
+  if (!protocol) return account.user_id;
   return `${account.user_id}-${protocol}`;
 }
 
 export function defaultManagedDraft(account: NewApiAccount): ManagedChannelDraft {
   return {
-    name: defaultManagedName(account, "openai"),
-    protocol: "openai",
+    name: defaultManagedName(account, null),
+    protocol: null,
     group_name: account.remote_group ?? "",
     base_url_override: "",
   };
