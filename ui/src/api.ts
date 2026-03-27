@@ -273,6 +273,7 @@ export type NewApiAccount = {
   auto_checkin_enabled: boolean;
   auto_checkin_time: string;
   low_balance_alert_threshold: number;
+  recharge_currency: "USD" | "CNY";
   remote_role: number | null;
   remote_username: string | null;
   remote_display_name: string | null;
@@ -304,6 +305,7 @@ export type CreateNewApiAccountInput = {
   auto_checkin_enabled?: boolean;
   auto_checkin_time?: string;
   low_balance_alert_threshold?: number;
+  recharge_currency?: "USD" | "CNY";
 };
 
 export type UpdateNewApiAccountInput = Partial<{
@@ -315,6 +317,7 @@ export type UpdateNewApiAccountInput = Partial<{
   auto_checkin_enabled: boolean;
   auto_checkin_time: string;
   low_balance_alert_threshold: number;
+  recharge_currency: "USD" | "CNY";
 }>;
 
 export type NewApiAccountCheckinsToday = {

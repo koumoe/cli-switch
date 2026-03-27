@@ -1,4 +1,4 @@
-import type { NewApiAccount, NewApiAccountCheckinMode, Protocol } from "@/api";
+import type { NewApiAccount, NewApiAccountCheckinMode, NewApiGroupOption, Protocol } from "@/api";
 
 export type AccountCheckinModeOption = "disabled" | NewApiAccountCheckinMode;
 
@@ -10,6 +10,7 @@ export type AccountDraft = {
   checkin_mode: AccountCheckinModeOption;
   auto_checkin_time: string;
   low_balance_alert_threshold: string;
+  recharge_currency: "USD" | "CNY";
 };
 
 export type ManagedChannelDraft = {
@@ -28,6 +29,7 @@ export function emptyAccountDraft(): AccountDraft {
     checkin_mode: "disabled",
     auto_checkin_time: "00:05:00",
     low_balance_alert_threshold: "0",
+    recharge_currency: "CNY",
   };
 }
 
@@ -61,6 +63,11 @@ export function defaultManagedDraft(account: NewApiAccount): ManagedChannelDraft
     group_name: account.remote_group ?? "",
     base_url_override: "",
   };
+}
+
+export function formatGroupLabel(group: NewApiGroupOption): string {
+  const ratio = group.ratio !== null && group.ratio !== undefined ? ` (x${group.ratio})` : "";
+  return `${group.name}${ratio}`;
 }
 
 export function resolveCheckinMode(account: NewApiAccount): AccountCheckinModeOption {

@@ -304,6 +304,11 @@
       "userId": "User ID",
       "userToken": "User Token",
       "userTokenKeepHint": "Leave empty to keep existing token",
+      "rechargeCurrency": "Default recharge currency",
+      "rechargeCurrencyOptions": {
+        "cny": "CNY (RMB)",
+        "usd": "USD"
+      },
       "pageCheckinUrl": "Page check-in URL",
       "checkinMode": "Check-in mode",
       "autoCheckinTime": "Auto check-in time",

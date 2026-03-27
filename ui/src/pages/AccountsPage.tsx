@@ -19,6 +19,7 @@ import {
 } from "@/api";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui";
+import { useCurrency } from "@/lib/currency";
 import { humanizeApiError } from "@/lib/error";
 import { useI18n } from "@/lib/i18n";
 
@@ -41,6 +42,7 @@ import {
 
 export function AccountsPage() {
   const { t } = useI18n();
+  const { currency } = useCurrency();
   const [accounts, setAccounts] = useState<NewApiAccount[]>([]);
   const [loading, setLoading] = useState(false);
   const [reordering, setReordering] = useState(false);
@@ -134,7 +136,10 @@ export function AccountsPage() {
     setEditorMode("create");
     setEditingId(null);
     setEditingSource(null);
-    setDraft(emptyAccountDraft());
+    setDraft({
+      ...emptyAccountDraft(),
+      recharge_currency: currency,
+    });
     setEditorOpen(true);
   }
 
@@ -150,6 +155,7 @@ export function AccountsPage() {
       checkin_mode: resolveCheckinMode(item),
       auto_checkin_time: item.auto_checkin_time ?? "00:05:00",
       low_balance_alert_threshold: String(item.low_balance_alert_threshold ?? 0),
+      recharge_currency: item.recharge_currency,
     });
     setEditorOpen(true);
   }
@@ -216,6 +222,7 @@ export function AccountsPage() {
           auto_checkin_enabled: autoCheckinEnabled,
           auto_checkin_time: draft.auto_checkin_time || "00:05:00",
           low_balance_alert_threshold: lowBalance,
+          recharge_currency: draft.recharge_currency,
         });
         toast.success(t("accounts.toast.createOk"));
       } else {
@@ -229,6 +236,7 @@ export function AccountsPage() {
           auto_checkin_enabled: autoCheckinEnabled,
           auto_checkin_time: draft.auto_checkin_time || "00:05:00",
           low_balance_alert_threshold: lowBalance,
+          recharge_currency: draft.recharge_currency,
         });
         toast.success(t("accounts.toast.updateOk"));
       }

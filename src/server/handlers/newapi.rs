@@ -110,6 +110,7 @@ fn build_candidate_from_create(
             .clone()
             .unwrap_or_else(|| "00:05:00".to_string()),
         low_balance_alert_threshold: input.low_balance_alert_threshold.unwrap_or(0.0),
+        recharge_currency: input.recharge_currency.unwrap_or(RechargeCurrency::Cny),
         remote_role: None,
         remote_username: None,
         remote_display_name: None,
@@ -177,6 +178,9 @@ fn build_candidate_from_update(
     }
     if let Some(value) = input.low_balance_alert_threshold {
         next.low_balance_alert_threshold = value;
+    }
+    if let Some(value) = input.recharge_currency {
+        next.recharge_currency = value;
     }
     validate_account_candidate(&next)?;
     Ok(next)
@@ -289,10 +293,7 @@ fn validate_managed_channel_name(name: &str) -> Result<String, ApiError> {
 }
 
 fn managed_channel_recharge_currency(account: &storage::NewApiAccount) -> RechargeCurrency {
-    match account.quota_display_type.as_str() {
-        "CNY" => RechargeCurrency::Cny,
-        _ => RechargeCurrency::Usd,
-    }
+    account.recharge_currency
 }
 
 fn notify_background_tasks(state: &AppState) {

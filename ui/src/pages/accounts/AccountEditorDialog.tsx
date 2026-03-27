@@ -76,6 +76,23 @@ export function AccountEditorDialog({
               placeholder={mode === "edit" ? t("accounts.editor.userTokenKeepHint") : "sk-..."}
             />
           </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">{t("accounts.editor.rechargeCurrency")}</label>
+            <Select
+              value={draft.recharge_currency}
+              onValueChange={(value) => {
+                setDraft((d) => ({ ...d, recharge_currency: value as "USD" | "CNY" }));
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="CNY">{t("accounts.editor.rechargeCurrencyOptions.cny")}</SelectItem>
+                <SelectItem value="USD">{t("accounts.editor.rechargeCurrencyOptions.usd")}</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
           {draft.checkin_mode === "page_open" ? (
             <div className="space-y-2">
               <label className="text-sm font-medium">{t("accounts.editor.pageCheckinUrl")}</label>
