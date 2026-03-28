@@ -81,18 +81,22 @@ fn ensure_windows_notification_shortcut() -> anyhow::Result<()> {
     })?;
 
     let shortcut_path = shortcut_dir.join(format!("{WINDOWS_SHORTCUT_NAME}.lnk"));
+    let app_id = HSTRING::from(WINDOWS_AUMID);
+    let app_id_pcw = PCWSTR::from_raw(app_id.as_ptr());
+
+    unsafe {
+        SetCurrentProcessExplicitAppUserModelID(app_id_pcw)
+            .context("set process AppUserModelID failed")?;
+    }
+
     if shortcut_path.exists() {
-        std::fs::remove_file(&shortcut_path).with_context(|| {
-            format!("remove stale shortcut failed: {}", shortcut_path.display())
-        })?;
+        return Ok(());
     }
 
     let exe_path = std::env::current_exe().context("resolve current exe path failed")?;
     let work_dir = exe_path
         .parent()
         .context("current exe has no parent directory")?;
-    let app_id = HSTRING::from(WINDOWS_AUMID);
-    let app_id_pcw = PCWSTR::from_raw(app_id.as_ptr());
 
     let needs_uninit = unsafe {
         match CoInitializeEx(None, COINIT_APARTMENTTHREADED).ok() {
@@ -107,9 +111,6 @@ fn ensure_windows_notification_shortcut() -> anyhow::Result<()> {
     };
 
     let result = unsafe {
-        SetCurrentProcessExplicitAppUserModelID(app_id_pcw)
-            .context("set process AppUserModelID failed")?;
-
         let shell_link: IShellLinkW = CoCreateInstance(&ShellLink, None, CLSCTX_INPROC_SERVER)
             .context("create IShellLinkW failed")?;
 
@@ -161,5 +162,5 @@ fn ensure_windows_notification_shortcut() -> anyhow::Result<()> {
         }
     }
 
-    result.map_err(anyhow::Error::from)
+    result
 }
