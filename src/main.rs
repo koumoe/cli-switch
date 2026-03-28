@@ -11,6 +11,8 @@ use tracing::Level;
 
 #[cfg(feature = "desktop")]
 mod desktop;
+#[cfg(feature = "desktop")]
+mod native_notifications;
 
 fn maybe_disable_macos_debug_system_logs() {
     #[cfg(target_os = "macos")]

@@ -1,7 +1,6 @@
 use anyhow::Context as _;
 use std::collections::BTreeMap;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use std::process::Command;
 use std::time::Duration;
 
 use cliswitch::events::AppEvent;
@@ -311,70 +310,7 @@ fn upsert_pending_multiplier_prompt(
 }
 
 fn show_system_notification(title: &str, body: &str) -> anyhow::Result<()> {
-    #[cfg(target_os = "macos")]
-    {
-        fn quote(value: &str) -> String {
-            format!("\"{}\"", value.replace('\\', "\\\\").replace('"', "\\\""))
-        }
-
-        let script = format!(
-            "display notification {} with title {}",
-            quote(body),
-            quote(title)
-        );
-        let mut cmd = Command::new("osascript");
-        cmd.args(["-e", &script]);
-        let status = cmd.status().context("spawn osascript failed")?;
-        if !status.success() {
-            anyhow::bail!("osascript exited with status {status}");
-        }
-        return Ok(());
-    }
-
-    #[cfg(target_os = "linux")]
-    {
-        let mut cmd = Command::new("notify-send");
-        cmd.args([title, body]);
-        let status = cmd.status().context("spawn notify-send failed")?;
-        if !status.success() {
-            anyhow::bail!("notify-send exited with status {status}");
-        }
-        return Ok(());
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-        fn ps_quote(value: &str) -> String {
-            value.replace('\'', "''")
-        }
-
-        let title = ps_quote(title);
-        let body = ps_quote(body);
-        let script = format!(
-            "$title='{title}'; \
-             $body='{body}'; \
-             [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] > $null; \
-             [Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime] > $null; \
-             $xml = New-Object Windows.Data.Xml.Dom.XmlDocument; \
-             $xml.LoadXml(\"<toast><visual><binding template='ToastGeneric'><text>$title</text><text>$body</text></binding></visual></toast>\"); \
-             $toast = [Windows.UI.Notifications.ToastNotification]::new($xml); \
-             $notifier = [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('CliSwitch'); \
-             $notifier.Show($toast);"
-        );
-        let mut cmd = Command::new("powershell");
-        cmd.args(["-NoProfile", "-NonInteractive", "-Command", &script]);
-        let status = cmd.status().context("spawn powershell failed")?;
-        if !status.success() {
-            anyhow::bail!("powershell exited with status {status}");
-        }
-        return Ok(());
-    }
-
-    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
-    {
-        let _ = (title, body);
-        anyhow::bail!("system notification is unsupported on this platform");
-    }
+    crate::native_notifications::show(title, body)
 }
 
 fn apply_desktop_locale(locale: AppLocale, menus: LocalizableMenus<'_>) {
@@ -813,6 +749,10 @@ pub async fn run(
     db_path: std::path::PathBuf,
     launched_by_autostart: bool,
 ) -> anyhow::Result<()> {
+    if let Err(err) = crate::native_notifications::initialize() {
+        tracing::warn!(err = %err, "initialize native notifications failed");
+    }
+
     let settings = match storage::get_app_settings(db_path.clone()).await {
         Ok(s) => Some(s),
         Err(e) => {
