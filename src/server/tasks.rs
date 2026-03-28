@@ -13,7 +13,36 @@ use crate::events::{
 use crate::{autostart, log_files, newapi, nodejs, storage, update};
 
 use super::handlers::pricing::run_pricing_sync;
+use super::scheduler::{self, DailyLocalTimeTrigger, IntervalTrigger};
 use super::state::data_dir_from_db_path;
+
+const RETRY_INTERVAL: Duration = Duration::from_secs(30);
+
+async fn wait_for_retry_or_shutdown(notify: &mut watch::Receiver<u64>) -> bool {
+    !scheduler::wait_for_trigger(&IntervalTrigger::new(RETRY_INTERVAL), notify)
+        .await
+        .closed()
+}
+
+async fn wait_for_change_or_shutdown(notify: &mut watch::Receiver<u64>) -> bool {
+    !scheduler::wait_for_change(notify).await.closed()
+}
+
+async fn wait_for_interval_or_shutdown(
+    interval: Duration,
+    notify: &mut watch::Receiver<u64>,
+) -> bool {
+    !scheduler::wait_for_trigger(&IntervalTrigger::new(interval), notify)
+        .await
+        .closed()
+}
+
+async fn wait_until_or_shutdown(
+    deadline: time::OffsetDateTime,
+    notify: &mut watch::Receiver<u64>,
+) -> bool {
+    !scheduler::wait_until(deadline, notify).await.closed()
+}
 
 pub(crate) async fn pricing_auto_update_loop(
     db_path: PathBuf,
@@ -25,11 +54,7 @@ pub(crate) async fn pricing_auto_update_loop(
             Ok(s) => s,
             Err(e) => {
                 tracing::warn!(err = %e, "load app settings failed");
-                let changed = tokio::select! {
-                    _ = tokio::time::sleep(Duration::from_secs(30)) => Ok(()),
-                    changed = notify.changed() => changed,
-                };
-                if changed.is_err() {
+                if !wait_for_retry_or_shutdown(&mut notify).await {
                     break;
                 }
                 continue;
@@ -37,7 +62,7 @@ pub(crate) async fn pricing_auto_update_loop(
         };
 
         if !settings.pricing_auto_update_enabled {
-            if notify.changed().await.is_err() {
+            if !wait_for_change_or_shutdown(&mut notify).await {
                 break;
             }
             continue;
@@ -48,12 +73,10 @@ pub(crate) async fn pricing_auto_update_loop(
             tracing::warn!(err = %e, "pricing auto sync failed");
         }
 
-        tokio::select! {
-            _ = tokio::time::sleep(Duration::from_secs((hours as u64) * 3600)) => {}
-            changed = notify.changed() => {
-                if changed.is_err() { break; }
-                continue;
-            }
+        if !wait_for_interval_or_shutdown(Duration::from_secs((hours as u64) * 3600), &mut notify)
+            .await
+        {
+            break;
         }
     }
 }
@@ -71,11 +94,7 @@ pub(crate) async fn app_update_auto_loop(
             Ok(s) => s,
             Err(e) => {
                 tracing::warn!(err = %e, "load app settings failed");
-                let changed = tokio::select! {
-                    _ = tokio::time::sleep(Duration::from_secs(30)) => Ok(()),
-                    changed = notify.changed() => changed,
-                };
-                if changed.is_err() {
+                if !wait_for_retry_or_shutdown(&mut notify).await {
                     break;
                 }
                 continue;
@@ -83,7 +102,7 @@ pub(crate) async fn app_update_auto_loop(
         };
 
         if !settings.app_auto_update_enabled {
-            if notify.changed().await.is_err() {
+            if !wait_for_change_or_shutdown(&mut notify).await {
                 break;
             }
             continue;
@@ -99,12 +118,8 @@ pub(crate) async fn app_update_auto_loop(
         )
         .await;
 
-        tokio::select! {
-            _ = tokio::time::sleep(interval) => {}
-            changed = notify.changed() => {
-                if changed.is_err() { break; }
-                continue;
-            }
+        if !wait_for_interval_or_shutdown(interval, &mut notify).await {
+            break;
         }
     }
 }
@@ -121,11 +136,7 @@ pub(crate) async fn cli_tools_auto_update_loop(db_path: PathBuf, mut notify: wat
             Ok(s) => s,
             Err(e) => {
                 tracing::warn!(err = %e, "load app settings failed");
-                let changed = tokio::select! {
-                    _ = tokio::time::sleep(Duration::from_secs(30)) => Ok(()),
-                    changed = notify.changed() => changed,
-                };
-                if changed.is_err() {
+                if !wait_for_retry_or_shutdown(&mut notify).await {
                     break;
                 }
                 continue;
@@ -137,7 +148,7 @@ pub(crate) async fn cli_tools_auto_update_loop(db_path: PathBuf, mut notify: wat
             || settings.codex_auto_update_enabled;
 
         if !enabled {
-            if notify.changed().await.is_err() {
+            if !wait_for_change_or_shutdown(&mut notify).await {
                 break;
             }
             continue;
@@ -301,12 +312,8 @@ pub(crate) async fn cli_tools_auto_update_loop(db_path: PathBuf, mut notify: wat
             tracing::warn!(err = %e, "cli tool auto update task join failed");
         }
 
-        tokio::select! {
-            _ = tokio::time::sleep(interval) => {}
-            changed = notify.changed() => {
-                if changed.is_err() { break; }
-                continue;
-            }
+        if !wait_for_interval_or_shutdown(interval, &mut notify).await {
+            break;
         }
     }
 }
@@ -349,11 +356,7 @@ pub(crate) async fn logs_retention_cleanup_loop(
             Ok(s) => s,
             Err(e) => {
                 tracing::warn!(err = %e, "load app settings failed");
-                let changed = tokio::select! {
-                    _ = tokio::time::sleep(Duration::from_secs(30)) => Ok(()),
-                    changed = notify.changed() => changed,
-                };
-                if changed.is_err() {
+                if !wait_for_retry_or_shutdown(&mut notify).await {
                     break;
                 }
                 continue;
@@ -390,25 +393,10 @@ pub(crate) async fn logs_retention_cleanup_loop(
             }
         }
 
-        tokio::select! {
-            _ = tokio::time::sleep(interval) => {}
-            changed = notify.changed() => {
-                if changed.is_err() { break; }
-                continue;
-            }
+        if !wait_for_interval_or_shutdown(interval, &mut notify).await {
+            break;
         }
     }
-}
-
-fn local_now() -> time::OffsetDateTime {
-    let offset = time::UtcOffset::current_local_offset().unwrap_or(time::UtcOffset::UTC);
-    time::OffsetDateTime::now_utc().to_offset(offset)
-}
-
-fn auto_checkin_due(now: time::OffsetDateTime, configured: &str) -> anyhow::Result<bool> {
-    let fmt = time::format_description::parse("[hour]:[minute]:[second]")?;
-    let scheduled = time::Time::parse(configured.trim(), &fmt)?;
-    Ok(now.time() >= scheduled)
 }
 
 async fn persist_newapi_overview(
@@ -452,6 +440,218 @@ async fn persist_newapi_sync_failure(
     .await
 }
 
+fn parse_auto_checkin_trigger(account: &storage::NewApiAccount) -> Option<DailyLocalTimeTrigger> {
+    match DailyLocalTimeTrigger::parse(&account.auto_checkin_time) {
+        Ok(trigger) => Some(trigger),
+        Err(err) => {
+            tracing::warn!(
+                account_id = %account.id,
+                auto_checkin_time = %account.auto_checkin_time,
+                err = %err,
+                "parse newapi auto checkin time failed"
+            );
+            None
+        }
+    }
+}
+
+fn earlier_deadline(
+    current: Option<time::OffsetDateTime>,
+    next: time::OffsetDateTime,
+) -> Option<time::OffsetDateTime> {
+    match current {
+        Some(existing) if existing <= next => Some(existing),
+        _ => Some(next),
+    }
+}
+
+async fn run_due_newapi_auto_checkin(
+    db_path: PathBuf,
+    http_client: &reqwest::Client,
+    account: &storage::NewApiAccount,
+    completed_ids: &mut HashSet<String>,
+) {
+    let latest_overview = match newapi::fetch_account_overview(http_client, account).await {
+        Ok(overview) => {
+            if let Err(err) =
+                persist_newapi_overview(db_path.clone(), &account.id, &overview, completed_ids)
+                    .await
+            {
+                tracing::warn!(account_id = %account.id, err = %err, "persist newapi overview failed");
+            }
+            Some(overview)
+        }
+        Err(err) => {
+            tracing::warn!(account_id = %account.id, err = %err, "sync newapi overview failed");
+            if let Err(update_err) =
+                persist_newapi_sync_failure(db_path.clone(), &account.id, &err).await
+            {
+                tracing::warn!(account_id = %account.id, err = %update_err, "persist newapi sync failure failed");
+            }
+            None
+        }
+    };
+
+    match newapi::perform_system_checkin_with_overview(
+        http_client,
+        account,
+        latest_overview.as_ref(),
+    )
+    .await
+    {
+        Ok(result) => {
+            let method = if result.already_checked_in {
+                "remote_detected"
+            } else {
+                "system_api"
+            };
+            if let Err(err) = storage::complete_newapi_account_checkin_today(
+                db_path.clone(),
+                account.id.clone(),
+                method,
+            )
+            .await
+            {
+                tracing::warn!(account_id = %account.id, err = %err, "record newapi system checkin failed");
+            } else {
+                completed_ids.insert(account.id.clone());
+            }
+
+            if result.already_checked_in && latest_overview.is_some() {
+                if let Some(overview) = latest_overview.as_ref()
+                    && let Err(err) = persist_newapi_overview(
+                        db_path.clone(),
+                        &account.id,
+                        overview,
+                        completed_ids,
+                    )
+                    .await
+                {
+                    tracing::warn!(account_id = %account.id, err = %err, "persist cached newapi overview after already checked in");
+                }
+            } else {
+                match newapi::fetch_account_overview(http_client, account).await {
+                    Ok(overview) => {
+                        if let Err(err) = persist_newapi_overview(
+                            db_path.clone(),
+                            &account.id,
+                            &overview,
+                            completed_ids,
+                        )
+                        .await
+                        {
+                            tracing::warn!(account_id = %account.id, err = %err, "persist newapi overview after system checkin failed");
+                        }
+                    }
+                    Err(err) => {
+                        tracing::warn!(account_id = %account.id, err = %err, "refresh newapi overview after system checkin failed");
+                        if let Err(update_err) =
+                            persist_newapi_sync_failure(db_path.clone(), &account.id, &err).await
+                        {
+                            tracing::warn!(account_id = %account.id, err = %update_err, "persist newapi sync failure after system checkin failed");
+                        }
+                    }
+                }
+            }
+        }
+        Err(err) => {
+            tracing::warn!(account_id = %account.id, err = %err, "auto newapi system checkin failed");
+        }
+    }
+}
+
+pub(crate) async fn newapi_auto_checkin_loop(
+    db_path: PathBuf,
+    http_client: reqwest::Client,
+    mut notify: watch::Receiver<u64>,
+) {
+    loop {
+        let now = scheduler::local_now();
+        let accounts = match storage::list_newapi_accounts_with_secret(db_path.clone()).await {
+            Ok(accounts) => accounts,
+            Err(err) => {
+                tracing::warn!(err = %err, "load newapi accounts failed");
+                if !wait_for_retry_or_shutdown(&mut notify).await {
+                    break;
+                }
+                continue;
+            }
+        };
+
+        let mut completed_ids =
+            match storage::get_newapi_accounts_checkins_today(db_path.clone()).await {
+                Ok(checkins) => checkins
+                    .completed_account_ids
+                    .into_iter()
+                    .collect::<HashSet<_>>(),
+                Err(err) => {
+                    tracing::warn!(err = %err, "load newapi account checkins failed");
+                    if !wait_for_retry_or_shutdown(&mut notify).await {
+                        break;
+                    }
+                    continue;
+                }
+            };
+
+        let mut due_accounts = Vec::new();
+        let mut next_deadline = None;
+
+        for account in accounts {
+            if !account.auto_checkin_enabled
+                || !matches!(
+                    account.checkin_mode,
+                    storage::NewApiAccountCheckinMode::SystemApi
+                )
+                || !newapi::account_has_user_api_credentials(&account)
+            {
+                continue;
+            }
+
+            let Some(trigger) = parse_auto_checkin_trigger(&account) else {
+                continue;
+            };
+
+            if completed_ids.contains(&account.id) {
+                next_deadline = earlier_deadline(next_deadline, trigger.tomorrow_deadline(now));
+                continue;
+            }
+
+            if trigger.is_due(now) {
+                due_accounts.push(account);
+                continue;
+            }
+
+            next_deadline = earlier_deadline(next_deadline, trigger.today_deadline(now));
+        }
+
+        if !due_accounts.is_empty() {
+            for account in due_accounts {
+                run_due_newapi_auto_checkin(
+                    db_path.clone(),
+                    &http_client,
+                    &account,
+                    &mut completed_ids,
+                )
+                .await;
+            }
+            continue;
+        }
+
+        match next_deadline {
+            Some(deadline) => {
+                if !wait_until_or_shutdown(deadline, &mut notify).await {
+                    break;
+                }
+            }
+            None => {
+                if !wait_for_change_or_shutdown(&mut notify).await {
+                    break;
+                }
+            }
+        }
+    }
+}
+
 fn normalize_remote_multiplier(raw: f64) -> Option<f64> {
     if !raw.is_finite() || raw < 0.0 {
         return None;
@@ -467,16 +667,11 @@ pub(crate) async fn newapi_accounts_maintenance_loop(
     let interval = Duration::from_secs(30 * 60);
 
     loop {
-        let now = local_now();
         let settings = match storage::get_app_settings(db_path.clone()).await {
             Ok(settings) => settings,
             Err(err) => {
                 tracing::warn!(err = %err, "load app settings failed");
-                let changed = tokio::select! {
-                    _ = tokio::time::sleep(Duration::from_secs(30)) => Ok(()),
-                    changed = notify.changed() => changed,
-                };
-                if changed.is_err() {
+                if !wait_for_retry_or_shutdown(&mut notify).await {
                     break;
                 }
                 continue;
@@ -487,11 +682,7 @@ pub(crate) async fn newapi_accounts_maintenance_loop(
             Ok(accounts) => accounts,
             Err(err) => {
                 tracing::warn!(err = %err, "load newapi accounts failed");
-                let changed = tokio::select! {
-                    _ = tokio::time::sleep(Duration::from_secs(30)) => Ok(()),
-                    changed = notify.changed() => changed,
-                };
-                if changed.is_err() {
+                if !wait_for_retry_or_shutdown(&mut notify).await {
                     break;
                 }
                 continue;
@@ -549,8 +740,7 @@ pub(crate) async fn newapi_accounts_maintenance_loop(
                 continue;
             }
 
-            let mut latest_overview = match newapi::fetch_account_overview(&http_client, &account)
-                .await
+            let latest_overview = match newapi::fetch_account_overview(&http_client, &account).await
             {
                 Ok(overview) => {
                     if let Err(err) = persist_newapi_overview(
@@ -579,102 +769,6 @@ pub(crate) async fn newapi_accounts_maintenance_loop(
                     None
                 }
             };
-
-            let auto_due = if account.auto_checkin_enabled
-                && matches!(
-                    account.checkin_mode,
-                    storage::NewApiAccountCheckinMode::SystemApi
-                ) {
-                match auto_checkin_due(now, &account.auto_checkin_time) {
-                    Ok(due) => due,
-                    Err(err) => {
-                        tracing::warn!(
-                            account_id = %account.id,
-                            auto_checkin_time = %account.auto_checkin_time,
-                            err = %err,
-                            "parse newapi auto checkin time failed"
-                        );
-                        false
-                    }
-                }
-            } else {
-                false
-            };
-
-            if auto_due && !completed_ids.contains(&account.id) {
-                match newapi::perform_system_checkin_with_overview(
-                    &http_client,
-                    &account,
-                    latest_overview.as_ref(),
-                )
-                .await
-                {
-                    Ok(result) => {
-                        let method = if result.already_checked_in {
-                            "remote_detected"
-                        } else {
-                            "system_api"
-                        };
-                        if let Err(err) = storage::complete_newapi_account_checkin_today(
-                            db_path.clone(),
-                            account.id.clone(),
-                            method,
-                        )
-                        .await
-                        {
-                            tracing::warn!(account_id = %account.id, err = %err, "record newapi system checkin failed");
-                        } else {
-                            completed_ids.insert(account.id.clone());
-                        }
-
-                        if result.already_checked_in && latest_overview.is_some() {
-                            if let Some(overview) = latest_overview.as_ref()
-                                && let Err(err) = persist_newapi_overview(
-                                    db_path.clone(),
-                                    &account.id,
-                                    overview,
-                                    &mut completed_ids,
-                                )
-                                .await
-                            {
-                                tracing::warn!(account_id = %account.id, err = %err, "persist cached newapi overview after already checked in");
-                            }
-                        } else {
-                            match newapi::fetch_account_overview(&http_client, &account).await {
-                                Ok(overview) => {
-                                    if let Err(err) = persist_newapi_overview(
-                                        db_path.clone(),
-                                        &account.id,
-                                        &overview,
-                                        &mut completed_ids,
-                                    )
-                                    .await
-                                    {
-                                        tracing::warn!(account_id = %account.id, err = %err, "persist newapi overview after system checkin failed");
-                                    }
-                                    latest_overview = Some(overview);
-                                }
-                                Err(err) => {
-                                    latest_overview = None;
-                                    tracing::warn!(account_id = %account.id, err = %err, "refresh newapi overview after system checkin failed");
-                                    if let Err(update_err) = persist_newapi_sync_failure(
-                                        db_path.clone(),
-                                        &account.id,
-                                        &err,
-                                    )
-                                    .await
-                                    {
-                                        tracing::warn!(account_id = %account.id, err = %update_err, "persist newapi sync failure after system checkin failed");
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    Err(err) => {
-                        tracing::warn!(account_id = %account.id, err = %err, "auto newapi system checkin failed");
-                    }
-                }
-            }
 
             if let Some(overview) = latest_overview.as_ref() {
                 if account.low_balance_alert_threshold <= 0.0 {
@@ -829,12 +923,8 @@ pub(crate) async fn newapi_accounts_maintenance_loop(
             }
         }
 
-        tokio::select! {
-            _ = tokio::time::sleep(interval) => {}
-            changed = notify.changed() => {
-                if changed.is_err() { break; }
-                continue;
-            }
+        if !wait_for_interval_or_shutdown(interval, &mut notify).await {
+            break;
         }
     }
 }
