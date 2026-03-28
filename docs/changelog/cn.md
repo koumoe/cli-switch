@@ -1,3 +1,10 @@
+## [0.52.0](https://github.com/koumoe/cli-switch/compare/v0.51.0...v0.52.0) (2026-03-28)
+
+### 功能
+* 增加本地化格式化、Accept-Language 与 i18n lint ([2c94540](https://github.com/koumoe/cli-switch/commit/2c945402e142e71e4550f8c7e0b2f09767b971c2))
+
+### 修复
+* 修复托管分组缺失提示 ([36b6fa4](https://github.com/koumoe/cli-switch/commit/36b6fa4656a8aa6c8feeb00838febd41fdcf2be5))
 ## [0.51.0](https://github.com/koumoe/cli-switch/compare/v0.50.0...v0.51.0) (2026-03-28)
 
 ### 功能
