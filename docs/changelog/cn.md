@@ -1,3 +1,10 @@
+## [0.51.0](https://github.com/koumoe/cli-switch/compare/v0.50.0...v0.51.0) (2026-03-28)
+
+### 功能
+* 抽象自动签到调度触发器 ([482edd1](https://github.com/koumoe/cli-switch/commit/482edd1c0f8af7fc06fb6259f30d225f2ac1375b))
+
+### 修复
+* 完成后端 i18n 问题本地化收尾 ([f9dbd5e](https://github.com/koumoe/cli-switch/commit/f9dbd5e2dca23845bdf34f4f26a8e8cdea8dc155))
 ## [0.50.0](https://github.com/koumoe/cli-switch/compare/v0.49.1...v0.50.0) (2026-03-27)
 
 ### 功能
