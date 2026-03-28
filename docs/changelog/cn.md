@@ -1,3 +1,7 @@
+## [0.53.0](https://github.com/koumoe/cli-switch/compare/v0.52.0...v0.53.0) (2026-03-28)
+
+### 功能
+* 使用原生系统通知 (#174) ([#174](https://github.com/koumoe/cli-switch/issues/174)) ([b4e103a](https://github.com/koumoe/cli-switch/commit/b4e103a9ff43cf8b4772ce9604fd4ccaaaa6112e))
 ## [0.52.0](https://github.com/koumoe/cli-switch/compare/v0.51.0...v0.52.0) (2026-03-28)
 
 ### 功能
