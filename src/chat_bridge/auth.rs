@@ -114,7 +114,6 @@ impl ChatBridgeRuntime {
             msg.platform,
             msg.sender_id.clone(),
             msg.sender_display_name.clone(),
-            locale.as_str().to_string(),
         )
         .await?;
         let name = binding

@@ -764,9 +764,8 @@ export function SettingsPage() {
   const whatsappConnected = chatBridgeWhatsAppStatus?.connected ?? false;
   const whatsappQrImageSrc = normalizeQrImageSrc(chatBridgeWhatsAppStatus?.qr_image);
   const whatsappStatusLabel = t(`settings.chatBridge.whatsapp.state.${whatsappStatusKey}`);
-  const whatsappLastErrorMessage = whatsappStatusKey === "error"
-    ? t("settings.chatBridge.whatsapp.lastErrorGeneric")
-    : null;
+  const whatsappLastErrorMessage = humanizeIssue(chatBridgeWhatsAppStatus?.issue, t)
+    ?? (whatsappStatusKey === "error" ? t("settings.chatBridge.whatsapp.lastErrorGeneric") : null);
   const whatsappStatusTone = whatsappStatusKey === "error"
     ? "destructive"
     : whatsappConnected
@@ -776,6 +775,8 @@ export function SettingsPage() {
   const weixinConnected = chatBridgeWeixinStatus?.connected ?? false;
   const weixinQrImageSrc = normalizeQrImageSrc(chatBridgeWeixinStatus?.qr_image);
   const weixinStatusLabel = t(`settings.chatBridge.weixin.state.${weixinStatusKey}`);
+  const weixinLastErrorMessage = humanizeIssue(chatBridgeWeixinStatus?.issue, t)
+    ?? (weixinStatusKey === "error" ? t("settings.chatBridge.weixin.lastErrorGeneric") : null);
   const weixinStatusTone = weixinStatusKey === "error"
     ? "destructive"
     : weixinConnected
@@ -813,7 +814,7 @@ export function SettingsPage() {
   const chatBridgeLoginDialogLastErrorMessage = chatBridgeLoginDialogPlatform === "whatsapp"
     ? whatsappLastErrorMessage
     : chatBridgeLoginDialogPlatform === "weixin"
-      ? chatBridgeWeixinStatus?.last_error ?? null
+      ? weixinLastErrorMessage
       : null;
 
   const chatBridgeTab = (

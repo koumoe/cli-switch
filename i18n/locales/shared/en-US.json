@@ -106,6 +106,8 @@
     "chat_bridge_binding_exists": "This platform account is already bound",
     "chat_bridge_binding_not_found": "Chat bridge binding was not found",
     "chat_bridge_pairing_token_expires_out_of_range": "Pairing token expiry must be between 1 and 1440 minutes",
+    "chat_bridge_runtime_unavailable": "The {{platform}} runtime encountered an error. Check the logs or start login again.",
+    "chat_bridge_weixin_session_expired": "The Weixin session expired. Please scan the QR code again to log in.",
     "tools_terminal_shim_setup_failed": "Failed to set up the terminal shim for {{tool}}",
     "tools_proxy_config_apply_item_failed": "Failed to apply proxy config for {{tool}}",
     "update_version_required": "Version is required",
@@ -129,6 +131,17 @@
   },
   "desktop": {
     "editMenuTitle": "Edit",
+    "notifications": {
+      "lowBalance": {
+        "title": "CliSwitch Low Balance",
+        "body": "{{base_url}} balance {{balance}}"
+      },
+      "managedChannel": {
+        "title": "CliSwitch Channel Change",
+        "deletedBody": "Remote token for channel {{channel}} was deleted. Disable or delete the local channel.",
+        "multiplierBody": "Channel {{channel}} multiplier mismatch: local ×{{local_multiplier}}, remote ×{{remote_multiplier}}. Please confirm the update."
+      }
+    },
     "tray": {
       "show": "Show Window",
       "hide": "Hide Window",
@@ -250,6 +263,11 @@
       "no_label": "no",
       "pending_label": "pending",
       "pricing_label": "Pricing",
+      "runtime_state_awaiting_qr": "awaiting_qr",
+      "runtime_state_connected": "connected",
+      "runtime_state_disabled": "disabled",
+      "runtime_state_error": "error",
+      "runtime_state_starting": "starting",
       "routes_label": "Routes",
       "title": "System status:",
       "token_configured": "token configured",

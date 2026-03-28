@@ -5,7 +5,6 @@ use rusqlite::{OptionalExtension as _, params};
 use std::path::PathBuf;
 
 use super::*;
-use crate::i18n::AppLocale;
 
 const PAIRING_TOKEN_SCAN_LIMIT: i64 = 256;
 const PAIRING_TOKEN_HINT_LEN: usize = 8;
@@ -170,7 +169,6 @@ pub async fn consume_pairing_token(
     platform: ChatPlatform,
     platform_user_id: String,
     display_name: Option<String>,
-    preferred_locale: String,
 ) -> anyhow::Result<ChatBridgeBinding> {
     let token = token.trim().to_string();
     let platform_user_id = platform_user_id.trim().to_string();
@@ -182,9 +180,6 @@ pub async fn consume_pairing_token(
         !platform_user_id.is_empty(),
         "platform_user_id is required to bind chat bridge"
     );
-    let preferred_locale = AppLocale::parse_or_default(&preferred_locale)
-        .as_str()
-        .to_string();
 
     with_conn(db_path, move |conn| {
         let tx = conn
@@ -267,29 +262,23 @@ pub async fn consume_pairing_token(
             tx.execute(
                 r#"
                 UPDATE chat_bindings
-                SET display_name = ?2, preferred_locale = ?3, bound_at = ?4, is_active = 1
+                SET display_name = ?2, bound_at = ?3, is_active = 1
                 WHERE id = ?1
                 "#,
-                params![
-                    binding_id,
-                    display_name.as_deref(),
-                    preferred_locale.as_str(),
-                    now
-                ],
+                params![binding_id, display_name.as_deref(), now],
             )?;
             binding_id
         } else {
             tx.execute(
                 r#"
                 INSERT INTO chat_bindings (
-                  platform, platform_user_id, display_name, preferred_locale, bound_at, is_active
-                ) VALUES (?1, ?2, ?3, ?4, ?5, 1)
+                  platform, platform_user_id, display_name, bound_at, is_active
+                ) VALUES (?1, ?2, ?3, ?4, 1)
                 "#,
                 params![
                     platform.as_str(),
                     platform_user_id.as_str(),
                     display_name.as_deref(),
-                    preferred_locale.as_str(),
                     now,
                 ],
             )?;

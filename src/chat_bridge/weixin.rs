@@ -17,6 +17,8 @@ use crate::nodejs;
 const BRIDGE_MJS: &str = include_str!("weixin/bridge.mjs");
 const BRIDGE_SEND_TIMEOUT: Duration = Duration::from_secs(30);
 const DEFAULT_WEIXIN_BASE_URL: &str = "https://ilinkai.weixin.qq.com";
+pub(crate) const PUBLIC_RUNTIME_ERROR_CODE: &str = "chat_bridge_runtime_unavailable";
+pub(crate) const SESSION_EXPIRED_ERROR_CODE: &str = "chat_bridge_weixin_session_expired";
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -77,6 +79,17 @@ impl WeixinStatus {
             last_error: Some(err.into()),
         }
     }
+}
+
+pub(crate) fn public_runtime_issue_code(last_error: Option<&str>) -> Option<&'static str> {
+    let raw = last_error?.trim();
+    if raw.is_empty() {
+        return None;
+    }
+    if raw == SESSION_EXPIRED_ERROR_CODE {
+        return Some(SESSION_EXPIRED_ERROR_CODE);
+    }
+    Some(PUBLIC_RUNTIME_ERROR_CODE)
 }
 
 #[derive(Debug, Clone)]

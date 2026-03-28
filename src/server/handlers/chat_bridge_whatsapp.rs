@@ -5,9 +5,8 @@ use axum::response::IntoResponse;
 use serde::Serialize;
 
 use crate::chat_bridge::whatsapp_web::{WhatsAppWebControl, WhatsAppWebState};
+use crate::i18n::{UserFacingIssue, UserFacingIssuePayload, current_locale};
 use crate::server::AppState;
-
-const PUBLIC_RUNTIME_ERROR_CODE: &str = "runtime_unavailable";
 
 #[derive(Debug, Clone, Serialize)]
 pub(in crate::server) struct WhatsAppStatusResponse {
@@ -16,13 +15,15 @@ pub(in crate::server) struct WhatsAppStatusResponse {
     pub me: Option<String>,
     pub qr: Option<String>,
     pub qr_image: Option<String>,
-    pub last_error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub issue: Option<UserFacingIssuePayload>,
 }
 
 pub(in crate::server) async fn get_chat_bridge_whatsapp_status(
     State(state): State<AppState>,
 ) -> impl IntoResponse {
     let settings = state.settings_snapshot();
+    let locale = current_locale().unwrap_or(settings.ui_locale);
     let mut status = state.whatsapp_status_rx.borrow().clone();
     if !settings.chat_bridge_enabled || !settings.chat_bridge_whatsapp_enabled {
         status.state = WhatsAppWebState::Disabled;
@@ -32,18 +33,19 @@ pub(in crate::server) async fn get_chat_bridge_whatsapp_status(
         status.last_error = None;
     }
 
+    let issue = status.last_error.as_ref().map(|_| {
+        UserFacingIssue::new("chat_bridge_runtime_unavailable")
+            .with_arg("platform", "WhatsApp")
+            .to_payload(locale)
+    });
+
     Json(WhatsAppStatusResponse {
         qr_image: status.qr_image,
         state: status.state,
         connected: status.connected,
         me: status.me,
         qr: status.qr,
-        // Never expose backend error details to the client. The frontend maps this
-        // generic code to a localized user-facing message.
-        last_error: status
-            .last_error
-            .as_ref()
-            .map(|_| PUBLIC_RUNTIME_ERROR_CODE.to_string()),
+        issue,
     })
 }
 

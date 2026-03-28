@@ -43,6 +43,14 @@ fn collect_rs_files(root: &Path, out: &mut Vec<PathBuf>) {
     }
 }
 
+fn collect_literal_matches(raw: &str, pattern: &Regex, out: &mut BTreeSet<String>) {
+    for caps in pattern.captures_iter(raw) {
+        if let Some(key) = caps.get(1) {
+            out.insert(key.as_str().to_string());
+        }
+    }
+}
+
 #[test]
 fn app_locale_normalizes_values() {
     assert_eq!(AppLocale::parse("zh"), Some(AppLocale::ZhCN));
@@ -166,6 +174,34 @@ fn backend_error_codes_have_translations() {
 }
 
 #[test]
+fn chat_bridge_message_keys_have_translations() {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/chat_bridge");
+    let direct_key_re = Regex::new(r#"(?:\bt\b|\bt_args\b)\(\s*locale\s*,\s*"([^"]+)""#)
+        .expect("chat bridge direct key regex");
+
+    let mut files = Vec::new();
+    collect_rs_files(&root, &mut files);
+
+    let mut keys = BTreeSet::new();
+    for path in files {
+        let raw = fs::read_to_string(&path)
+            .unwrap_or_else(|err| panic!("read source {path:?} failed: {err}"));
+        collect_literal_matches(&raw, &direct_key_re, &mut keys);
+    }
+
+    let shared_keys = flattened_key_set(shared_zh_catalog_str(), "shared zh-CN");
+    let missing = keys
+        .into_iter()
+        .filter(|key| !shared_keys.contains(&format!("chatBridge.{key}")))
+        .collect::<Vec<_>>();
+
+    assert!(
+        missing.is_empty(),
+        "missing shared locale entries for chat bridge keys: {missing:?}"
+    );
+}
+
+#[test]
 fn structured_issue_surfaces_do_not_reintroduce_legacy_error_fields() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let rust_type_guards = [
@@ -184,6 +220,14 @@ fn structured_issue_surfaces_do_not_reintroduce_legacy_error_fields() {
         (
             "src/cli_tool_proxy_config.rs",
             r#"pub\s+struct\s+CliToolProxyConfigApplyItem\s*\{(?s:.*?)\berror\s*:"#,
+        ),
+        (
+            "src/server/handlers/chat_bridge_whatsapp.rs",
+            r#"struct\s+WhatsAppStatusResponse\s*\{(?s:.*?)last_error\s*:"#,
+        ),
+        (
+            "src/server/handlers/chat_bridge_weixin.rs",
+            r#"struct\s+WeixinStatusResponse\s*\{(?s:.*?)last_error\s*:"#,
         ),
     ];
 
@@ -215,6 +259,14 @@ fn structured_issue_surfaces_do_not_reintroduce_legacy_error_fields() {
             "ui/src/api.ts",
             r#"export\s+type\s+InstallCliToolResponse\s*=\s*\{(?s:.*?)terminal_shim_error\?\s*:"#,
         ),
+        (
+            "ui/src/api.ts",
+            r#"export\s+type\s+ChatBridgeWhatsAppStatus\s*=\s*\{(?s:.*?)last_error\?\s*:"#,
+        ),
+        (
+            "ui/src/api.ts",
+            r#"export\s+type\s+ChatBridgeWeixinStatus\s*=\s*\{(?s:.*?)last_error\?\s*:"#,
+        ),
     ];
 
     for (path, pattern) in ts_type_guards {
@@ -234,6 +286,14 @@ fn structured_issue_surfaces_do_not_reintroduce_legacy_error_fields() {
         ("ui/src/pages/SettingsPage.tsx", "applied?.error"),
         ("ui/src/pages/ChannelsPage.tsx", "r.error"),
         ("ui/src/lib/cliToolInstaller.ts", "terminal_shim_error"),
+        (
+            "ui/src/pages/SettingsPage.tsx",
+            "chatBridgeWeixinStatus?.last_error",
+        ),
+        (
+            "ui/src/pages/SettingsPage.tsx",
+            "chatBridgeWhatsAppStatus?.last_error",
+        ),
     ];
 
     for (path, token) in legacy_tokens {
