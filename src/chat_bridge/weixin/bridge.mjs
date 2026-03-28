@@ -517,7 +517,7 @@ async function ensurePolling() {
               me,
               qr: null,
               qr_image: null,
-              last_error: "微信会话已过期，请重新扫码登录。",
+              last_error: "chat_bridge_weixin_session_expired",
             });
             void startLoginFlow();
             return;

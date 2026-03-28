@@ -66,7 +66,7 @@ export type ChatBridgeWhatsAppStatus = {
   me?: string | null;
   qr?: string | null;
   qr_image?: string | null;
-  last_error?: string | null;
+  issue?: UserFacingIssuePayload | null;
 };
 
 export type ChatBridgeWeixinStatus = {
@@ -75,7 +75,7 @@ export type ChatBridgeWeixinStatus = {
   me?: string | null;
   qr?: string | null;
   qr_image?: string | null;
-  last_error?: string | null;
+  issue?: UserFacingIssuePayload | null;
 };
 
 export type ChatBridgeBinding = {

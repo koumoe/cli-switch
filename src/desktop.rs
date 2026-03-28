@@ -136,60 +136,116 @@ fn desktop_text(locale: AppLocale, key: &str, fallback: &str) -> String {
         .unwrap_or_else(|| fallback.to_string())
 }
 
-fn low_balance_notification_title(locale: AppLocale) -> &'static str {
-    match locale {
-        AppLocale::ZhCN => "CliSwitch 余额告警",
-        AppLocale::EnUS => "CliSwitch Low Balance",
+fn desktop_args<const N: usize>(pairs: [(&str, String); N]) -> BTreeMap<String, String> {
+    let mut out = BTreeMap::new();
+    for (key, value) in pairs {
+        out.insert(key.to_string(), value);
     }
+    out
+}
+
+fn desktop_text_args(
+    locale: AppLocale,
+    key: &str,
+    args: &BTreeMap<String, String>,
+    fallback: String,
+) -> String {
+    i18n::render_optional(locale, key, args).unwrap_or(fallback)
+}
+
+fn low_balance_notification_title(locale: AppLocale) -> String {
+    desktop_text(
+        locale,
+        "desktop.notifications.lowBalance.title",
+        match locale {
+            AppLocale::ZhCN => "CliSwitch 余额告警",
+            AppLocale::EnUS => "CliSwitch Low Balance",
+        },
+    )
 }
 
 fn low_balance_notification_body(
     locale: AppLocale,
     alert: &cliswitch::events::NewApiLowBalanceAlert,
 ) -> String {
-    match locale {
-        AppLocale::ZhCN => format!("{} 余额 {}", alert.base_url, alert.balance_text),
-        AppLocale::EnUS => format!("{} balance {}", alert.base_url, alert.balance_text),
-    }
+    let args = desktop_args([
+        ("base_url", alert.base_url.clone()),
+        ("balance", alert.balance_text.clone()),
+    ]);
+    desktop_text_args(
+        locale,
+        "desktop.notifications.lowBalance.body",
+        &args,
+        match locale {
+            AppLocale::ZhCN => format!("{} 余额 {}", alert.base_url, alert.balance_text),
+            AppLocale::EnUS => format!("{} balance {}", alert.base_url, alert.balance_text),
+        },
+    )
 }
 
-fn managed_channel_notification_title(locale: AppLocale) -> &'static str {
-    match locale {
-        AppLocale::ZhCN => "CliSwitch 渠道变更通知",
-        AppLocale::EnUS => "CliSwitch Channel Change",
-    }
+fn managed_channel_notification_title(locale: AppLocale) -> String {
+    desktop_text(
+        locale,
+        "desktop.notifications.managedChannel.title",
+        match locale {
+            AppLocale::ZhCN => "CliSwitch 渠道变更通知",
+            AppLocale::EnUS => "CliSwitch Channel Change",
+        },
+    )
 }
 
 fn managed_channel_deleted_body(
     locale: AppLocale,
     event: &cliswitch::events::NewApiManagedChannelMissingPrompt,
 ) -> String {
-    match locale {
-        AppLocale::ZhCN => format!(
-            "检测到渠道 {} 对应的远端 token 已被删除，请选择禁用或删除",
-            event.channel_name
-        ),
-        AppLocale::EnUS => format!(
-            "Remote token for channel {} was deleted. Disable or delete the local channel.",
-            event.channel_name
-        ),
-    }
+    let args = desktop_args([("channel", event.channel_name.clone())]);
+    desktop_text_args(
+        locale,
+        "desktop.notifications.managedChannel.deletedBody",
+        &args,
+        match locale {
+            AppLocale::ZhCN => format!(
+                "检测到渠道 {} 对应的远端 token 已被删除，请选择禁用或删除",
+                event.channel_name
+            ),
+            AppLocale::EnUS => format!(
+                "Remote token for channel {} was deleted. Disable or delete the local channel.",
+                event.channel_name
+            ),
+        },
+    )
 }
 
 fn managed_channel_multiplier_body(
     locale: AppLocale,
     event: &cliswitch::events::NewApiManagedChannelMultiplierPrompt,
 ) -> String {
-    match locale {
-        AppLocale::ZhCN => format!(
-            "检测到渠道 {} 的倍率不一致：本地 ×{:.2}，远端 ×{:.2}，请确认是否更新",
-            event.channel_name, event.current_multiplier, event.remote_multiplier
+    let args = desktop_args([
+        ("channel", event.channel_name.clone()),
+        (
+            "local_multiplier",
+            format!("{:.2}", event.current_multiplier),
         ),
-        AppLocale::EnUS => format!(
-            "Channel {} multiplier mismatch: local ×{:.2}, remote ×{:.2}. Please confirm the update.",
-            event.channel_name, event.current_multiplier, event.remote_multiplier
+        (
+            "remote_multiplier",
+            format!("{:.2}", event.remote_multiplier),
         ),
-    }
+    ]);
+    desktop_text_args(
+        locale,
+        "desktop.notifications.managedChannel.multiplierBody",
+        &args,
+        match locale {
+            AppLocale::ZhCN => format!(
+                "检测到渠道 {} 的倍率不一致：本地 ×{:.2}，远端 ×{:.2}，请确认是否更新",
+                event.channel_name, event.current_multiplier, event.remote_multiplier
+            ),
+            AppLocale::EnUS => format!(
+                "Channel {} multiplier mismatch: local ×{:.2}, remote ×{:.2}. Please confirm the update.",
+                event.channel_name, event.current_multiplier, event.remote_multiplier
+            ),
+        },
+    )
 }
 
 fn upsert_pending_missing_prompt(
@@ -635,14 +691,14 @@ fn handle_user_event(
             if let AppEvent::NewApiLowBalanceAlert(ref alert) = ev {
                 let title = low_balance_notification_title(state.locale);
                 let body = low_balance_notification_body(state.locale, alert);
-                if let Err(err) = show_system_notification(title, &body) {
+                if let Err(err) = show_system_notification(&title, &body) {
                     tracing::warn!(err = %err, account_id = %alert.account_id, "show low balance system notification failed");
                 }
             }
             if let AppEvent::NewApiManagedChannelMissingPrompt(ref prompt) = ev {
                 let title = managed_channel_notification_title(state.locale);
                 let body = managed_channel_deleted_body(state.locale, prompt);
-                if let Err(err) = show_system_notification(title, &body) {
+                if let Err(err) = show_system_notification(&title, &body) {
                     tracing::warn!(err = %err, channel_id = %prompt.channel_id, "show managed channel deleted system notification failed");
                 }
                 apply_window_visible(window, state, tray_show, tray_hide, true, true);
@@ -650,7 +706,7 @@ fn handle_user_event(
             if let AppEvent::NewApiManagedChannelMultiplierPrompt(ref prompt) = ev {
                 let title = managed_channel_notification_title(state.locale);
                 let body = managed_channel_multiplier_body(state.locale, prompt);
-                if let Err(err) = show_system_notification(title, &body) {
+                if let Err(err) = show_system_notification(&title, &body) {
                     tracing::warn!(err = %err, channel_id = %prompt.channel_id, "show managed channel multiplier system notification failed");
                 }
             }

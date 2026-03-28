@@ -1940,41 +1940,23 @@ fn configured_label(configured: bool, locale: AppLocale) -> String {
     }
 }
 
-fn whatsapp_web_state_label(state: WhatsAppWebState, locale: AppLocale) -> &'static str {
-    match locale {
-        AppLocale::ZhCN => match state {
-            WhatsAppWebState::Disabled => "已禁用",
-            WhatsAppWebState::Starting => "启动中",
-            WhatsAppWebState::AwaitingQr => "等待扫码",
-            WhatsAppWebState::Connected => "已连接",
-            WhatsAppWebState::Error => "异常",
-        },
-        AppLocale::EnUS => match state {
-            WhatsAppWebState::Disabled => "disabled",
-            WhatsAppWebState::Starting => "starting",
-            WhatsAppWebState::AwaitingQr => "awaiting_qr",
-            WhatsAppWebState::Connected => "connected",
-            WhatsAppWebState::Error => "error",
-        },
+fn whatsapp_web_state_label(state: WhatsAppWebState, locale: AppLocale) -> String {
+    match state {
+        WhatsAppWebState::Disabled => t(locale, "status.runtime_state_disabled"),
+        WhatsAppWebState::Starting => t(locale, "status.runtime_state_starting"),
+        WhatsAppWebState::AwaitingQr => t(locale, "status.runtime_state_awaiting_qr"),
+        WhatsAppWebState::Connected => t(locale, "status.runtime_state_connected"),
+        WhatsAppWebState::Error => t(locale, "status.runtime_state_error"),
     }
 }
 
-fn weixin_state_label(state: WeixinState, locale: AppLocale) -> &'static str {
-    match locale {
-        AppLocale::ZhCN => match state {
-            WeixinState::Disabled => "已禁用",
-            WeixinState::Starting => "启动中",
-            WeixinState::AwaitingQr => "等待扫码",
-            WeixinState::Connected => "已连接",
-            WeixinState::Error => "异常",
-        },
-        AppLocale::EnUS => match state {
-            WeixinState::Disabled => "disabled",
-            WeixinState::Starting => "starting",
-            WeixinState::AwaitingQr => "awaiting_qr",
-            WeixinState::Connected => "connected",
-            WeixinState::Error => "error",
-        },
+fn weixin_state_label(state: WeixinState, locale: AppLocale) -> String {
+    match state {
+        WeixinState::Disabled => t(locale, "status.runtime_state_disabled"),
+        WeixinState::Starting => t(locale, "status.runtime_state_starting"),
+        WeixinState::AwaitingQr => t(locale, "status.runtime_state_awaiting_qr"),
+        WeixinState::Connected => t(locale, "status.runtime_state_connected"),
+        WeixinState::Error => t(locale, "status.runtime_state_error"),
     }
 }
 
@@ -2426,12 +2408,7 @@ mod tests {
         let _ = std::fs::remove_file(PathBuf::from(format!("{}-shm", path.display())));
     }
 
-    async fn bind_test_user(
-        db_path: &Path,
-        platform: ChatPlatform,
-        platform_user_id: &str,
-        locale: AppLocale,
-    ) {
+    async fn bind_test_user(db_path: &Path, platform: ChatPlatform, platform_user_id: &str) {
         let pairing = storage::create_pairing_token(
             db_path.to_path_buf(),
             storage::CreatePairingTokenInput {
@@ -2448,7 +2425,6 @@ mod tests {
             platform,
             platform_user_id.to_string(),
             Some("@koumoe".to_string()),
-            locale.as_str().to_string(),
         )
         .await
         .expect("consume pairing token");
@@ -2893,17 +2869,11 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn help_uses_global_ui_locale_even_if_binding_locale_is_zh_cn() {
+    async fn help_uses_global_ui_locale_for_bound_users() {
         let db_path = temp_db_path();
         remove_sqlite_artifacts(&db_path);
         storage::init_db(&db_path).expect("init db");
-        bind_test_user(
-            &db_path,
-            ChatPlatform::Telegram,
-            "tg-user-1",
-            AppLocale::ZhCN,
-        )
-        .await;
+        bind_test_user(&db_path, ChatPlatform::Telegram, "tg-user-1").await;
         storage::update_app_settings(
             db_path.clone(),
             storage::AppSettingsPatch {
@@ -2935,13 +2905,7 @@ mod tests {
         let db_path = temp_db_path();
         remove_sqlite_artifacts(&db_path);
         storage::init_db(&db_path).expect("init db");
-        bind_test_user(
-            &db_path,
-            ChatPlatform::Telegram,
-            "tg-user-no-session",
-            AppLocale::ZhCN,
-        )
-        .await;
+        bind_test_user(&db_path, ChatPlatform::Telegram, "tg-user-no-session").await;
 
         let runtime = test_runtime(&db_path).await;
         let adapter = FakeAdapter::new(false);
@@ -2967,13 +2931,7 @@ mod tests {
         let db_path = temp_db_path();
         remove_sqlite_artifacts(&db_path);
         storage::init_db(&db_path).expect("init db");
-        bind_test_user(
-            &db_path,
-            ChatPlatform::Telegram,
-            "tg-user-no-default",
-            AppLocale::ZhCN,
-        )
-        .await;
+        bind_test_user(&db_path, ChatPlatform::Telegram, "tg-user-no-default").await;
         let session = storage::create_bridge_session(
             db_path.clone(),
             storage::CreateBridgeSessionInput {
@@ -3024,13 +2982,7 @@ mod tests {
         let db_path = temp_db_path();
         remove_sqlite_artifacts(&db_path);
         storage::init_db(&db_path).expect("init db");
-        bind_test_user(
-            &db_path,
-            ChatPlatform::Telegram,
-            "tg-user-2",
-            AppLocale::ZhCN,
-        )
-        .await;
+        bind_test_user(&db_path, ChatPlatform::Telegram, "tg-user-2").await;
         let channel = create_test_channel(&db_path, "openai-main", Protocol::Openai).await;
 
         let runtime = test_runtime(&db_path).await;
@@ -3063,13 +3015,7 @@ mod tests {
         let db_path = temp_db_path();
         remove_sqlite_artifacts(&db_path);
         storage::init_db(&db_path).expect("init db");
-        bind_test_user(
-            &db_path,
-            ChatPlatform::Telegram,
-            "tg-user-2-list",
-            AppLocale::ZhCN,
-        )
-        .await;
+        bind_test_user(&db_path, ChatPlatform::Telegram, "tg-user-2-list").await;
         create_test_channel(&db_path, "openai-main", Protocol::Openai).await;
 
         let runtime = test_runtime(&db_path).await;
@@ -3095,13 +3041,7 @@ mod tests {
         let db_path = temp_db_path();
         remove_sqlite_artifacts(&db_path);
         storage::init_db(&db_path).expect("init db");
-        bind_test_user(
-            &db_path,
-            ChatPlatform::Weixin,
-            "wx-user-2-list",
-            AppLocale::ZhCN,
-        )
-        .await;
+        bind_test_user(&db_path, ChatPlatform::Weixin, "wx-user-2-list").await;
         create_test_channel(&db_path, "openai-main", Protocol::Openai).await;
 
         let runtime = test_runtime(&db_path).await;
@@ -3126,13 +3066,7 @@ mod tests {
         let db_path = temp_db_path();
         remove_sqlite_artifacts(&db_path);
         storage::init_db(&db_path).expect("init db");
-        bind_test_user(
-            &db_path,
-            ChatPlatform::Discord,
-            "discord-user-2-list",
-            AppLocale::ZhCN,
-        )
-        .await;
+        bind_test_user(&db_path, ChatPlatform::Discord, "discord-user-2-list").await;
         create_test_channel(&db_path, "openai-main", Protocol::Openai).await;
 
         let runtime = test_runtime(&db_path).await;
@@ -3157,13 +3091,7 @@ mod tests {
         let db_path = temp_db_path();
         remove_sqlite_artifacts(&db_path);
         storage::init_db(&db_path).expect("init db");
-        bind_test_user(
-            &db_path,
-            ChatPlatform::Telegram,
-            "tg-user-3",
-            AppLocale::ZhCN,
-        )
-        .await;
+        bind_test_user(&db_path, ChatPlatform::Telegram, "tg-user-3").await;
         let channel = create_test_channel(&db_path, "openai-main", Protocol::Openai).await;
         let route = storage::create_route(
             db_path.clone(),
@@ -3201,13 +3129,7 @@ mod tests {
         let db_path = temp_db_path();
         remove_sqlite_artifacts(&db_path);
         storage::init_db(&db_path).expect("init db");
-        bind_test_user(
-            &db_path,
-            ChatPlatform::Telegram,
-            "tg-user-4",
-            AppLocale::ZhCN,
-        )
-        .await;
+        bind_test_user(&db_path, ChatPlatform::Telegram, "tg-user-4").await;
         let channel = create_test_channel(&db_path, "openai-main", Protocol::Openai).await;
         storage::insert_usage_event(
             db_path.clone(),
@@ -3265,7 +3187,7 @@ mod tests {
         let db_path = temp_db_path();
         remove_sqlite_artifacts(&db_path);
         storage::init_db(&db_path).expect("init db");
-        bind_test_user(&db_path, ChatPlatform::Weixin, "wx-user-4", AppLocale::ZhCN).await;
+        bind_test_user(&db_path, ChatPlatform::Weixin, "wx-user-4").await;
         let channel = create_test_channel(&db_path, "openai-main", Protocol::Openai).await;
         storage::insert_usage_event(
             db_path.clone(),
@@ -3315,13 +3237,7 @@ mod tests {
         let db_path = temp_db_path();
         remove_sqlite_artifacts(&db_path);
         storage::init_db(&db_path).expect("init db");
-        bind_test_user(
-            &db_path,
-            ChatPlatform::Discord,
-            "discord-user-4",
-            AppLocale::ZhCN,
-        )
-        .await;
+        bind_test_user(&db_path, ChatPlatform::Discord, "discord-user-4").await;
         let channel = create_test_channel(&db_path, "openai-main", Protocol::Openai).await;
         storage::insert_usage_event(
             db_path.clone(),
@@ -3371,13 +3287,7 @@ mod tests {
         let db_path = temp_db_path();
         remove_sqlite_artifacts(&db_path);
         storage::init_db(&db_path).expect("init db");
-        bind_test_user(
-            &db_path,
-            ChatPlatform::Telegram,
-            "tg-user-5",
-            AppLocale::ZhCN,
-        )
-        .await;
+        bind_test_user(&db_path, ChatPlatform::Telegram, "tg-user-5").await;
         let channel = create_test_channel(&db_path, "openai-main", Protocol::Openai).await;
         storage::insert_usage_event(
             db_path.clone(),
@@ -3438,7 +3348,7 @@ mod tests {
         let db_path = temp_db_path();
         remove_sqlite_artifacts(&db_path);
         storage::init_db(&db_path).expect("init db");
-        bind_test_user(&db_path, ChatPlatform::Weixin, "wx-user-5", AppLocale::ZhCN).await;
+        bind_test_user(&db_path, ChatPlatform::Weixin, "wx-user-5").await;
         let channel = create_test_channel(&db_path, "openai-main", Protocol::Openai).await;
         storage::insert_usage_event(
             db_path.clone(),
@@ -3488,13 +3398,7 @@ mod tests {
         let db_path = temp_db_path();
         remove_sqlite_artifacts(&db_path);
         storage::init_db(&db_path).expect("init db");
-        bind_test_user(
-            &db_path,
-            ChatPlatform::Discord,
-            "discord-user-5",
-            AppLocale::ZhCN,
-        )
-        .await;
+        bind_test_user(&db_path, ChatPlatform::Discord, "discord-user-5").await;
         let channel = create_test_channel(&db_path, "openai-main", Protocol::Openai).await;
         storage::insert_usage_event(
             db_path.clone(),
