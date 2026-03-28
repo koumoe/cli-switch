@@ -6,6 +6,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui";
+import { formatNumber } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 
 type PaginationBarProps = {
@@ -34,7 +35,7 @@ export function PaginationBar({
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 border-t bg-background px-4 py-3 rounded-b-lg">
       <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-        <span>{t("common.pagination.total", { total: total.toLocaleString() })}</span>
+        <span>{t("common.pagination.total", { total: formatNumber(total) })}</span>
         <span>{t("common.pagination.page", { page, totalPages })}</span>
         <Select
           value={String(pageSize)}

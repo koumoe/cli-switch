@@ -63,12 +63,19 @@ jobs:
           cache: npm
           cache-dependency-path: ui/package-lock.json
 
+      - name: Install UI dependencies
+        working-directory: ui
+        run: npm ci
+
+      - name: Lint i18n catalogs
+        run: node scripts/i18n-lint.mjs
+
       - name: Check changelog i18n
         run: node scripts/changelog-i18n.mjs check docs/changelog/en.md docs/changelog/cn.md
 
       - name: Build UI
         working-directory: ui
-        run: npm ci && npm run build
+        run: npm run build
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -199,9 +206,16 @@ jobs:
           cache: npm
           cache-dependency-path: ui/package-lock.json
 
+      - name: Install UI dependencies
+        working-directory: ui
+        run: npm ci
+
+      - name: Lint i18n catalogs
+        run: node scripts/i18n-lint.mjs
+
       - name: Build UI
         working-directory: ui
-        run: npm ci && npm run build
+        run: npm run build
 
       - name: Upload UI dist
         uses: actions/upload-artifact@v7

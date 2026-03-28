@@ -27,7 +27,7 @@ import {
   type ChannelStats,
   type TrendPoint,
 } from "../api";
-import { protocolLabel, protocolLabelKey } from "../lib";
+import { formatNumber, protocolLabel, protocolLabelKey } from "../lib";
 
 type TrendDay = { key: string; label: string };
 type TrendSeries = {
@@ -211,7 +211,7 @@ function ChannelDistribution({
                 <span className="truncate">{s.name}</span>
               </div>
               <span className="text-muted-foreground ml-2">
-                {view === "percent" ? `${percent}%` : s.success.toLocaleString()}
+                {view === "percent" ? `${formatNumber(percent)}%` : formatNumber(s.success)}
               </span>
             </div>
             <div className="h-2 bg-muted rounded-full overflow-hidden">
@@ -375,7 +375,7 @@ export function OverviewPage() {
           </CardHeader>
           <CardContent className="pb-3 px-3">
             <div className="text-xl font-bold">
-              {stats?.total_tokens?.toLocaleString() ?? "-"}
+              {formatNumber(stats?.total_tokens)}
             </div>
           </CardContent>
         </Card>

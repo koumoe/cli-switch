@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useMemo, useState } from "react";
 
+import { formatNumber } from "@/lib/format";
 import { useI18n, type Locale } from "@/lib/i18n";
 
 export type Currency = "USD" | "CNY";
@@ -27,19 +28,13 @@ function getInitialCurrencyMode(): CurrencyMode {
   return normalized ?? "auto";
 }
 
-export function currencySymbol(currency: Currency): string {
-  switch (currency) {
-    case "USD":
-      return "$";
-    case "CNY":
-      return "¥";
-  }
-}
-
-export function formatDecimal(n: number, maxDecimals = 6): string {
+export function formatDecimal(n: number, maxDecimals = 6, locale?: Locale): string {
   if (!Number.isFinite(n)) return "-";
-  const s = n.toFixed(Math.max(0, Math.min(12, Math.floor(maxDecimals))));
-  return s.replace(/\.?0+$/, "");
+  return formatNumber(n, {
+    locale,
+    minimumFractionDigits: 0,
+    maximumFractionDigits: Math.max(0, Math.min(12, Math.floor(maxDecimals))),
+  });
 }
 
 export function parseDecimalLike(v: string | number | null | undefined): number | null {
@@ -55,10 +50,17 @@ export function formatMoney(
   amount: number | null | undefined,
   currency: Currency,
   maxDecimals = 6,
+  locale?: Locale,
 ): string {
   if (amount === null || amount === undefined) return "-";
   if (!Number.isFinite(amount)) return "-";
-  return `${currencySymbol(currency)}${formatDecimal(amount, maxDecimals)}`;
+  return formatNumber(amount, {
+    locale,
+    style: "currency",
+    currency,
+    minimumFractionDigits: 0,
+    maximumFractionDigits: Math.max(0, Math.min(12, Math.floor(maxDecimals))),
+  });
 }
 
 type CurrencyContextValue = {
@@ -97,4 +99,3 @@ export function useCurrency() {
   if (!ctx) throw new Error("useCurrency must be used within CurrencyProvider");
   return ctx;
 }
-

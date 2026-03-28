@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use crate::chat_bridge::i18n::{args, t, t_args};
 use crate::cli_tools::CliToolId;
-use crate::i18n::AppLocale;
+use crate::i18n::{AppLocale, format_integer};
 use crate::storage;
 
 const PROJECT_SELECTION_TTL_MS: i64 = 10 * 60 * 1000;
@@ -138,7 +138,10 @@ impl ProjectStore {
                     t_args(
                         locale,
                         "project.index_start",
-                        &args([("start", PROJECT_SELECTION_DISPLAY_INDEX_START.to_string())]),
+                        &args([(
+                            "start",
+                            format_integer(locale, PROJECT_SELECTION_DISPLAY_INDEX_START),
+                        )]),
                     )
                 );
             }
@@ -392,7 +395,7 @@ mod tests {
             .resolve_project_ref(db_path.clone(), &key, "1", false, AppLocale::ZhCN)
             .await
             .expect_err("legacy index should fail");
-        assert!(err.to_string().contains("项目编号从 1001 开始"));
+        assert!(err.to_string().contains("项目编号从 1,001 开始"));
 
         remove_sqlite_artifacts(&db_path);
     }

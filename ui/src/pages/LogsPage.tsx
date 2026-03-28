@@ -44,7 +44,7 @@ import {
   type Protocol,
   type UsageEvent,
 } from "../api";
-import { clampStr, formatDateTime, formatDuration, protocolLabel, protocolLabelKey } from "../lib";
+import { clampStr, formatDateTime, formatDuration, formatNumber, protocolLabel, protocolLabelKey } from "../lib";
 
 export function LogsPage() {
   const { locale, t } = useI18n();
@@ -221,14 +221,14 @@ export function LogsPage() {
               <div className="grid grid-cols-[120px_1fr] gap-2">
                 <div className="text-muted-foreground">{t("logs.headers.tokens")}</div>
                 <div className="flex flex-wrap gap-x-4 gap-y-1">
-                  <div>{t("logs.cell.input")}: {detailEvent.prompt_tokens?.toLocaleString() ?? "-"}</div>
-                  <div>{t("logs.cell.output")}: {detailEvent.completion_tokens?.toLocaleString() ?? "-"}</div>
-                  <div>{t("logs.cell.total")}: {detailEvent.total_tokens?.toLocaleString() ?? "-"}</div>
+                  <div>{t("logs.cell.input")}: {formatNumber(detailEvent.prompt_tokens)}</div>
+                  <div>{t("logs.cell.output")}: {formatNumber(detailEvent.completion_tokens)}</div>
+                  <div>{t("logs.cell.total")}: {formatNumber(detailEvent.total_tokens)}</div>
                   {detailEvent.cache_read_tokens != null && (
-                    <div>{t("logs.cell.cacheRead")}: {detailEvent.cache_read_tokens.toLocaleString()}</div>
+                    <div>{t("logs.cell.cacheRead")}: {formatNumber(detailEvent.cache_read_tokens)}</div>
                   )}
                   {detailEvent.cache_write_tokens != null && (
-                    <div>{t("logs.cell.cacheWrite")}: {detailEvent.cache_write_tokens.toLocaleString()}</div>
+                    <div>{t("logs.cell.cacheWrite")}: {formatNumber(detailEvent.cache_write_tokens)}</div>
                   )}
                 </div>
               </div>
@@ -460,8 +460,8 @@ export function LogsPage() {
                       </TableCell>
                       <TableCell className="py-3">
                         <div className="flex flex-col items-center gap-0.5 text-xs text-muted-foreground">
-                          <div>{t("logs.cell.input")}: {e.prompt_tokens?.toLocaleString() ?? "-"}</div>
-                          <div>{t("logs.cell.output")}: {e.completion_tokens?.toLocaleString() ?? "-"}</div>
+                          <div>{t("logs.cell.input")}: {formatNumber(e.prompt_tokens)}</div>
+                          <div>{t("logs.cell.output")}: {formatNumber(e.completion_tokens)}</div>
                         </div>
                       </TableCell>
                       <TableCell className="py-3">
