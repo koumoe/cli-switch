@@ -138,7 +138,9 @@
       },
       "managedChannel": {
         "title": "CliSwitch Channel Change",
-        "deletedBody": "Remote token for channel {{channel}} was deleted. Disable or delete the local channel.",
+        "tokenMissingBody": "Remote token for channel {{channel}} was not found in the latest list. Disable or delete the local channel.",
+        "groupMissingBody": "Remote group for channel {{channel}} was not found in the latest list. Disable or delete the local channel.",
+        "tokenAndGroupMissingBody": "Remote token and group for channel {{channel}} were not found in the latest list. Disable or delete the local channel.",
         "multiplierBody": "Channel {{channel}} multiplier mismatch: local ×{{local_multiplier}}, remote ×{{remote_multiplier}}. Please confirm the update."
       }
     },

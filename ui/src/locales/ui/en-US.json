@@ -253,8 +253,11 @@
       "reorderFail": "Failed to save order"
     },
     "remoteMissing": {
-      "title": "Managed Channel Unavailable",
-      "description": "The New API token linked to {{name}} no longer exists. Choose how to handle the local channel.",
+      "title": "Managed Channel Remote Reference Missing",
+      "descriptionGeneric": "A remote reference linked to {{name}} was not found in the latest list. Choose how to handle the local channel.",
+      "descriptionToken": "The remote token linked to {{name}} was not found in the latest list. Choose how to handle the local channel.",
+      "descriptionGroup": "The remote group linked to {{name}} was not found in the latest list. Choose how to handle the local channel.",
+      "descriptionTokenAndGroup": "The remote token and group linked to {{name}} were not found in the latest list. Choose how to handle the local channel.",
       "baseUrl": "Account Base URL: {{value}}",
       "group": "Group: {{value}}",
       "token": "Token name: {{value}}",
@@ -601,7 +604,7 @@
       "title": "New API Managed Channels",
       "subtitle": "Control managed channel change alerts and multiplier sync confirmations",
       "missingPrompt": "Managed channel change notifications",
-      "missingPromptHint": "When enabled, newly added managed channels send system notifications; deleted remote tokens send system notifications, open the window, and show a disable/delete prompt",
+      "missingPromptHint": "When enabled, newly added managed channels send system notifications; if a remote token or group is not found in the latest list, send a system notification, open the window, and show a disable/delete prompt",
       "syncMultiplier": "Sync channel multipliers",
       "syncMultiplierHint": "When enabled, check remote group ratios every 30 minutes; when a mismatch is found, send a system notification, ask immediately if the window is already open, or wait until you open the window to ask whether to update the local real multiplier",
       "ignoreFreeMultiplier": "Ignore free multipliers",

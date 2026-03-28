@@ -138,7 +138,9 @@
       },
       "managedChannel": {
         "title": "CliSwitch 渠道变更通知",
-        "deletedBody": "检测到渠道 {{channel}} 对应的远端 token 已被删除，请选择禁用或删除",
+        "tokenMissingBody": "检测到渠道 {{channel}} 对应的远端 token 未在列表中找到，请选择禁用或删除",
+        "groupMissingBody": "检测到渠道 {{channel}} 对应的远端分组未在列表中找到，请选择禁用或删除",
+        "tokenAndGroupMissingBody": "检测到渠道 {{channel}} 对应的远端 token 和分组均未在列表中找到，请选择禁用或删除",
         "multiplierBody": "检测到渠道 {{channel}} 的倍率不一致：本地 ×{{local_multiplier}}，远端 ×{{remote_multiplier}}，请确认是否更新"
       }
     },
