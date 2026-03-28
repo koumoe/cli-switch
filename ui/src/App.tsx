@@ -96,6 +96,24 @@ function formatMultiplier(value: number): string {
   return `×${value.toFixed(2)}`;
 }
 
+function managedMissingDescriptionKey(
+  prompt: NewApiManagedChannelMissingPrompt | null,
+): string {
+  if (!prompt) {
+    return "channels.remoteMissing.descriptionGeneric";
+  }
+  if (prompt.missing_group && prompt.missing_token) {
+    return "channels.remoteMissing.descriptionTokenAndGroup";
+  }
+  if (prompt.missing_group) {
+    return "channels.remoteMissing.descriptionGroup";
+  }
+  if (prompt.missing_token) {
+    return "channels.remoteMissing.descriptionToken";
+  }
+  return "channels.remoteMissing.descriptionGeneric";
+}
+
 function routeFromPath(pathname: string): AppRoute {
   if (pathname === "/") return "overview";
   if (pathname.startsWith("/channels")) return "channels";
@@ -672,7 +690,7 @@ export default function App() {
           <DialogHeader>
             <DialogTitle>{t("channels.remoteMissing.title")}</DialogTitle>
             <DialogDescription>
-              {t("channels.remoteMissing.description", {
+              {t(managedMissingDescriptionKey(activeManagedMissing), {
                 name: activeManagedMissing?.channel_name ?? "",
               })}
             </DialogDescription>

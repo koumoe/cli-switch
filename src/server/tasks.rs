@@ -834,21 +834,26 @@ pub(crate) async fn newapi_accounts_maintenance_loop(
                 && (settings.newapi_managed_channel_missing_prompt_enabled
                     || settings.newapi_managed_channel_sync_multiplier_enabled)
             {
-                let remote_groups = match newapi::list_groups(&http_client, &account).await {
-                    Ok(groups) => Some(
-                        groups
-                            .into_iter()
-                            .filter_map(|group| {
-                                group.ratio.and_then(|ratio| {
-                                    normalize_remote_multiplier(ratio)
-                                        .map(|ratio| (group.name, ratio))
-                                })
-                            })
-                            .collect::<HashMap<String, f64>>(),
-                    ),
+                let (remote_group_names, remote_groups) = match newapi::list_groups(
+                    &http_client,
+                    &account,
+                )
+                .await
+                {
+                    Ok(groups) => {
+                        let mut remote_group_names = HashSet::new();
+                        let mut remote_groups = HashMap::new();
+                        for group in groups {
+                            remote_group_names.insert(group.name.clone());
+                            if let Some(ratio) = group.ratio.and_then(normalize_remote_multiplier) {
+                                remote_groups.insert(group.name, ratio);
+                            }
+                        }
+                        (Some(remote_group_names), Some(remote_groups))
+                    }
                     Err(err) => {
                         tracing::warn!(account_id = %account.id, err = %err, "load newapi groups failed");
-                        None
+                        (None, None)
                     }
                 };
                 let remote_token_ids = if settings.newapi_managed_channel_missing_prompt_enabled {
@@ -869,12 +874,23 @@ pub(crate) async fn newapi_accounts_maintenance_loop(
                 };
 
                 for channel in managed_channels {
-                    if settings.newapi_managed_channel_missing_prompt_enabled
+                    let missing_token = settings.newapi_managed_channel_missing_prompt_enabled
                         && channel.enabled
-                        && let (Some(token_id), Some(remote_token_ids)) =
-                            (channel.newapi_token_id, remote_token_ids.as_ref())
-                        && !remote_token_ids.contains(&token_id)
-                    {
+                        && match (channel.newapi_token_id, remote_token_ids.as_ref()) {
+                            (Some(token_id), Some(remote_token_ids)) => {
+                                !remote_token_ids.contains(&token_id)
+                            }
+                            _ => false,
+                        };
+                    let missing_group = settings.newapi_managed_channel_missing_prompt_enabled
+                        && channel.enabled
+                        && match (channel.newapi_group.as_deref(), remote_group_names.as_ref()) {
+                            (Some(group_name), Some(remote_group_names)) => {
+                                !remote_group_names.contains(group_name)
+                            }
+                            _ => false,
+                        };
+                    if missing_token || missing_group {
                         events::publish(AppEvent::NewApiManagedChannelMissingPrompt(
                             NewApiManagedChannelMissingPrompt {
                                 channel_id: channel.id.clone(),
@@ -883,6 +899,8 @@ pub(crate) async fn newapi_accounts_maintenance_loop(
                                 account_base_url: account.base_url.clone(),
                                 group_name: channel.newapi_group.clone(),
                                 token_name: channel.newapi_token_name.clone(),
+                                missing_group,
+                                missing_token,
                             },
                         ));
                     }

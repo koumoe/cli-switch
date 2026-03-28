@@ -351,6 +351,8 @@ export type NewApiManagedChannelMissingPrompt = {
   account_base_url: string;
   group_name: string | null;
   token_name: string | null;
+  missing_group: boolean;
+  missing_token: boolean;
 };
 
 export type NewApiManagedChannelMultiplierPrompt = {

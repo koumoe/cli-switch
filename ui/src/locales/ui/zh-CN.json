@@ -253,8 +253,11 @@
       "reorderFail": "保存排序失败"
     },
     "remoteMissing": {
-      "title": "托管渠道已失效",
-      "description": "检测到 {{name}} 对应的 New API token 已不存在，请选择处理方式。",
+      "title": "托管渠道远端关联缺失",
+      "descriptionGeneric": "检测到 {{name}} 对应的远端关联未在列表中找到，请选择处理方式。",
+      "descriptionToken": "检测到 {{name}} 对应的远端 token 未在列表中找到，请选择处理方式。",
+      "descriptionGroup": "检测到 {{name}} 对应的远端分组未在列表中找到，请选择处理方式。",
+      "descriptionTokenAndGroup": "检测到 {{name}} 对应的远端 token 和分组均未在列表中找到，请选择处理方式。",
       "baseUrl": "账号 Base URL：{{value}}",
       "group": "分组：{{value}}",
       "token": "Token 名称：{{value}}",
@@ -601,7 +604,7 @@
       "title": "New API 托管渠道",
       "subtitle": "管理托管渠道的变更提醒与倍率同步确认",
       "missingPrompt": "渠道变更通知",
-      "missingPromptHint": "开启后，新增托管渠道会发送系统通知；检测到远端 token 被删除时，会发送系统通知、打开窗口并弹框提示禁用或删除",
+      "missingPromptHint": "开启后，新增托管渠道会发送系统通知；检测到远端 token 或分组未在列表中找到时，会发送系统通知、打开窗口并弹框提示禁用或删除",
       "syncMultiplier": "同步渠道倍率",
       "syncMultiplierHint": "开启后每 30 分钟检查远端分组倍率；发现差异时会先发送系统通知，若窗口已打开则直接弹窗，未打开则在你主动打开窗口后询问是否修改本地真实倍率",
       "ignoreFreeMultiplier": "忽略免费倍率",

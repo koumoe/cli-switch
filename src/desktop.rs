@@ -194,22 +194,56 @@ fn managed_channel_notification_title(locale: AppLocale) -> String {
     )
 }
 
-fn managed_channel_deleted_body(
+fn managed_channel_missing_body(
     locale: AppLocale,
     event: &cliswitch::events::NewApiManagedChannelMissingPrompt,
 ) -> String {
     let args = desktop_args([("channel", event.channel_name.clone())]);
+    if event.missing_group && event.missing_token {
+        return desktop_text_args(
+            locale,
+            "desktop.notifications.managedChannel.tokenAndGroupMissingBody",
+            &args,
+            match locale {
+                AppLocale::ZhCN => format!(
+                    "检测到渠道 {} 对应的远端 token 和分组均未在列表中找到，请选择禁用或删除",
+                    event.channel_name
+                ),
+                AppLocale::EnUS => format!(
+                    "Remote token and group for channel {} were not found in the latest list. Disable or delete the local channel.",
+                    event.channel_name
+                ),
+            },
+        );
+    }
+    if event.missing_group {
+        return desktop_text_args(
+            locale,
+            "desktop.notifications.managedChannel.groupMissingBody",
+            &args,
+            match locale {
+                AppLocale::ZhCN => format!(
+                    "检测到渠道 {} 对应的远端分组未在列表中找到，请选择禁用或删除",
+                    event.channel_name
+                ),
+                AppLocale::EnUS => format!(
+                    "Remote group for channel {} was not found in the latest list. Disable or delete the local channel.",
+                    event.channel_name
+                ),
+            },
+        );
+    }
     desktop_text_args(
         locale,
-        "desktop.notifications.managedChannel.deletedBody",
+        "desktop.notifications.managedChannel.tokenMissingBody",
         &args,
         match locale {
             AppLocale::ZhCN => format!(
-                "检测到渠道 {} 对应的远端 token 已被删除，请选择禁用或删除",
+                "检测到渠道 {} 对应的远端 token 未在列表中找到，请选择禁用或删除",
                 event.channel_name
             ),
             AppLocale::EnUS => format!(
-                "Remote token for channel {} was deleted. Disable or delete the local channel.",
+                "Remote token for channel {} was not found in the latest list. Disable or delete the local channel.",
                 event.channel_name
             ),
         },
@@ -697,9 +731,9 @@ fn handle_user_event(
             }
             if let AppEvent::NewApiManagedChannelMissingPrompt(ref prompt) = ev {
                 let title = managed_channel_notification_title(state.locale);
-                let body = managed_channel_deleted_body(state.locale, prompt);
+                let body = managed_channel_missing_body(state.locale, prompt);
                 if let Err(err) = show_system_notification(&title, &body) {
-                    tracing::warn!(err = %err, channel_id = %prompt.channel_id, "show managed channel deleted system notification failed");
+                    tracing::warn!(err = %err, channel_id = %prompt.channel_id, "show managed channel missing system notification failed");
                 }
                 apply_window_visible(window, state, tray_show, tray_hide, true, true);
             }

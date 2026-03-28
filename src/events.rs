@@ -30,6 +30,8 @@ pub struct NewApiManagedChannelMissingPrompt {
     pub account_base_url: String,
     pub group_name: Option<String>,
     pub token_name: Option<String>,
+    pub missing_group: bool,
+    pub missing_token: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
