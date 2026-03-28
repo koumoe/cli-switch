@@ -13,7 +13,8 @@ tokio::task_local! {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LocaleSource {
-    Header,
+    CustomHeader,
+    AcceptLanguage,
     Query,
     Settings,
     Default,
@@ -66,7 +67,7 @@ fn resolve_request_context(state: &AppState, req: &Request) -> RequestContext {
     {
         return RequestContext {
             locale: raw,
-            source: LocaleSource::Header,
+            source: LocaleSource::CustomHeader,
         };
     }
 
@@ -80,6 +81,18 @@ fn resolve_request_context(state: &AppState, req: &Request) -> RequestContext {
         return RequestContext {
             locale,
             source: LocaleSource::Query,
+        };
+    }
+
+    if let Some(locale) = req
+        .headers()
+        .get(http::header::ACCEPT_LANGUAGE)
+        .and_then(|value| value.to_str().ok())
+        .and_then(AppLocale::parse_accept_language)
+    {
+        return RequestContext {
+            locale,
+            source: LocaleSource::AcceptLanguage,
         };
     }
 

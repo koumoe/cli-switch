@@ -1,13 +1,7 @@
 import type { Protocol } from "./api";
+export { formatDateTime, formatNumber } from "@/lib/format";
 
 export type Translator = (key: string, vars?: Record<string, string | number>) => string;
-
-export function formatDateTime(ms: number | null | undefined): string {
-  if (!ms) return "-";
-  const d = new Date(ms);
-  if (Number.isNaN(d.getTime())) return "-";
-  return d.toLocaleString();
-}
 
 export function protocolLabelKey(protocol: Protocol): string {
   switch (protocol) {

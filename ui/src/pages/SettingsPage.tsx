@@ -41,7 +41,7 @@ import { useCurrency, type CurrencyMode } from "@/lib/currency";
 import { setLogLevel } from "@/lib/logger";
 import { UpdatePromptDialog } from "@/components/UpdatePromptDialog";
 import { postIpc } from "@/lib/ipc";
-import { formatBytes, formatDateTime } from "../lib";
+import { formatBytes, formatDateTime, formatNumber } from "../lib";
 import { applyCliToolsProxyConfig, checkUpdate, clearLogs, clearRecords, createChatBridgePairingToken, deactivateChatBridgeBinding, downloadUpdate, getChatBridgeWeixinStatus, getChatBridgeWhatsAppStatus, getCliToolsProxyConfigStatus, getCliToolsStatus, getDbSize, getHealth, getLogsSize, getSettings, getUpdateChangelog, getUpdateStatus, ignoreUpdate, listChatBridgeBindings, logoutChatBridgeWeixin, logoutChatBridgeWhatsApp, openDataDir, pricingStatus, pricingSync, startChatBridgeWeixinLogin, startChatBridgeWhatsAppLogin, updateSettings, type AppSettings, type AutoStartLaunchMode, type ChatBridgeBinding, type ChatBridgePairingToken, type ChatBridgeWeixinStatus, type ChatBridgeWhatsAppStatus, type ChatPlatform, type CloseBehavior, type DbSize, type Health, type LogsSize, type PricingStatus, type RecordsClearMode, type UpdateCheck, type UpdateStatus, type ChangelogSection, type CliToolId, type CliToolsStatus, type CliToolStatus, type CliToolProxyConfigStatus, type CliToolProxyConfigToolStatus } from "../api";
 import type { CliswitchUpdateStatusEvent } from "@/lib/cliswitchEvents";
 import { clearUpdateReadyShown } from "@/lib/updateReadyPrompt";
@@ -1914,7 +1914,7 @@ export function SettingsPage() {
                 <div>
                   <div className="font-medium text-sm">{t("settings.pricingData.status")}</div>
                   <div className="text-xs text-muted-foreground">
-                    {t("settings.pricingData.count", { count: (pricing?.count ?? 0).toLocaleString() })}
+                    {t("settings.pricingData.count", { count: formatNumber(pricing?.count ?? 0) })}
                     {" · "}
                     {t("settings.pricingData.lastSync", {
                       time: pricing?.last_sync_ms ? formatDateTime(pricing.last_sync_ms) : "-",
@@ -2476,7 +2476,7 @@ export function SettingsPage() {
                                 ? "settings.records.clearedDetailErrors"
                                 : "settings.records.clearedDetail",
                               {
-                                count: res.usage_events_deleted.toLocaleString(),
+                                count: formatNumber(res.usage_events_deleted),
                               }
                             ),
                           });

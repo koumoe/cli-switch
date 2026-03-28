@@ -8,7 +8,6 @@
     "channels": "渠道管理",
     "accounts": "账号管理",
     "prompts": "项目管理",
-    "routes": "路由",
     "monitor": "渠道统计",
     "logs": "请求明细",
     "settings": "设置"
@@ -41,8 +40,6 @@
     "disabled": "禁用",
     "free": "免费",
     "actions": "操作",
-    "channel": "渠道",
-    "route": "路由",
     "pagination": {
       "total": "共 {{total}} 条",
       "page": "第 {{page}} / {{totalPages}} 页",
@@ -59,12 +56,10 @@
       "gemini": "Gemini CLI"
     },
     "sidebar": {
-      "title": "类型",
-      "description": "全局提示词置顶，项目提示词按目录管理"
+      "title": "类型"
     },
     "global": {
-      "title": "全局提示词",
-      "description": "对 {{tool}} 统一生效的全局提示词文档"
+      "title": "全局提示词"
     },
     "projects": {
       "empty": "尚未从 {{tool}} 发现项目，请先在对应 CLI 中打开过项目后再回来编辑。",
@@ -73,21 +68,12 @@
     },
     "editor": {
       "placeholder": "# 在这里编写 Markdown 提示词",
-      "empty": "当前还没有内容",
-      "readonly": "点击右上角“编辑”开始编写 Markdown 文档。",
       "edit": "修改提示词",
-      "cancel": "取消编辑",
       "save": "保存提示词",
-      "saved": "提示词已保存",
-      "saveFail": "保存提示词失败",
-      "loadFail": "加载提示词失败",
       "unsavedConfirm": "当前有未保存修改，确认放弃吗？",
-      "unsavedDescription": "当前有未保存修改，确认放弃吗？",
       "globalBadge": "全局",
       "projectBadge": "项目",
-      "updatedAt": "最后更新：{{value}}",
       "noSelection": "未选择提示词",
-      "noProjectHint": "请选择表格中的项目，或直接编辑全局提示词。",
       "size": "内容大小：{{current}} / {{max}}"
     },
     "actions": {
@@ -119,7 +105,6 @@
       "todayRequests": "本月请求",
       "totalTokens": "本月 Token",
       "estimatedCost": "官方额度",
-      "avgLatency": "平均延迟",
       "actualSpend": "预估费用"
     },
     "trend": {
@@ -165,18 +150,13 @@
     },
     "table": {
       "name": "名称",
-      "terminal": "终端",
       "priority": "优先级",
       "realMultiplier": "实际倍率",
-      "baseUrl": "Base URL",
       "status": "状态",
-      "checkin": "签到",
       "empty": "暂无渠道，点击「新建渠道」添加"
     },
     "actions": {
       "drag": "拖拽排序",
-      "checkin": "签到",
-      "checkinMissing": "未设置签到地址",
       "test": "测试连接",
       "edit": "编辑",
       "delete": "删除",
@@ -202,26 +182,8 @@
       "realMultiplierHint": "支持 0 表示免费渠道，最多 2 位小数",
       "realMultiplierTooManyDecimals": "最多只能输入 2 位小数",
       "baseUrl": "Base URL",
-      "checkinUrl": "签到地址",
-      "checkinUrlHint": "可选：设置后，12 点后会在列表显示红点提醒",
       "apiKey": "API Key / Token",
       "enabled": "启用"
-    },
-    "checkin": {
-      "status": {
-        "todo": "未签到",
-        "done": "已签到",
-        "none": "无签到"
-      },
-      "dialog": {
-        "title": "签到确认",
-        "description": "已打开 {{name}} 的签到页面，是否已完成签到？",
-        "notDone": "未完成",
-        "done": "已完成"
-      },
-      "toast": {
-        "done": "{{name}} 签到完成"
-      }
     },
     "deleteDialog": {
       "title": "删除渠道",
@@ -288,15 +250,10 @@
     "title": "账号管理",
     "new": "新增账号",
     "table": {
-      "account": "账号",
       "baseUrl": "Base URL",
-      "role": "角色",
       "balance": "余额",
       "checkin": "签到",
-      "alert": "告警",
-      "empty": "暂无账号，点击「新增账号」添加",
-      "lastSync": "最近同步：{{value}}",
-      "group": "分组：{{name}}，倍率：{{ratio}}"
+      "empty": "暂无账号，点击「新增账号」添加"
     },
     "checkin": {
       "modeDisabled": "不签到",
@@ -305,18 +262,12 @@
       "done": "已签到",
       "todo": "未签到",
       "none": "无签到",
-      "autoOn": "自动签到时间：{{time}}",
       "dialog": {
         "title": "签到确认",
         "description": "已打开 {{name}} 的签到页面，是否已完成签到？",
         "notDone": "未完成",
         "done": "已完成"
       }
-    },
-    "alert": {
-      "enabled": "低余额告警：{{value}}",
-      "disabled": "低余额告警：关闭",
-      "notified": "已触发告警"
     },
     "actions": {
       "drag": "拖拽排序",
@@ -374,8 +325,6 @@
       "loadFail": "加载账号失败",
       "actionFail": "操作失败",
       "baseUrlRequired": "Base URL 不能为空",
-      "userIdRequired": "User ID 不能为空",
-      "userTokenRequired": "User Token 不能为空",
       "thresholdInvalid": "低余额阈值必须是 >= 0 的数字",
       "createOk": "账号创建成功",
       "updateOk": "账号更新成功",
@@ -453,11 +402,6 @@
   "monitor": {
     "title": "渠道统计",
     "range": {
-      "today": "今天",
-      "yesterday": "昨天",
-      "week": "本周",
-      "month": "本月",
-      "custom": "自定义",
       "selectRange": "选择日期区间"
     },
     "cards": {
@@ -664,7 +608,6 @@
       "update": "更新",
       "installOk": "{{name}} 安装/更新成功",
       "terminalReady": "终端命令已就绪（重启终端生效）",
-      "terminalSetupFailed": "终端命令配置失败：{{error}}",
       "installFail": "{{name}} 安装/更新失败",
       "autoEnable": "自动更新",
       "saved": "设置已保存",
@@ -682,13 +625,9 @@
       "loadFail": "获取配置状态失败",
       "apply": "一键配置",
       "applied": "配置已写入",
-      "appliedPartial": "部分配置写入失败",
-      "partialDesc": "失败工具：{{tools}}",
       "applyFail": "写入配置失败",
       "ok": "已配置",
-      "needsFix": "未配置",
-      "current": "当前",
-      "expected": "期望"
+      "needsFix": "未配置"
     },
     "update": {
       "title": "CliSwitch 更新",
@@ -721,8 +660,7 @@
       "downloading": "已开始下载更新",
       "downloadFail": "下载失败",
       "saved": "设置已保存",
-      "saveFail": "保存失败",
-      "autoStarted": "已开始自动下载更新"
+      "saveFail": "保存失败"
     },
     "storage": {
       "title": "数据存储",
@@ -732,9 +670,7 @@
       "dbFile": "数据库文件",
       "dbSize": "数据库大小",
       "dbSizeFail": "获取数据库大小失败",
-      "openFail": "打开失败",
-      "openInDevTitle": "功能开发中",
-      "openInDevDesc": "打开文件夹功能将在后续版本中提供"
+      "openFail": "打开失败"
     },
     "logging": {
       "title": "应用日志",
@@ -753,9 +689,7 @@
       "saveFail": "保存失败",
       "dir": "日志目录",
       "clear": "清理",
-      "clearAll": "清理全部",
       "clearLogs": "清理日志",
-      "clearLogsHint": "选择日期区间清理或清理全部日志文件",
       "selectRange": "选择日期区间",
       "confirmTitle": "确认清理日志",
       "confirmDateRange": "将清理 {{range}} 的日志文件，是否继续？",
@@ -773,25 +707,14 @@
       "logsSizeFail": "获取日志大小失败",
       "clearRecords": "清理记录",
       "clearHint": "选择范围后进行清理",
-      "scopeAll": "全部",
-      "scopeErrors": "仅错误",
-      "scopeRange": "按时间",
       "typeAll": "全部类型",
       "typeErrors": "仅错误",
       "timeAll": "全部",
       "timeRange": "按时间"
     },
     "records": {
-      "title": "请求记录",
-      "subtitle": "管理请求记录和错误信息",
       "clear": "清理",
-      "clearRecords": "按区间清理",
-      "clearRecordsHint": "选择日期区间清理请求记录",
       "selectRange": "选择日期区间",
-      "quickActions": "快捷操作",
-      "quickActionsHint": "清理失败请求或全部记录，并自动压缩数据库",
-      "clearErrors": "仅清理错误",
-      "clearAll": "清理全部",
       "confirmTitle": "确认清理",
       "confirmDateRange": "将清理 {{range}} 的记录，是否继续？",
       "confirmDateRangeErrors": "将清理 {{range}} 的错误记录，是否继续？",
@@ -817,19 +740,14 @@
       "saveFail": "保存失败"
     },
     "chatBridge": {
-      "title": "消息互联",
-      "subtitle": "统一管理消息平台入口、配对绑定与聊天项目访问。",
       "configTitle": "基础配置",
       "configHint": "控制消息互联运行时与项目创建策略。",
       "platformConfigTitle": "平台配置",
       "platformConfigHint": "当前 Telegram / Discord / WhatsApp / 微信 已接入运行时。WhatsApp 与微信均采用扫码登录模式。",
-      "platformConfigLabel": "{{platform}} 配置",
       "enable": "启用消息互联",
       "enableHint": "关闭后会保留配置，但不会启动消息互联运行时。",
       "telegramEnable": "启用 Telegram",
       "telegramEnableHint": "允许 Telegram Bot 接入消息互联。",
-      "telegramConfigTitle": "Telegram 配置",
-      "telegramConfigHint": "管理 Telegram Bot Token、启用状态，以及 Telegram 侧的绑定入口。",
       "telegramToken": "Telegram Bot Token",
       "telegramTokenPlaceholder": "123456:ABC-DEF...",
       "telegramTokenPlaceholderConfigured": "已配置，留空表示保持当前 Token",
@@ -837,8 +755,6 @@
       "telegramTokenHintConfigured": "当前不会回显已保存的 Token。留空保存会保持原值，输入新 Token 才会覆盖。",
       "discordEnable": "启用 Discord",
       "discordEnableHint": "允许 Discord Bot 接入消息互联。",
-      "discordConfigTitle": "Discord 配置",
-      "discordConfigHint": "管理 Discord Bot Token、启用状态，以及 Discord 侧的绑定入口。需在 Discord Developer Portal 为 Bot 开启 Message Content Intent。",
       "discordToken": "Discord Bot Token",
       "discordTokenPlaceholder": "MTEx...Q2F0",
       "discordTokenPlaceholderConfigured": "已配置，留空表示保持当前 Token",
@@ -846,12 +762,8 @@
       "discordTokenHintConfigured": "当前不会回显已保存的 Token。留空保存会保持原值，输入新 Token 才会覆盖。",
       "whatsappEnable": "启用 WhatsApp",
       "whatsappEnableHint": "启用 WhatsApp Web 桥接。",
-      "whatsappConfigTitle": "WhatsApp Web",
-      "whatsappConfigHint": "无需 Meta 开发者 Token。保存启用开关后，点击开始登录并在手机 WhatsApp 中扫码即可。",
       "weixinEnable": "启用微信",
       "weixinEnableHint": "启用微信桥接。",
-      "weixinConfigTitle": "微信",
-      "weixinConfigHint": "无需 OpenClaw 运行时。保存启用开关后，点击开始登录并使用微信扫码即可。",
       "whatsapp": {
         "runtimeTitle": "连接状态",
         "runtimeHint": "本桥接通过 WhatsApp Web 运行。若会话过期，可再次开始登录以刷新二维码。",
@@ -890,11 +802,11 @@
         "connectionLabel": "运行时连接",
         "connectionConnected": "已连接",
         "connectionDisconnected": "未连接",
-      "accountLabel": "已登录账号",
-      "accountEmpty": "尚未登录",
-      "lastErrorLabel": "最近错误",
-      "lastErrorGeneric": "微信运行时出现异常，请查看日志或重新开始登录。",
-      "qrTitle": "扫码登录",
+        "accountLabel": "已登录账号",
+        "accountEmpty": "尚未登录",
+        "lastErrorLabel": "最近错误",
+        "lastErrorGeneric": "微信运行时出现异常，请查看日志或重新开始登录。",
+        "qrTitle": "扫码登录",
         "qrHint": "点击开始登录，然后在手机微信中扫码完成登录。",
         "dialogHint": "二维码通常只在首次登录或会话失效时需要，点击按钮后在弹窗中查看、刷新或退出会话。",
         "qrAlt": "微信二维码",
@@ -923,9 +835,6 @@
       "turnTimeoutInvalid": "CLI 执行超时必须是大于等于 0 的整数分钟数",
       "saved": "消息互联设置已保存",
       "saveFail": "保存消息互联设置失败",
-      "supportReady": "已接入",
-      "supportPending": "未接入",
-      "supportPendingHint": "{{platform}} 运行时尚未接入，当前仅保留配置入口与平台分组视图。",
       "actions": {
         "pairing": "配对 Token",
         "bindings": "已绑定账号"
@@ -952,10 +861,8 @@
       },
       "bindings": {
         "title": "已绑定账号",
-        "subtitle": "显示当前已完成绑定的聊天平台账号。",
         "summary": "当前平台已绑定 {{count}} 个账号",
         "loadFail": "获取绑定列表失败",
-        "empty": "暂无已绑定账号",
         "emptyForPlatform": "{{platform}} 暂无已绑定账号",
         "dialogTitle": "{{platform}} 已绑定账号",
         "dialogSubtitle": "这里只显示 {{platform}} 平台下已完成绑定的账号。",

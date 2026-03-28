@@ -1,6 +1,6 @@
 use crate::chat_bridge::cli::permission_mode_label;
 use crate::cli_tools::CliToolId;
-use crate::i18n::AppLocale;
+use crate::i18n::{AppLocale, format_integer};
 use crate::storage::{BridgePermissionMode, BridgeSession};
 
 use super::i18n::{args, t, t_args};
@@ -430,7 +430,7 @@ fn relative_time_label(now_ms: i64, at_ms: i64, locale: AppLocale) -> String {
         return t_args(
             locale,
             "time.minutes_ago",
-            &args([("minutes", minutes.to_string())]),
+            &args([("minutes", format_integer(locale, minutes))]),
         );
     }
     let hours = minutes / 60;
@@ -438,11 +438,15 @@ fn relative_time_label(now_ms: i64, at_ms: i64, locale: AppLocale) -> String {
         return t_args(
             locale,
             "time.hours_ago",
-            &args([("hours", hours.to_string())]),
+            &args([("hours", format_integer(locale, hours))]),
         );
     }
     let days = hours / 24;
-    t_args(locale, "time.days_ago", &args([("days", days.to_string())]))
+    t_args(
+        locale,
+        "time.days_ago",
+        &args([("days", format_integer(locale, days))]),
+    )
 }
 
 #[cfg(test)]

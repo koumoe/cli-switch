@@ -8,7 +8,6 @@
     "channels": "Channel Management",
     "accounts": "Account Management",
     "prompts": "Project Management",
-    "routes": "Routes",
     "monitor": "Channel Statistics",
     "logs": "Request Details",
     "settings": "Settings"
@@ -41,8 +40,6 @@
     "disabled": "Disabled",
     "free": "Free",
     "actions": "Actions",
-    "channel": "Channel",
-    "route": "Route",
     "pagination": {
       "total": "{{total}} total",
       "page": "Page {{page}} / {{totalPages}}",
@@ -59,12 +56,10 @@
       "gemini": "Gemini CLI"
     },
     "sidebar": {
-      "title": "Type",
-      "description": "Global prompt stays on top, project prompts are managed by folder"
+      "title": "Type"
     },
     "global": {
-      "title": "Global Prompt",
-      "description": "Shared markdown prompt document applied to {{tool}}"
+      "title": "Global Prompt"
     },
     "projects": {
       "empty": "No projects discovered from {{tool}} yet. Open a project in that CLI first, then come back to edit it.",
@@ -73,21 +68,12 @@
     },
     "editor": {
       "placeholder": "# Write your Markdown prompt here",
-      "empty": "No content yet",
-      "readonly": "Click “Edit” in the top-right corner to start writing the Markdown document.",
       "edit": "Edit Prompt",
-      "cancel": "Cancel Editing",
       "save": "Save Prompt",
-      "saved": "Prompt saved",
-      "saveFail": "Failed to save prompt",
-      "loadFail": "Failed to load prompt",
       "unsavedConfirm": "You have unsaved changes. Discard them?",
-      "unsavedDescription": "You have unsaved changes. Discard them?",
       "globalBadge": "Global",
       "projectBadge": "Project",
-      "updatedAt": "Updated: {{value}}",
       "noSelection": "No prompt selected",
-      "noProjectHint": "Select a project in the table, or edit the global prompt directly.",
       "size": "Size: {{current}} / {{max}}"
     },
     "actions": {
@@ -119,7 +105,6 @@
       "todayRequests": "This Month Requests",
       "totalTokens": "This Month Tokens",
       "estimatedCost": "Official Credits",
-      "avgLatency": "Avg Latency",
       "actualSpend": "Estimated Cost"
     },
     "trend": {
@@ -165,18 +150,13 @@
     },
     "table": {
       "name": "Name",
-      "terminal": "Terminal",
       "priority": "Priority",
       "realMultiplier": "Multiplier",
-      "baseUrl": "Base URL",
       "status": "Status",
-      "checkin": "Check-in",
       "empty": "No channels. Click 'New Channel' to add one."
     },
     "actions": {
       "drag": "Drag to reorder",
-      "checkin": "Check-in",
-      "checkinMissing": "No check-in URL",
       "test": "Test Connection",
       "edit": "Edit",
       "delete": "Delete",
@@ -202,26 +182,8 @@
       "realMultiplierHint": "0 means free channel; up to 2 decimals",
       "realMultiplierTooManyDecimals": "Up to 2 decimal places",
       "baseUrl": "Base URL",
-      "checkinUrl": "Check-in URL",
-      "checkinUrlHint": "Optional: after 12:00, a red dot appears until you confirm completion",
       "apiKey": "API Key / Token",
       "enabled": "Enabled"
-    },
-    "checkin": {
-      "status": {
-        "todo": "Not checked in",
-        "done": "Checked in",
-        "none": "No check-in"
-      },
-      "dialog": {
-        "title": "Check-in",
-        "description": "Opened the check-in page for {{name}}. Have you completed it?",
-        "notDone": "Not yet",
-        "done": "Done"
-      },
-      "toast": {
-        "done": "{{name}} check-in completed"
-      }
     },
     "deleteDialog": {
       "title": "Delete Channel",
@@ -288,15 +250,10 @@
     "title": "Account Management",
     "new": "New Account",
     "table": {
-      "account": "Account",
       "baseUrl": "Base URL",
-      "role": "Role",
       "balance": "Balance",
       "checkin": "Check-in",
-      "alert": "Alert",
-      "empty": "No accounts yet. Click 'New Account' to add one.",
-      "lastSync": "Last sync: {{value}}",
-      "group": "Group: {{name}}, ratio: {{ratio}}"
+      "empty": "No accounts yet. Click 'New Account' to add one."
     },
     "checkin": {
       "modeDisabled": "No check-in",
@@ -305,18 +262,12 @@
       "done": "Checked in",
       "todo": "Not checked in",
       "none": "No check-in",
-      "autoOn": "Auto check-in time: {{time}}",
       "dialog": {
         "title": "Check-in Confirmation",
         "description": "Opened the check-in page for {{name}}. Is check-in completed?",
         "notDone": "Not yet",
         "done": "Completed"
       }
-    },
-    "alert": {
-      "enabled": "Low-balance alert: {{value}}",
-      "disabled": "Low-balance alert: Off",
-      "notified": "Alert already triggered"
     },
     "actions": {
       "drag": "Drag to reorder",
@@ -374,8 +325,6 @@
       "loadFail": "Failed to load accounts",
       "actionFail": "Operation failed",
       "baseUrlRequired": "Base URL is required",
-      "userIdRequired": "User ID is required",
-      "userTokenRequired": "User Token is required",
       "thresholdInvalid": "Threshold must be a finite number >= 0",
       "createOk": "Account created",
       "updateOk": "Account updated",
@@ -453,11 +402,6 @@
   "monitor": {
     "title": "Channel Statistics",
     "range": {
-      "today": "Today",
-      "yesterday": "Yesterday",
-      "week": "This Week",
-      "month": "This Month",
-      "custom": "Custom",
       "selectRange": "Select date range"
     },
     "cards": {
@@ -664,7 +608,6 @@
       "update": "Update",
       "installOk": "{{name}} installed/updated",
       "terminalReady": "Terminal command is ready (restart your terminal to apply).",
-      "terminalSetupFailed": "Terminal command setup failed: {{error}}",
       "installFail": "Failed to install/update {{name}}",
       "autoEnable": "Auto update",
       "saved": "Saved",
@@ -682,13 +625,9 @@
       "loadFail": "Failed to load config status",
       "apply": "Apply",
       "applied": "Config written",
-      "appliedPartial": "Some configs failed",
-      "partialDesc": "Failed tools: {{tools}}",
       "applyFail": "Failed to write config",
       "ok": "Configured",
-      "needsFix": "Not configured",
-      "current": "Current",
-      "expected": "Expected"
+      "needsFix": "Not configured"
     },
     "update": {
       "title": "CliSwitch Update",
@@ -721,8 +660,7 @@
       "downloading": "Update download started",
       "downloadFail": "Download failed",
       "saved": "Saved",
-      "saveFail": "Save failed",
-      "autoStarted": "Auto download started"
+      "saveFail": "Save failed"
     },
     "storage": {
       "title": "Storage",
@@ -732,9 +670,7 @@
       "dbFile": "Database file",
       "dbSize": "Database size",
       "dbSizeFail": "Failed to load database size",
-      "openFail": "Failed to open",
-      "openInDevTitle": "In development",
-      "openInDevDesc": "Open-folder support will be available in a future version"
+      "openFail": "Failed to open"
     },
     "logging": {
       "title": "App Logs",
@@ -753,9 +689,7 @@
       "saveFail": "Save failed",
       "dir": "Log directory",
       "clear": "Clear",
-      "clearAll": "Clear all",
       "clearLogs": "Clear logs",
-      "clearLogsHint": "Select date range to clear or clear all log files",
       "selectRange": "Select date range",
       "confirmTitle": "Confirm log cleanup",
       "confirmDateRange": "This will clear log files for {{range}}. Continue?",
@@ -773,25 +707,14 @@
       "logsSizeFail": "Failed to get log size",
       "clearRecords": "Clear records",
       "clearHint": "Choose a scope then clear",
-      "scopeAll": "All",
-      "scopeErrors": "Errors only",
-      "scopeRange": "By time",
       "typeAll": "All types",
       "typeErrors": "Errors only",
       "timeAll": "All",
       "timeRange": "By time"
     },
     "records": {
-      "title": "Request Records",
-      "subtitle": "Manage request records and error logs",
       "clear": "Clear",
-      "clearRecords": "Clear by range",
-      "clearRecordsHint": "Select date range to clear request records",
       "selectRange": "Select date range",
-      "quickActions": "Quick actions",
-      "quickActionsHint": "Clear errors or all records, and vacuum the database",
-      "clearErrors": "Clear errors only",
-      "clearAll": "Clear all",
       "confirmTitle": "Confirm clear",
       "confirmDateRange": "This will clear records for {{range}}. Continue?",
       "confirmDateRangeErrors": "This will clear error records for {{range}}. Continue?",
@@ -817,19 +740,14 @@
       "saveFail": "Save failed"
     },
     "chatBridge": {
-      "title": "Messaging",
-      "subtitle": "Manage messaging entrypoints, pairing, and chat-side project access in one place.",
       "configTitle": "Base Config",
       "configHint": "Controls the messaging runtime and how chat-created projects are handled.",
       "platformConfigTitle": "Platform Config",
       "platformConfigHint": "Telegram, Discord, WhatsApp, and Weixin are wired into the runtime today. WhatsApp and Weixin both use QR login flows.",
-      "platformConfigLabel": "{{platform}} Config",
       "enable": "Enable Messaging",
       "enableHint": "Keeps settings when off, but disables the messaging runtime.",
       "telegramEnable": "Enable Telegram",
       "telegramEnableHint": "Allow a Telegram bot to connect to Messaging.",
-      "telegramConfigTitle": "Telegram Config",
-      "telegramConfigHint": "Manage the Telegram bot token, runtime toggle, and Telegram-side binding entrypoints.",
       "telegramToken": "Telegram Bot Token",
       "telegramTokenPlaceholder": "123456:ABC-DEF...",
       "telegramTokenPlaceholderConfigured": "Configured. Leave blank to keep the current token",
@@ -837,8 +755,6 @@
       "telegramTokenHintConfigured": "The saved token is no longer echoed back to the UI. Leaving this blank keeps the current value; enter a new token to replace it.",
       "discordEnable": "Enable Discord",
       "discordEnableHint": "Allow a Discord bot to connect to Messaging.",
-      "discordConfigTitle": "Discord Config",
-      "discordConfigHint": "Manage the Discord bot token, runtime toggle, and Discord-side binding entrypoints. Enable Message Content Intent for the bot in Discord Developer Portal.",
       "discordToken": "Discord Bot Token",
       "discordTokenPlaceholder": "MTEx...Q2F0",
       "discordTokenPlaceholderConfigured": "Configured. Leave blank to keep the current token",
@@ -846,12 +762,8 @@
       "discordTokenHintConfigured": "The saved token is no longer echoed back to the UI. Leaving this blank keeps the current value; enter a new token to replace it.",
       "whatsappEnable": "Enable WhatsApp",
       "whatsappEnableHint": "Enable the WhatsApp Web bridge for Messaging.",
-      "whatsappConfigTitle": "WhatsApp Web",
-      "whatsappConfigHint": "No Meta developer token is needed. Save the toggle, then start login and scan the QR code in WhatsApp.",
       "weixinEnable": "Enable Weixin",
       "weixinEnableHint": "Enable the Weixin bridge for Messaging.",
-      "weixinConfigTitle": "Weixin",
-      "weixinConfigHint": "No OpenClaw runtime is needed. Save the toggle, then start login and scan the QR code in Weixin.",
       "whatsapp": {
         "runtimeTitle": "Connection Status",
         "runtimeHint": "This bridge runs through WhatsApp Web. If the session expires, start login again to refresh the QR code.",
@@ -890,11 +802,11 @@
         "connectionLabel": "Runtime Connection",
         "connectionConnected": "Connected",
         "connectionDisconnected": "Not connected",
-      "accountLabel": "Logged-in Account",
-      "accountEmpty": "Not logged in yet",
-      "lastErrorLabel": "Last Error",
-      "lastErrorGeneric": "The Weixin runtime encountered an error. Check the logs or start login again.",
-      "qrTitle": "QR Login",
+        "accountLabel": "Logged-in Account",
+        "accountEmpty": "Not logged in yet",
+        "lastErrorLabel": "Last Error",
+        "lastErrorGeneric": "The Weixin runtime encountered an error. Check the logs or start login again.",
+        "qrTitle": "QR Login",
         "qrHint": "Click Start Login, then open Weixin on your phone and scan the QR code.",
         "dialogHint": "The QR code is usually only needed for first-time login or when the session expires. Open the dialog to view, refresh, or log out the session.",
         "qrAlt": "Weixin QR code",
@@ -923,9 +835,6 @@
       "turnTimeoutInvalid": "CLI execution timeout must be an integer number of minutes greater than or equal to 0",
       "saved": "Messaging settings saved",
       "saveFail": "Failed to save Messaging settings",
-      "supportReady": "Ready",
-      "supportPending": "Not Connected",
-      "supportPendingHint": "{{platform}} runtime is not wired in yet. This tab is reserved for future platform-specific configuration and filtered binding views.",
       "actions": {
         "pairing": "Pairing Token",
         "bindings": "Bound Accounts"
@@ -952,10 +861,8 @@
       },
       "bindings": {
         "title": "Bound Accounts",
-        "subtitle": "Shows chat platform accounts that have completed binding.",
         "summary": "{{count}} bound accounts on this platform",
         "loadFail": "Failed to load bindings",
-        "empty": "No bound accounts yet",
         "emptyForPlatform": "No bound accounts on {{platform}} yet",
         "dialogTitle": "{{platform}} Bound Accounts",
         "dialogSubtitle": "Only accounts bound on {{platform}} are shown here.",

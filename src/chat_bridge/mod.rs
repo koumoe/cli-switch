@@ -56,7 +56,10 @@ use crate::cli_tools::{
     try_get_cmd_version_at,
 };
 use crate::events;
-use crate::i18n::{AppLocale, render_error};
+use crate::i18n::{
+    AppLocale, CurrencyCode, format_currency, format_integer, format_local_timestamp_ms,
+    render_error,
+};
 use crate::storage::{self, BridgeSessionStatus, ChatPlatform, StorageError};
 
 const STREAM_UPDATE_INTERVAL: Duration = Duration::from_millis(1200);
@@ -750,15 +753,15 @@ impl ChatBridgeRuntime {
                             locale,
                             "session.stop_all_with_cancel",
                             &args([
-                                ("count", count.to_string()),
-                                ("cancelled", cancelled.to_string()),
+                                ("count", format_integer(locale, count)),
+                                ("cancelled", format_integer(locale, cancelled)),
                             ]),
                         )
                     } else {
                         t_args(
                             locale,
                             "session.stop_all",
-                            &args([("count", count.to_string())]),
+                            &args([("count", format_integer(locale, count))]),
                         )
                     },
                     msg.message_id.as_deref(),
@@ -1403,7 +1406,7 @@ fn format_channels_list(channels: &[storage::Channel], now_ms: i64, locale: AppL
             t(locale, "channel.status_label"),
             channel_status_label(channel, now_ms, locale),
             t(locale, "channel.priority_label"),
-            channel.priority,
+            format_integer(locale, channel.priority),
             t(locale, "channel.id_label"),
             short_id(&channel.id)
         ));
@@ -1412,7 +1415,7 @@ fn format_channels_list(channels: &[storage::Channel], now_ms: i64, locale: AppL
             lines.push(format!(
                 "   {}: {}",
                 t(locale, "channel.auto_disabled_until_label"),
-                format_local_timestamp_ms(channel.auto_disabled_until_ms)
+                format_local_timestamp_ms(locale, channel.auto_disabled_until_ms)
             ));
         }
     }
@@ -1510,32 +1513,35 @@ fn format_usage_report(
         ),
         (
             t(locale, "stats.requests_label"),
-            summary.requests.to_string(),
+            format_integer(locale, summary.requests),
         ),
         (
             t(locale, "stats.success_label"),
-            summary.success.to_string(),
+            format_integer(locale, summary.success),
         ),
-        (t(locale, "stats.failed_label"), summary.failed.to_string()),
+        (
+            t(locale, "stats.failed_label"),
+            format_integer(locale, summary.failed),
+        ),
         (
             t(locale, "stats.avg_latency_label"),
-            format_avg_latency(summary.avg_latency_ms),
+            format_avg_latency(locale, summary.avg_latency_ms),
         ),
         (
             t(locale, "stats.prompt_tokens_label"),
-            summary.prompt_tokens.to_string(),
+            format_integer(locale, summary.prompt_tokens),
         ),
         (
             t(locale, "stats.completion_tokens_label"),
-            summary.completion_tokens.to_string(),
+            format_integer(locale, summary.completion_tokens),
         ),
         (
             t(locale, "stats.total_tokens_label"),
-            summary.total_tokens.to_string(),
+            format_integer(locale, summary.total_tokens),
         ),
         (
             t(locale, "stats.estimated_cost_label"),
-            format_cost_usd(summary.estimated_cost_usd.as_deref()),
+            format_cost_usd(locale, summary.estimated_cost_usd.as_deref()),
         ),
     ]));
     lines.push(String::new());
@@ -1552,18 +1558,18 @@ fn format_usage_report(
             format!(
                 "{}: {} · {}: {} · {}: {}",
                 t(locale, "stats.requests_label"),
-                item.requests,
+                format_integer(locale, item.requests),
                 t(locale, "stats.success_label"),
-                item.success,
+                format_integer(locale, item.success),
                 t(locale, "stats.failed_label"),
-                item.failed
+                format_integer(locale, item.failed)
             ),
             format!(
                 "{}: {} · {}: {}",
                 t(locale, "stats.total_tokens_label"),
-                item.total_tokens,
+                format_integer(locale, item.total_tokens),
                 t(locale, "stats.estimated_cost_short_label"),
-                format_cost_usd(item.estimated_cost_usd.as_deref())
+                format_cost_usd(locale, item.estimated_cost_usd.as_deref())
             ),
         ]
     }));
@@ -1586,15 +1592,15 @@ fn format_costs_report(
         ),
         (
             t(locale, "stats.estimated_cost_label"),
-            format_cost_usd(summary.estimated_cost_usd.as_deref()),
+            format_cost_usd(locale, summary.estimated_cost_usd.as_deref()),
         ),
         (
             t(locale, "stats.total_tokens_label"),
-            summary.total_tokens.to_string(),
+            format_integer(locale, summary.total_tokens),
         ),
         (
             t(locale, "stats.pricing_models_label"),
-            pricing.count.to_string(),
+            format_integer(locale, pricing.count),
         ),
         (
             t(locale, "stats.last_sync_label"),
@@ -1623,11 +1629,11 @@ fn format_costs_report(
         vec![format!(
             "{}: {} · {}: {} · {}: {}",
             t(locale, "stats.estimated_cost_short_label"),
-            format_cost_usd(item.estimated_cost_usd.as_deref()),
+            format_cost_usd(locale, item.estimated_cost_usd.as_deref()),
             t(locale, "stats.requests_label"),
-            item.requests,
+            format_integer(locale, item.requests),
             t(locale, "stats.total_tokens_label"),
-            item.total_tokens
+            format_integer(locale, item.total_tokens)
         )]
     }));
 
@@ -1741,7 +1747,7 @@ fn format_status_report(ctx: StatusReportContext<'_>) -> String {
     lines.push(format!(
         "{}: {}",
         t(locale, "status.generated_at_label"),
-        format_local_timestamp_ms(now_ms)
+        format_local_timestamp_ms(locale, now_ms)
     ));
     lines.push(format!(
         "{}: {}",
@@ -1758,14 +1764,14 @@ fn format_status_report(ctx: StatusReportContext<'_>) -> String {
         enabled_label(settings.chat_bridge_telegram_enabled, locale),
         token_configured_label(settings.chat_bridge_telegram_bot_token_configured, locale),
         t(locale, "status.active_sessions_label"),
-        telegram_sessions
+        format_integer(locale, telegram_sessions)
     ));
     lines.push(format!(
         "- Discord: {} / {} / {}={}",
         enabled_label(settings.chat_bridge_discord_enabled, locale),
         token_configured_label(settings.chat_bridge_discord_bot_token_configured, locale),
         t(locale, "status.active_sessions_label"),
-        discord_sessions
+        format_integer(locale, discord_sessions)
     ));
     lines.push(format!(
         "- WhatsApp: {} / state={} / connected={} / me={} / {}={}",
@@ -1777,7 +1783,7 @@ fn format_status_report(ctx: StatusReportContext<'_>) -> String {
             .clone()
             .unwrap_or_else(|| t(locale, "status.unknown_label")),
         t(locale, "status.active_sessions_label"),
-        whatsapp_sessions
+        format_integer(locale, whatsapp_sessions)
     ));
     lines.push(format!(
         "- Weixin: {} / state={} / connected={} / me={} / {}={}",
@@ -1789,31 +1795,31 @@ fn format_status_report(ctx: StatusReportContext<'_>) -> String {
             .clone()
             .unwrap_or_else(|| t(locale, "status.unknown_label")),
         t(locale, "status.active_sessions_label"),
-        weixin_sessions
+        format_integer(locale, weixin_sessions)
     ));
     lines.push(format!(
         "{}: {}={}  {}={}  {}={}",
         t(locale, "status.channels_label"),
         t(locale, "status.total_label"),
-        channels.len(),
+        format_integer(locale, channels.len()),
         t(locale, "status.enabled_label"),
-        enabled_channels,
+        format_integer(locale, enabled_channels),
         t(locale, "status.auto_disabled_label"),
-        auto_disabled
+        format_integer(locale, auto_disabled)
     ));
     lines.push(format!(
         "{}: {}={}  {}={}",
         t(locale, "status.routes_label"),
         t(locale, "status.total_label"),
-        routes.len(),
+        format_integer(locale, routes.len()),
         t(locale, "status.enabled_label"),
-        enabled_routes
+        format_integer(locale, enabled_routes)
     ));
     lines.push(format!(
         "{}: {}={}  {}={}",
         t(locale, "status.pricing_label"),
         t(locale, "status.models_label"),
-        pricing.count,
+        format_integer(locale, pricing.count),
         t(locale, "status.last_sync_label"),
         pricing
             .last_sync_ms
@@ -2016,32 +2022,20 @@ fn stats_window_ms(range: CommandStatsRange) -> (i64, Option<i64>) {
     (start_ms, end_ms)
 }
 
-fn format_avg_latency(value: Option<f64>) -> String {
+fn format_avg_latency(locale: AppLocale, value: Option<f64>) -> String {
     value
         .filter(|v| v.is_finite())
-        .map(|v| format!("{v:.0} ms"))
+        .map(|v| format!("{} ms", format_integer(locale, v.round() as i64)))
         .unwrap_or_else(|| "-".to_string())
 }
 
-fn format_cost_usd(value: Option<&str>) -> String {
+fn format_cost_usd(locale: AppLocale, value: Option<&str>) -> String {
     value
         .map(|item| {
-            let normalized = item
-                .parse::<f64>()
+            item.parse::<f64>()
                 .ok()
-                .map(|parsed| {
-                    let mut s = format!("{parsed:.12}");
-                    while s.contains('.') && s.ends_with('0') {
-                        s.pop();
-                    }
-                    if s.ends_with('.') {
-                        s.pop();
-                    }
-                    s
-                })
-                .filter(|parsed| !parsed.is_empty())
-                .unwrap_or_else(|| item.to_string());
-            format!("${normalized}")
+                .map(|parsed| format_currency(locale, parsed, CurrencyCode::Usd, 12))
+                .unwrap_or_else(|| item.to_string())
         })
         .unwrap_or_else(|| "-".to_string())
 }
@@ -2049,7 +2043,7 @@ fn format_cost_usd(value: Option<&str>) -> String {
 fn format_local_timestamp_with_relative(now_ms: i64, at_ms: i64, locale: AppLocale) -> String {
     format!(
         "{} ({})",
-        format_local_timestamp_ms(at_ms),
+        format_local_timestamp_ms(locale, at_ms),
         format_relative_time_label(now_ms, at_ms, locale)
     )
 }
@@ -2064,7 +2058,7 @@ fn format_relative_time_label(now_ms: i64, at_ms: i64, locale: AppLocale) -> Str
         return t_args(
             locale,
             "time.minutes_ago",
-            &args([("minutes", minutes.to_string())]),
+            &args([("minutes", format_integer(locale, minutes))]),
         );
     }
     let hours = minutes / 60;
@@ -2072,28 +2066,14 @@ fn format_relative_time_label(now_ms: i64, at_ms: i64, locale: AppLocale) -> Str
         return t_args(
             locale,
             "time.hours_ago",
-            &args([("hours", hours.to_string())]),
+            &args([("hours", format_integer(locale, hours))]),
         );
     }
     let days = hours / 24;
-    t_args(locale, "time.days_ago", &args([("days", days.to_string())]))
-}
-
-fn format_local_timestamp_ms(ms: i64) -> String {
-    let nanos = i128::from(ms).saturating_mul(1_000_000);
-    let Ok(dt) = time::OffsetDateTime::from_unix_timestamp_nanos(nanos) else {
-        return ms.to_string();
-    };
-    let offset = time::UtcOffset::current_local_offset().unwrap_or(time::UtcOffset::UTC);
-    let local = dt.to_offset(offset);
-    format!(
-        "{:04}-{:02}-{:02} {:02}:{:02}:{:02}",
-        local.year(),
-        u8::from(local.month()),
-        local.day(),
-        local.hour(),
-        local.minute(),
-        local.second()
+    t_args(
+        locale,
+        "time.days_ago",
+        &args([("days", format_integer(locale, days))]),
     )
 }
 
@@ -2371,7 +2351,7 @@ fn render_user_error(err: &anyhow::Error, locale: AppLocale) -> String {
         Some(StorageError::ChatSessionNotFound { session_id }) => t_args(
             locale,
             "error.session_not_found",
-            &args([("session_id", session_id.to_string())]),
+            &args([("session_id", format_integer(locale, session_id))]),
         ),
         Some(StorageError::ChatProjectPathNotFound { path }) => t_args(
             locale,
@@ -3170,13 +3150,13 @@ mod tests {
         assert!(output.contains("用量统计："), "{output}");
         assert!(!output.contains("```text"), "{output}");
         assert!(output.contains("- 请求数: 1"), "{output}");
-        assert!(output.contains("- 预估成本: $0.12"), "{output}");
+        assert!(output.contains("- 预估成本: US$0.12"), "{output}");
         assert!(output.contains("按渠道："), "{output}");
         assert!(output.contains("【OpenAI】"), "{output}");
         assert!(output.contains("1. openai-main"), "{output}");
         assert!(output.contains("请求数: 1 · 成功: 1 · 失败: 0"), "{output}");
         assert!(
-            output.contains("Total Tokens: 15 · 成本: $0.12"),
+            output.contains("Total Tokens: 15 · 成本: US$0.12"),
             "{output}"
         );
         remove_sqlite_artifacts(&db_path);
@@ -3327,7 +3307,7 @@ mod tests {
         let output = adapter.calls().join("\n");
         assert!(output.contains("费用报告："), "{output}");
         assert!(!output.contains("```text"), "{output}");
-        assert!(output.contains("- 预估成本: $0.12"), "{output}");
+        assert!(output.contains("- 预估成本: US$0.12"), "{output}");
         assert!(output.contains("- 价格模型数: 0"), "{output}");
         assert!(
             output.contains("当前没有价格模型数据，预估成本可能为空。"),
@@ -3337,7 +3317,7 @@ mod tests {
         assert!(output.contains("【OpenAI】"), "{output}");
         assert!(output.contains("1. openai-main"), "{output}");
         assert!(
-            output.contains("成本: $0.12 · 请求数: 1 · Total Tokens: 15"),
+            output.contains("成本: US$0.12 · 请求数: 1 · Total Tokens: 15"),
             "{output}"
         );
         remove_sqlite_artifacts(&db_path);

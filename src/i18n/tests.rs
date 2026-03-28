@@ -12,7 +12,9 @@ use super::catalog::{
     ui_zh_catalog_str,
 };
 use super::translator::flatten_leaf_keys;
-use super::{AppLocale, render};
+use super::{
+    AppLocale, CurrencyCode, format_currency, format_integer, format_local_timestamp_ms, render,
+};
 
 fn parse_catalog(raw: &str, label: &str) -> Value {
     parse_catalog_strict(raw, label).unwrap_or_else(|err| panic!("{err}"))
@@ -59,6 +61,43 @@ fn app_locale_normalizes_values() {
     assert_eq!(AppLocale::parse("en"), Some(AppLocale::EnUS));
     assert_eq!(AppLocale::parse("en_US"), Some(AppLocale::EnUS));
     assert_eq!(AppLocale::parse("fr"), None);
+}
+
+#[test]
+fn accept_language_prefers_supported_locale_with_highest_quality() {
+    assert_eq!(
+        AppLocale::parse_accept_language("fr-CA, zh-CN;q=0.8, en-US;q=0.7"),
+        Some(AppLocale::ZhCN)
+    );
+    assert_eq!(
+        AppLocale::parse_accept_language("fr, en-US;q=0.9, zh-CN;q=1.0"),
+        Some(AppLocale::ZhCN)
+    );
+    assert_eq!(
+        AppLocale::parse_accept_language("fr, en-US;q=0.7, zh-CN;q=0"),
+        Some(AppLocale::EnUS)
+    );
+    assert_eq!(AppLocale::parse_accept_language("fr-FR, de-DE"), None);
+}
+
+#[test]
+fn locale_formatters_render_expected_variants() {
+    assert_eq!(format_integer(AppLocale::ZhCN, 1234567), "1,234,567");
+    assert_eq!(format_integer(AppLocale::EnUS, -9876543), "-9,876,543");
+    assert_eq!(
+        format_currency(AppLocale::ZhCN, 1234.5, CurrencyCode::Usd, 6),
+        "US$1,234.5"
+    );
+    assert_eq!(
+        format_currency(AppLocale::EnUS, 1234.5, CurrencyCode::Cny, 6),
+        "CN¥1,234.5"
+    );
+
+    let zh = format_local_timestamp_ms(AppLocale::ZhCN, 0);
+    let en = format_local_timestamp_ms(AppLocale::EnUS, 0);
+    assert!(zh.contains("1970"));
+    assert!(en.contains("1970"));
+    assert_ne!(zh, en);
 }
 
 #[test]
