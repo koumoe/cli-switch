@@ -46,6 +46,10 @@ export type AppSettings = {
   chat_bridge_weixin_enabled: boolean;
   chat_bridge_turn_timeout_minutes: number;
   chat_bridge_allow_new_projects: boolean;
+  system_notifications_enabled: boolean;
+  newapi_low_balance_system_notification_enabled: boolean;
+  newapi_managed_channel_missing_system_notification_enabled: boolean;
+  newapi_managed_channel_multiplier_system_notification_enabled: boolean;
   newapi_managed_channel_missing_prompt_enabled: boolean;
   newapi_managed_channel_sync_multiplier_enabled: boolean;
   newapi_managed_channel_sync_free_multiplier_enabled: boolean;

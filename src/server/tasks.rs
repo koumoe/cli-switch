@@ -771,7 +771,9 @@ pub(crate) async fn newapi_accounts_maintenance_loop(
             };
 
             if let Some(overview) = latest_overview.as_ref() {
-                if account.low_balance_alert_threshold <= 0.0 {
+                if account.low_balance_alert_threshold <= 0.0
+                    || !settings.newapi_low_balance_system_notification_enabled()
+                {
                     if account.low_balance_alert_notified {
                         let _ = storage::set_newapi_account_balance_alert_notified(
                             db_path.clone(),
