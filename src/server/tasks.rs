@@ -18,6 +18,47 @@ use super::state::data_dir_from_db_path;
 
 const RETRY_INTERVAL: Duration = Duration::from_secs(30);
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LowBalanceAlertAction {
+    None,
+    MarkNotifiedSilently,
+    PublishAndMarkNotified,
+    ClearNotified,
+}
+
+fn decide_low_balance_alert_action(
+    threshold: f64,
+    last_balance_amount: Option<f64>,
+    notified: bool,
+    notifications_enabled: bool,
+) -> LowBalanceAlertAction {
+    if threshold <= 0.0 {
+        return if notified {
+            LowBalanceAlertAction::ClearNotified
+        } else {
+            LowBalanceAlertAction::None
+        };
+    }
+
+    let Some(balance_amount) = last_balance_amount else {
+        return LowBalanceAlertAction::None;
+    };
+
+    if balance_amount <= threshold {
+        if notified {
+            LowBalanceAlertAction::None
+        } else if notifications_enabled {
+            LowBalanceAlertAction::PublishAndMarkNotified
+        } else {
+            LowBalanceAlertAction::MarkNotifiedSilently
+        }
+    } else if notified {
+        LowBalanceAlertAction::ClearNotified
+    } else {
+        LowBalanceAlertAction::None
+    }
+}
+
 async fn wait_for_retry_or_shutdown(notify: &mut watch::Receiver<u64>) -> bool {
     !scheduler::wait_for_trigger(&IntervalTrigger::new(RETRY_INTERVAL), notify)
         .await
@@ -771,47 +812,55 @@ pub(crate) async fn newapi_accounts_maintenance_loop(
             };
 
             if let Some(overview) = latest_overview.as_ref() {
-                if account.low_balance_alert_threshold <= 0.0
-                    || !settings.newapi_low_balance_system_notification_enabled()
-                {
-                    if account.low_balance_alert_notified {
-                        let _ = storage::set_newapi_account_balance_alert_notified(
+                match decide_low_balance_alert_action(
+                    account.low_balance_alert_threshold,
+                    overview.last_balance_amount,
+                    account.low_balance_alert_notified,
+                    settings.newapi_low_balance_system_notification_enabled(),
+                ) {
+                    LowBalanceAlertAction::None => {}
+                    LowBalanceAlertAction::MarkNotifiedSilently => {
+                        if let Err(err) = storage::set_newapi_account_balance_alert_notified(
                             db_path.clone(),
                             account.id.clone(),
-                            false,
+                            true,
                             None,
                         )
-                        .await;
-                    }
-                } else if let Some(balance_amount) = overview.last_balance_amount {
-                    if balance_amount <= account.low_balance_alert_threshold {
-                        if !account.low_balance_alert_notified {
-                            let balance_text = newapi::format_balance_amount(
-                                balance_amount,
-                                &overview.quota_display_type,
-                                overview.custom_currency_symbol.as_deref(),
-                            );
-                            events::publish(AppEvent::NewApiLowBalanceAlert(
-                                NewApiLowBalanceAlert {
-                                    account_id: account.id.clone(),
-                                    base_url: account.base_url.clone(),
-                                    balance_text,
-                                },
-                            ));
-                            if let Err(err) = storage::set_newapi_account_balance_alert_notified(
-                                db_path.clone(),
-                                account.id.clone(),
-                                true,
-                                Some(storage::now_ms()),
-                            )
-                            .await
-                            {
-                                tracing::warn!(account_id = %account.id, err = %err, "mark newapi low balance alert notified failed");
-                            } else {
-                                account.low_balance_alert_notified = true;
-                            }
+                        .await
+                        {
+                            tracing::warn!(account_id = %account.id, err = %err, "mark newapi low balance alert notified silently failed");
+                        } else {
+                            account.low_balance_alert_notified = true;
                         }
-                    } else if account.low_balance_alert_notified {
+                    }
+                    LowBalanceAlertAction::PublishAndMarkNotified => {
+                        let Some(balance_amount) = overview.last_balance_amount else {
+                            continue;
+                        };
+                        let balance_text = newapi::format_balance_amount(
+                            balance_amount,
+                            &overview.quota_display_type,
+                            overview.custom_currency_symbol.as_deref(),
+                        );
+                        events::publish(AppEvent::NewApiLowBalanceAlert(NewApiLowBalanceAlert {
+                            account_id: account.id.clone(),
+                            base_url: account.base_url.clone(),
+                            balance_text,
+                        }));
+                        if let Err(err) = storage::set_newapi_account_balance_alert_notified(
+                            db_path.clone(),
+                            account.id.clone(),
+                            true,
+                            Some(storage::now_ms()),
+                        )
+                        .await
+                        {
+                            tracing::warn!(account_id = %account.id, err = %err, "mark newapi low balance alert notified failed");
+                        } else {
+                            account.low_balance_alert_notified = true;
+                        }
+                    }
+                    LowBalanceAlertAction::ClearNotified => {
                         if let Err(err) = storage::set_newapi_account_balance_alert_notified(
                             db_path.clone(),
                             account.id.clone(),
@@ -946,5 +995,42 @@ pub(crate) async fn newapi_accounts_maintenance_loop(
         if !wait_for_interval_or_shutdown(interval, &mut notify).await {
             break;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{LowBalanceAlertAction, decide_low_balance_alert_action};
+
+    #[test]
+    fn low_balance_alert_is_silently_consumed_when_notifications_are_disabled() {
+        assert_eq!(
+            decide_low_balance_alert_action(10.0, Some(8.0), false, false),
+            LowBalanceAlertAction::MarkNotifiedSilently
+        );
+    }
+
+    #[test]
+    fn low_balance_alert_is_published_when_notifications_are_enabled() {
+        assert_eq!(
+            decide_low_balance_alert_action(10.0, Some(8.0), false, true),
+            LowBalanceAlertAction::PublishAndMarkNotified
+        );
+    }
+
+    #[test]
+    fn low_balance_alert_is_cleared_after_balance_recovers_even_if_notifications_are_disabled() {
+        assert_eq!(
+            decide_low_balance_alert_action(10.0, Some(12.0), true, false),
+            LowBalanceAlertAction::ClearNotified
+        );
+    }
+
+    #[test]
+    fn disabled_threshold_clears_existing_low_balance_state() {
+        assert_eq!(
+            decide_low_balance_alert_action(0.0, Some(8.0), true, true),
+            LowBalanceAlertAction::ClearNotified
+        );
     }
 }

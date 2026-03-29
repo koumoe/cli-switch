@@ -56,7 +56,7 @@ pub struct NewApiManagedChannelMultiplierPrompt {
     pub remote_multiplier: f64,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct SystemNotificationSettings {
     pub enabled: bool,
     pub newapi_low_balance_enabled: bool,
@@ -80,18 +80,6 @@ impl SystemNotificationSettings {
             newapi_managed_channel_multiplier_enabled: settings
                 .newapi_managed_channel_multiplier_system_notification_enabled,
         }
-    }
-
-    pub fn low_balance_enabled(&self) -> bool {
-        self.enabled && self.newapi_low_balance_enabled
-    }
-
-    pub fn managed_channel_missing_enabled(&self) -> bool {
-        self.enabled && self.newapi_managed_channel_missing_enabled
-    }
-
-    pub fn managed_channel_multiplier_enabled(&self) -> bool {
-        self.enabled && self.newapi_managed_channel_multiplier_enabled
     }
 }
 

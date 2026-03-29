@@ -663,7 +663,9 @@ fn handle_user_event(
                 state.system_notifications = next.clone();
             }
             if let AppEvent::NewApiLowBalanceAlert(ref alert) = ev {
-                if state.system_notifications.low_balance_enabled() {
+                if state.system_notifications.enabled
+                    && state.system_notifications.newapi_low_balance_enabled
+                {
                     let title = low_balance_notification_title(state.locale);
                     let body = low_balance_notification_body(state.locale, alert);
                     if let Err(err) = show_system_notification(&title, &body) {
@@ -672,7 +674,11 @@ fn handle_user_event(
                 }
             }
             if let AppEvent::NewApiManagedChannelMissingPrompt(ref prompt) = ev {
-                if state.system_notifications.managed_channel_missing_enabled() {
+                if state.system_notifications.enabled
+                    && state
+                        .system_notifications
+                        .newapi_managed_channel_missing_enabled
+                {
                     let title = managed_channel_notification_title(state.locale);
                     let body = managed_channel_missing_body(state.locale, prompt);
                     if let Err(err) = show_system_notification(&title, &body) {
@@ -682,9 +688,10 @@ fn handle_user_event(
                 apply_window_visible(window, state, tray_show, tray_hide, true, true);
             }
             if let AppEvent::NewApiManagedChannelMultiplierPrompt(ref prompt) = ev {
-                if state
-                    .system_notifications
-                    .managed_channel_multiplier_enabled()
+                if state.system_notifications.enabled
+                    && state
+                        .system_notifications
+                        .newapi_managed_channel_multiplier_enabled
                 {
                     let title = managed_channel_notification_title(state.locale);
                     let body = managed_channel_multiplier_body(state.locale, prompt);

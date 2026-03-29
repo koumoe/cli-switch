@@ -62,6 +62,8 @@ pub(in crate::server) async fn update_settings(
 ) -> Result<impl IntoResponse, ApiError> {
     let autostart_enabled_updated = input.auto_start_enabled.is_some();
     let autostart_mode_updated = input.auto_start_launch_mode.is_some();
+    let prev_notification_settings =
+        SystemNotificationSettings::from_settings(state.settings_snapshot().as_ref());
 
     let changed: Vec<&'static str> = [
         (
@@ -344,9 +346,12 @@ pub(in crate::server) async fn update_settings(
         tracing::info!(changed = ?changed, "settings updated");
     }
 
-    events::publish(AppEvent::SystemNotificationSettingsChanged(
-        SystemNotificationSettings::from_settings(&settings),
-    ));
+    let next_notification_settings = SystemNotificationSettings::from_settings(&settings);
+    if prev_notification_settings != next_notification_settings {
+        events::publish(AppEvent::SystemNotificationSettingsChanged(
+            next_notification_settings,
+        ));
+    }
     let _ = state.settings_cache.send(Arc::new(settings.clone()));
 
     let next = *state.settings_notify.borrow() + 1;
