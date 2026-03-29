@@ -1,3 +1,8 @@
+## [0.55.0](https://github.com/koumoe/cli-switch/compare/v0.54.0...v0.55.0) (2026-03-29)
+
+### Features
+
+* split system notifications settings ([6a8fd6e](https://github.com/koumoe/cli-switch/commit/6a8fd6ea8eb5e743f8018a07cf8dcfaf7b1d5407))
 ## [0.54.0](https://github.com/koumoe/cli-switch/compare/v0.53.0...v0.54.0) (2026-03-29)
 
 ### Features
