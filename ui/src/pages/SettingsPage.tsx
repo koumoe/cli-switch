@@ -1534,6 +1534,10 @@ export function SettingsPage() {
             <Shield className="h-3.5 w-3.5" />
             {t("settings.tabs.channel")}
           </TabsTrigger>
+          <TabsTrigger value="notifications" className="gap-1.5">
+            <Bell className="h-3.5 w-3.5" />
+            {t("settings.tabs.notifications")}
+          </TabsTrigger>
           <TabsTrigger value="application" className="gap-1.5">
             <Settings2 className="h-3.5 w-3.5" />
             {t("settings.tabs.application")}
@@ -1814,122 +1818,6 @@ export function SettingsPage() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Bell className="h-4 w-4" />
-                {t("settings.systemNotifications.title")}
-              </CardTitle>
-              <CardDescription>{t("settings.systemNotifications.subtitle")}</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <div className="font-medium text-sm">{t("settings.systemNotifications.enable")}</div>
-                  <div className="text-xs text-muted-foreground">{t("settings.systemNotifications.enableHint")}</div>
-                </div>
-                <Switch
-                  checked={appSettings?.system_notifications_enabled ?? true}
-                  onCheckedChange={(v) => {
-                    setAppSettings((prev) => (
-                      prev ? { ...prev, system_notifications_enabled: v } : prev
-                    ));
-                  }}
-                  disabled={!appSettings || systemNotificationSaving}
-                />
-              </div>
-
-              {appSettings?.system_notifications_enabled ? (
-                <>
-                  <div className="flex items-center justify-between gap-4">
-                    <div>
-                      <div className="font-medium text-sm">{t("settings.systemNotifications.lowBalance")}</div>
-                      <div className="text-xs text-muted-foreground">{t("settings.systemNotifications.lowBalanceHint")}</div>
-                    </div>
-                    <Switch
-                      checked={appSettings?.newapi_low_balance_system_notification_enabled ?? true}
-                      onCheckedChange={(v) => {
-                        setAppSettings((prev) => (
-                          prev ? { ...prev, newapi_low_balance_system_notification_enabled: v } : prev
-                        ));
-                      }}
-                      disabled={!appSettings || systemNotificationSaving}
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between gap-4">
-                    <div>
-                      <div className="font-medium text-sm">{t("settings.systemNotifications.managedChannelMissing")}</div>
-                      <div className="text-xs text-muted-foreground">{t("settings.systemNotifications.managedChannelMissingHint")}</div>
-                    </div>
-                    <Switch
-                      checked={appSettings?.newapi_managed_channel_missing_system_notification_enabled ?? true}
-                      onCheckedChange={(v) => {
-                        setAppSettings((prev) => (
-                          prev
-                            ? { ...prev, newapi_managed_channel_missing_system_notification_enabled: v }
-                            : prev
-                        ));
-                      }}
-                      disabled={!appSettings || systemNotificationSaving}
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between gap-4">
-                    <div>
-                      <div className="font-medium text-sm">{t("settings.systemNotifications.managedChannelMultiplier")}</div>
-                      <div className="text-xs text-muted-foreground">{t("settings.systemNotifications.managedChannelMultiplierHint")}</div>
-                    </div>
-                    <Switch
-                      checked={appSettings?.newapi_managed_channel_multiplier_system_notification_enabled ?? true}
-                      onCheckedChange={(v) => {
-                        setAppSettings((prev) => (
-                          prev
-                            ? {
-                                ...prev,
-                                newapi_managed_channel_multiplier_system_notification_enabled: v,
-                              }
-                            : prev
-                        ));
-                      }}
-                      disabled={!appSettings || systemNotificationSaving}
-                    />
-                  </div>
-                </>
-              ) : null}
-
-              <div className="flex justify-end">
-                <Button
-                  size="sm"
-                  onClick={async () => {
-                    if (!appSettings) return;
-                    setSystemNotificationSaving(true);
-                    try {
-                      const next = await updateSettings({
-                        system_notifications_enabled: appSettings.system_notifications_enabled,
-                        newapi_low_balance_system_notification_enabled:
-                          appSettings.newapi_low_balance_system_notification_enabled,
-                        newapi_managed_channel_missing_system_notification_enabled:
-                          appSettings.newapi_managed_channel_missing_system_notification_enabled,
-                        newapi_managed_channel_multiplier_system_notification_enabled:
-                          appSettings.newapi_managed_channel_multiplier_system_notification_enabled,
-                      });
-                      setAppSettings(next);
-                      toast.success(t("settings.systemNotifications.saved"));
-                    } catch (e) {
-                      toast.error(t("settings.systemNotifications.saveFail"), { description: humanizeApiError(e, t) });
-                    } finally {
-                      setSystemNotificationSaving(false);
-                    }
-                  }}
-                  disabled={!appSettings || systemNotificationSaving}
-                >
-                  {t("common.save")}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
                 <Bot className="h-4 w-4" />
                 {t("settings.newApiManaged.title")}
               </CardTitle>
@@ -2137,6 +2025,157 @@ export function SettingsPage() {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* 系统通知标签页 */}
+        <TabsContent value="notifications" className="mt-2 space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Bell className="h-4 w-4" />
+                {t("settings.systemNotifications.title")}
+              </CardTitle>
+              <CardDescription>{t("settings.systemNotifications.subtitle")}</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <div className="font-medium text-sm">{t("settings.systemNotifications.enable")}</div>
+                  <div className="text-xs text-muted-foreground">{t("settings.systemNotifications.enableHint")}</div>
+                </div>
+                <Switch
+                  checked={appSettings?.system_notifications_enabled ?? true}
+                  onCheckedChange={(v) => {
+                    setAppSettings((prev) => (
+                      prev ? { ...prev, system_notifications_enabled: v } : prev
+                    ));
+                  }}
+                  disabled={!appSettings || systemNotificationSaving}
+                />
+              </div>
+
+              <div className="flex justify-end">
+                <Button
+                  size="sm"
+                  onClick={async () => {
+                    if (!appSettings) return;
+                    setSystemNotificationSaving(true);
+                    try {
+                      const next = await updateSettings({
+                        system_notifications_enabled: appSettings.system_notifications_enabled,
+                      });
+                      setAppSettings(next);
+                      toast.success(t("settings.systemNotifications.saved"));
+                    } catch (e) {
+                      toast.error(t("settings.systemNotifications.saveFail"), { description: humanizeApiError(e, t) });
+                    } finally {
+                      setSystemNotificationSaving(false);
+                    }
+                  }}
+                  disabled={!appSettings || systemNotificationSaving}
+                >
+                  {t("common.save")}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {appSettings?.system_notifications_enabled ? (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Bot className="h-4 w-4" />
+                  {t("settings.newApiManaged.title")}
+                </CardTitle>
+                <CardDescription>{t("settings.systemNotifications.newApiSubtitle")}</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <div className="font-medium text-sm">{t("settings.systemNotifications.lowBalance")}</div>
+                    <div className="text-xs text-muted-foreground">{t("settings.systemNotifications.lowBalanceHint")}</div>
+                  </div>
+                  <Switch
+                    checked={appSettings?.newapi_low_balance_system_notification_enabled ?? true}
+                    onCheckedChange={(v) => {
+                      setAppSettings((prev) => (
+                        prev ? { ...prev, newapi_low_balance_system_notification_enabled: v } : prev
+                      ));
+                    }}
+                    disabled={!appSettings || systemNotificationSaving}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <div className="font-medium text-sm">{t("settings.systemNotifications.managedChannelMissing")}</div>
+                    <div className="text-xs text-muted-foreground">{t("settings.systemNotifications.managedChannelMissingHint")}</div>
+                  </div>
+                  <Switch
+                    checked={appSettings?.newapi_managed_channel_missing_system_notification_enabled ?? true}
+                    onCheckedChange={(v) => {
+                      setAppSettings((prev) => (
+                        prev
+                          ? { ...prev, newapi_managed_channel_missing_system_notification_enabled: v }
+                          : prev
+                      ));
+                    }}
+                    disabled={!appSettings || systemNotificationSaving}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <div className="font-medium text-sm">{t("settings.systemNotifications.managedChannelMultiplier")}</div>
+                    <div className="text-xs text-muted-foreground">{t("settings.systemNotifications.managedChannelMultiplierHint")}</div>
+                  </div>
+                  <Switch
+                    checked={appSettings?.newapi_managed_channel_multiplier_system_notification_enabled ?? true}
+                    onCheckedChange={(v) => {
+                      setAppSettings((prev) => (
+                        prev
+                          ? {
+                              ...prev,
+                              newapi_managed_channel_multiplier_system_notification_enabled: v,
+                            }
+                          : prev
+                      ));
+                    }}
+                    disabled={!appSettings || systemNotificationSaving}
+                  />
+                </div>
+
+                <div className="flex justify-end">
+                  <Button
+                    size="sm"
+                    onClick={async () => {
+                      if (!appSettings) return;
+                      setSystemNotificationSaving(true);
+                      try {
+                        const next = await updateSettings({
+                          newapi_low_balance_system_notification_enabled:
+                            appSettings.newapi_low_balance_system_notification_enabled,
+                          newapi_managed_channel_missing_system_notification_enabled:
+                            appSettings.newapi_managed_channel_missing_system_notification_enabled,
+                          newapi_managed_channel_multiplier_system_notification_enabled:
+                            appSettings.newapi_managed_channel_multiplier_system_notification_enabled,
+                        });
+                        setAppSettings(next);
+                        toast.success(t("settings.systemNotifications.saved"));
+                      } catch (e) {
+                        toast.error(t("settings.systemNotifications.saveFail"), { description: humanizeApiError(e, t) });
+                      } finally {
+                        setSystemNotificationSaving(false);
+                      }
+                    }}
+                    disabled={!appSettings || systemNotificationSaving}
+                  >
+                    {t("common.save")}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ) : null}
         </TabsContent>
 
         {/* 应用标签页 */}
