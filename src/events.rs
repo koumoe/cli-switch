@@ -3,6 +3,7 @@ use std::sync::{Mutex, OnceLock};
 use serde::Serialize;
 use tokio::sync::broadcast;
 
+use crate::storage;
 use crate::update;
 
 #[derive(Debug, Clone, Serialize)]
@@ -55,12 +56,40 @@ pub struct NewApiManagedChannelMultiplierPrompt {
     pub remote_multiplier: f64,
 }
 
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct SystemNotificationSettings {
+    pub enabled: bool,
+    pub newapi_low_balance_enabled: bool,
+    pub newapi_managed_channel_missing_enabled: bool,
+    pub newapi_managed_channel_multiplier_enabled: bool,
+}
+
+impl Default for SystemNotificationSettings {
+    fn default() -> Self {
+        Self::from_settings(&storage::AppSettings::default())
+    }
+}
+
+impl SystemNotificationSettings {
+    pub fn from_settings(settings: &storage::AppSettings) -> Self {
+        Self {
+            enabled: settings.system_notifications_enabled,
+            newapi_low_balance_enabled: settings.newapi_low_balance_system_notification_enabled,
+            newapi_managed_channel_missing_enabled: settings
+                .newapi_managed_channel_missing_system_notification_enabled,
+            newapi_managed_channel_multiplier_enabled: settings
+                .newapi_managed_channel_multiplier_system_notification_enabled,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum AppEvent {
     UpdateStatus(update::UpdateStatus),
     UsageChanged { at_ms: i64 },
     ChannelsChanged { at_ms: i64 },
     NpmEnvInstallProgress(NpmEnvInstallProgress),
+    SystemNotificationSettingsChanged(SystemNotificationSettings),
     NewApiLowBalanceAlert(NewApiLowBalanceAlert),
     NewApiManagedChannelCreated(NewApiManagedChannelCreated),
     NewApiManagedChannelMissingPrompt(NewApiManagedChannelMissingPrompt),

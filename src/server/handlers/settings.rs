@@ -4,6 +4,7 @@ use axum::response::IntoResponse;
 use serde::Deserialize;
 use std::sync::Arc;
 
+use crate::events::{self, AppEvent, SystemNotificationSettings};
 use crate::i18n::AppLocale;
 use crate::server::AppState;
 use crate::server::error::ApiError;
@@ -46,6 +47,10 @@ pub(in crate::server) struct UpdateSettingsInput {
     chat_bridge_weixin_enabled: Option<bool>,
     chat_bridge_turn_timeout_minutes: Option<i64>,
     chat_bridge_allow_new_projects: Option<bool>,
+    system_notifications_enabled: Option<bool>,
+    newapi_low_balance_system_notification_enabled: Option<bool>,
+    newapi_managed_channel_missing_system_notification_enabled: Option<bool>,
+    newapi_managed_channel_multiplier_system_notification_enabled: Option<bool>,
     newapi_managed_channel_missing_prompt_enabled: Option<bool>,
     newapi_managed_channel_sync_multiplier_enabled: Option<bool>,
     newapi_managed_channel_sync_free_multiplier_enabled: Option<bool>,
@@ -57,6 +62,8 @@ pub(in crate::server) async fn update_settings(
 ) -> Result<impl IntoResponse, ApiError> {
     let autostart_enabled_updated = input.auto_start_enabled.is_some();
     let autostart_mode_updated = input.auto_start_launch_mode.is_some();
+    let prev_notification_settings =
+        SystemNotificationSettings::from_settings(state.settings_snapshot().as_ref());
 
     let changed: Vec<&'static str> = [
         (
@@ -145,6 +152,28 @@ pub(in crate::server) async fn update_settings(
         (
             "chat_bridge_allow_new_projects",
             input.chat_bridge_allow_new_projects.is_some(),
+        ),
+        (
+            "system_notifications_enabled",
+            input.system_notifications_enabled.is_some(),
+        ),
+        (
+            "newapi_low_balance_system_notification_enabled",
+            input
+                .newapi_low_balance_system_notification_enabled
+                .is_some(),
+        ),
+        (
+            "newapi_managed_channel_missing_system_notification_enabled",
+            input
+                .newapi_managed_channel_missing_system_notification_enabled
+                .is_some(),
+        ),
+        (
+            "newapi_managed_channel_multiplier_system_notification_enabled",
+            input
+                .newapi_managed_channel_multiplier_system_notification_enabled
+                .is_some(),
         ),
         (
             "newapi_managed_channel_missing_prompt_enabled",
@@ -270,6 +299,13 @@ pub(in crate::server) async fn update_settings(
             chat_bridge_weixin_enabled: input.chat_bridge_weixin_enabled,
             chat_bridge_turn_timeout_minutes: input.chat_bridge_turn_timeout_minutes,
             chat_bridge_allow_new_projects: input.chat_bridge_allow_new_projects,
+            system_notifications_enabled: input.system_notifications_enabled,
+            newapi_low_balance_system_notification_enabled: input
+                .newapi_low_balance_system_notification_enabled,
+            newapi_managed_channel_missing_system_notification_enabled: input
+                .newapi_managed_channel_missing_system_notification_enabled,
+            newapi_managed_channel_multiplier_system_notification_enabled: input
+                .newapi_managed_channel_multiplier_system_notification_enabled,
             newapi_managed_channel_missing_prompt_enabled: input
                 .newapi_managed_channel_missing_prompt_enabled,
             newapi_managed_channel_sync_multiplier_enabled: input
@@ -310,6 +346,12 @@ pub(in crate::server) async fn update_settings(
         tracing::info!(changed = ?changed, "settings updated");
     }
 
+    let next_notification_settings = SystemNotificationSettings::from_settings(&settings);
+    if prev_notification_settings != next_notification_settings {
+        events::publish(AppEvent::SystemNotificationSettingsChanged(
+            next_notification_settings,
+        ));
+    }
     let _ = state.settings_cache.send(Arc::new(settings.clone()));
 
     let next = *state.settings_notify.borrow() + 1;

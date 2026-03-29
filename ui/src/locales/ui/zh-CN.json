@@ -297,7 +297,7 @@
       "checkinMode": "签到模式",
       "autoCheckinTime": "自动签到时间",
       "lowBalanceThreshold": "低余额告警金额",
-      "lowBalanceHint": "0 表示关闭，>0 时低于阈值触发系统通知"
+      "lowBalanceHint": "0 表示关闭；大于 0 时低于阈值触发低余额提醒，是否发送系统通知取决于设置中的系统通知开关"
     },
     "managed": {
       "title": "创建 key 与渠道",
@@ -544,13 +544,27 @@
       "saved": "设置已保存",
       "saveFail": "保存失败"
     },
+    "systemNotifications": {
+      "title": "系统通知",
+      "subtitle": "统一管理系统级推送内容",
+      "enable": "启用系统通知",
+      "enableHint": "关闭后不再发送任何系统级通知",
+      "lowBalance": "低余额提醒",
+      "lowBalanceHint": "当账号余额低于设定阈值时发送系统通知",
+      "managedChannelMissing": "托管渠道缺失提醒",
+      "managedChannelMissingHint": "当远端 token 或分组缺失时发送系统通知",
+      "managedChannelMultiplier": "托管渠道倍率差异提醒",
+      "managedChannelMultiplierHint": "当检测到本地与远端倍率不一致时发送系统通知",
+      "saved": "系统通知设置已保存",
+      "saveFail": "保存系统通知设置失败"
+    },
     "newApiManaged": {
       "title": "New API 托管渠道",
       "subtitle": "管理托管渠道的变更提醒与倍率同步确认",
       "missingPrompt": "渠道变更通知",
-      "missingPromptHint": "开启后，新增托管渠道会发送系统通知；检测到远端 token 或分组未在列表中找到时，会发送系统通知、打开窗口并弹框提示禁用或删除",
+      "missingPromptHint": "开启后，检测到远端 token 或分组未在列表中找到时，会打开窗口并弹框提示禁用或删除；若系统通知已开启，也会发送系统通知",
       "syncMultiplier": "同步渠道倍率",
-      "syncMultiplierHint": "开启后每 30 分钟检查远端分组倍率；发现差异时会先发送系统通知，若窗口已打开则直接弹窗，未打开则在你主动打开窗口后询问是否修改本地真实倍率",
+      "syncMultiplierHint": "开启后每 30 分钟检查远端分组倍率；发现差异时，若窗口已打开则直接弹窗，未打开则在你主动打开窗口后询问是否修改本地真实倍率；若系统通知已开启，也会发送系统通知",
       "ignoreFreeMultiplier": "忽略免费倍率",
       "ignoreFreeMultiplierHint": "开启后，本地真实倍率为 0 的渠道不受远端倍率同步管理",
       "saved": "New API 托管渠道设置已保存",

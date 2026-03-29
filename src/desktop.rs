@@ -62,6 +62,7 @@ struct DesktopState {
     close_request_inflight: bool,
     close_prompt_open: bool,
     locale: AppLocale,
+    system_notifications: cliswitch::events::SystemNotificationSettings,
     ui_ready: bool,
     pending_managed_channel_missing: Vec<cliswitch::events::NewApiManagedChannelMissingPrompt>,
     pending_managed_channel_multiplier:
@@ -658,26 +659,45 @@ fn handle_user_event(
             }
         }
         UserEvent::BackendEvent(ev) => {
+            if let AppEvent::SystemNotificationSettingsChanged(ref next) = ev {
+                state.system_notifications = next.clone();
+            }
             if let AppEvent::NewApiLowBalanceAlert(ref alert) = ev {
-                let title = low_balance_notification_title(state.locale);
-                let body = low_balance_notification_body(state.locale, alert);
-                if let Err(err) = show_system_notification(&title, &body) {
-                    tracing::warn!(err = %err, account_id = %alert.account_id, "show low balance system notification failed");
+                if state.system_notifications.enabled
+                    && state.system_notifications.newapi_low_balance_enabled
+                {
+                    let title = low_balance_notification_title(state.locale);
+                    let body = low_balance_notification_body(state.locale, alert);
+                    if let Err(err) = show_system_notification(&title, &body) {
+                        tracing::warn!(err = %err, account_id = %alert.account_id, "show low balance system notification failed");
+                    }
                 }
             }
             if let AppEvent::NewApiManagedChannelMissingPrompt(ref prompt) = ev {
-                let title = managed_channel_notification_title(state.locale);
-                let body = managed_channel_missing_body(state.locale, prompt);
-                if let Err(err) = show_system_notification(&title, &body) {
-                    tracing::warn!(err = %err, channel_id = %prompt.channel_id, "show managed channel missing system notification failed");
+                if state.system_notifications.enabled
+                    && state
+                        .system_notifications
+                        .newapi_managed_channel_missing_enabled
+                {
+                    let title = managed_channel_notification_title(state.locale);
+                    let body = managed_channel_missing_body(state.locale, prompt);
+                    if let Err(err) = show_system_notification(&title, &body) {
+                        tracing::warn!(err = %err, channel_id = %prompt.channel_id, "show managed channel missing system notification failed");
+                    }
                 }
                 apply_window_visible(window, state, tray_show, tray_hide, true, true);
             }
             if let AppEvent::NewApiManagedChannelMultiplierPrompt(ref prompt) = ev {
-                let title = managed_channel_notification_title(state.locale);
-                let body = managed_channel_multiplier_body(state.locale, prompt);
-                if let Err(err) = show_system_notification(&title, &body) {
-                    tracing::warn!(err = %err, channel_id = %prompt.channel_id, "show managed channel multiplier system notification failed");
+                if state.system_notifications.enabled
+                    && state
+                        .system_notifications
+                        .newapi_managed_channel_multiplier_enabled
+                {
+                    let title = managed_channel_notification_title(state.locale);
+                    let body = managed_channel_multiplier_body(state.locale, prompt);
+                    if let Err(err) = show_system_notification(&title, &body) {
+                        tracing::warn!(err = %err, channel_id = %prompt.channel_id, "show managed channel multiplier system notification failed");
+                    }
                 }
             }
 
@@ -720,6 +740,7 @@ fn handle_user_event(
                 AppEvent::NpmEnvInstallProgress(progress) => {
                     dispatch_custom_event(webview, "cliswitch-npm-env-install-progress", &progress);
                 }
+                AppEvent::SystemNotificationSettingsChanged(_) => {}
                 AppEvent::NewApiLowBalanceAlert(alert) => {
                     dispatch_custom_event(webview, "cliswitch-newapi-low-balance-alert", &alert);
                 }
@@ -966,6 +987,10 @@ pub async fn run(
         close_request_inflight: false,
         close_prompt_open: false,
         locale: initial_locale,
+        system_notifications: settings
+            .as_ref()
+            .map(cliswitch::events::SystemNotificationSettings::from_settings)
+            .unwrap_or_default(),
         ui_ready: false,
         pending_managed_channel_missing: Vec::new(),
         pending_managed_channel_multiplier: Vec::new(),

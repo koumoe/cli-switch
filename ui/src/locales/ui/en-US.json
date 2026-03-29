@@ -297,7 +297,7 @@
       "checkinMode": "Check-in mode",
       "autoCheckinTime": "Auto check-in time",
       "lowBalanceThreshold": "Low-balance alert threshold",
-      "lowBalanceHint": "0 disables alerts; >0 sends system notifications below threshold"
+      "lowBalanceHint": "0 disables alerts; above 0 triggers low-balance alerts below the threshold, and whether a system notification is sent depends on Settings"
     },
     "managed": {
       "title": "Create Key and Channel",
@@ -544,13 +544,27 @@
       "saved": "Saved",
       "saveFail": "Save failed"
     },
+    "systemNotifications": {
+      "title": "System Notifications",
+      "subtitle": "Manage all system-level alerts in one place",
+      "enable": "Enable system notifications",
+      "enableHint": "When disabled, no system-level notifications will be sent",
+      "lowBalance": "Low-balance alerts",
+      "lowBalanceHint": "Send a system notification when an account balance falls below its threshold",
+      "managedChannelMissing": "Managed channel missing alerts",
+      "managedChannelMissingHint": "Send a system notification when a remote token or group is missing",
+      "managedChannelMultiplier": "Managed channel multiplier mismatch alerts",
+      "managedChannelMultiplierHint": "Send a system notification when local and remote multipliers differ",
+      "saved": "System notification settings saved",
+      "saveFail": "Failed to save system notification settings"
+    },
     "newApiManaged": {
       "title": "New API Managed Channels",
       "subtitle": "Control managed channel change alerts and multiplier sync confirmations",
       "missingPrompt": "Managed channel change notifications",
-      "missingPromptHint": "When enabled, newly added managed channels send system notifications; if a remote token or group is not found in the latest list, send a system notification, open the window, and show a disable/delete prompt",
+      "missingPromptHint": "When enabled, if a remote token or group is not found in the latest list, open the window and show a disable/delete prompt; if system notifications are enabled, also send a system notification",
       "syncMultiplier": "Sync channel multipliers",
-      "syncMultiplierHint": "When enabled, check remote group ratios every 30 minutes; when a mismatch is found, send a system notification, ask immediately if the window is already open, or wait until you open the window to ask whether to update the local real multiplier",
+      "syncMultiplierHint": "When enabled, check remote group ratios every 30 minutes; when a mismatch is found, ask immediately if the window is already open, or wait until you open the window to ask whether to update the local real multiplier; if system notifications are enabled, also send a system notification",
       "ignoreFreeMultiplier": "Ignore free multipliers",
       "ignoreFreeMultiplierHint": "When enabled, channels with local real multiplier 0 are not managed by remote multiplier sync",
       "saved": "New API managed channel settings saved",

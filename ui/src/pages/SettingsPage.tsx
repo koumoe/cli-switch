@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Sun, Moon, Monitor, FolderOpen, Info, Database, Languages, DollarSign, RefreshCw, Shield, Power, ScrollText, Palette, Settings2, Cpu, Bot, Trash2 } from "lucide-react";
+import { Sun, Moon, Monitor, FolderOpen, Info, Database, Languages, DollarSign, RefreshCw, Shield, Power, ScrollText, Palette, Settings2, Cpu, Bot, Trash2, Bell } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import type { DateRange } from "react-day-picker";
@@ -105,6 +105,7 @@ export function SettingsPage() {
   });
   const [saving, setSaving] = useState(false);
   const [autoDisableSaving, setAutoDisableSaving] = useState(false);
+  const [systemNotificationSaving, setSystemNotificationSaving] = useState(false);
   const [newApiManagedSaving, setNewApiManagedSaving] = useState(false);
   const [closeSaving, setCloseSaving] = useState(false);
   const [autoStartSaving, setAutoStartSaving] = useState(false);
@@ -1803,6 +1804,122 @@ export function SettingsPage() {
                     }
                   }}
                   disabled={!appSettings || autoDisableSaving}
+                >
+                  {t("common.save")}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Bell className="h-4 w-4" />
+                {t("settings.systemNotifications.title")}
+              </CardTitle>
+              <CardDescription>{t("settings.systemNotifications.subtitle")}</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <div className="font-medium text-sm">{t("settings.systemNotifications.enable")}</div>
+                  <div className="text-xs text-muted-foreground">{t("settings.systemNotifications.enableHint")}</div>
+                </div>
+                <Switch
+                  checked={appSettings?.system_notifications_enabled ?? true}
+                  onCheckedChange={(v) => {
+                    setAppSettings((prev) => (
+                      prev ? { ...prev, system_notifications_enabled: v } : prev
+                    ));
+                  }}
+                  disabled={!appSettings || systemNotificationSaving}
+                />
+              </div>
+
+              {appSettings?.system_notifications_enabled ? (
+                <>
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <div className="font-medium text-sm">{t("settings.systemNotifications.lowBalance")}</div>
+                      <div className="text-xs text-muted-foreground">{t("settings.systemNotifications.lowBalanceHint")}</div>
+                    </div>
+                    <Switch
+                      checked={appSettings?.newapi_low_balance_system_notification_enabled ?? true}
+                      onCheckedChange={(v) => {
+                        setAppSettings((prev) => (
+                          prev ? { ...prev, newapi_low_balance_system_notification_enabled: v } : prev
+                        ));
+                      }}
+                      disabled={!appSettings || systemNotificationSaving}
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <div className="font-medium text-sm">{t("settings.systemNotifications.managedChannelMissing")}</div>
+                      <div className="text-xs text-muted-foreground">{t("settings.systemNotifications.managedChannelMissingHint")}</div>
+                    </div>
+                    <Switch
+                      checked={appSettings?.newapi_managed_channel_missing_system_notification_enabled ?? true}
+                      onCheckedChange={(v) => {
+                        setAppSettings((prev) => (
+                          prev
+                            ? { ...prev, newapi_managed_channel_missing_system_notification_enabled: v }
+                            : prev
+                        ));
+                      }}
+                      disabled={!appSettings || systemNotificationSaving}
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <div className="font-medium text-sm">{t("settings.systemNotifications.managedChannelMultiplier")}</div>
+                      <div className="text-xs text-muted-foreground">{t("settings.systemNotifications.managedChannelMultiplierHint")}</div>
+                    </div>
+                    <Switch
+                      checked={appSettings?.newapi_managed_channel_multiplier_system_notification_enabled ?? true}
+                      onCheckedChange={(v) => {
+                        setAppSettings((prev) => (
+                          prev
+                            ? {
+                                ...prev,
+                                newapi_managed_channel_multiplier_system_notification_enabled: v,
+                              }
+                            : prev
+                        ));
+                      }}
+                      disabled={!appSettings || systemNotificationSaving}
+                    />
+                  </div>
+                </>
+              ) : null}
+
+              <div className="flex justify-end">
+                <Button
+                  size="sm"
+                  onClick={async () => {
+                    if (!appSettings) return;
+                    setSystemNotificationSaving(true);
+                    try {
+                      const next = await updateSettings({
+                        system_notifications_enabled: appSettings.system_notifications_enabled,
+                        newapi_low_balance_system_notification_enabled:
+                          appSettings.newapi_low_balance_system_notification_enabled,
+                        newapi_managed_channel_missing_system_notification_enabled:
+                          appSettings.newapi_managed_channel_missing_system_notification_enabled,
+                        newapi_managed_channel_multiplier_system_notification_enabled:
+                          appSettings.newapi_managed_channel_multiplier_system_notification_enabled,
+                      });
+                      setAppSettings(next);
+                      toast.success(t("settings.systemNotifications.saved"));
+                    } catch (e) {
+                      toast.error(t("settings.systemNotifications.saveFail"), { description: humanizeApiError(e, t) });
+                    } finally {
+                      setSystemNotificationSaving(false);
+                    }
+                  }}
+                  disabled={!appSettings || systemNotificationSaving}
                 >
                   {t("common.save")}
                 </Button>
