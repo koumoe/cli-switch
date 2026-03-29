@@ -1,3 +1,8 @@
+## [0.54.0](https://github.com/koumoe/cli-switch/compare/v0.53.0...v0.54.0) (2026-03-29)
+
+### Features
+
+* add system notification switches (#175) ([#175](https://github.com/koumoe/cli-switch/issues/175)) ([27cfccd](https://github.com/koumoe/cli-switch/commit/27cfccdd9e2331685212d0221f1474539fae2301))
 ## [0.53.0](https://github.com/koumoe/cli-switch/compare/v0.52.0...v0.53.0) (2026-03-28)
 
 ### Features
