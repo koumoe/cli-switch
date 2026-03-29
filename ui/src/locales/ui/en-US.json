@@ -501,6 +501,7 @@
     "tabs": {
       "appearance": "Appearance",
       "channel": "Channel",
+      "notifications": "Notifications",
       "application": "App",
       "chatBridge": "Messaging",
       "update": "CLI",
@@ -546,7 +547,8 @@
     },
     "systemNotifications": {
       "title": "System Notifications",
-      "subtitle": "Manage all system-level alerts in one place",
+      "subtitle": "Control the global system notification switch",
+      "newApiSubtitle": "Manage low-balance and managed-channel alerts for New API",
       "enable": "Enable system notifications",
       "enableHint": "When disabled, no system-level notifications will be sent",
       "lowBalance": "Low-balance alerts",
@@ -560,11 +562,11 @@
     },
     "newApiManaged": {
       "title": "New API Managed Channels",
-      "subtitle": "Control managed channel change alerts and multiplier sync confirmations",
-      "missingPrompt": "Managed channel change notifications",
-      "missingPromptHint": "When enabled, if a remote token or group is not found in the latest list, open the window and show a disable/delete prompt; if system notifications are enabled, also send a system notification",
+      "subtitle": "Control managed channel change detection and multiplier sync confirmations",
+      "missingPrompt": "Managed channel change detection",
+      "missingPromptHint": "When enabled, detect whether remote tokens or groups still exist; if any are missing, open the window and show a disable/delete prompt; if Managed channel missing alerts are enabled in Settings > Notifications, also send a system notification",
       "syncMultiplier": "Sync channel multipliers",
-      "syncMultiplierHint": "When enabled, check remote group ratios every 30 minutes; when a mismatch is found, ask immediately if the window is already open, or wait until you open the window to ask whether to update the local real multiplier; if system notifications are enabled, also send a system notification",
+      "syncMultiplierHint": "When enabled, check remote group ratios every 30 minutes; when a mismatch is found, ask immediately if the window is already open, or wait until you open the window to ask whether to update the local real multiplier; if Managed channel multiplier mismatch alerts are enabled in Settings > Notifications, also send a system notification",
       "ignoreFreeMultiplier": "Ignore free multipliers",
       "ignoreFreeMultiplierHint": "When enabled, channels with local real multiplier 0 are not managed by remote multiplier sync",
       "saved": "New API managed channel settings saved",
