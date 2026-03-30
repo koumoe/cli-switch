@@ -6,6 +6,8 @@ use std::path::PathBuf;
 use time::Time;
 use uuid::Uuid;
 
+use crate::bearer_token::normalize_optional_bearer_token;
+
 use super::{RechargeCurrency, StorageError, now_ms, with_conn};
 
 const CHECKIN_TIME_FORMAT: &str = "[hour]:[minute]:[second]";
@@ -139,7 +141,6 @@ pub struct RemoteAccountRemoteSnapshot {
     pub remote_username: Option<String>,
     pub remote_display_name: Option<String>,
     pub last_balance_amount: Option<f64>,
-    pub last_sync_error: Option<String>,
     pub last_synced_at_ms: Option<i64>,
 }
 
@@ -160,19 +161,6 @@ fn normalize_optional_base_url(raw: Option<String>) -> Option<String> {
 
 fn normalize_optional_text(raw: Option<String>) -> Option<String> {
     raw.map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty())
-}
-
-fn normalize_access_token(raw: Option<String>) -> Option<String> {
-    raw.map(|value| value.trim().to_string())
-        .map(|value| {
-            value
-                .strip_prefix("Bearer ")
-                .or_else(|| value.strip_prefix("bearer "))
-                .unwrap_or(value.as_str())
-                .trim()
-                .to_string()
-        })
         .filter(|value| !value.is_empty())
 }
 
@@ -396,7 +384,7 @@ pub async fn create_remote_account(
         let provider = input.provider;
         let base_url = normalize_base_url(&input.base_url);
         let api_url = normalize_optional_base_url(input.api_url);
-        let access_token = normalize_access_token(Some(input.access_token));
+        let access_token = normalize_optional_bearer_token(Some(input.access_token));
         let page_checkin_url = normalize_optional_text(input.page_checkin_url);
         let checkin_mode = input
             .checkin_mode
@@ -482,7 +470,7 @@ pub async fn update_remote_account(
             account.api_url = normalize_optional_base_url(input.api_url);
         }
         if let Some(value) = input.access_token {
-            account.access_token = normalize_access_token(Some(value));
+            account.access_token = normalize_optional_bearer_token(Some(value));
             account.access_token_configured = account.access_token.is_some();
         }
         if input.page_checkin_url.is_some() {
@@ -553,17 +541,15 @@ fn get_remote_account_impl_sync(
     .map_err(Into::into)
 }
 
-pub async fn update_remote_account_snapshot(
+pub async fn apply_remote_account_sync_success(
     db_path: PathBuf,
     account_id: String,
     snapshot: RemoteAccountRemoteSnapshot,
 ) -> anyhow::Result<()> {
     with_conn(db_path, move |conn| {
-        let current = get_remote_account_impl_sync(conn, account_id.clone(), true)?
-            .ok_or_else(|| StorageError::RemoteAccountNotFound {
-                account_id: account_id.clone(),
-            })?;
-        conn.execute(
+        let synced_at_ms = snapshot.last_synced_at_ms.unwrap_or_else(now_ms);
+        let updated_at_ms = now_ms();
+        let changed = conn.execute(
             r#"
             UPDATE remote_accounts
             SET remote_user_id = ?2, remote_role = ?3, remote_username = ?4, remote_display_name = ?5,
@@ -573,16 +559,44 @@ pub async fn update_remote_account_snapshot(
             "#,
             params![
                 account_id,
-                snapshot.remote_user_id.or(current.remote_user_id),
-                snapshot.remote_role.or(current.remote_role),
-                snapshot.remote_username.or(current.remote_username),
-                snapshot.remote_display_name.or(current.remote_display_name),
-                snapshot.last_balance_amount.or(current.last_balance_amount),
-                snapshot.last_sync_error.or(current.last_sync_error),
-                snapshot.last_synced_at_ms.or(current.last_synced_at_ms),
-                now_ms(),
+                snapshot.remote_user_id,
+                snapshot.remote_role,
+                snapshot.remote_username,
+                snapshot.remote_display_name,
+                snapshot.last_balance_amount,
+                Option::<String>::None,
+                synced_at_ms,
+                updated_at_ms,
             ],
         )?;
+        if changed == 0 {
+            return Err(StorageError::RemoteAccountNotFound { account_id }.into());
+        }
+        Ok(())
+    })
+    .await
+}
+
+pub async fn apply_remote_account_sync_failure(
+    db_path: PathBuf,
+    account_id: String,
+    last_sync_error: String,
+    last_synced_at_ms: Option<i64>,
+) -> anyhow::Result<()> {
+    with_conn(db_path, move |conn| {
+        let synced_at_ms = last_synced_at_ms.unwrap_or_else(now_ms);
+        let updated_at_ms = now_ms();
+        let changed = conn.execute(
+            r#"
+            UPDATE remote_accounts
+            SET last_sync_error = ?2, last_synced_at_ms = ?3, updated_at_ms = ?4
+            WHERE id = ?1
+            "#,
+            params![account_id, last_sync_error, synced_at_ms, updated_at_ms],
+        )?;
+        if changed == 0 {
+            return Err(StorageError::RemoteAccountNotFound { account_id }.into());
+        }
         Ok(())
     })
     .await

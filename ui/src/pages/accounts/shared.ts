@@ -57,6 +57,9 @@ export function ymdLocal(ms: number): string {
 
 export function formatAmount(account: RemoteAccount, v: number | null): string {
   if (v === null || v === undefined || !Number.isFinite(v)) return "-";
+  if (account.provider === "sub2api") {
+    return `${account.recharge_currency === "CNY" ? "¥" : "$"}${v.toFixed(2)}`;
+  }
   if (account.quota_display_type === "TOKENS") return v.toFixed(0);
   const symbol = account.quota_display_type === "CNY"
     ? "¥"
@@ -111,10 +114,6 @@ export function accountHasUserApiCredentials(
 
 export function isNewApiAccount(account: Pick<RemoteAccount, "provider">): boolean {
   return account.provider === "newapi";
-}
-
-export function isSub2ApiAccount(account: Pick<RemoteAccount, "provider">): boolean {
-  return account.provider === "sub2api";
 }
 
 export function resolveAccountDisplayName(

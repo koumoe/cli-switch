@@ -69,12 +69,12 @@ pub(crate) use protocol::normalize_base_url;
 pub use remote_account::{
     CreateRemoteAccount, RemoteAccount, RemoteAccountCheckinMode, RemoteAccountCheckinsToday,
     RemoteAccountProvider, RemoteAccountRemoteSnapshot, UpdateRemoteAccount,
+    apply_remote_account_sync_failure, apply_remote_account_sync_success,
     assign_remote_account_sort_orders, complete_remote_account_checkin_today,
     create_remote_account, delete_remote_account, get_remote_account_with_secret,
     get_remote_account_with_secret_optional, get_remote_account_without_secret,
     get_remote_accounts_checkins_today, list_remote_accounts, list_remote_accounts_with_secret,
     set_remote_account_balance_alert_notified, update_remote_account,
-    update_remote_account_snapshot,
 };
 pub use route::{
     CreateRoute, Route, RouteChannel, UpdateRoute, create_route, delete_route, get_route,

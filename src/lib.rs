@@ -1,5 +1,6 @@
 pub mod app;
 pub mod autostart;
+pub(crate) mod bearer_token;
 pub mod changelog;
 pub mod chat_bridge;
 pub mod cli_tool_proxy_config;

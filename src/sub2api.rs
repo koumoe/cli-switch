@@ -2,6 +2,8 @@ use anyhow::Context as _;
 use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
 use serde::Deserialize;
 
+use crate::bearer_token::normalize_bearer_token;
+
 #[derive(Debug, Clone)]
 pub struct Sub2ApiAccountOverview {
     pub remote_user_id: i64,
@@ -84,15 +86,6 @@ struct KeyData {
     status: String,
 }
 
-fn normalize_access_token(raw: &str) -> String {
-    raw.trim()
-        .strip_prefix("Bearer ")
-        .or_else(|| raw.trim().strip_prefix("bearer "))
-        .unwrap_or(raw.trim())
-        .trim()
-        .to_string()
-}
-
 fn join_url(base_url: &str, path: &str) -> anyhow::Result<String> {
     let mut url = reqwest::Url::parse(base_url).with_context(|| format!("无效 URL：{base_url}"))?;
     if path.starts_with('/') {
@@ -104,7 +97,7 @@ fn join_url(base_url: &str, path: &str) -> anyhow::Result<String> {
 }
 
 fn auth_headers(access_token: &str) -> anyhow::Result<HeaderMap> {
-    let token = normalize_access_token(access_token);
+    let token = normalize_bearer_token(access_token);
     if token.is_empty() {
         anyhow::bail!("missing sub2api access token");
     }
