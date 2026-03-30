@@ -10,7 +10,7 @@ use crate::server::AppState;
 use crate::server::error::{ApiError, map_storage_unit_no_content_err};
 use crate::storage::{self, RechargeCurrency};
 
-fn validate_http_url(raw: &str, field: &'static str) -> Result<String, ApiError> {
+pub(super) fn validate_http_url(raw: &str, field: &'static str) -> Result<String, ApiError> {
     let value = raw.trim();
     if value.is_empty() {
         return Err(ApiError::bad_request(field, format!("{field} is required")));
@@ -26,7 +26,7 @@ fn validate_http_url(raw: &str, field: &'static str) -> Result<String, ApiError>
     }
 }
 
-fn validate_optional_http_url(
+pub(super) fn validate_optional_http_url(
     raw: Option<&str>,
     field: &'static str,
 ) -> Result<Option<String>, ApiError> {
@@ -85,7 +85,7 @@ fn validate_account_candidate(account: &storage::NewApiAccount) -> Result<(), Ap
     Ok(())
 }
 
-fn build_candidate_from_create(
+pub(super) fn build_candidate_from_create(
     input: &storage::CreateNewApiAccount,
 ) -> Result<storage::NewApiAccount, ApiError> {
     let page_checkin_url = validate_optional_http_url(
@@ -132,6 +132,7 @@ fn build_candidate_from_create(
         last_synced_at_ms: None,
         low_balance_alert_notified: false,
         last_balance_alert_at_ms: None,
+        sort_order: 0,
         created_at_ms: 0,
         updated_at_ms: 0,
     };
@@ -139,7 +140,7 @@ fn build_candidate_from_create(
     Ok(account)
 }
 
-fn build_candidate_from_update(
+pub(super) fn build_candidate_from_update(
     current: &storage::NewApiAccount,
     input: &storage::UpdateNewApiAccount,
 ) -> Result<storage::NewApiAccount, ApiError> {
@@ -193,7 +194,7 @@ fn build_candidate_from_update(
     Ok(next)
 }
 
-async fn apply_account_overview(
+pub(super) async fn apply_account_overview(
     state: &AppState,
     account_id: String,
     overview: &newapi_client::NewApiAccountOverview,
@@ -216,7 +217,7 @@ async fn apply_account_overview(
     Ok(account)
 }
 
-async fn clear_account_remote_state(
+pub(super) async fn clear_account_remote_state(
     state: &AppState,
     account_id: String,
 ) -> Result<storage::NewApiAccount, ApiError> {
@@ -249,7 +250,7 @@ async fn clear_account_remote_state(
         .map_err(ApiError::Internal)
 }
 
-async fn sync_account_if_possible(
+pub(super) async fn sync_account_if_possible(
     state: &AppState,
     account_id: String,
     account: &storage::NewApiAccount,
@@ -263,7 +264,7 @@ async fn sync_account_if_possible(
     apply_account_overview(state, account_id, &overview).await
 }
 
-async fn record_account_sync_failure(
+pub(super) async fn record_account_sync_failure(
     state: &AppState,
     account_id: String,
     err: &anyhow::Error,
@@ -281,7 +282,7 @@ async fn record_account_sync_failure(
     Ok(())
 }
 
-fn sync_error(err: anyhow::Error) -> ApiError {
+pub(super) fn sync_error(err: anyhow::Error) -> ApiError {
     ApiError::bad_gateway(
         "newapi_sync_failed",
         format!("Failed to sync New API account: {err}"),
@@ -312,12 +313,12 @@ fn managed_channel_base_url(
         .unwrap_or_else(|| account.base_url.clone())
 }
 
-fn notify_background_tasks(state: &AppState) {
+pub(super) fn notify_background_tasks(state: &AppState) {
     let next = *state.settings_notify.borrow() + 1;
     let _ = state.settings_notify.send(next);
 }
 
-async fn delete_remote_managed_channel_resources(
+pub(super) async fn delete_remote_managed_channel_resources(
     state: &AppState,
     account: &storage::NewApiAccount,
     channel: &storage::Channel,

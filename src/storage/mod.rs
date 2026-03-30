@@ -13,6 +13,7 @@ mod newapi;
 mod pricing;
 mod prompt;
 mod protocol;
+mod remote_account;
 mod route;
 mod settings;
 mod stats;
@@ -45,13 +46,13 @@ pub use checkin::{
 pub use newapi::{
     CreateNewApiAccount, DeleteNewApiAccountResult, NewApiAccount, NewApiAccountCheckinMode,
     NewApiAccountCheckinsToday, NewApiAccountRemoteSnapshot, UpdateNewApiAccount,
-    complete_newapi_account_checkin_today, create_newapi_account, delete_newapi_account,
-    detach_channels_from_newapi_account, get_newapi_account, get_newapi_account_for_secret_use,
-    get_newapi_account_with_secret, get_newapi_account_with_secret_optional,
-    get_newapi_account_without_secret, get_newapi_account_without_secret_optional,
-    get_newapi_accounts_checkins_today, list_channels_by_newapi_account, list_newapi_accounts,
-    list_newapi_accounts_with_secret, reorder_newapi_accounts,
-    set_newapi_account_balance_alert_notified, update_newapi_account,
+    assign_newapi_account_sort_orders, complete_newapi_account_checkin_today,
+    create_newapi_account, delete_newapi_account, detach_channels_from_newapi_account,
+    get_newapi_account, get_newapi_account_for_secret_use, get_newapi_account_with_secret,
+    get_newapi_account_with_secret_optional, get_newapi_account_without_secret,
+    get_newapi_account_without_secret_optional, get_newapi_accounts_checkins_today,
+    list_channels_by_newapi_account, list_newapi_accounts, list_newapi_accounts_with_secret,
+    reorder_newapi_accounts, set_newapi_account_balance_alert_notified, update_newapi_account,
     update_newapi_account_remote_snapshot,
 };
 pub use pricing::{
@@ -65,6 +66,16 @@ pub use prompt::{
 };
 pub use protocol::Protocol;
 pub(crate) use protocol::normalize_base_url;
+pub use remote_account::{
+    CreateRemoteAccount, RemoteAccount, RemoteAccountCheckinMode, RemoteAccountCheckinsToday,
+    RemoteAccountProvider, RemoteAccountRemoteSnapshot, UpdateRemoteAccount,
+    assign_remote_account_sort_orders, complete_remote_account_checkin_today,
+    create_remote_account, delete_remote_account, get_remote_account_with_secret,
+    get_remote_account_with_secret_optional, get_remote_account_without_secret,
+    get_remote_accounts_checkins_today, list_remote_accounts, list_remote_accounts_with_secret,
+    set_remote_account_balance_alert_notified, update_remote_account,
+    update_remote_account_snapshot,
+};
 pub use route::{
     CreateRoute, Route, RouteChannel, UpdateRoute, create_route, delete_route, get_route,
     list_route_channels, list_routes, set_route_channels, update_route,
@@ -94,6 +105,7 @@ fn open_conn(db_path: &Path) -> anyhow::Result<Connection> {
 fn ensure_schema_upgrades(conn: &Connection) -> anyhow::Result<()> {
     chat_bridge::ensure_chat_bridge_schema(conn)?;
     newapi::ensure_newapi_schema(conn)?;
+    remote_account::ensure_remote_account_schema(conn)?;
     Ok(())
 }
 

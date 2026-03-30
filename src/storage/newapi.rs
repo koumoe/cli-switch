@@ -79,6 +79,7 @@ pub struct NewApiAccount {
     pub last_synced_at_ms: Option<i64>,
     pub low_balance_alert_notified: bool,
     pub last_balance_alert_at_ms: Option<i64>,
+    pub sort_order: i64,
     pub created_at_ms: i64,
     pub updated_at_ms: i64,
 }
@@ -211,8 +212,9 @@ fn account_from_row(
         last_synced_at_ms: row.get(26)?,
         low_balance_alert_notified: row.get::<_, i64>(27)? != 0,
         last_balance_alert_at_ms: row.get(28)?,
-        created_at_ms: row.get(29)?,
-        updated_at_ms: row.get(30)?,
+        sort_order: row.get(29)?,
+        created_at_ms: row.get(30)?,
+        updated_at_ms: row.get(31)?,
     })
 }
 
@@ -409,7 +411,7 @@ async fn list_newapi_accounts_impl(
                    low_balance_alert_threshold, recharge_currency, remote_role, remote_username, remote_display_name, remote_group,
                    quota_display_type, quota_per_unit, usd_exchange_rate, custom_currency_symbol, custom_currency_exchange_rate,
                    remote_checkin_enabled, remote_turnstile_check_enabled, last_quota, last_used_quota, last_balance_amount,
-                   last_sync_error, last_synced_at_ms, low_balance_alert_notified, last_balance_alert_at_ms, created_at_ms, updated_at_ms
+                   last_sync_error, last_synced_at_ms, low_balance_alert_notified, last_balance_alert_at_ms, sort_order, created_at_ms, updated_at_ms
             FROM newapi_accounts
             ORDER BY sort_order ASC, created_at_ms ASC
             "#,
@@ -486,7 +488,7 @@ async fn get_newapi_account_impl(
                    low_balance_alert_threshold, recharge_currency, remote_role, remote_username, remote_display_name, remote_group,
                    quota_display_type, quota_per_unit, usd_exchange_rate, custom_currency_symbol, custom_currency_exchange_rate,
                    remote_checkin_enabled, remote_turnstile_check_enabled, last_quota, last_used_quota, last_balance_amount,
-                   last_sync_error, last_synced_at_ms, low_balance_alert_notified, last_balance_alert_at_ms, created_at_ms, updated_at_ms
+                   last_sync_error, last_synced_at_ms, low_balance_alert_notified, last_balance_alert_at_ms, sort_order, created_at_ms, updated_at_ms
             FROM newapi_accounts
             WHERE id = ?1
             "#,
@@ -577,6 +579,7 @@ pub async fn create_newapi_account(
             last_synced_at_ms: None,
             low_balance_alert_notified: false,
             last_balance_alert_at_ms: None,
+            sort_order,
             created_at_ms: ts,
             updated_at_ms: ts,
         })
@@ -707,7 +710,7 @@ fn get_account_row(
                low_balance_alert_threshold, recharge_currency, remote_role, remote_username, remote_display_name, remote_group,
                quota_display_type, quota_per_unit, usd_exchange_rate, custom_currency_symbol, custom_currency_exchange_rate,
                remote_checkin_enabled, remote_turnstile_check_enabled, last_quota, last_used_quota, last_balance_amount,
-               last_sync_error, last_synced_at_ms, low_balance_alert_notified, last_balance_alert_at_ms, created_at_ms, updated_at_ms
+               last_sync_error, last_synced_at_ms, low_balance_alert_notified, last_balance_alert_at_ms, sort_order, created_at_ms, updated_at_ms
         FROM newapi_accounts
         WHERE id = ?1
         "#,
@@ -760,6 +763,25 @@ pub async fn reorder_newapi_accounts(
             tx.execute(
                 r#"UPDATE newapi_accounts SET sort_order = ?2, updated_at_ms = ?3 WHERE id = ?1"#,
                 params![account_id, index as i64, now_ms()],
+            )?;
+        }
+        tx.commit()?;
+        Ok(())
+    })
+    .await
+}
+
+pub async fn assign_newapi_account_sort_orders(
+    db_path: PathBuf,
+    account_orders: Vec<(String, i64)>,
+) -> anyhow::Result<()> {
+    with_conn(db_path, move |conn| {
+        let tx = conn.unchecked_transaction()?;
+        let ts = now_ms();
+        for (account_id, sort_order) in account_orders {
+            tx.execute(
+                r#"UPDATE newapi_accounts SET sort_order = ?2, updated_at_ms = ?3 WHERE id = ?1"#,
+                params![account_id, sort_order, ts],
             )?;
         }
         tx.commit()?;

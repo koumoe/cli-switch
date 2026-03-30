@@ -62,6 +62,13 @@ fn request_endpoint_template(method: &Method, path: &str) -> Option<&'static str
         ("POST", "/api/channels") => Some("/api/channels"),
         ("POST", "/api/channels/reorder") => Some("/api/channels/reorder"),
         ("GET", "/api/channels/checkins/today") => Some("/api/channels/checkins/today"),
+        ("GET", "/api/remote/accounts") => Some("/api/remote/accounts"),
+        ("POST", "/api/remote/accounts") => Some("/api/remote/accounts"),
+        ("POST", "/api/remote/accounts/detect") => Some("/api/remote/accounts/detect"),
+        ("POST", "/api/remote/accounts/reorder") => Some("/api/remote/accounts/reorder"),
+        ("GET", "/api/remote/accounts/checkins/today") => {
+            Some("/api/remote/accounts/checkins/today")
+        }
         ("GET", "/api/newapi/accounts") => Some("/api/newapi/accounts"),
         ("POST", "/api/newapi/accounts") => Some("/api/newapi/accounts"),
         ("POST", "/api/newapi/accounts/reorder") => Some("/api/newapi/accounts/reorder"),
@@ -94,6 +101,26 @@ fn request_endpoint_template(method: &Method, path: &str) -> Option<&'static str
                 }
                 ["api", "channels", _, "checkins", "complete"] if method == Method::POST => {
                     Some("/api/channels/{id}/checkins/complete")
+                }
+                ["api", "remote", "accounts", _] if method == Method::PUT => {
+                    Some("/api/remote/accounts/{id}")
+                }
+                ["api", "remote", "accounts", _] if method == Method::DELETE => {
+                    Some("/api/remote/accounts/{id}")
+                }
+                ["api", "remote", "accounts", _, "refresh"] if method == Method::POST => {
+                    Some("/api/remote/accounts/{id}/refresh")
+                }
+                ["api", "remote", "accounts", _, "groups"] if method == Method::GET => {
+                    Some("/api/remote/accounts/{id}/groups")
+                }
+                ["api", "remote", "accounts", _, "keys"] if method == Method::POST => {
+                    Some("/api/remote/accounts/{id}/keys")
+                }
+                ["api", "remote", "accounts", _, "checkins", "complete"]
+                    if method == Method::POST =>
+                {
+                    Some("/api/remote/accounts/{id}/checkins/complete")
                 }
                 ["api", "newapi", "accounts", _] if method == Method::PUT => {
                     Some("/api/newapi/accounts/{id}")
@@ -176,6 +203,11 @@ fn request_purpose(method: &Method, path: &str) -> &'static str {
         ("POST", "/api/channels") => "handlers::create_channel",
         ("POST", "/api/channels/reorder") => "handlers::reorder_channels",
         ("GET", "/api/channels/checkins/today") => "handlers::channel_checkins_today",
+        ("GET", "/api/remote/accounts") => "handlers::list_remote_accounts",
+        ("POST", "/api/remote/accounts") => "handlers::create_remote_account",
+        ("POST", "/api/remote/accounts/detect") => "handlers::detect_remote_account",
+        ("POST", "/api/remote/accounts/reorder") => "handlers::reorder_remote_accounts",
+        ("GET", "/api/remote/accounts/checkins/today") => "handlers::remote_account_checkins_today",
         ("GET", "/api/newapi/accounts") => "handlers::list_newapi_accounts",
         ("POST", "/api/newapi/accounts") => "handlers::create_newapi_account",
         ("POST", "/api/newapi/accounts/reorder") => "handlers::reorder_newapi_accounts",
@@ -206,6 +238,26 @@ fn request_purpose(method: &Method, path: &str) -> &'static str {
                 }
                 ["api", "channels", _, "checkins", "complete"] if method == Method::POST => {
                     "handlers::complete_channel_checkin_today"
+                }
+                ["api", "remote", "accounts", _] if method == Method::PUT => {
+                    "handlers::update_remote_account"
+                }
+                ["api", "remote", "accounts", _] if method == Method::DELETE => {
+                    "handlers::delete_remote_account"
+                }
+                ["api", "remote", "accounts", _, "refresh"] if method == Method::POST => {
+                    "handlers::refresh_remote_account"
+                }
+                ["api", "remote", "accounts", _, "groups"] if method == Method::GET => {
+                    "handlers::list_remote_account_groups"
+                }
+                ["api", "remote", "accounts", _, "keys"] if method == Method::POST => {
+                    "handlers::create_remote_account_key"
+                }
+                ["api", "remote", "accounts", _, "checkins", "complete"]
+                    if method == Method::POST =>
+                {
+                    "handlers::complete_remote_account_checkin_today"
                 }
                 ["api", "newapi", "accounts", _] if method == Method::PUT => {
                     "handlers::update_newapi_account"
@@ -367,6 +419,42 @@ fn build_app(state: AppState) -> Router {
         .route(
             "/api/channels/checkins/today",
             get(handlers::channel_checkins_today),
+        )
+        .route(
+            "/api/remote/accounts",
+            get(handlers::list_remote_accounts).post(handlers::create_remote_account),
+        )
+        .route(
+            "/api/remote/accounts/detect",
+            post(handlers::detect_remote_account),
+        )
+        .route(
+            "/api/remote/accounts/reorder",
+            post(handlers::reorder_remote_accounts),
+        )
+        .route(
+            "/api/remote/accounts/checkins/today",
+            get(handlers::remote_account_checkins_today),
+        )
+        .route(
+            "/api/remote/accounts/{id}",
+            put(handlers::update_remote_account).delete(handlers::delete_remote_account),
+        )
+        .route(
+            "/api/remote/accounts/{id}/refresh",
+            post(handlers::refresh_remote_account),
+        )
+        .route(
+            "/api/remote/accounts/{id}/groups",
+            get(handlers::list_remote_account_groups),
+        )
+        .route(
+            "/api/remote/accounts/{id}/keys",
+            post(handlers::create_remote_account_key),
+        )
+        .route(
+            "/api/remote/accounts/{id}/checkins/complete",
+            post(handlers::complete_remote_account_checkin_today),
         )
         .route(
             "/api/newapi/accounts",

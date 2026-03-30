@@ -15,5 +15,6 @@ pub mod proxy;
 pub mod server;
 pub mod shell_env;
 pub mod storage;
+pub(crate) mod sub2api;
 pub mod terminal;
 pub mod update;
