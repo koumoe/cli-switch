@@ -2,20 +2,19 @@ import React, { useEffect, useReducer, useRef, useState } from "react";
 import { Plus, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
-import { type NewApiAccount, type NewApiAccountCheckinMode, type NewApiGroupOption } from "@/api";
+import { type RemoteAccount, type RemoteGroupOption } from "@/api";
 import {
-  completeNewApiAccountCheckinToday,
-  createNewApiAccount,
   createNewApiManagedChannel,
-  deleteNewApiAccount,
-  listNewApiAccounts,
-  listNewApiGroups,
-  newApiAccountCheckinsToday,
+  deleteRemoteAccount,
+  listRemoteAccountGroups,
+  listRemoteAccounts,
   newApiSystemCheckin,
   openInBrowser,
-  refreshNewApiAccount,
-  reorderNewApiAccounts,
-  updateNewApiAccount,
+  refreshRemoteAccount,
+  remoteAccountCheckinsToday,
+  reorderRemoteAccounts,
+  updateRemoteAccount,
+  completeRemoteAccountCheckinToday,
 } from "@/api";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui";
@@ -24,7 +23,9 @@ import { humanizeApiError } from "@/lib/error";
 import { useI18n } from "@/lib/i18n";
 
 import { AccountEditorDialog } from "./accounts/AccountEditorDialog";
+import { AccountWizardDialog } from "./accounts/AccountWizardDialog";
 import { AccountsTable } from "./accounts/AccountsTable";
+import { CreateKeyDialog } from "./accounts/CreateKeyDialog";
 import { DeleteAccountDialog } from "./accounts/DeleteAccountDialog";
 import { ManagedChannelDialog } from "./accounts/ManagedChannelDialog";
 import { ManualCheckinDialog } from "./accounts/ManualCheckinDialog";
@@ -34,7 +35,9 @@ import {
   dragReducer,
   emptyAccountDraft,
   initialDragState,
+  isNewApiAccount,
   resolveCheckinMode,
+  resolveAccountDisplayName,
   ymdLocal,
   type AccountDraft,
   type ManagedChannelDraft,
@@ -43,7 +46,7 @@ import {
 export function AccountsPage() {
   const { t } = useI18n();
   const { currency } = useCurrency();
-  const [accounts, setAccounts] = useState<NewApiAccount[]>([]);
+  const [accounts, setAccounts] = useState<RemoteAccount[]>([]);
   const [loading, setLoading] = useState(false);
   const [reordering, setReordering] = useState(false);
   const [dragState, dispatchDrag] = useReducer(dragReducer, initialDragState);
@@ -54,33 +57,38 @@ export function AccountsPage() {
   const [checkinsDate, setCheckinsDate] = useState<string | null>(null);
   const [checkinDoneMap, setCheckinDoneMap] = useState<Record<string, boolean>>({});
 
+  const [wizardOpen, setWizardOpen] = useState(false);
+
   const [editorOpen, setEditorOpen] = useState(false);
-  const [editorMode, setEditorMode] = useState<"create" | "edit">("create");
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editingSource, setEditingSource] = useState<NewApiAccount | null>(null);
-  const [draft, setDraft] = useState<AccountDraft>(emptyAccountDraft());
+  const [editingSource, setEditingSource] = useState<RemoteAccount | null>(null);
+  const [draft, setDraft] = useState<AccountDraft>(emptyAccountDraft(currency));
   const [saving, setSaving] = useState(false);
+  const [loginOpening, setLoginOpening] = useState(false);
 
   const [refreshing, setRefreshing] = useState<Record<string, boolean>>({});
   const [systemChecking, setSystemChecking] = useState<Record<string, boolean>>({});
   const [pageOpening, setPageOpening] = useState<Record<string, boolean>>({});
 
   const [manualPromptOpen, setManualPromptOpen] = useState(false);
-  const [manualPromptTarget, setManualPromptTarget] = useState<NewApiAccount | null>(null);
+  const [manualPromptTarget, setManualPromptTarget] = useState<RemoteAccount | null>(null);
   const [manualCompleting, setManualCompleting] = useState(false);
 
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<NewApiAccount | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<RemoteAccount | null>(null);
   const [deleteManagedChannels, setDeleteManagedChannels] = useState(true);
   const [deleteSyncRemote, setDeleteSyncRemote] = useState(true);
   const [deleting, setDeleting] = useState(false);
 
   const [managedOpen, setManagedOpen] = useState(false);
-  const [managedTarget, setManagedTarget] = useState<NewApiAccount | null>(null);
+  const [managedTarget, setManagedTarget] = useState<RemoteAccount | null>(null);
   const [managedDraft, setManagedDraft] = useState<ManagedChannelDraft | null>(null);
-  const [managedGroups, setManagedGroups] = useState<NewApiGroupOption[]>([]);
+  const [managedGroups, setManagedGroups] = useState<RemoteGroupOption[]>([]);
   const [managedLoadingGroups, setManagedLoadingGroups] = useState(false);
   const [managedCreating, setManagedCreating] = useState(false);
+
+  const [createKeyOpen, setCreateKeyOpen] = useState(false);
+  const [createKeyTarget, setCreateKeyTarget] = useState<RemoteAccount | null>(null);
 
   const [today, setToday] = useState(() => ymdLocal(Date.now()));
 
@@ -95,8 +103,8 @@ export function AccountsPage() {
     setLoading(true);
     try {
       const [items, checkins] = await Promise.all([
-        listNewApiAccounts(),
-        newApiAccountCheckinsToday().catch(() => null),
+        listRemoteAccounts(),
+        remoteAccountCheckinsToday().catch(() => null),
       ]);
       setAccounts(items);
       if (checkins) {
@@ -122,7 +130,7 @@ export function AccountsPage() {
   useEffect(() => {
     if (!checkinsDate) return;
     if (checkinsDate === today) return;
-    void newApiAccountCheckinsToday()
+    void remoteAccountCheckinsToday()
       .then((res) => {
         setCheckinsDate(res.date);
         const next: Record<string, boolean> = {};
@@ -133,25 +141,19 @@ export function AccountsPage() {
   }, [checkinsDate, today]);
 
   function openCreate() {
-    setEditorMode("create");
-    setEditingId(null);
-    setEditingSource(null);
-    setDraft({
-      ...emptyAccountDraft(),
-      recharge_currency: currency,
-    });
-    setEditorOpen(true);
+    setWizardOpen(true);
   }
 
-  function openEdit(item: NewApiAccount) {
-    setEditorMode("edit");
+  function openEdit(item: RemoteAccount) {
     setEditingId(item.id);
     setEditingSource(item);
     setDraft({
+      provider: item.provider,
       base_url: item.base_url ?? "",
       api_url: item.api_url ?? "",
-      user_id: item.user_id ?? "",
+      user_id: item.provider === "newapi" ? item.user_id ?? "" : "",
       user_token: "",
+      bearer_token: "",
       page_checkin_url: item.page_checkin_url ?? "",
       checkin_mode: resolveCheckinMode(item),
       auto_checkin_time: item.auto_checkin_time ?? "00:05:00",
@@ -161,10 +163,10 @@ export function AccountsPage() {
     setEditorOpen(true);
   }
 
-  async function persistOrder(next: NewApiAccount[]) {
+  async function persistOrder(next: RemoteAccount[]) {
     setReordering(true);
     try {
-      await reorderNewApiAccounts(next.map((item) => item.id));
+      await reorderRemoteAccounts(next.map((item) => item.id));
       toast.success(t("accounts.toast.reorderOk"));
       await refreshAll();
     } catch (e) {
@@ -176,20 +178,11 @@ export function AccountsPage() {
   }
 
   async function saveEditor() {
+    if (!editingId) return;
     const baseUrl = draft.base_url.trim();
     const apiUrl = draft.api_url.trim();
-    const userId = draft.user_id.trim();
     const pageUrl = draft.page_checkin_url.trim();
-    const token = draft.user_token.trim();
     const lowBalance = Number(draft.low_balance_alert_threshold);
-    const editingHasStoredToken = !!editingSource?.user_token_configured;
-    const effectiveHasCredentials = !!userId && (editorMode === "create" ? !!token : (!!token || editingHasStoredToken));
-    const shouldClearStoredToken =
-      editorMode === "edit"
-      && !userId
-      && !token
-      && draft.checkin_mode === "page_open"
-      && editingHasStoredToken;
 
     if (!baseUrl) {
       toast.error(t("accounts.toast.actionFail"), { description: t("accounts.toast.baseUrlRequired") });
@@ -203,47 +196,59 @@ export function AccountsPage() {
       toast.error(t("accounts.toast.actionFail"), { description: t("accounts.toast.pageCheckinUrlRequired") });
       return;
     }
-    if (draft.checkin_mode === "system_api" && !effectiveHasCredentials) {
-      toast.error(t("accounts.toast.actionFail"), { description: t("accounts.toast.credentialsRequiredForSystem") });
-      return;
-    }
-
-    const requestCheckinMode: NewApiAccountCheckinMode =
-      draft.checkin_mode === "page_open" ? "page_open" : "system_api";
-    const autoCheckinEnabled = draft.checkin_mode === "system_api";
 
     setSaving(true);
     try {
-      if (editorMode === "create") {
-        await createNewApiAccount({
+      if (draft.provider === "newapi") {
+        const userId = draft.user_id.trim();
+        const token = draft.user_token.trim();
+        const editingHasStoredToken = !!editingSource?.user_token_configured;
+        const effectiveHasCredentials = !!userId && (!!token || editingHasStoredToken);
+        const shouldClearStoredToken =
+          editingSource?.provider === "newapi"
+          && !userId
+          && !token
+          && draft.checkin_mode === "page_open"
+          && editingHasStoredToken;
+
+        if (draft.checkin_mode === "system_api" && !effectiveHasCredentials) {
+          toast.error(t("accounts.toast.actionFail"), { description: t("accounts.toast.credentialsRequiredForSystem") });
+          return;
+        }
+
+        await updateRemoteAccount(editingId, {
+          provider: "newapi",
           base_url: baseUrl,
-          api_url: apiUrl,
-          user_id: userId,
-          user_token: token,
-          page_checkin_url: pageUrl || null,
-          checkin_mode: requestCheckinMode,
-          auto_checkin_enabled: autoCheckinEnabled,
-          auto_checkin_time: draft.auto_checkin_time || "00:05:00",
-          low_balance_alert_threshold: lowBalance,
-          recharge_currency: draft.recharge_currency,
-        });
-        toast.success(t("accounts.toast.createOk"));
-      } else {
-        if (!editingId) return;
-        await updateNewApiAccount(editingId, {
-          base_url: baseUrl,
-          api_url: apiUrl,
+          api_url: apiUrl || null,
           user_id: userId,
           user_token: shouldClearStoredToken ? "" : token || undefined,
           page_checkin_url: pageUrl || null,
-          checkin_mode: requestCheckinMode,
-          auto_checkin_enabled: autoCheckinEnabled,
+          checkin_mode: draft.checkin_mode,
           auto_checkin_time: draft.auto_checkin_time || "00:05:00",
           low_balance_alert_threshold: lowBalance,
           recharge_currency: draft.recharge_currency,
         });
-        toast.success(t("accounts.toast.updateOk"));
+      } else {
+        const bearerToken = draft.bearer_token.trim();
+        const editingHasStoredToken = !!editingSource?.user_token_configured;
+        if (!bearerToken && !editingHasStoredToken) {
+          toast.error(t("accounts.toast.actionFail"), { description: t("accounts.toast.bearerTokenRequired") });
+          return;
+        }
+        await updateRemoteAccount(editingId, {
+          provider: "sub2api",
+          base_url: baseUrl,
+          api_url: apiUrl || null,
+          bearer_token: bearerToken || undefined,
+          page_checkin_url: pageUrl || null,
+          checkin_mode: draft.checkin_mode,
+          auto_checkin_time: draft.auto_checkin_time || "00:05:00",
+          low_balance_alert_threshold: lowBalance,
+          recharge_currency: draft.recharge_currency,
+        });
       }
+
+      toast.success(t("accounts.toast.updateOk"));
       setEditorOpen(false);
       setEditingSource(null);
       await refreshAll();
@@ -254,10 +259,28 @@ export function AccountsPage() {
     }
   }
 
-  async function onRefreshAccount(item: NewApiAccount) {
+  async function openLoginPageForEditor() {
+    if (draft.provider !== "sub2api") return;
+    const baseUrl = draft.base_url.trim();
+    if (!baseUrl) {
+      toast.error(t("accounts.toast.actionFail"), { description: t("accounts.toast.baseUrlRequired") });
+      return;
+    }
+    const url = draft.page_checkin_url.trim() || editingSource?.page_checkin_url || `${baseUrl.replace(/\/+$/, "")}/dashboard`;
+    setLoginOpening(true);
+    try {
+      await openInBrowser(url);
+    } catch (e) {
+      toast.error(t("accounts.toast.actionFail"), { description: humanizeApiError(e, t) });
+    } finally {
+      setLoginOpening(false);
+    }
+  }
+
+  async function onRefreshAccount(item: RemoteAccount) {
     setRefreshing((current) => ({ ...current, [item.id]: true }));
     try {
-      await refreshNewApiAccount(item.id);
+      await refreshRemoteAccount(item.id);
       toast.success(t("accounts.toast.refreshOk"));
       await refreshAll();
     } catch (e) {
@@ -267,7 +290,8 @@ export function AccountsPage() {
     }
   }
 
-  async function onSystemCheckin(item: NewApiAccount) {
+  async function onSystemCheckin(item: RemoteAccount) {
+    if (!isNewApiAccount(item)) return;
     setSystemChecking((current) => ({ ...current, [item.id]: true }));
     try {
       await newApiSystemCheckin(item.id);
@@ -281,7 +305,7 @@ export function AccountsPage() {
     }
   }
 
-  async function openManualCheckinPrompt(item: NewApiAccount) {
+  async function openManualCheckinPrompt(item: RemoteAccount) {
     const url = (item.page_checkin_url ?? "").trim();
     if (!url) {
       toast.error(t("accounts.toast.actionFail"), { description: t("accounts.toast.pageCheckinUrlRequired") });
@@ -303,10 +327,10 @@ export function AccountsPage() {
     if (!manualPromptTarget) return;
     setManualCompleting(true);
     try {
-      await completeNewApiAccountCheckinToday(manualPromptTarget.id);
+      await completeRemoteAccountCheckinToday(manualPromptTarget.id);
       setCheckinDoneMap((current) => ({ ...current, [manualPromptTarget.id]: true }));
       toast.success(t("accounts.toast.manualCheckinOk", {
-        name: manualPromptTarget.user_id || manualPromptTarget.base_url,
+        name: resolveAccountDisplayName(manualPromptTarget),
       }));
       setManualPromptOpen(false);
       setManualPromptTarget(null);
@@ -317,10 +341,11 @@ export function AccountsPage() {
     }
   }
 
-  function openDeleteDialog(item: NewApiAccount) {
+  function openDeleteDialog(item: RemoteAccount) {
+    const newapi = isNewApiAccount(item);
     setDeleteTarget(item);
-    setDeleteManagedChannels(true);
-    setDeleteSyncRemote(true);
+    setDeleteManagedChannels(newapi);
+    setDeleteSyncRemote(newapi);
     setDeleteOpen(true);
   }
 
@@ -328,10 +353,15 @@ export function AccountsPage() {
     if (!deleteTarget) return;
     setDeleting(true);
     try {
-      await deleteNewApiAccount(deleteTarget.id, {
-        delete_managed_channels: deleteManagedChannels,
-        sync_remote_delete: deleteSyncRemote,
-      });
+      await deleteRemoteAccount(
+        deleteTarget.id,
+        isNewApiAccount(deleteTarget)
+          ? {
+            delete_managed_channels: deleteManagedChannels,
+            sync_remote_delete: deleteSyncRemote,
+          }
+          : undefined
+      );
       toast.success(t("accounts.toast.deleteOk"));
       setDeleteOpen(false);
       setDeleteTarget(null);
@@ -353,7 +383,8 @@ export function AccountsPage() {
     if (checked) setDeleteManagedChannels(true);
   }
 
-  async function openCreateManagedChannelDialog(item: NewApiAccount) {
+  async function openCreateManagedChannelDialog(item: RemoteAccount) {
+    if (!isNewApiAccount(item)) return;
     if (!accountHasUserApiCredentials(item)) {
       toast.error(t("accounts.toast.actionFail"), { description: t("accounts.toast.credentialsRequiredForManaged") });
       return;
@@ -364,7 +395,7 @@ export function AccountsPage() {
     setManagedOpen(true);
     setManagedLoadingGroups(true);
     try {
-      const groups = await listNewApiGroups(item.id);
+      const groups = await listRemoteAccountGroups(item.id);
       setManagedGroups(groups);
       const preferred = (item.remote_group ?? "").trim();
       if (preferred && groups.some((group) => group.name === preferred)) {
@@ -408,9 +439,22 @@ export function AccountsPage() {
     }
   }
 
+  function openCreateKeyDialog(item: RemoteAccount) {
+    if (isNewApiAccount(item)) return;
+    if (!accountHasUserApiCredentials(item)) {
+      toast.error(t("accounts.toast.actionFail"), { description: t("accounts.toast.credentialsRequiredForKey") });
+      return;
+    }
+    setCreateKeyTarget(item);
+    setCreateKeyOpen(true);
+  }
+
   function handleEditorOpenChange(open: boolean) {
     setEditorOpen(open);
-    if (!open) setEditingSource(null);
+    if (!open) {
+      setEditingSource(null);
+      setLoginOpening(false);
+    }
   }
 
   function handleDeleteOpenChange(open: boolean) {
@@ -429,6 +473,11 @@ export function AccountsPage() {
   function handleManualCheckinCancel() {
     setManualPromptOpen(false);
     setManualPromptTarget(null);
+  }
+
+  function handleCreateKeyOpenChange(open: boolean) {
+    setCreateKeyOpen(open);
+    if (!open) setCreateKeyTarget(null);
   }
 
   return (
@@ -469,18 +518,28 @@ export function AccountsPage() {
         onSystemCheckin={onSystemCheckin}
         onOpenManualCheckinPrompt={openManualCheckinPrompt}
         onOpenCreateManagedChannelDialog={openCreateManagedChannelDialog}
+        onOpenCreateKeyDialog={openCreateKeyDialog}
         onOpenEdit={openEdit}
         onOpenDeleteDialog={openDeleteDialog}
       />
 
+      <AccountWizardDialog
+        open={wizardOpen}
+        defaultRechargeCurrency={currency}
+        onOpenChange={setWizardOpen}
+        onCreated={refreshAll}
+      />
+
       <AccountEditorDialog
         open={editorOpen}
-        mode={editorMode}
+        account={editingSource}
         draft={draft}
         saving={saving}
+        loginOpening={loginOpening}
         onOpenChange={handleEditorOpenChange}
         setDraft={setDraft}
         onSave={saveEditor}
+        onOpenLoginPage={openLoginPageForEditor}
       />
 
       <ManualCheckinDialog
@@ -514,6 +573,12 @@ export function AccountsPage() {
         onDeleteManagedChannelsChange={handleDeleteManagedChannelsChange}
         onDeleteSyncRemoteChange={handleDeleteSyncRemoteChange}
         onConfirmDelete={confirmDelete}
+      />
+
+      <CreateKeyDialog
+        open={createKeyOpen}
+        target={createKeyTarget}
+        onOpenChange={handleCreateKeyOpenChange}
       />
     </div>
   );

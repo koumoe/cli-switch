@@ -1,6 +1,8 @@
 import React from "react";
 
+import type { RemoteAccount } from "@/api";
 import {
+  Badge,
   Button,
   Dialog,
   DialogContent,
@@ -17,48 +19,65 @@ import {
 } from "@/components/ui";
 import { useI18n } from "@/lib/i18n";
 
-import type { AccountCheckinModeOption, AccountDraft } from "./shared";
+import {
+  providerSupportsSystemCheckin,
+  supportedCheckinModes,
+  type AccountCheckinModeOption,
+  type AccountDraft,
+} from "./shared";
 
 type AccountEditorDialogProps = {
   open: boolean;
-  mode: "create" | "edit";
+  account: RemoteAccount | null;
   draft: AccountDraft;
   saving: boolean;
+  loginOpening: boolean;
   onOpenChange: (open: boolean) => void;
   setDraft: React.Dispatch<React.SetStateAction<AccountDraft>>;
   onSave: () => void | Promise<void>;
+  onOpenLoginPage: () => void | Promise<void>;
 };
 
 export function AccountEditorDialog({
   open,
-  mode,
+  account,
   draft,
   saving,
+  loginOpening,
   onOpenChange,
   setDraft,
   onSave,
+  onOpenLoginPage,
 }: AccountEditorDialogProps) {
   const { t } = useI18n();
+  const modeOptions = supportedCheckinModes(draft.provider);
+  const showSystemTime = providerSupportsSystemCheckin(draft.provider) && draft.checkin_mode === "system_api";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[560px] max-h-[85vh] overflow-hidden flex flex-col">
+      <DialogContent className="sm:max-w-[620px] max-h-[85vh] overflow-hidden flex flex-col">
         <DialogHeader>
-          <DialogTitle>
-            {mode === "create" ? t("accounts.editor.createTitle") : t("accounts.editor.editTitle")}
-          </DialogTitle>
+          <DialogTitle>{t("accounts.editor.editTitle")}</DialogTitle>
           <DialogDescription>{t("accounts.editor.description")}</DialogDescription>
         </DialogHeader>
 
         <div className="flex-1 min-h-0 space-y-4 py-2 overflow-y-auto pr-1">
+          <div className="flex items-center gap-2 rounded-lg border bg-muted/20 px-3 py-2">
+            <Badge variant={draft.provider === "newapi" ? "secondary" : "outline"}>
+              {t(`accounts.providers.${draft.provider}`)}
+            </Badge>
+            <span className="text-sm text-muted-foreground">{t("accounts.editor.providerLocked")}</span>
+          </div>
+
           <div className="space-y-2">
             <label className="text-sm font-medium">{t("accounts.editor.baseUrl")}</label>
             <Input
               value={draft.base_url}
               onChange={(e) => setDraft((d) => ({ ...d, base_url: e.target.value }))}
-              placeholder="https://new-api.example.com"
+              placeholder="https://api.example.com"
             />
           </div>
+
           <div className="space-y-2">
             <label className="text-sm font-medium">{t("accounts.editor.apiUrl")}</label>
             <Input
@@ -68,29 +87,56 @@ export function AccountEditorDialog({
             />
             <p className="text-xs text-muted-foreground">{t("accounts.editor.apiUrlHint")}</p>
           </div>
-          <div className="space-y-2">
-            <label className="text-sm font-medium">{t("accounts.editor.userId")}</label>
-            <Input
-              value={draft.user_id}
-              onChange={(e) => setDraft((d) => ({ ...d, user_id: e.target.value }))}
-              placeholder="1001"
-            />
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm font-medium">{t("accounts.editor.userToken")}</label>
-            <Input
-              type="password"
-              value={draft.user_token}
-              onChange={(e) => setDraft((d) => ({ ...d, user_token: e.target.value }))}
-              placeholder={mode === "edit" ? t("accounts.editor.userTokenKeepHint") : "sk-..."}
-            />
-          </div>
+
+          {draft.provider === "newapi" ? (
+            <>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">{t("accounts.editor.userId")}</label>
+                <Input
+                  value={draft.user_id}
+                  onChange={(e) => setDraft((d) => ({ ...d, user_id: e.target.value }))}
+                  placeholder="1001"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">{t("accounts.editor.userToken")}</label>
+                <Input
+                  type="password"
+                  value={draft.user_token}
+                  onChange={(e) => setDraft((d) => ({ ...d, user_token: e.target.value }))}
+                  placeholder={account?.user_token_configured ? t("accounts.editor.userTokenKeepHint") : "sk-..."}
+                />
+              </div>
+            </>
+          ) : (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <label className="text-sm font-medium">{t("accounts.editor.bearerToken")}</label>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void onOpenLoginPage()}
+                  disabled={saving || loginOpening}
+                >
+                  {loginOpening ? t("accounts.editor.openLoginPageOpening") : t("accounts.editor.openLoginPage")}
+                </Button>
+              </div>
+              <Input
+                type="password"
+                value={draft.bearer_token}
+                onChange={(e) => setDraft((d) => ({ ...d, bearer_token: e.target.value }))}
+                placeholder={account?.user_token_configured ? t("accounts.editor.bearerTokenKeepHint") : "Bearer eyJ..."}
+              />
+              <p className="text-xs text-muted-foreground">{t("accounts.editor.bearerTokenHint")}</p>
+            </div>
+          )}
+
           <div className="space-y-2">
             <label className="text-sm font-medium">{t("accounts.editor.rechargeCurrency")}</label>
             <Select
               value={draft.recharge_currency}
               onValueChange={(value) => {
-                setDraft((d) => ({ ...d, recharge_currency: value as "USD" | "CNY" }));
+                setDraft((d) => ({ ...d, recharge_currency: value as AccountDraft["recharge_currency"] }));
               }}
             >
               <SelectTrigger>
@@ -102,17 +148,8 @@ export function AccountEditorDialog({
               </SelectContent>
             </Select>
           </div>
-          {draft.checkin_mode === "page_open" ? (
-            <div className="space-y-2">
-              <label className="text-sm font-medium">{t("accounts.editor.pageCheckinUrl")}</label>
-              <Input
-                value={draft.page_checkin_url}
-                onChange={(e) => setDraft((d) => ({ ...d, page_checkin_url: e.target.value }))}
-                placeholder="https://new-api.example.com/user/checkin"
-              />
-            </div>
-          ) : null}
-          <div className={draft.checkin_mode === "system_api" ? "grid grid-cols-2 gap-4" : "space-y-2"}>
+
+          <div className={showSystemTime ? "grid grid-cols-2 gap-4" : "space-y-2"}>
             <div className="space-y-2">
               <label className="text-sm font-medium">{t("accounts.editor.checkinMode")}</label>
               <Select
@@ -125,13 +162,15 @@ export function AccountEditorDialog({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="disabled">{t("accounts.checkin.modeDisabled")}</SelectItem>
-                  <SelectItem value="system_api">{t("accounts.checkin.modeSystem")}</SelectItem>
-                  <SelectItem value="page_open">{t("accounts.checkin.modePage")}</SelectItem>
+                  {modeOptions.map((mode) => (
+                    <SelectItem key={mode} value={mode}>
+                      {t(`accounts.checkin.mode${mode === "disabled" ? "Disabled" : mode === "system_api" ? "System" : "Page"}`)}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
-            {draft.checkin_mode === "system_api" ? (
+            {showSystemTime ? (
               <div className="space-y-2">
                 <label className="text-sm font-medium">{t("accounts.editor.autoCheckinTime")}</label>
                 <Input
@@ -142,6 +181,18 @@ export function AccountEditorDialog({
               </div>
             ) : null}
           </div>
+
+          {draft.checkin_mode === "page_open" ? (
+            <div className="space-y-2">
+              <label className="text-sm font-medium">{t("accounts.editor.pageCheckinUrl")}</label>
+              <Input
+                value={draft.page_checkin_url}
+                onChange={(e) => setDraft((d) => ({ ...d, page_checkin_url: e.target.value }))}
+                placeholder="https://api.example.com/dashboard"
+              />
+            </div>
+          ) : null}
+
           <div className="space-y-2">
             <label className="text-sm font-medium">{t("accounts.editor.lowBalanceThreshold")}</label>
             <Input

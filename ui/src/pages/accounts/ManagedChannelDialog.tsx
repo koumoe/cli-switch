@@ -1,6 +1,6 @@
 import React from "react";
 
-import type { NewApiAccount, NewApiGroupOption, Protocol } from "@/api";
+import type { Protocol, RemoteAccount, RemoteGroupOption } from "@/api";
 import {
   Button,
   Dialog,
@@ -22,9 +22,9 @@ import { defaultManagedName, formatGroupLabel, type ManagedChannelDraft } from "
 
 type ManagedChannelDialogProps = {
   open: boolean;
-  target: NewApiAccount | null;
+  target: RemoteAccount | null;
   draft: ManagedChannelDraft | null;
-  groups: NewApiGroupOption[];
+  groups: RemoteGroupOption[];
   loadingGroups: boolean;
   creating: boolean;
   onOpenChange: (open: boolean) => void;

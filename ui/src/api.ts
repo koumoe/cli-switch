@@ -268,6 +268,112 @@ export type ChannelCheckinsToday = {
   completed_channel_ids: string[];
 };
 
+export type RechargeCurrency = "USD" | "CNY";
+
+export type RemoteAccountProvider = "newapi" | "sub2api";
+
+export type RemoteAccountCheckinMode = "disabled" | "system_api" | "page_open";
+
+export type RemoteAccount = {
+  id: string;
+  provider: RemoteAccountProvider;
+  base_url: string;
+  api_url: string | null;
+  user_id: string;
+  user_token_configured: boolean;
+  page_checkin_url: string | null;
+  checkin_mode: RemoteAccountCheckinMode;
+  auto_checkin_enabled: boolean;
+  auto_checkin_time: string;
+  low_balance_alert_threshold: number;
+  recharge_currency: RechargeCurrency;
+  remote_role: number | null;
+  remote_role_text: string | null;
+  remote_username: string | null;
+  remote_display_name: string | null;
+  remote_group: string | null;
+  quota_display_type: string;
+  quota_per_unit: number;
+  usd_exchange_rate: number;
+  custom_currency_symbol: string | null;
+  custom_currency_exchange_rate: number;
+  remote_checkin_enabled: boolean;
+  remote_turnstile_check_enabled: boolean;
+  last_quota: number | null;
+  last_used_quota: number | null;
+  last_balance_amount: number | null;
+  last_sync_error: string | null;
+  last_synced_at_ms: number | null;
+  low_balance_alert_notified: boolean;
+  last_balance_alert_at_ms: number | null;
+  sort_order: number;
+  created_at_ms: number;
+  updated_at_ms: number;
+};
+
+export type RemoteAccountDetection = {
+  provider: RemoteAccountProvider;
+  normalized_base_url: string;
+  recommended_api_url: string | null;
+  suggested_page_checkin_url: string | null;
+  supported_checkin_modes: RemoteAccountCheckinMode[];
+};
+
+export type CreateRemoteAccountInput = {
+  provider: RemoteAccountProvider;
+  base_url: string;
+  api_url?: string | null;
+  user_id?: string | null;
+  user_token?: string | null;
+  bearer_token?: string | null;
+  page_checkin_url?: string | null;
+  checkin_mode?: RemoteAccountCheckinMode;
+  auto_checkin_time?: string;
+  low_balance_alert_threshold?: number;
+  recharge_currency?: RechargeCurrency;
+};
+
+export type UpdateRemoteAccountInput = Partial<{
+  provider: RemoteAccountProvider;
+  base_url: string;
+  api_url: string | null;
+  user_id: string;
+  user_token: string;
+  bearer_token: string;
+  page_checkin_url: string | null;
+  checkin_mode: RemoteAccountCheckinMode;
+  auto_checkin_time: string;
+  low_balance_alert_threshold: number;
+  recharge_currency: RechargeCurrency;
+}>;
+
+export type RemoteAccountCheckinsToday = {
+  date: string;
+  completed_account_ids: string[];
+};
+
+export type RemoteGroupOption = {
+  id: number | null;
+  name: string;
+  ratio: number | null;
+  description: string | null;
+  platform: string | null;
+  managed_channel_count: number;
+};
+
+export type CreateRemoteKeyInput = {
+  name: string;
+  group_id?: number | null;
+};
+
+export type RemoteKey = {
+  id: number;
+  key: string;
+  name: string;
+  group_id: number | null;
+  status: string;
+};
+
 export type NewApiAccountCheckinMode = "system_api" | "page_open";
 
 export type NewApiAccount = {
@@ -833,6 +939,66 @@ export function channelCheckinsToday(): Promise<ChannelCheckinsToday> {
 
 export function completeChannelCheckinToday(id: string): Promise<void> {
   return http<void>("POST", `/api/channels/${encodeURIComponent(id)}/checkins/complete`);
+}
+
+export function listRemoteAccounts(): Promise<RemoteAccount[]> {
+  return http<RemoteAccount[]>("GET", "/api/remote/accounts");
+}
+
+export function detectRemoteAccount(baseUrl: string): Promise<RemoteAccountDetection> {
+  return http<RemoteAccountDetection>("POST", "/api/remote/accounts/detect", { base_url: baseUrl });
+}
+
+export function createRemoteAccount(input: CreateRemoteAccountInput): Promise<RemoteAccount> {
+  return http<RemoteAccount>("POST", "/api/remote/accounts", input);
+}
+
+export function updateRemoteAccount(
+  id: string,
+  input: UpdateRemoteAccountInput
+): Promise<RemoteAccount> {
+  return http<RemoteAccount>("PUT", `/api/remote/accounts/${encodeURIComponent(id)}`, input);
+}
+
+export function refreshRemoteAccount(id: string): Promise<RemoteAccount> {
+  return http<RemoteAccount>("POST", `/api/remote/accounts/${encodeURIComponent(id)}/refresh`, {});
+}
+
+export function listRemoteAccountGroups(accountId: string): Promise<RemoteGroupOption[]> {
+  return http<RemoteGroupOption[]>(
+    "GET",
+    `/api/remote/accounts/${encodeURIComponent(accountId)}/groups`
+  );
+}
+
+export function createRemoteAccountKey(
+  accountId: string,
+  input: CreateRemoteKeyInput
+): Promise<RemoteKey> {
+  return http<RemoteKey>(
+    "POST",
+    `/api/remote/accounts/${encodeURIComponent(accountId)}/keys`,
+    input
+  );
+}
+
+export function reorderRemoteAccounts(accountIds: string[]): Promise<void> {
+  return http<void>("POST", "/api/remote/accounts/reorder", { account_ids: accountIds });
+}
+
+export function remoteAccountCheckinsToday(): Promise<RemoteAccountCheckinsToday> {
+  return http<RemoteAccountCheckinsToday>("GET", "/api/remote/accounts/checkins/today");
+}
+
+export function completeRemoteAccountCheckinToday(id: string): Promise<void> {
+  return http<void>("POST", `/api/remote/accounts/${encodeURIComponent(id)}/checkins/complete`, {});
+}
+
+export function deleteRemoteAccount(
+  id: string,
+  input?: { delete_managed_channels?: boolean; sync_remote_delete?: boolean }
+): Promise<void> {
+  return http<void>("DELETE", `/api/remote/accounts/${encodeURIComponent(id)}`, input);
 }
 
 export function listNewApiAccounts(): Promise<NewApiAccount[]> {

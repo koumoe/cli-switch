@@ -1,7 +1,7 @@
 import React from "react";
 import { GripVertical, KeyRound, Pencil, RefreshCw, Trash2 } from "lucide-react";
 
-import type { NewApiAccount } from "@/api";
+import type { RemoteAccount } from "@/api";
 import {
   Badge,
   Button,
@@ -19,18 +19,20 @@ import { useI18n } from "@/lib/i18n";
 import {
   accountHasUserApiCredentials,
   formatAmount,
+  isNewApiAccount,
   moveInList,
   moveToEndList,
+  resolveAccountDisplayName,
   resolveCheckinMode,
   type DragAction,
 } from "./shared";
 
 type AccountsTableProps = {
-  accounts: NewApiAccount[];
+  accounts: RemoteAccount[];
   reordering: boolean;
   dragId: string | null;
   dragOverId: string | null;
-  dragSnapshot: NewApiAccount[] | null;
+  dragSnapshot: RemoteAccount[] | null;
   dragCommittedRef: React.MutableRefObject<boolean>;
   today: string;
   checkinsDate: string | null;
@@ -38,15 +40,16 @@ type AccountsTableProps = {
   refreshing: Record<string, boolean>;
   systemChecking: Record<string, boolean>;
   pageOpening: Record<string, boolean>;
-  setAccounts: React.Dispatch<React.SetStateAction<NewApiAccount[]>>;
+  setAccounts: React.Dispatch<React.SetStateAction<RemoteAccount[]>>;
   dispatchDrag: React.Dispatch<DragAction>;
-  persistOrder: (next: NewApiAccount[]) => Promise<void>;
-  onRefreshAccount: (item: NewApiAccount) => void | Promise<void>;
-  onSystemCheckin: (item: NewApiAccount) => void | Promise<void>;
-  onOpenManualCheckinPrompt: (item: NewApiAccount) => void | Promise<void>;
-  onOpenCreateManagedChannelDialog: (item: NewApiAccount) => void | Promise<void>;
-  onOpenEdit: (item: NewApiAccount) => void;
-  onOpenDeleteDialog: (item: NewApiAccount) => void;
+  persistOrder: (next: RemoteAccount[]) => Promise<void>;
+  onRefreshAccount: (item: RemoteAccount) => void | Promise<void>;
+  onSystemCheckin: (item: RemoteAccount) => void | Promise<void>;
+  onOpenManualCheckinPrompt: (item: RemoteAccount) => void | Promise<void>;
+  onOpenCreateManagedChannelDialog: (item: RemoteAccount) => void | Promise<void>;
+  onOpenCreateKeyDialog: (item: RemoteAccount) => void | Promise<void>;
+  onOpenEdit: (item: RemoteAccount) => void;
+  onOpenDeleteDialog: (item: RemoteAccount) => void;
 };
 
 export function AccountsTable({
@@ -69,12 +72,13 @@ export function AccountsTable({
   onSystemCheckin,
   onOpenManualCheckinPrompt,
   onOpenCreateManagedChannelDialog,
+  onOpenCreateKeyDialog,
   onOpenEdit,
   onOpenDeleteDialog,
 }: AccountsTableProps) {
   const { t } = useI18n();
 
-  function setAccountDragPreview(e: React.DragEvent, item: NewApiAccount) {
+  function setAccountDragPreview(e: React.DragEvent, item: RemoteAccount) {
     try {
       const el = document.createElement("div");
       el.style.position = "absolute";
@@ -96,7 +100,7 @@ export function AccountsTable({
       title.style.color = "rgba(0,0,0,0.92)";
 
       const meta = document.createElement("div");
-      meta.textContent = item.user_id || t("accounts.checkin.none");
+      meta.textContent = `${t(`accounts.providers.${item.provider}`)} · ${resolveAccountDisplayName(item)}`;
       meta.style.marginTop = "4px";
       meta.style.fontSize = "11px";
       meta.style.color = "rgba(0,0,0,0.6)";
@@ -165,6 +169,8 @@ export function AccountsTable({
                 const canTriggerCheckin = logicalCheckinMode !== "disabled" && !done;
                 const checkinBusy = !!systemChecking[item.id] || !!pageOpening[item.id];
                 const canManageToken = accountHasUserApiCredentials(item);
+                const newapi = isNewApiAccount(item);
+                const identity = resolveAccountDisplayName(item);
 
                 return (
                   <TableRow
@@ -219,9 +225,17 @@ export function AccountsTable({
                         <GripVertical className="h-4 w-4" />
                       </button>
                     </TableCell>
-                    <TableCell className="max-w-[320px]">
-                      <div className="truncate" title={item.base_url}>
-                        {item.base_url}
+                    <TableCell className="max-w-[360px]">
+                      <div className="space-y-1">
+                        <div className="truncate font-medium" title={item.base_url}>
+                          {item.base_url}
+                        </div>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <Badge variant={newapi ? "secondary" : "outline"}>
+                            {t(`accounts.providers.${item.provider}`)}
+                          </Badge>
+                          <span className="truncate" title={identity}>{identity}</span>
+                        </div>
                       </div>
                     </TableCell>
                     <TableCell>
@@ -265,15 +279,27 @@ export function AccountsTable({
                         >
                           <RefreshCw className="h-4 w-4" />
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => void onOpenCreateManagedChannelDialog(item)}
-                          disabled={!canManageToken}
-                          title={t("accounts.actions.createManaged")}
-                        >
-                          <KeyRound className="h-4 w-4" />
-                        </Button>
+                        {newapi ? (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => void onOpenCreateManagedChannelDialog(item)}
+                            disabled={!canManageToken}
+                            title={t("accounts.actions.createManaged")}
+                          >
+                            <KeyRound className="h-4 w-4" />
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => void onOpenCreateKeyDialog(item)}
+                            disabled={!canManageToken}
+                            title={t("accounts.actions.createKey")}
+                          >
+                            <KeyRound className="h-4 w-4" />
+                          </Button>
+                        )}
                         <Button variant="ghost" size="icon" onClick={() => onOpenEdit(item)} title={t("accounts.actions.edit")}>
                           <Pencil className="h-4 w-4" />
                         </Button>
