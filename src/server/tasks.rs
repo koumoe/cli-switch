@@ -788,7 +788,8 @@ async fn run_newapi_account_maintenance(
     let latest_overview = match newapi::fetch_account_overview(http_client, account).await {
         Ok(overview) => {
             if let Err(err) =
-                persist_newapi_overview(db_path.clone(), &account.id, &overview, completed_ids).await
+                persist_newapi_overview(db_path.clone(), &account.id, &overview, completed_ids)
+                    .await
             {
                 tracing::warn!(account_id = %account.id, err = %err, "persist newapi overview failed");
             }
@@ -886,7 +887,8 @@ async fn run_newapi_account_maintenance(
         return;
     }
 
-    let (remote_group_names, remote_groups) = match newapi::list_groups(http_client, account).await {
+    let (remote_group_names, remote_groups) = match newapi::list_groups(http_client, account).await
+    {
         Ok(groups) => {
             let mut remote_group_names = HashSet::new();
             let mut remote_groups = HashMap::new();
@@ -905,7 +907,12 @@ async fn run_newapi_account_maintenance(
     };
     let remote_token_ids = if settings.newapi_managed_channel_missing_prompt_enabled {
         match newapi::list_tokens(http_client, account).await {
-            Ok(tokens) => Some(tokens.into_iter().map(|token| token.id).collect::<HashSet<i64>>()),
+            Ok(tokens) => Some(
+                tokens
+                    .into_iter()
+                    .map(|token| token.id)
+                    .collect::<HashSet<i64>>(),
+            ),
             Err(err) => {
                 tracing::warn!(account_id = %account.id, err = %err, "load newapi tokens failed");
                 None
@@ -1013,29 +1020,34 @@ async fn run_sub2api_account_maintenance(
         return;
     };
 
-    let latest_overview =
-        match sub2api::fetch_account_overview(http_client, &account.base_url, token).await {
-            Ok(overview) => {
-                if let Err(err) =
-                    persist_sub2api_overview(db_path.clone(), &account.id, &overview).await
-                {
-                    tracing::warn!(account_id = %account.id, err = %err, "persist sub2api overview failed");
-                }
-                account.remote_display_name = overview.remote_display_name.clone();
-                account.remote_username = overview.remote_username.clone();
-                account.remote_role = overview.remote_role.clone();
-                Some(overview)
+    let latest_overview = match sub2api::fetch_account_overview(
+        http_client,
+        &account.base_url,
+        token,
+    )
+    .await
+    {
+        Ok(overview) => {
+            if let Err(err) =
+                persist_sub2api_overview(db_path.clone(), &account.id, &overview).await
+            {
+                tracing::warn!(account_id = %account.id, err = %err, "persist sub2api overview failed");
             }
-            Err(err) => {
-                tracing::warn!(account_id = %account.id, err = %err, "sync sub2api overview failed");
-                if let Err(update_err) =
-                    persist_sub2api_sync_failure(db_path.clone(), &account.id, &err).await
-                {
-                    tracing::warn!(account_id = %account.id, err = %update_err, "persist sub2api sync failure failed");
-                }
-                None
+            account.remote_display_name = overview.remote_display_name.clone();
+            account.remote_username = overview.remote_username.clone();
+            account.remote_role = overview.remote_role.clone();
+            Some(overview)
+        }
+        Err(err) => {
+            tracing::warn!(account_id = %account.id, err = %err, "sync sub2api overview failed");
+            if let Err(update_err) =
+                persist_sub2api_sync_failure(db_path.clone(), &account.id, &err).await
+            {
+                tracing::warn!(account_id = %account.id, err = %update_err, "persist sub2api sync failure failed");
             }
-        };
+            None
+        }
+    };
 
     if let Some(overview) = latest_overview.as_ref() {
         match decide_low_balance_alert_action(
@@ -1112,35 +1124,39 @@ async fn run_sub2api_account_maintenance(
         return;
     }
 
-    let (remote_group_names, remote_group_ids, remote_group_ratios_by_name, remote_group_ratios_by_id) =
-        match sub2api::list_groups(http_client, &account.base_url, token).await {
-            Ok(groups) => {
-                let mut remote_group_names = HashSet::new();
-                let mut remote_group_ids = HashSet::new();
-                let mut remote_group_ratios_by_name = HashMap::new();
-                let mut remote_group_ratios_by_id = HashMap::new();
-                for group in groups {
-                    remote_group_names.insert(group.name.clone());
-                    remote_group_ids.insert(group.id);
-                    if let Some(ratio) = group.rate_multiplier.and_then(normalize_remote_multiplier)
-                    {
-                        remote_group_ratios_by_name.insert(group.name.clone(), ratio);
-                        remote_group_ratios_by_id.insert(group.id, ratio);
-                    }
+    let (
+        remote_group_names,
+        remote_group_ids,
+        remote_group_ratios_by_name,
+        remote_group_ratios_by_id,
+    ) = match sub2api::list_groups(http_client, &account.base_url, token).await {
+        Ok(groups) => {
+            let mut remote_group_names = HashSet::new();
+            let mut remote_group_ids = HashSet::new();
+            let mut remote_group_ratios_by_name = HashMap::new();
+            let mut remote_group_ratios_by_id = HashMap::new();
+            for group in groups {
+                remote_group_names.insert(group.name.clone());
+                remote_group_ids.insert(group.id);
+                if let Some(ratio) = group.rate_multiplier.and_then(normalize_remote_multiplier) {
+                    remote_group_ratios_by_name.insert(group.name.clone(), ratio);
+                    remote_group_ratios_by_id.insert(group.id, ratio);
                 }
-                (
-                    Some(remote_group_names),
-                    Some(remote_group_ids),
-                    Some(remote_group_ratios_by_name),
-                    Some(remote_group_ratios_by_id),
-                )
             }
-            Err(err) => {
-                tracing::warn!(account_id = %account.id, err = %err, "load sub2api groups failed");
-                (None, None, None, None)
-            }
-        };
-    let (remote_key_ids, remote_key_names) = if settings.newapi_managed_channel_missing_prompt_enabled
+            (
+                Some(remote_group_names),
+                Some(remote_group_ids),
+                Some(remote_group_ratios_by_name),
+                Some(remote_group_ratios_by_id),
+            )
+        }
+        Err(err) => {
+            tracing::warn!(account_id = %account.id, err = %err, "load sub2api groups failed");
+            (None, None, None, None)
+        }
+    };
+    let (remote_key_ids, remote_key_names) = if settings
+        .newapi_managed_channel_missing_prompt_enabled
     {
         match sub2api::list_keys(http_client, &account.base_url, token).await {
             Ok(keys) => (
@@ -1273,28 +1289,28 @@ pub(crate) async fn remote_accounts_maintenance_loop(
             }
         };
 
-        let newapi_accounts =
-            match storage::list_newapi_accounts_with_secret(db_path.clone()).await {
-                Ok(accounts) => accounts,
-                Err(err) => {
-                    tracing::warn!(err = %err, "load newapi accounts failed");
-                    if !wait_for_retry_or_shutdown(&mut notify).await {
-                        break;
-                    }
-                    continue;
+        let newapi_accounts = match storage::list_newapi_accounts_with_secret(db_path.clone()).await
+        {
+            Ok(accounts) => accounts,
+            Err(err) => {
+                tracing::warn!(err = %err, "load newapi accounts failed");
+                if !wait_for_retry_or_shutdown(&mut notify).await {
+                    break;
                 }
-            };
-        let remote_accounts =
-            match storage::list_remote_accounts_with_secret(db_path.clone()).await {
-                Ok(accounts) => accounts,
-                Err(err) => {
-                    tracing::warn!(err = %err, "load remote accounts failed");
-                    if !wait_for_retry_or_shutdown(&mut notify).await {
-                        break;
-                    }
-                    continue;
+                continue;
+            }
+        };
+        let remote_accounts = match storage::list_remote_accounts_with_secret(db_path.clone()).await
+        {
+            Ok(accounts) => accounts,
+            Err(err) => {
+                tracing::warn!(err = %err, "load remote accounts failed");
+                if !wait_for_retry_or_shutdown(&mut notify).await {
+                    break;
                 }
-            };
+                continue;
+            }
+        };
         let managed_channels_by_account = if settings.newapi_managed_channel_missing_prompt_enabled
             || settings.newapi_managed_channel_sync_multiplier_enabled
         {

@@ -514,7 +514,8 @@ pub(in crate::server) async fn list_newapi_account_groups(
         .await?
         .into_iter()
         .filter(|channel| {
-            channel.is_managed_by_account(storage::ManagedRemoteProvider::Newapi, account.id.as_str())
+            channel
+                .is_managed_by_account(storage::ManagedRemoteProvider::Newapi, account.id.as_str())
         })
         .fold(
             std::collections::HashMap::<String, usize>::new(),
@@ -759,7 +760,10 @@ pub(in crate::server) async fn delete_newapi_account(
             .await?
             .into_iter()
             .filter(|channel| {
-                channel.is_managed_by_account(storage::ManagedRemoteProvider::Newapi, account_id.as_str())
+                channel.is_managed_by_account(
+                    storage::ManagedRemoteProvider::Newapi,
+                    account_id.as_str(),
+                )
             })
             .collect::<Vec<_>>();
         let mut deleted_channel_ids = Vec::new();

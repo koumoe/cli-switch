@@ -4,8 +4,8 @@ use axum::response::IntoResponse;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
-use crate::events::{self, AppEvent, RemoteManagedChannelCreated};
 use super::newapi as newapi_handlers;
+use crate::events::{self, AppEvent, RemoteManagedChannelCreated};
 use crate::newapi as newapi_client;
 use crate::server::AppState;
 use crate::server::error::{ApiError, map_storage_unit_no_content_err};
@@ -236,7 +236,10 @@ pub(super) async fn delete_remote_managed_channel_resources(
         return Ok(());
     };
     let account_id = channel.managed_account_id().ok_or_else(|| {
-        anyhow::anyhow!("managed channel {} missing linked remote account id", channel.id)
+        anyhow::anyhow!(
+            "managed channel {} missing linked remote account id",
+            channel.id
+        )
     })?;
     match provider {
         storage::ManagedRemoteProvider::Newapi => {
@@ -269,8 +272,11 @@ pub(super) async fn delete_remote_managed_channel_resources(
                 .managed_resource_id()
                 .as_deref()
                 .and_then(|value| value.parse::<i64>().ok())
-                .ok_or_else(|| anyhow::anyhow!("managed channel {} missing remote key id", channel.id))?;
-            sub2api_client::delete_key(&state.http_client, &account.base_url, token, key_id).await?;
+                .ok_or_else(|| {
+                    anyhow::anyhow!("managed channel {} missing remote key id", channel.id)
+                })?;
+            sub2api_client::delete_key(&state.http_client, &account.base_url, token, key_id)
+                .await?;
         }
     }
     Ok(())
@@ -1274,8 +1280,9 @@ pub(in crate::server) async fn create_remote_managed_channel(
             let channel = match storage::create_channel(state.db_path(), create_local).await {
                 Ok(channel) => channel,
                 Err(err) => {
-                    let _ = newapi_client::delete_token(&state.http_client, &account, remote.token_id)
-                        .await;
+                    let _ =
+                        newapi_client::delete_token(&state.http_client, &account, remote.token_id)
+                            .await;
                     return Err(ApiError::Internal(err));
                 }
             };
@@ -1339,7 +1346,10 @@ pub(in crate::server) async fn create_remote_managed_channel(
                 groups.iter().find(|item| item.name == requested_group_name)
             }
             .ok_or_else(|| {
-                ApiError::bad_request("remote_group_not_found", "selected remote group was not found")
+                ApiError::bad_request(
+                    "remote_group_not_found",
+                    "selected remote group was not found",
+                )
             })?;
             let created_key = sub2api_client::create_key(
                 &state.http_client,

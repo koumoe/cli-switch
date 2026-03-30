@@ -183,11 +183,7 @@ impl Channel {
         self.newapi_group = None;
     }
 
-    pub fn is_managed_by_account(
-        &self,
-        provider: ManagedRemoteProvider,
-        account_id: &str,
-    ) -> bool {
+    pub fn is_managed_by_account(&self, provider: ManagedRemoteProvider, account_id: &str) -> bool {
         self.managed_provider() == Some(provider) && self.managed_account_id() == Some(account_id)
     }
 }
@@ -683,8 +679,8 @@ pub async fn get_channel(db_path: PathBuf, channel_id: String) -> anyhow::Result
         ))?;
 
         stmt.query_row([channel_id], channel_from_row)
-        .optional()
-        .map_err(Into::into)
+            .optional()
+            .map_err(Into::into)
     })
     .await
 }
@@ -868,7 +864,8 @@ pub async fn detach_channels_from_managed_account(
     provider: ManagedRemoteProvider,
     account_id: String,
 ) -> anyhow::Result<Vec<String>> {
-    let ids = list_channel_ids_by_managed_account(db_path.clone(), provider, account_id.clone()).await?;
+    let ids =
+        list_channel_ids_by_managed_account(db_path.clone(), provider, account_id.clone()).await?;
     if ids.is_empty() {
         return Ok(ids);
     }
