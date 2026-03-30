@@ -20,6 +20,10 @@ import { useI18n } from "@/lib/i18n";
 
 import { defaultManagedName, formatGroupLabel, type ManagedChannelDraft } from "./shared";
 
+function groupSelectValue(group: Pick<RemoteGroupOption, "id" | "name">): string {
+  return group.id === null ? `name:${group.name}` : `id:${group.id}`;
+}
+
 type ManagedChannelDialogProps = {
   open: boolean;
   target: RemoteAccount | null;
@@ -44,7 +48,13 @@ export function ManagedChannelDialog({
   onCreate,
 }: ManagedChannelDialogProps) {
   const { t } = useI18n();
-  const selectedGroup = draft ? groups.find((group) => group.name === draft.group_name) ?? null : null;
+  const selectedGroup = draft
+    ? (
+      draft.group_id !== null
+        ? groups.find((group) => group.id === draft.group_id)
+        : groups.find((group) => group.name === draft.group_name)
+    ) ?? null
+    : null;
   const selectedGroupLabel = selectedGroup ? formatGroupLabel(selectedGroup) : "";
   const selectedGroupAddedLabel = selectedGroup && selectedGroup.managed_channel_count > 0
     ? t("accounts.managed.groupAdded", { count: selectedGroup.managed_channel_count })
@@ -105,9 +115,14 @@ export function ManagedChannelDialog({
             <div className="space-y-2">
               <label className="text-sm font-medium">{t("accounts.managed.group")}</label>
               <Select
-                value={draft.group_name}
+                value={selectedGroup ? groupSelectValue(selectedGroup) : ""}
                 onValueChange={(value) => {
-                  setDraft((current) => (current ? { ...current, group_name: value } : current));
+                  const group = groups.find((item) => groupSelectValue(item) === value) ?? null;
+                  setDraft((current) => (current && group ? {
+                    ...current,
+                    group_name: group.name,
+                    group_id: group.id,
+                  } : current));
                 }}
                 disabled={loadingGroups}
               >
@@ -137,7 +152,7 @@ export function ManagedChannelDialog({
                   className="max-w-[min(32rem,calc(100vw-2rem))]"
                 >
                   {groups.map((group) => (
-                    <SelectItem key={group.name} value={group.name}>
+                    <SelectItem key={groupSelectValue(group)} value={groupSelectValue(group)}>
                       <div className="min-w-0 flex flex-col pr-2">
                         <span className="truncate">{formatGroupLabel(group)}</span>
                         {[group.description, group.managed_channel_count > 0

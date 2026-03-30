@@ -225,19 +225,32 @@ pub fn ensure_remote_account_schema(conn: &rusqlite::Connection) -> anyhow::Resu
         r#"
         CREATE TABLE IF NOT EXISTS remote_accounts (
           id TEXT PRIMARY KEY,
-          provider TEXT NOT NULL CHECK(provider IN ('sub2api')),
+          provider TEXT NOT NULL CHECK(provider IN ('newapi','sub2api')),
           base_url TEXT NOT NULL,
           api_url TEXT NULL,
-          access_token TEXT NOT NULL,
+          user_id TEXT NOT NULL DEFAULT '',
+          user_token TEXT NOT NULL DEFAULT '',
+          access_token TEXT NOT NULL DEFAULT '',
           page_checkin_url TEXT NULL,
-          checkin_mode TEXT NOT NULL DEFAULT 'disabled' CHECK(checkin_mode IN ('disabled','page_open')),
+          checkin_mode TEXT NOT NULL DEFAULT 'disabled' CHECK(checkin_mode IN ('disabled','system_api','page_open')),
+          auto_checkin_enabled INTEGER NOT NULL DEFAULT 0,
           auto_checkin_time TEXT NOT NULL DEFAULT '00:05:00',
           low_balance_alert_threshold REAL NOT NULL DEFAULT 0,
           recharge_currency TEXT NOT NULL DEFAULT 'CNY' CHECK(recharge_currency IN ('CNY','USD')),
           remote_user_id TEXT NULL,
-          remote_role TEXT NULL,
+          remote_role NULL,
           remote_username TEXT NULL,
           remote_display_name TEXT NULL,
+          remote_group TEXT NULL,
+          quota_display_type TEXT NOT NULL DEFAULT 'USD',
+          quota_per_unit REAL NOT NULL DEFAULT 500000,
+          usd_exchange_rate REAL NOT NULL DEFAULT 1,
+          custom_currency_symbol TEXT NULL,
+          custom_currency_exchange_rate REAL NOT NULL DEFAULT 1,
+          remote_checkin_enabled INTEGER NOT NULL DEFAULT 0,
+          remote_turnstile_check_enabled INTEGER NOT NULL DEFAULT 0,
+          last_quota INTEGER NULL,
+          last_used_quota INTEGER NULL,
           last_balance_amount REAL NULL,
           last_sync_error TEXT NULL,
           last_synced_at_ms INTEGER NULL,
@@ -247,12 +260,12 @@ pub fn ensure_remote_account_schema(conn: &rusqlite::Connection) -> anyhow::Resu
           created_at_ms INTEGER NOT NULL,
           updated_at_ms INTEGER NOT NULL
         );
-        CREATE UNIQUE INDEX IF NOT EXISTS idx_remote_accounts_provider_base_url
-        ON remote_accounts(provider, base_url);
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_remote_accounts_provider_base_user
+        ON remote_accounts(provider, base_url, user_id);
         CREATE TABLE IF NOT EXISTS remote_account_checkins (
           account_id TEXT NOT NULL,
           date TEXT NOT NULL,
-          method TEXT NOT NULL DEFAULT 'manual_page' CHECK(method IN ('manual_page')),
+          method TEXT NOT NULL DEFAULT 'manual_page' CHECK(method IN ('manual_page','system_api','remote_detected')),
           completed_at_ms INTEGER NOT NULL,
           PRIMARY KEY (account_id, date)
         );
@@ -286,6 +299,7 @@ async fn list_remote_accounts_impl(
                    last_sync_error, last_synced_at_ms, low_balance_alert_notified,
                    last_balance_alert_at_ms, sort_order, created_at_ms, updated_at_ms
             FROM remote_accounts
+            WHERE provider = 'sub2api'
             ORDER BY sort_order ASC, created_at_ms ASC
             "#,
         )?;
@@ -314,6 +328,13 @@ pub async fn get_remote_account_with_secret(
         .ok_or_else(|| StorageError::RemoteAccountNotFound { account_id }.into())
 }
 
+pub async fn get_remote_account_without_secret_optional(
+    db_path: PathBuf,
+    account_id: String,
+) -> anyhow::Result<Option<RemoteAccount>> {
+    get_remote_account_impl(db_path, account_id, false).await
+}
+
 pub async fn get_remote_account_with_secret_optional(
     db_path: PathBuf,
     account_id: String,
@@ -335,7 +356,7 @@ async fn get_remote_account_impl(
                    last_sync_error, last_synced_at_ms, low_balance_alert_notified,
                    last_balance_alert_at_ms, sort_order, created_at_ms, updated_at_ms
             FROM remote_accounts
-            WHERE id = ?1
+            WHERE provider = 'sub2api' AND id = ?1
             "#,
         )?;
         stmt.query_row([account_id], |row| remote_account_from_row(row, include_secret))
@@ -531,7 +552,7 @@ fn get_remote_account_impl_sync(
                last_sync_error, last_synced_at_ms, low_balance_alert_notified,
                last_balance_alert_at_ms, sort_order, created_at_ms, updated_at_ms
         FROM remote_accounts
-        WHERE id = ?1
+        WHERE provider = 'sub2api' AND id = ?1
         "#,
     )?;
     stmt.query_row([account_id], |row| {
@@ -555,7 +576,7 @@ pub async fn apply_remote_account_sync_success(
             SET remote_user_id = ?2, remote_role = ?3, remote_username = ?4, remote_display_name = ?5,
                 last_balance_amount = ?6, last_sync_error = ?7, last_synced_at_ms = ?8,
                 updated_at_ms = ?9
-            WHERE id = ?1
+            WHERE provider = 'sub2api' AND id = ?1
             "#,
             params![
                 account_id,
@@ -590,7 +611,7 @@ pub async fn apply_remote_account_sync_failure(
             r#"
             UPDATE remote_accounts
             SET last_sync_error = ?2, last_synced_at_ms = ?3, updated_at_ms = ?4
-            WHERE id = ?1
+            WHERE provider = 'sub2api' AND id = ?1
             "#,
             params![account_id, last_sync_error, synced_at_ms, updated_at_ms],
         )?;
@@ -613,7 +634,7 @@ pub async fn set_remote_account_balance_alert_notified(
             r#"
             UPDATE remote_accounts
             SET low_balance_alert_notified = ?2, last_balance_alert_at_ms = ?3, updated_at_ms = ?4
-            WHERE id = ?1
+            WHERE provider = 'sub2api' AND id = ?1
             "#,
             params![
                 account_id,
@@ -634,7 +655,7 @@ pub async fn delete_remote_account(db_path: PathBuf, account_id: String) -> anyh
     with_conn(db_path, move |conn| {
         let tx = conn.unchecked_transaction()?;
         let deleted = tx.execute(
-            r#"DELETE FROM remote_accounts WHERE id = ?1"#,
+            r#"DELETE FROM remote_accounts WHERE provider = 'sub2api' AND id = ?1"#,
             [&account_id],
         )?;
         if deleted == 0 {
@@ -677,8 +698,10 @@ pub async fn get_remote_accounts_checkins_today(
         let mut stmt = conn.prepare(
             r#"
             SELECT account_id
-            FROM remote_account_checkins
-            WHERE date = ?1
+            FROM remote_account_checkins c
+            INNER JOIN remote_accounts a ON a.id = c.account_id
+            WHERE c.date = ?1
+              AND a.provider = 'sub2api'
             ORDER BY completed_at_ms ASC
             "#,
         )?;
@@ -700,7 +723,7 @@ pub async fn complete_remote_account_checkin_today(
     with_conn(db_path, move |conn| {
         let exists = conn
             .query_row(
-                r#"SELECT id FROM remote_accounts WHERE id = ?1"#,
+                r#"SELECT id FROM remote_accounts WHERE provider = 'sub2api' AND id = ?1"#,
                 [&account_id],
                 |_| Ok(()),
             )

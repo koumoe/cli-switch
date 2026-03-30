@@ -41,17 +41,17 @@ const KEY_CHAT_BRIDGE_TURN_TIMEOUT_MINUTES: &str = "chat_bridge_turn_timeout_min
 const KEY_CHAT_BRIDGE_ALLOW_NEW_PROJECTS: &str = "chat_bridge_allow_new_projects";
 const KEY_SYSTEM_NOTIFICATIONS_ENABLED: &str = "system_notifications_enabled";
 const KEY_NEWAPI_LOW_BALANCE_SYSTEM_NOTIFICATION_ENABLED: &str =
-    "newapi_low_balance_system_notification_enabled";
+    "remote_low_balance_system_notification_enabled";
 const KEY_NEWAPI_MANAGED_CHANNEL_MISSING_SYSTEM_NOTIFICATION_ENABLED: &str =
-    "newapi_managed_channel_missing_system_notification_enabled";
+    "remote_managed_channel_missing_system_notification_enabled";
 const KEY_NEWAPI_MANAGED_CHANNEL_MULTIPLIER_SYSTEM_NOTIFICATION_ENABLED: &str =
-    "newapi_managed_channel_multiplier_system_notification_enabled";
+    "remote_managed_channel_multiplier_system_notification_enabled";
 const KEY_NEWAPI_MANAGED_CHANNEL_MISSING_PROMPT_ENABLED: &str =
-    "newapi_managed_channel_missing_prompt_enabled";
+    "remote_managed_channel_missing_prompt_enabled";
 const KEY_NEWAPI_MANAGED_CHANNEL_SYNC_MULTIPLIER_ENABLED: &str =
-    "newapi_managed_channel_sync_multiplier_enabled";
+    "remote_managed_channel_sync_multiplier_enabled";
 const KEY_NEWAPI_MANAGED_CHANNEL_SYNC_FREE_MULTIPLIER_ENABLED: &str =
-    "newapi_managed_channel_sync_free_multiplier_enabled";
+    "remote_managed_channel_sync_free_multiplier_enabled";
 const DEFAULT_CHAT_BRIDGE_TURN_TIMEOUT_MINUTES: i64 = 0;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -124,12 +124,12 @@ pub struct AppSettings {
     pub chat_bridge_turn_timeout_minutes: i64,
     pub chat_bridge_allow_new_projects: bool,
     pub system_notifications_enabled: bool,
-    pub newapi_low_balance_system_notification_enabled: bool,
-    pub newapi_managed_channel_missing_system_notification_enabled: bool,
-    pub newapi_managed_channel_multiplier_system_notification_enabled: bool,
-    pub newapi_managed_channel_missing_prompt_enabled: bool,
-    pub newapi_managed_channel_sync_multiplier_enabled: bool,
-    pub newapi_managed_channel_sync_free_multiplier_enabled: bool,
+    pub remote_low_balance_system_notification_enabled: bool,
+    pub remote_managed_channel_missing_system_notification_enabled: bool,
+    pub remote_managed_channel_multiplier_system_notification_enabled: bool,
+    pub remote_managed_channel_missing_prompt_enabled: bool,
+    pub remote_managed_channel_sync_multiplier_enabled: bool,
+    pub remote_managed_channel_sync_free_multiplier_enabled: bool,
     #[serde(default)]
     pub has_invalid_values: bool,
 }
@@ -169,12 +169,12 @@ impl Default for AppSettings {
             chat_bridge_turn_timeout_minutes: DEFAULT_CHAT_BRIDGE_TURN_TIMEOUT_MINUTES,
             chat_bridge_allow_new_projects: false,
             system_notifications_enabled: true,
-            newapi_low_balance_system_notification_enabled: true,
-            newapi_managed_channel_missing_system_notification_enabled: true,
-            newapi_managed_channel_multiplier_system_notification_enabled: true,
-            newapi_managed_channel_missing_prompt_enabled: true,
-            newapi_managed_channel_sync_multiplier_enabled: true,
-            newapi_managed_channel_sync_free_multiplier_enabled: false,
+            remote_low_balance_system_notification_enabled: true,
+            remote_managed_channel_missing_system_notification_enabled: true,
+            remote_managed_channel_multiplier_system_notification_enabled: true,
+            remote_managed_channel_missing_prompt_enabled: true,
+            remote_managed_channel_sync_multiplier_enabled: true,
+            remote_managed_channel_sync_free_multiplier_enabled: false,
             has_invalid_values: false,
         }
     }
@@ -197,18 +197,18 @@ impl AppSettings {
             .map(|minutes| Duration::from_secs(minutes.saturating_mul(60)))
     }
 
-    pub fn newapi_low_balance_system_notification_enabled(&self) -> bool {
-        self.system_notifications_enabled && self.newapi_low_balance_system_notification_enabled
+    pub fn remote_low_balance_system_notification_enabled(&self) -> bool {
+        self.system_notifications_enabled && self.remote_low_balance_system_notification_enabled
     }
 
-    pub fn newapi_managed_channel_missing_system_notification_enabled(&self) -> bool {
+    pub fn remote_managed_channel_missing_system_notification_enabled(&self) -> bool {
         self.system_notifications_enabled
-            && self.newapi_managed_channel_missing_system_notification_enabled
+            && self.remote_managed_channel_missing_system_notification_enabled
     }
 
-    pub fn newapi_managed_channel_multiplier_system_notification_enabled(&self) -> bool {
+    pub fn remote_managed_channel_multiplier_system_notification_enabled(&self) -> bool {
         self.system_notifications_enabled
-            && self.newapi_managed_channel_multiplier_system_notification_enabled
+            && self.remote_managed_channel_multiplier_system_notification_enabled
     }
 }
 
@@ -244,12 +244,12 @@ pub struct AppSettingsPatch {
     pub chat_bridge_turn_timeout_minutes: Option<i64>,
     pub chat_bridge_allow_new_projects: Option<bool>,
     pub system_notifications_enabled: Option<bool>,
-    pub newapi_low_balance_system_notification_enabled: Option<bool>,
-    pub newapi_managed_channel_missing_system_notification_enabled: Option<bool>,
-    pub newapi_managed_channel_multiplier_system_notification_enabled: Option<bool>,
-    pub newapi_managed_channel_missing_prompt_enabled: Option<bool>,
-    pub newapi_managed_channel_sync_multiplier_enabled: Option<bool>,
-    pub newapi_managed_channel_sync_free_multiplier_enabled: Option<bool>,
+    pub remote_low_balance_system_notification_enabled: Option<bool>,
+    pub remote_managed_channel_missing_system_notification_enabled: Option<bool>,
+    pub remote_managed_channel_multiplier_system_notification_enabled: Option<bool>,
+    pub remote_managed_channel_missing_prompt_enabled: Option<bool>,
+    pub remote_managed_channel_sync_multiplier_enabled: Option<bool>,
+    pub remote_managed_channel_sync_free_multiplier_enabled: Option<bool>,
 }
 
 fn get_setting(conn: &Connection, key: &str) -> rusqlite::Result<Option<String>> {
@@ -593,60 +593,60 @@ pub async fn get_app_settings(db_path: PathBuf) -> anyhow::Result<AppSettings> {
             );
         }
         if let Some(v) = get_setting(conn, KEY_NEWAPI_LOW_BALANCE_SYSTEM_NOTIFICATION_ENABLED)? {
-            out.newapi_low_balance_system_notification_enabled = parse_bool_setting(
+            out.remote_low_balance_system_notification_enabled = parse_bool_setting(
                 KEY_NEWAPI_LOW_BALANCE_SYSTEM_NOTIFICATION_ENABLED,
                 &v,
                 &mut has_invalid_values,
-                out.newapi_low_balance_system_notification_enabled,
+                out.remote_low_balance_system_notification_enabled,
             );
         }
         if let Some(v) = get_setting(
             conn,
             KEY_NEWAPI_MANAGED_CHANNEL_MISSING_SYSTEM_NOTIFICATION_ENABLED,
         )? {
-            out.newapi_managed_channel_missing_system_notification_enabled = parse_bool_setting(
+            out.remote_managed_channel_missing_system_notification_enabled = parse_bool_setting(
                 KEY_NEWAPI_MANAGED_CHANNEL_MISSING_SYSTEM_NOTIFICATION_ENABLED,
                 &v,
                 &mut has_invalid_values,
-                out.newapi_managed_channel_missing_system_notification_enabled,
+                out.remote_managed_channel_missing_system_notification_enabled,
             );
         }
         if let Some(v) = get_setting(
             conn,
             KEY_NEWAPI_MANAGED_CHANNEL_MULTIPLIER_SYSTEM_NOTIFICATION_ENABLED,
         )? {
-            out.newapi_managed_channel_multiplier_system_notification_enabled = parse_bool_setting(
+            out.remote_managed_channel_multiplier_system_notification_enabled = parse_bool_setting(
                 KEY_NEWAPI_MANAGED_CHANNEL_MULTIPLIER_SYSTEM_NOTIFICATION_ENABLED,
                 &v,
                 &mut has_invalid_values,
-                out.newapi_managed_channel_multiplier_system_notification_enabled,
+                out.remote_managed_channel_multiplier_system_notification_enabled,
             );
         }
         if let Some(v) = get_setting(conn, KEY_NEWAPI_MANAGED_CHANNEL_MISSING_PROMPT_ENABLED)? {
-            out.newapi_managed_channel_missing_prompt_enabled = parse_bool_setting(
+            out.remote_managed_channel_missing_prompt_enabled = parse_bool_setting(
                 KEY_NEWAPI_MANAGED_CHANNEL_MISSING_PROMPT_ENABLED,
                 &v,
                 &mut has_invalid_values,
-                out.newapi_managed_channel_missing_prompt_enabled,
+                out.remote_managed_channel_missing_prompt_enabled,
             );
         }
         if let Some(v) = get_setting(conn, KEY_NEWAPI_MANAGED_CHANNEL_SYNC_MULTIPLIER_ENABLED)? {
-            out.newapi_managed_channel_sync_multiplier_enabled = parse_bool_setting(
+            out.remote_managed_channel_sync_multiplier_enabled = parse_bool_setting(
                 KEY_NEWAPI_MANAGED_CHANNEL_SYNC_MULTIPLIER_ENABLED,
                 &v,
                 &mut has_invalid_values,
-                out.newapi_managed_channel_sync_multiplier_enabled,
+                out.remote_managed_channel_sync_multiplier_enabled,
             );
         }
         if let Some(v) = get_setting(
             conn,
             KEY_NEWAPI_MANAGED_CHANNEL_SYNC_FREE_MULTIPLIER_ENABLED,
         )? {
-            out.newapi_managed_channel_sync_free_multiplier_enabled = parse_bool_setting(
+            out.remote_managed_channel_sync_free_multiplier_enabled = parse_bool_setting(
                 KEY_NEWAPI_MANAGED_CHANNEL_SYNC_FREE_MULTIPLIER_ENABLED,
                 &v,
                 &mut has_invalid_values,
-                out.newapi_managed_channel_sync_free_multiplier_enabled,
+                out.remote_managed_channel_sync_free_multiplier_enabled,
             );
         }
 
@@ -868,7 +868,7 @@ pub async fn update_app_settings(
                 updated_at_ms,
             )?;
         }
-        if let Some(v) = patch.newapi_low_balance_system_notification_enabled {
+        if let Some(v) = patch.remote_low_balance_system_notification_enabled {
             set_setting(
                 conn,
                 KEY_NEWAPI_LOW_BALANCE_SYSTEM_NOTIFICATION_ENABLED,
@@ -876,7 +876,7 @@ pub async fn update_app_settings(
                 updated_at_ms,
             )?;
         }
-        if let Some(v) = patch.newapi_managed_channel_missing_system_notification_enabled {
+        if let Some(v) = patch.remote_managed_channel_missing_system_notification_enabled {
             set_setting(
                 conn,
                 KEY_NEWAPI_MANAGED_CHANNEL_MISSING_SYSTEM_NOTIFICATION_ENABLED,
@@ -884,7 +884,7 @@ pub async fn update_app_settings(
                 updated_at_ms,
             )?;
         }
-        if let Some(v) = patch.newapi_managed_channel_multiplier_system_notification_enabled {
+        if let Some(v) = patch.remote_managed_channel_multiplier_system_notification_enabled {
             set_setting(
                 conn,
                 KEY_NEWAPI_MANAGED_CHANNEL_MULTIPLIER_SYSTEM_NOTIFICATION_ENABLED,
@@ -892,7 +892,7 @@ pub async fn update_app_settings(
                 updated_at_ms,
             )?;
         }
-        if let Some(v) = patch.newapi_managed_channel_missing_prompt_enabled {
+        if let Some(v) = patch.remote_managed_channel_missing_prompt_enabled {
             set_setting(
                 conn,
                 KEY_NEWAPI_MANAGED_CHANNEL_MISSING_PROMPT_ENABLED,
@@ -900,7 +900,7 @@ pub async fn update_app_settings(
                 updated_at_ms,
             )?;
         }
-        if let Some(v) = patch.newapi_managed_channel_sync_multiplier_enabled {
+        if let Some(v) = patch.remote_managed_channel_sync_multiplier_enabled {
             set_setting(
                 conn,
                 KEY_NEWAPI_MANAGED_CHANNEL_SYNC_MULTIPLIER_ENABLED,
@@ -908,7 +908,7 @@ pub async fn update_app_settings(
                 updated_at_ms,
             )?;
         }
-        if let Some(v) = patch.newapi_managed_channel_sync_free_multiplier_enabled {
+        if let Some(v) = patch.remote_managed_channel_sync_free_multiplier_enabled {
             set_setting(
                 conn,
                 KEY_NEWAPI_MANAGED_CHANNEL_SYNC_FREE_MULTIPLIER_ENABLED,

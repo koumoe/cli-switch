@@ -2455,12 +2455,6 @@ mod tests {
                 managed_remote_resource_name: None,
                 managed_remote_group_name: None,
                 managed_remote_group_id: None,
-                managed_by_newapi: None,
-                newapi_account_id: None,
-                newapi_channel_id: None,
-                newapi_token_id: None,
-                newapi_token_name: None,
-                newapi_group: None,
             },
         )
         .await

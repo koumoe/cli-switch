@@ -610,16 +610,6 @@ async fn get_token_key(
     Ok(data.key)
 }
 
-pub async fn delete_channel(
-    http_client: &reqwest::Client,
-    account: &NewApiAccount,
-    channel_id: i64,
-) -> anyhow::Result<()> {
-    let headers = auth_headers(account)?;
-    let url = join_url(&account.base_url, &format!("/api/channel/{channel_id}"));
-    send_no_data(http_client.delete(url).headers(headers)).await
-}
-
 pub async fn delete_token(
     http_client: &reqwest::Client,
     account: &NewApiAccount,

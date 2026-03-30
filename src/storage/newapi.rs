@@ -225,171 +225,6 @@ fn local_today_ymd() -> anyhow::Result<String> {
     Ok(today.format(&fmt)?)
 }
 
-pub fn ensure_newapi_schema(conn: &rusqlite::Connection) -> anyhow::Result<()> {
-    conn.execute_batch(
-        r#"
-        CREATE TABLE IF NOT EXISTS newapi_accounts (
-          id TEXT PRIMARY KEY,
-          base_url TEXT NOT NULL,
-          api_url TEXT NULL,
-          user_id TEXT NOT NULL,
-          user_token TEXT NOT NULL,
-          page_checkin_url TEXT NULL,
-          checkin_mode TEXT NOT NULL DEFAULT 'system_api' CHECK(checkin_mode IN ('system_api','page_open')),
-          auto_checkin_enabled INTEGER NOT NULL DEFAULT 0,
-          auto_checkin_time TEXT NOT NULL DEFAULT '00:05:00',
-          low_balance_alert_threshold REAL NOT NULL DEFAULT 0,
-          recharge_currency TEXT NOT NULL DEFAULT 'CNY' CHECK(recharge_currency IN ('CNY','USD')),
-          remote_role INTEGER NULL,
-          remote_username TEXT NULL,
-          remote_display_name TEXT NULL,
-          remote_group TEXT NULL,
-          quota_display_type TEXT NOT NULL DEFAULT 'USD',
-          quota_per_unit REAL NOT NULL DEFAULT 500000,
-          usd_exchange_rate REAL NOT NULL DEFAULT 1,
-          custom_currency_symbol TEXT NULL,
-          custom_currency_exchange_rate REAL NOT NULL DEFAULT 1,
-          remote_checkin_enabled INTEGER NOT NULL DEFAULT 0,
-          remote_turnstile_check_enabled INTEGER NOT NULL DEFAULT 0,
-          last_quota INTEGER NULL,
-          last_used_quota INTEGER NULL,
-          last_balance_amount REAL NULL,
-          last_sync_error TEXT NULL,
-          last_synced_at_ms INTEGER NULL,
-          low_balance_alert_notified INTEGER NOT NULL DEFAULT 0,
-          last_balance_alert_at_ms INTEGER NULL,
-          created_at_ms INTEGER NOT NULL,
-          updated_at_ms INTEGER NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS newapi_account_checkins (
-          account_id TEXT NOT NULL,
-          date TEXT NOT NULL,
-          method TEXT NOT NULL DEFAULT 'manual_page' CHECK(method IN ('manual_page','system_api','remote_detected')),
-          completed_at_ms INTEGER NOT NULL,
-          PRIMARY KEY (account_id, date)
-        );
-        CREATE INDEX IF NOT EXISTS idx_newapi_account_checkins_date
-        ON newapi_account_checkins(date, completed_at_ms);
-        "#,
-    )?;
-
-    ensure_newapi_account_column(conn, "sort_order", "INTEGER NOT NULL DEFAULT 0")?;
-    ensure_newapi_account_column(conn, "api_url", "TEXT NULL")?;
-    ensure_newapi_account_recharge_currency_column(conn)?;
-    conn.execute(r#"DROP INDEX IF EXISTS idx_newapi_accounts_base_user"#, [])?;
-    conn.execute(
-        r#"
-        CREATE UNIQUE INDEX IF NOT EXISTS idx_newapi_accounts_base_user
-        ON newapi_accounts(base_url, user_id)
-        WHERE user_id <> ''
-        "#,
-        [],
-    )?;
-
-    ensure_channel_column(conn, "managed_by_newapi", "INTEGER NOT NULL DEFAULT 0")?;
-    ensure_channel_column(conn, "newapi_account_id", "TEXT NULL")?;
-    ensure_channel_column(conn, "newapi_channel_id", "INTEGER NULL")?;
-    ensure_channel_column(conn, "newapi_token_id", "INTEGER NULL")?;
-    ensure_channel_column(conn, "newapi_token_name", "TEXT NULL")?;
-    ensure_channel_column(conn, "newapi_group", "TEXT NULL")?;
-    conn.execute(
-        r#"CREATE INDEX IF NOT EXISTS idx_channels_newapi_account_id ON channels(newapi_account_id)"#,
-        [],
-    )?;
-
-    Ok(())
-}
-
-fn ensure_channel_column(
-    conn: &rusqlite::Connection,
-    column_name: &str,
-    column_ddl: &str,
-) -> anyhow::Result<()> {
-    ensure_table_column(conn, "channels", column_name, column_ddl)
-}
-
-fn ensure_newapi_account_column(
-    conn: &rusqlite::Connection,
-    column_name: &str,
-    column_ddl: &str,
-) -> anyhow::Result<()> {
-    ensure_table_column(conn, "newapi_accounts", column_name, column_ddl)
-}
-
-fn ensure_newapi_account_recharge_currency_column(
-    conn: &rusqlite::Connection,
-) -> anyhow::Result<()> {
-    if table_has_column(conn, "newapi_accounts", "recharge_currency")? {
-        return Ok(());
-    }
-    ensure_newapi_account_column(
-        conn,
-        "recharge_currency",
-        "TEXT NOT NULL DEFAULT 'CNY' CHECK(recharge_currency IN ('CNY','USD'))",
-    )?;
-    conn.execute(
-        r#"
-        UPDATE newapi_accounts
-        SET recharge_currency = CASE
-            WHEN quota_display_type = 'CNY' THEN 'CNY'
-            ELSE 'USD'
-        END
-        "#,
-        [],
-    )?;
-    Ok(())
-}
-
-fn ensure_table_column(
-    conn: &rusqlite::Connection,
-    table_name: &str,
-    column_name: &str,
-    column_ddl: &str,
-) -> anyhow::Result<()> {
-    let table_name = checked_sql_identifier(table_name)?;
-    let column_name = checked_sql_identifier(column_name)?;
-    let exists = table_has_column(conn, table_name, column_name)?;
-    if !exists {
-        conn.execute(
-            &format!("ALTER TABLE {table_name} ADD COLUMN {column_name} {column_ddl}"),
-            [],
-        )?;
-    }
-    Ok(())
-}
-
-fn table_has_column(
-    conn: &rusqlite::Connection,
-    table_name: &str,
-    column_name: &str,
-) -> anyhow::Result<bool> {
-    let table_name = checked_sql_identifier(table_name)?;
-    let column_name = checked_sql_identifier(column_name)?;
-    let mut stmt = conn.prepare(&format!("PRAGMA table_info({table_name})"))?;
-    let mut rows = stmt.query([])?;
-    while let Some(row) = rows.next()? {
-        let name: String = row.get(1)?;
-        if name == column_name {
-            return Ok(true);
-        }
-    }
-    Ok(false)
-}
-
-fn checked_sql_identifier(name: &str) -> anyhow::Result<&str> {
-    let mut chars = name.chars();
-    let Some(first) = chars.next() else {
-        anyhow::bail!("SQL 标识符不能为空");
-    };
-    if !(first == '_' || first.is_ascii_alphabetic()) {
-        anyhow::bail!("非法 SQL 标识符：{name}");
-    }
-    if !chars.all(|ch| ch == '_' || ch.is_ascii_alphanumeric()) {
-        anyhow::bail!("非法 SQL 标识符：{name}");
-    }
-    Ok(name)
-}
-
 pub async fn list_newapi_accounts(db_path: PathBuf) -> anyhow::Result<Vec<NewApiAccount>> {
     list_newapi_accounts_impl(db_path, false).await
 }
@@ -412,7 +247,8 @@ async fn list_newapi_accounts_impl(
                    quota_display_type, quota_per_unit, usd_exchange_rate, custom_currency_symbol, custom_currency_exchange_rate,
                    remote_checkin_enabled, remote_turnstile_check_enabled, last_quota, last_used_quota, last_balance_amount,
                    last_sync_error, last_synced_at_ms, low_balance_alert_notified, last_balance_alert_at_ms, sort_order, created_at_ms, updated_at_ms
-            FROM newapi_accounts
+            FROM remote_accounts
+            WHERE provider = 'newapi'
             ORDER BY sort_order ASC, created_at_ms ASC
             "#,
         )?;
@@ -489,8 +325,8 @@ async fn get_newapi_account_impl(
                    quota_display_type, quota_per_unit, usd_exchange_rate, custom_currency_symbol, custom_currency_exchange_rate,
                    remote_checkin_enabled, remote_turnstile_check_enabled, last_quota, last_used_quota, last_balance_amount,
                    last_sync_error, last_synced_at_ms, low_balance_alert_notified, last_balance_alert_at_ms, sort_order, created_at_ms, updated_at_ms
-            FROM newapi_accounts
-            WHERE id = ?1
+            FROM remote_accounts
+            WHERE provider = 'newapi' AND id = ?1
             "#,
         )?;
         stmt.query_row([account_id], |row| account_from_row(row, include_secret))
@@ -524,11 +360,12 @@ pub async fn create_newapi_account(
 
         conn.execute(
             r#"
-            INSERT INTO newapi_accounts (
-                id, base_url, api_url, user_id, user_token, page_checkin_url, checkin_mode, auto_checkin_enabled, auto_checkin_time,
-                low_balance_alert_threshold, recharge_currency, sort_order, created_at_ms, updated_at_ms
+            INSERT INTO remote_accounts (
+                id, provider, base_url, api_url, user_id, user_token, access_token, page_checkin_url,
+                checkin_mode, auto_checkin_enabled, auto_checkin_time, low_balance_alert_threshold,
+                recharge_currency, sort_order, created_at_ms, updated_at_ms
             )
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
+            VALUES (?1, 'newapi', ?2, ?3, ?4, ?5, '', ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
             "#,
             params![
                 id,
@@ -641,10 +478,10 @@ pub async fn update_newapi_account(
 
         conn.execute(
             r#"
-            UPDATE newapi_accounts
+            UPDATE remote_accounts
             SET base_url = ?2, api_url = ?3, user_id = ?4, user_token = ?5, page_checkin_url = ?6, checkin_mode = ?7,
                 auto_checkin_enabled = ?8, auto_checkin_time = ?9, low_balance_alert_threshold = ?10, recharge_currency = ?11, updated_at_ms = ?12
-            WHERE id = ?1
+            WHERE provider = 'newapi' AND id = ?1
             "#,
             params![
                 account.id,
@@ -677,14 +514,14 @@ fn ensure_unique_account(
     }
     let existing: Option<String> = if let Some(exclude_id) = exclude_id {
         conn.query_row(
-            r#"SELECT id FROM newapi_accounts WHERE base_url = ?1 AND user_id = ?2 AND id <> ?3"#,
+            r#"SELECT id FROM remote_accounts WHERE provider = 'newapi' AND base_url = ?1 AND user_id = ?2 AND id <> ?3"#,
             params![base_url, user_id, exclude_id],
             |row| row.get(0),
         )
         .optional()?
     } else {
         conn.query_row(
-            r#"SELECT id FROM newapi_accounts WHERE base_url = ?1 AND user_id = ?2"#,
+            r#"SELECT id FROM remote_accounts WHERE provider = 'newapi' AND base_url = ?1 AND user_id = ?2"#,
             params![base_url, user_id],
             |row| row.get(0),
         )
@@ -711,8 +548,8 @@ fn get_account_row(
                quota_display_type, quota_per_unit, usd_exchange_rate, custom_currency_symbol, custom_currency_exchange_rate,
                remote_checkin_enabled, remote_turnstile_check_enabled, last_quota, last_used_quota, last_balance_amount,
                last_sync_error, last_synced_at_ms, low_balance_alert_notified, last_balance_alert_at_ms, sort_order, created_at_ms, updated_at_ms
-        FROM newapi_accounts
-        WHERE id = ?1
+        FROM remote_accounts
+        WHERE provider = 'newapi' AND id = ?1
         "#,
     )?;
     stmt.query_row([account_id], |row| account_from_row(row, true))
@@ -728,7 +565,8 @@ pub async fn reorder_newapi_accounts(
         let mut stmt = conn.prepare(
             r#"
             SELECT id
-            FROM newapi_accounts
+            FROM remote_accounts
+            WHERE provider = 'newapi'
             ORDER BY sort_order ASC, created_at_ms ASC
             "#,
         )?;
@@ -761,7 +599,7 @@ pub async fn reorder_newapi_accounts(
         let tx = conn.unchecked_transaction()?;
         for (index, account_id) in account_ids.iter().enumerate() {
             tx.execute(
-                r#"UPDATE newapi_accounts SET sort_order = ?2, updated_at_ms = ?3 WHERE id = ?1"#,
+                r#"UPDATE remote_accounts SET sort_order = ?2, updated_at_ms = ?3 WHERE provider = 'newapi' AND id = ?1"#,
                 params![account_id, index as i64, now_ms()],
             )?;
         }
@@ -780,7 +618,7 @@ pub async fn assign_newapi_account_sort_orders(
         let ts = now_ms();
         for (account_id, sort_order) in account_orders {
             tx.execute(
-                r#"UPDATE newapi_accounts SET sort_order = ?2, updated_at_ms = ?3 WHERE id = ?1"#,
+                r#"UPDATE remote_accounts SET sort_order = ?2, updated_at_ms = ?3 WHERE provider = 'newapi' AND id = ?1"#,
                 params![account_id, sort_order, ts],
             )?;
         }
@@ -899,7 +737,7 @@ pub async fn update_newapi_account_remote_snapshot(
         };
         conn.execute(
             r#"
-            UPDATE newapi_accounts
+            UPDATE remote_accounts
             SET remote_role = ?2,
                 remote_username = ?3,
                 remote_display_name = ?4,
@@ -917,7 +755,7 @@ pub async fn update_newapi_account_remote_snapshot(
                 last_sync_error = ?16,
                 last_synced_at_ms = ?17,
                 updated_at_ms = ?18
-            WHERE id = ?1
+            WHERE provider = 'newapi' AND id = ?1
             "#,
             params![
                 account_id,
@@ -954,9 +792,9 @@ pub async fn set_newapi_account_balance_alert_notified(
     with_conn(db_path, move |conn| {
         let updated = conn.execute(
             r#"
-            UPDATE newapi_accounts
+            UPDATE remote_accounts
             SET low_balance_alert_notified = ?2, last_balance_alert_at_ms = ?3, updated_at_ms = ?4
-            WHERE id = ?1
+            WHERE provider = 'newapi' AND id = ?1
             "#,
             params![
                 account_id,
@@ -985,9 +823,11 @@ pub async fn get_newapi_accounts_checkins_today(
         move |conn| {
             let mut stmt = conn.prepare(
                 r#"
-                SELECT account_id
-                FROM newapi_account_checkins
-                WHERE date = ?1
+                SELECT c.account_id
+                FROM remote_account_checkins c
+                INNER JOIN remote_accounts a ON a.id = c.account_id
+                WHERE c.date = ?1
+                  AND a.provider = 'newapi'
                 "#,
             )?;
             let mut rows = stmt.query([date])?;
@@ -1017,7 +857,7 @@ pub async fn complete_newapi_account_checkin_today(
     with_conn(db_path, move |conn| {
         let exists: Option<i64> = conn
             .query_row(
-                r#"SELECT 1 FROM newapi_accounts WHERE id = ?1"#,
+                r#"SELECT 1 FROM remote_accounts WHERE provider = 'newapi' AND id = ?1"#,
                 params![account_id],
                 |row| row.get(0),
             )
@@ -1030,7 +870,7 @@ pub async fn complete_newapi_account_checkin_today(
         }
         conn.execute(
             r#"
-            INSERT INTO newapi_account_checkins (account_id, date, method, completed_at_ms)
+            INSERT INTO remote_account_checkins (account_id, date, method, completed_at_ms)
             VALUES (?1, ?2, ?3, ?4)
             ON CONFLICT(account_id, date) DO UPDATE SET
               method = excluded.method,
@@ -1052,8 +892,9 @@ pub async fn list_channels_by_newapi_account(
             r#"
             SELECT id
             FROM channels
-            WHERE newapi_account_id = ?1
-               OR (managed_by_remote = 1 AND managed_remote_provider = 'newapi' AND managed_remote_account_id = ?1)
+            WHERE managed_by_remote = 1
+              AND managed_remote_provider = 'newapi'
+              AND managed_remote_account_id = ?1
             ORDER BY created_at_ms ASC
             "#,
         )?;
@@ -1073,8 +914,9 @@ pub async fn detach_channels_from_newapi_account(
             r#"
             SELECT id
             FROM channels
-            WHERE newapi_account_id = ?1
-               OR (managed_by_remote = 1 AND managed_remote_provider = 'newapi' AND managed_remote_account_id = ?1)
+            WHERE managed_by_remote = 1
+              AND managed_remote_provider = 'newapi'
+              AND managed_remote_account_id = ?1
             ORDER BY created_at_ms ASC
             "#,
         )?;
@@ -1090,15 +932,10 @@ pub async fn detach_channels_from_newapi_account(
                 managed_remote_resource_name = NULL,
                 managed_remote_group_name = NULL,
                 managed_remote_group_id = NULL,
-                managed_by_newapi = 0,
-                newapi_account_id = NULL,
-                newapi_channel_id = NULL,
-                newapi_token_id = NULL,
-                newapi_token_name = NULL,
-                newapi_group = NULL,
                 updated_at_ms = ?2
-            WHERE newapi_account_id = ?1
-               OR (managed_by_remote = 1 AND managed_remote_provider = 'newapi' AND managed_remote_account_id = ?1)
+            WHERE managed_by_remote = 1
+              AND managed_remote_provider = 'newapi'
+              AND managed_remote_account_id = ?1
             "#,
             params![account_id, now_ms()],
         )?;
@@ -1115,7 +952,7 @@ pub async fn delete_newapi_account(
     with_conn(db_path, move |conn| {
         let exists: Option<i64> = conn
             .query_row(
-                r#"SELECT 1 FROM newapi_accounts WHERE id = ?1"#,
+                r#"SELECT 1 FROM remote_accounts WHERE provider = 'newapi' AND id = ?1"#,
                 params![account_id],
                 |row| row.get(0),
             )
@@ -1131,8 +968,9 @@ pub async fn delete_newapi_account(
             r#"
             SELECT id
             FROM channels
-            WHERE newapi_account_id = ?1
-               OR (managed_by_remote = 1 AND managed_remote_provider = 'newapi' AND managed_remote_account_id = ?1)
+            WHERE managed_by_remote = 1
+              AND managed_remote_provider = 'newapi'
+              AND managed_remote_account_id = ?1
             ORDER BY created_at_ms ASC
             "#,
         )?;
@@ -1163,15 +1001,10 @@ pub async fn delete_newapi_account(
                     managed_remote_resource_name = NULL,
                     managed_remote_group_name = NULL,
                     managed_remote_group_id = NULL,
-                    managed_by_newapi = 0,
-                    newapi_account_id = NULL,
-                    newapi_channel_id = NULL,
-                    newapi_token_id = NULL,
-                    newapi_token_name = NULL,
-                    newapi_group = NULL,
                     updated_at_ms = ?2
-                WHERE newapi_account_id = ?1
-                   OR (managed_by_remote = 1 AND managed_remote_provider = 'newapi' AND managed_remote_account_id = ?1)
+                WHERE managed_by_remote = 1
+                  AND managed_remote_provider = 'newapi'
+                  AND managed_remote_account_id = ?1
                 "#,
                 params![account_id.clone(), now_ms()],
             )?;
@@ -1182,11 +1015,11 @@ pub async fn delete_newapi_account(
         };
 
         tx.execute(
-            r#"DELETE FROM newapi_account_checkins WHERE account_id = ?1"#,
+            r#"DELETE FROM remote_account_checkins WHERE account_id = ?1"#,
             params![account_id.clone()],
         )?;
         tx.execute(
-            r#"DELETE FROM newapi_accounts WHERE id = ?1"#,
+            r#"DELETE FROM remote_accounts WHERE provider = 'newapi' AND id = ?1"#,
             params![account_id],
         )?;
         tx.commit()?;

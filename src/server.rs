@@ -72,12 +72,6 @@ fn request_endpoint_template(method: &Method, path: &str) -> Option<&'static str
         ("POST", "/api/remote/accounts/{id}/managed_channel") => {
             Some("/api/remote/accounts/{id}/managed_channel")
         }
-        ("GET", "/api/newapi/accounts") => Some("/api/newapi/accounts"),
-        ("POST", "/api/newapi/accounts") => Some("/api/newapi/accounts"),
-        ("POST", "/api/newapi/accounts/reorder") => Some("/api/newapi/accounts/reorder"),
-        ("GET", "/api/newapi/accounts/checkins/today") => {
-            Some("/api/newapi/accounts/checkins/today")
-        }
         ("POST", "/api/system/open") => Some("/api/system/open"),
         ("POST", "/api/system/open_data_dir") => Some("/api/system/open_data_dir"),
         ("POST", "/api/system/pick_folder") => Some("/api/system/pick_folder"),
@@ -128,30 +122,10 @@ fn request_endpoint_template(method: &Method, path: &str) -> Option<&'static str
                 {
                     Some("/api/remote/accounts/{id}/checkins/complete")
                 }
-                ["api", "newapi", "accounts", _] if method == Method::PUT => {
-                    Some("/api/newapi/accounts/{id}")
-                }
-                ["api", "newapi", "accounts", _] if method == Method::DELETE => {
-                    Some("/api/newapi/accounts/{id}")
-                }
-                ["api", "newapi", "accounts", _, "refresh"] if method == Method::POST => {
-                    Some("/api/newapi/accounts/{id}/refresh")
-                }
-                ["api", "newapi", "accounts", _, "groups"] if method == Method::GET => {
-                    Some("/api/newapi/accounts/{id}/groups")
-                }
-                ["api", "newapi", "accounts", _, "checkins", "complete"]
+                ["api", "remote", "accounts", _, "checkins", "system"]
                     if method == Method::POST =>
                 {
-                    Some("/api/newapi/accounts/{id}/checkins/complete")
-                }
-                ["api", "newapi", "accounts", _, "checkins", "system"]
-                    if method == Method::POST =>
-                {
-                    Some("/api/newapi/accounts/{id}/checkins/system")
-                }
-                ["api", "newapi", "accounts", _, "managed_channel"] if method == Method::POST => {
-                    Some("/api/newapi/accounts/{id}/managed_channel")
+                    Some("/api/remote/accounts/{id}/checkins/system")
                 }
                 ["api", "chat_bridge", "bindings", _] if method == Method::DELETE => {
                     Some("/api/chat_bridge/bindings/{id}")
@@ -217,10 +191,6 @@ fn request_purpose(method: &Method, path: &str) -> &'static str {
         ("POST", "/api/remote/accounts/{id}/managed_channel") => {
             "handlers::create_remote_managed_channel"
         }
-        ("GET", "/api/newapi/accounts") => "handlers::list_newapi_accounts",
-        ("POST", "/api/newapi/accounts") => "handlers::create_newapi_account",
-        ("POST", "/api/newapi/accounts/reorder") => "handlers::reorder_newapi_accounts",
-        ("GET", "/api/newapi/accounts/checkins/today") => "handlers::newapi_account_checkins_today",
         ("POST", "/api/system/open") => "handlers::open_in_browser",
         ("POST", "/api/system/open_data_dir") => "handlers::open_data_dir",
         ("POST", "/api/system/pick_folder") => "handlers::pick_folder",
@@ -268,30 +238,10 @@ fn request_purpose(method: &Method, path: &str) -> &'static str {
                 {
                     "handlers::complete_remote_account_checkin_today"
                 }
-                ["api", "newapi", "accounts", _] if method == Method::PUT => {
-                    "handlers::update_newapi_account"
-                }
-                ["api", "newapi", "accounts", _] if method == Method::DELETE => {
-                    "handlers::delete_newapi_account"
-                }
-                ["api", "newapi", "accounts", _, "refresh"] if method == Method::POST => {
-                    "handlers::refresh_newapi_account"
-                }
-                ["api", "newapi", "accounts", _, "groups"] if method == Method::GET => {
-                    "handlers::list_newapi_account_groups"
-                }
-                ["api", "newapi", "accounts", _, "checkins", "complete"]
+                ["api", "remote", "accounts", _, "checkins", "system"]
                     if method == Method::POST =>
                 {
-                    "handlers::complete_newapi_account_checkin_today"
-                }
-                ["api", "newapi", "accounts", _, "checkins", "system"]
-                    if method == Method::POST =>
-                {
-                    "handlers::perform_newapi_account_system_checkin"
-                }
-                ["api", "newapi", "accounts", _, "managed_channel"] if method == Method::POST => {
-                    "handlers::create_newapi_managed_channel"
+                    "handlers::perform_remote_account_system_checkin"
                 }
                 ["api", "chat_bridge", "bindings", _] if method == Method::DELETE => {
                     "handlers::deactivate_chat_bridge_binding"
@@ -470,40 +420,8 @@ fn build_app(state: AppState) -> Router {
             post(handlers::complete_remote_account_checkin_today),
         )
         .route(
-            "/api/newapi/accounts",
-            get(handlers::list_newapi_accounts).post(handlers::create_newapi_account),
-        )
-        .route(
-            "/api/newapi/accounts/reorder",
-            post(handlers::reorder_newapi_accounts),
-        )
-        .route(
-            "/api/newapi/accounts/checkins/today",
-            get(handlers::newapi_account_checkins_today),
-        )
-        .route(
-            "/api/newapi/accounts/{id}",
-            put(handlers::update_newapi_account).delete(handlers::delete_newapi_account),
-        )
-        .route(
-            "/api/newapi/accounts/{id}/refresh",
-            post(handlers::refresh_newapi_account),
-        )
-        .route(
-            "/api/newapi/accounts/{id}/groups",
-            get(handlers::list_newapi_account_groups),
-        )
-        .route(
-            "/api/newapi/accounts/{id}/checkins/complete",
-            post(handlers::complete_newapi_account_checkin_today),
-        )
-        .route(
-            "/api/newapi/accounts/{id}/checkins/system",
-            post(handlers::perform_newapi_account_system_checkin),
-        )
-        .route(
-            "/api/newapi/accounts/{id}/managed_channel",
-            post(handlers::create_newapi_managed_channel),
+            "/api/remote/accounts/{id}/checkins/system",
+            post(handlers::perform_remote_account_system_checkin),
         )
         .route(
             "/api/channels/{id}",

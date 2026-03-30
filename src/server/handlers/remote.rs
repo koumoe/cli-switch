@@ -89,20 +89,6 @@ pub(in crate::server) enum RemoteAccountResponse {
     },
 }
 
-impl RemoteAccountResponse {
-    fn sort_order(&self) -> i64 {
-        match self {
-            Self::Newapi { common, .. } | Self::Sub2Api { common, .. } => common.sort_order,
-        }
-    }
-
-    fn created_at_ms(&self) -> i64 {
-        match self {
-            Self::Newapi { common, .. } | Self::Sub2Api { common, .. } => common.created_at_ms,
-        }
-    }
-}
-
 #[derive(Debug, Clone, Serialize)]
 pub(in crate::server) struct RemoteGroupResponse {
     pub id: Option<i64>,
@@ -199,15 +185,122 @@ pub(in crate::server) struct DeleteRemoteAccountInput {
     pub sync_remote_delete: Option<bool>,
 }
 
+#[derive(Debug, Clone)]
+struct PreparedCreateRemoteManagedChannelInput {
+    name: String,
+    protocol: storage::Protocol,
+    group_name: String,
+    group_id: Option<i64>,
+    base_url_override: Option<String>,
+    priority: i64,
+    enabled: bool,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct DeleteRemoteAccountOptions {
+    delete_managed_channels: bool,
+    sync_remote_delete: bool,
+}
+
+fn validate_required_trimmed_text(
+    value: &str,
+    code: &'static str,
+    message: &'static str,
+) -> Result<String, ApiError> {
+    let value = value.trim();
+    if value.is_empty() {
+        return Err(ApiError::bad_request(code, message));
+    }
+    Ok(value.to_string())
+}
+
 fn validate_managed_channel_name(name: &str) -> Result<String, ApiError> {
-    let name = name.trim();
-    if name.is_empty() {
+    validate_required_trimmed_text(name, "remote_managed_name_required", "name is required")
+}
+
+fn validate_remote_key_name(name: &str) -> Result<String, ApiError> {
+    validate_required_trimmed_text(name, "remote_key_name_required", "name is required")
+}
+
+fn validate_remote_group_name(name: &str) -> Result<String, ApiError> {
+    validate_required_trimmed_text(name, "remote_group_required", "group_name is required")
+}
+
+fn prepare_create_remote_managed_channel_input(
+    input: CreateRemoteManagedChannelInput,
+) -> Result<PreparedCreateRemoteManagedChannelInput, ApiError> {
+    Ok(PreparedCreateRemoteManagedChannelInput {
+        name: validate_managed_channel_name(&input.name)?,
+        protocol: input.protocol.ok_or_else(|| {
+            ApiError::bad_request("remote_protocol_required", "protocol is required")
+        })?,
+        group_name: validate_remote_group_name(&input.group_name)?,
+        group_id: input.group_id,
+        base_url_override: newapi_handlers::validate_optional_http_url(
+            input.base_url_override.as_deref(),
+            "remote_managed_base_url_invalid",
+        )?,
+        priority: input.priority.unwrap_or(0),
+        enabled: input.enabled.unwrap_or(true),
+    })
+}
+
+fn parse_delete_remote_account_options(
+    input: DeleteRemoteAccountInput,
+) -> Result<DeleteRemoteAccountOptions, ApiError> {
+    let options = DeleteRemoteAccountOptions {
+        delete_managed_channels: input.delete_managed_channels.unwrap_or(false),
+        sync_remote_delete: input.sync_remote_delete.unwrap_or(false),
+    };
+    if options.sync_remote_delete && !options.delete_managed_channels {
         return Err(ApiError::bad_request(
-            "remote_managed_name_required",
-            "name is required",
+            "remote_delete_remote_requires_channel_delete",
+            "sync_remote_delete requires delete_managed_channels=true",
         ));
     }
-    Ok(name.to_string())
+    Ok(options)
+}
+
+fn normalize_http_url_preserving_path(raw: &str, field: &'static str) -> Result<String, ApiError> {
+    let value = newapi_handlers::validate_http_url(raw, field)?;
+    let mut parsed = reqwest::Url::parse(&value)
+        .map_err(|e| ApiError::bad_request(field, format!("Invalid {field}: {e}")))?;
+    parsed.set_query(None);
+    parsed.set_fragment(None);
+    Ok(parsed.to_string().trim_end_matches('/').to_string())
+}
+
+fn resolve_remote_url_from_base(base_url: &str, raw: &str) -> Option<String> {
+    let value = raw.trim();
+    if value.is_empty() {
+        return None;
+    }
+
+    if let Ok(parsed) = reqwest::Url::parse(value) {
+        return match parsed.scheme() {
+            "http" | "https" => Some(parsed.to_string().trim_end_matches('/').to_string()),
+            _ => None,
+        };
+    }
+
+    let mut base = reqwest::Url::parse(base_url).ok()?;
+    base.set_query(None);
+    base.set_fragment(None);
+
+    if value.starts_with('/') {
+        base.set_path(value);
+        return Some(base.to_string().trim_end_matches('/').to_string());
+    }
+
+    let base_dir = match base.path().trim_end_matches('/') {
+        "" => "/".to_string(),
+        path => format!("{path}/"),
+    };
+    base.set_path(&base_dir);
+
+    base.join(value)
+        .ok()
+        .map(|url| url.to_string().trim_end_matches('/').to_string())
 }
 
 fn managed_channel_base_url_for_newapi(
@@ -228,6 +321,90 @@ fn managed_channel_base_url_for_sub2api(
         .unwrap_or_else(|| format!("{}/v1", account.base_url.trim_end_matches('/')))
 }
 
+fn channel_sort_rank(protocol: storage::Protocol) -> i32 {
+    match protocol {
+        storage::Protocol::Openai => 0,
+        storage::Protocol::Anthropic => 1,
+        storage::Protocol::Gemini => 2,
+    }
+}
+
+fn add_channel_to_cache(state: &AppState, channel: &storage::Channel) {
+    state.channels_cache.send_modify(|cur| {
+        let mut next = (**cur).clone();
+        next.push(channel.clone());
+        next.sort_by(|a, b| {
+            channel_sort_rank(a.protocol)
+                .cmp(&channel_sort_rank(b.protocol))
+                .then_with(|| b.priority.cmp(&a.priority))
+                .then_with(|| a.name.cmp(&b.name))
+        });
+        *cur = std::sync::Arc::new(next);
+    });
+}
+
+fn remove_channels_from_cache(state: &AppState, deleted_channel_ids: &[String]) {
+    state.channels_cache.send_modify(|cur| {
+        let mut next = (**cur).clone();
+        next.retain(|channel| !deleted_channel_ids.contains(&channel.id));
+        *cur = std::sync::Arc::new(next);
+    });
+}
+
+fn clear_managed_links_in_cache(
+    state: &AppState,
+    provider: storage::ManagedRemoteProvider,
+    account_id: &str,
+) {
+    state.channels_cache.send_modify(|cur| {
+        let mut next = (**cur).clone();
+        for channel in &mut next {
+            if channel.is_managed_by_account(provider, account_id) {
+                channel.clear_managed_remote_link();
+            }
+        }
+        *cur = std::sync::Arc::new(next);
+    });
+}
+
+fn publish_remote_managed_channel_created_if_enabled(
+    state: &AppState,
+    provider: storage::ManagedRemoteProvider,
+    account_id: &str,
+    account_base_url: &str,
+    channel: &storage::Channel,
+) {
+    if !state
+        .settings_snapshot()
+        .remote_managed_channel_missing_prompt_enabled
+    {
+        return;
+    }
+    events::publish(AppEvent::RemoteManagedChannelCreated(
+        RemoteManagedChannelCreated {
+            channel_id: channel.id.clone(),
+            channel_name: channel.name.clone(),
+            account_id: account_id.to_string(),
+            account_base_url: account_base_url.to_string(),
+            provider,
+            group_name: channel.managed_group_name().map(ToOwned::to_owned),
+            resource_name: channel.managed_resource_name().map(ToOwned::to_owned),
+        },
+    ));
+}
+
+async fn list_managed_channels_for_account(
+    state: &AppState,
+    provider: storage::ManagedRemoteProvider,
+    account_id: &str,
+) -> Result<Vec<storage::Channel>, ApiError> {
+    Ok(storage::list_channels(state.db_path())
+        .await?
+        .into_iter()
+        .filter(|channel| channel.is_managed_by_account(provider, account_id))
+        .collect())
+}
+
 pub(super) async fn delete_remote_managed_channel_resources(
     state: &AppState,
     channel: &storage::Channel,
@@ -246,15 +423,10 @@ pub(super) async fn delete_remote_managed_channel_resources(
             let account =
                 storage::get_newapi_account_with_secret(state.db_path(), account_id.to_string())
                     .await?;
-            if let Some(remote_channel_id) = channel.newapi_channel_id {
-                newapi_client::delete_channel(&state.http_client, &account, remote_channel_id)
-                    .await?;
-            }
             if let Some(remote_token_id) = channel
                 .managed_resource_id()
                 .as_deref()
                 .and_then(|value| value.parse::<i64>().ok())
-                .or(channel.newapi_token_id)
             {
                 newapi_client::delete_token(&state.http_client, &account, remote_token_id).await?;
             }
@@ -282,20 +454,45 @@ pub(super) async fn delete_remote_managed_channel_resources(
     Ok(())
 }
 
-fn detect_provider_from_base_url(raw: &str) -> Result<String, ApiError> {
-    let value = newapi_handlers::validate_http_url(raw, "remote_base_url_required")?;
-    let parsed = reqwest::Url::parse(&value).map_err(|e| {
-        ApiError::bad_request("remote_base_url_invalid", format!("Invalid base_url: {e}"))
-    })?;
-    let host = parsed.host_str().ok_or_else(|| {
-        ApiError::bad_request("remote_base_url_invalid", "base_url must include a host")
-    })?;
-    let mut out = format!("{}://{}", parsed.scheme(), host);
-    if let Some(port) = parsed.port() {
-        out.push(':');
-        out.push_str(&port.to_string());
+async fn sync_delete_managed_channels_for_account(
+    state: &AppState,
+    provider: storage::ManagedRemoteProvider,
+    account_id: &str,
+) -> Result<(), ApiError> {
+    let channels = list_managed_channels_for_account(state, provider, account_id).await?;
+    let mut deleted_channel_ids = Vec::new();
+    let mut failures = Vec::new();
+    for channel in &channels {
+        match delete_remote_managed_channel_resources(state, channel).await {
+            Ok(()) => deleted_channel_ids.push(channel.id.clone()),
+            Err(err) => failures.push(format!("{} ({}): {err}", channel.name, channel.id)),
+        }
     }
-    Ok(out)
+    if !deleted_channel_ids.is_empty() && !failures.is_empty() {
+        for channel_id in &deleted_channel_ids {
+            storage::delete_channel(state.db_path(), channel_id.clone()).await?;
+        }
+        remove_channels_from_cache(state, &deleted_channel_ids);
+    }
+    if !failures.is_empty() {
+        return Err(ApiError::bad_gateway(
+            "remote_delete_partial_failed",
+            format!(
+                "Remote delete failed for some managed channels; account was kept. {}",
+                failures.join(" ; ")
+            ),
+        ));
+    }
+    Ok(())
+}
+
+fn detect_provider_from_base_url(raw: &str) -> Result<String, ApiError> {
+    normalize_http_url_preserving_path(raw, "remote_base_url_required").map_err(|err| match err {
+        ApiError::BadRequest { code: _, message } => {
+            ApiError::bad_request("remote_base_url_invalid", message)
+        }
+        other => other,
+    })
 }
 
 fn detect_recommended_api_url(
@@ -303,9 +500,14 @@ fn detect_recommended_api_url(
     base_url: &str,
     detected_api_url: Option<String>,
 ) -> Option<String> {
+    let detected = detected_api_url
+        .as_deref()
+        .and_then(|value| resolve_remote_url_from_base(base_url, value));
     match provider {
-        RemoteAccountProvider::Newapi => detected_api_url,
-        RemoteAccountProvider::Sub2Api => Some(format!("{}/v1", base_url.trim_end_matches('/'))),
+        RemoteAccountProvider::Newapi => detected,
+        RemoteAccountProvider::Sub2Api => {
+            detected.or_else(|| Some(format!("{}/v1", base_url.trim_end_matches('/'))))
+        }
     }
 }
 
@@ -323,31 +525,16 @@ fn detect_suggested_page_checkin_url(
     }
 }
 
-#[derive(Debug)]
-enum ResolvedRemoteAccount {
-    Newapi(storage::NewApiAccount),
-    Sub2Api(storage::RemoteAccount),
-}
-
 async fn resolve_remote_account_with_secret(
     state: &AppState,
     account_id: &str,
-) -> Result<ResolvedRemoteAccount, ApiError> {
-    let (newapi_account, remote_account) = tokio::try_join!(
-        storage::get_newapi_account_with_secret_optional(state.db_path(), account_id.to_string()),
-        storage::get_remote_account_with_secret_optional(state.db_path(), account_id.to_string()),
-    )?;
-    match (newapi_account, remote_account) {
-        (Some(_), Some(_)) => Err(ApiError::Internal(anyhow::anyhow!(
-            "account id {account_id} exists in both newapi_accounts and remote_accounts"
-        ))),
-        (Some(account), None) => Ok(ResolvedRemoteAccount::Newapi(account)),
-        (None, Some(account)) => Ok(ResolvedRemoteAccount::Sub2Api(account)),
-        (None, None) => Err(ApiError::not_found(
-            "remote_account_not_found",
-            "Remote account not found",
-        )),
-    }
+) -> Result<storage::UnifiedRemoteAccount, ApiError> {
+    storage::get_unified_remote_account_with_secret_optional(
+        state.db_path(),
+        account_id.to_string(),
+    )
+    .await?
+    .ok_or_else(|| ApiError::not_found("remote_account_not_found", "Remote account not found"))
 }
 
 fn resolve_newapi_checkin_mode(account: &storage::NewApiAccount) -> RemoteAccountCheckinMode {
@@ -389,59 +576,505 @@ fn map_newapi_common(account: &storage::NewApiAccount) -> RemoteAccountCommonRes
     }
 }
 
-fn map_newapi_account(account: storage::NewApiAccount) -> RemoteAccountResponse {
-    let common = map_newapi_common(&account);
-    RemoteAccountResponse::Newapi {
-        common,
-        newapi: NewapiRemoteAccountResponse {
-            remote_role: account.remote_role,
-            remote_group: account.remote_group,
-            quota_display_type: account.quota_display_type,
-            quota_per_unit: account.quota_per_unit,
-            usd_exchange_rate: account.usd_exchange_rate,
-            custom_currency_symbol: account.custom_currency_symbol,
-            custom_currency_exchange_rate: account.custom_currency_exchange_rate,
-            remote_checkin_enabled: account.remote_checkin_enabled,
-            remote_turnstile_check_enabled: account.remote_turnstile_check_enabled,
-            last_quota: account.last_quota,
-            last_used_quota: account.last_used_quota,
-        },
+impl From<storage::NewApiAccount> for RemoteAccountResponse {
+    fn from(account: storage::NewApiAccount) -> Self {
+        let common = map_newapi_common(&account);
+        Self::Newapi {
+            common,
+            newapi: NewapiRemoteAccountResponse {
+                remote_role: account.remote_role,
+                remote_group: account.remote_group,
+                quota_display_type: account.quota_display_type,
+                quota_per_unit: account.quota_per_unit,
+                usd_exchange_rate: account.usd_exchange_rate,
+                custom_currency_symbol: account.custom_currency_symbol,
+                custom_currency_exchange_rate: account.custom_currency_exchange_rate,
+                remote_checkin_enabled: account.remote_checkin_enabled,
+                remote_turnstile_check_enabled: account.remote_turnstile_check_enabled,
+                last_quota: account.last_quota,
+                last_used_quota: account.last_used_quota,
+            },
+        }
     }
 }
 
-fn map_remote_account(account: storage::RemoteAccount) -> RemoteAccountResponse {
-    let common = RemoteAccountCommonResponse {
-        id: account.id,
-        base_url: account.base_url,
-        api_url: account.api_url,
-        user_id: account.remote_user_id.unwrap_or_default(),
-        user_token_configured: account.access_token_configured,
-        page_checkin_url: account.page_checkin_url,
-        checkin_mode: match account.checkin_mode {
-            storage::RemoteAccountCheckinMode::Disabled => RemoteAccountCheckinMode::Disabled,
-            storage::RemoteAccountCheckinMode::PageOpen => RemoteAccountCheckinMode::PageOpen,
-        },
-        auto_checkin_enabled: false,
-        auto_checkin_time: account.auto_checkin_time,
-        low_balance_alert_threshold: account.low_balance_alert_threshold,
-        recharge_currency: account.recharge_currency,
-        remote_username: account.remote_username,
-        remote_display_name: account.remote_display_name,
-        last_balance_amount: account.last_balance_amount,
-        last_sync_error: account.last_sync_error,
-        last_synced_at_ms: account.last_synced_at_ms,
-        low_balance_alert_notified: account.low_balance_alert_notified,
-        last_balance_alert_at_ms: account.last_balance_alert_at_ms,
-        sort_order: account.sort_order,
-        created_at_ms: account.created_at_ms,
-        updated_at_ms: account.updated_at_ms,
-    };
-    RemoteAccountResponse::Sub2Api {
-        common,
-        sub2api: Sub2ApiRemoteAccountResponse {
-            remote_role_text: account.remote_role,
-        },
+impl From<storage::RemoteAccount> for RemoteAccountResponse {
+    fn from(account: storage::RemoteAccount) -> Self {
+        let common = RemoteAccountCommonResponse {
+            id: account.id,
+            base_url: account.base_url,
+            api_url: account.api_url,
+            user_id: account.remote_user_id.unwrap_or_default(),
+            user_token_configured: account.access_token_configured,
+            page_checkin_url: account.page_checkin_url,
+            checkin_mode: normalize_sub2api_checkin_mode_from_storage(account.checkin_mode),
+            auto_checkin_enabled: false,
+            auto_checkin_time: account.auto_checkin_time,
+            low_balance_alert_threshold: account.low_balance_alert_threshold,
+            recharge_currency: account.recharge_currency,
+            remote_username: account.remote_username,
+            remote_display_name: account.remote_display_name,
+            last_balance_amount: account.last_balance_amount,
+            last_sync_error: account.last_sync_error,
+            last_synced_at_ms: account.last_synced_at_ms,
+            low_balance_alert_notified: account.low_balance_alert_notified,
+            last_balance_alert_at_ms: account.last_balance_alert_at_ms,
+            sort_order: account.sort_order,
+            created_at_ms: account.created_at_ms,
+            updated_at_ms: account.updated_at_ms,
+        };
+        Self::Sub2Api {
+            common,
+            sub2api: Sub2ApiRemoteAccountResponse {
+                remote_role_text: account.remote_role,
+            },
+        }
     }
+}
+
+impl From<storage::UnifiedRemoteAccount> for RemoteAccountResponse {
+    fn from(account: storage::UnifiedRemoteAccount) -> Self {
+        match account {
+            storage::UnifiedRemoteAccount::Newapi(account) => account.into(),
+            storage::UnifiedRemoteAccount::Sub2Api(account) => account.into(),
+        }
+    }
+}
+
+fn remote_provider_mismatch_error() -> ApiError {
+    ApiError::bad_request(
+        "remote_provider_mismatch",
+        "provider does not match account type",
+    )
+}
+
+fn remote_credentials_required_error() -> ApiError {
+    ApiError::bad_request("remote_credentials_required", "bearer_token is required")
+}
+
+fn newapi_credentials_required_error() -> ApiError {
+    ApiError::bad_request(
+        "newapi_credentials_required",
+        "user_id and user_token are required for this action",
+    )
+}
+
+fn remote_key_unsupported_provider_error() -> ApiError {
+    ApiError::bad_request(
+        "remote_key_unsupported_provider",
+        "Only sub2api accounts support key creation",
+    )
+}
+
+fn remote_group_not_found_error() -> ApiError {
+    ApiError::bad_request(
+        "remote_group_not_found",
+        "selected remote group was not found",
+    )
+}
+
+fn remote_system_checkin_unsupported_provider_error() -> ApiError {
+    ApiError::bad_request(
+        "remote_checkin_unsupported_provider",
+        "System API check-in is only supported for newapi accounts",
+    )
+}
+
+fn ensure_provider_matches(
+    requested: Option<RemoteAccountProvider>,
+    actual: RemoteAccountProvider,
+) -> Result<(), ApiError> {
+    if requested.unwrap_or(actual) != actual {
+        return Err(remote_provider_mismatch_error());
+    }
+    Ok(())
+}
+
+fn normalize_newapi_create_checkin_mode(
+    mode: Option<RemoteAccountCheckinMode>,
+) -> (storage::NewApiAccountCheckinMode, bool) {
+    match mode.unwrap_or(RemoteAccountCheckinMode::Disabled) {
+        RemoteAccountCheckinMode::PageOpen => (storage::NewApiAccountCheckinMode::PageOpen, false),
+        RemoteAccountCheckinMode::Disabled => (storage::NewApiAccountCheckinMode::SystemApi, false),
+        RemoteAccountCheckinMode::SystemApi => (storage::NewApiAccountCheckinMode::SystemApi, true),
+    }
+}
+
+fn normalize_newapi_update_checkin_mode(
+    mode: Option<RemoteAccountCheckinMode>,
+) -> (Option<storage::NewApiAccountCheckinMode>, Option<bool>) {
+    match mode {
+        Some(RemoteAccountCheckinMode::PageOpen) => (
+            Some(storage::NewApiAccountCheckinMode::PageOpen),
+            Some(false),
+        ),
+        Some(RemoteAccountCheckinMode::Disabled) => (
+            Some(storage::NewApiAccountCheckinMode::SystemApi),
+            Some(false),
+        ),
+        Some(RemoteAccountCheckinMode::SystemApi) => (
+            Some(storage::NewApiAccountCheckinMode::SystemApi),
+            Some(true),
+        ),
+        None => (None, None),
+    }
+}
+
+fn normalize_sub2api_checkin_mode_to_storage(
+    mode: RemoteAccountCheckinMode,
+) -> storage::RemoteAccountCheckinMode {
+    match mode {
+        RemoteAccountCheckinMode::Disabled | RemoteAccountCheckinMode::SystemApi => {
+            storage::RemoteAccountCheckinMode::Disabled
+        }
+        RemoteAccountCheckinMode::PageOpen => storage::RemoteAccountCheckinMode::PageOpen,
+    }
+}
+
+fn normalize_sub2api_checkin_mode_from_storage(
+    mode: storage::RemoteAccountCheckinMode,
+) -> RemoteAccountCheckinMode {
+    match mode {
+        storage::RemoteAccountCheckinMode::Disabled => RemoteAccountCheckinMode::Disabled,
+        storage::RemoteAccountCheckinMode::PageOpen => RemoteAccountCheckinMode::PageOpen,
+    }
+}
+
+fn require_sub2api_access_token(account: &storage::RemoteAccount) -> Result<&str, ApiError> {
+    account
+        .access_token
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(remote_credentials_required_error)
+}
+
+fn map_create_newapi_account_error(err: anyhow::Error) -> ApiError {
+    match err.downcast_ref::<storage::StorageError>() {
+        Some(storage::StorageError::NewApiAccountAlreadyExists { .. }) => {
+            ApiError::conflict("newapi_account_exists", "New API account already exists")
+        }
+        _ => ApiError::Internal(err),
+    }
+}
+
+fn map_update_newapi_account_error(err: anyhow::Error) -> ApiError {
+    match err.downcast_ref::<storage::StorageError>() {
+        Some(storage::StorageError::NewApiAccountNotFound { .. }) => {
+            ApiError::not_found("newapi_account_not_found", "New API account not found")
+        }
+        Some(storage::StorageError::NewApiAccountAlreadyExists { .. }) => {
+            ApiError::conflict("newapi_account_exists", "New API account already exists")
+        }
+        _ => ApiError::Internal(err),
+    }
+}
+
+fn map_delete_newapi_account_error(err: anyhow::Error) -> ApiError {
+    match err.downcast_ref::<storage::StorageError>() {
+        Some(storage::StorageError::NewApiAccountNotFound { .. }) => {
+            ApiError::not_found("newapi_account_not_found", "New API account not found")
+        }
+        _ => ApiError::Internal(err),
+    }
+}
+
+fn map_complete_newapi_checkin_error(err: &anyhow::Error) -> Option<ApiError> {
+    matches!(
+        err.downcast_ref::<storage::StorageError>(),
+        Some(storage::StorageError::NewApiAccountNotFound { .. })
+    )
+    .then(|| ApiError::not_found("newapi_account_not_found", "New API account not found"))
+}
+
+fn map_complete_sub2api_checkin_error(err: &anyhow::Error) -> Option<ApiError> {
+    matches!(
+        err.downcast_ref::<storage::StorageError>(),
+        Some(storage::StorageError::RemoteAccountNotFound { .. })
+    )
+    .then(|| ApiError::not_found("remote_account_not_found", "Remote account not found"))
+}
+
+fn map_create_sub2api_account_error(err: anyhow::Error) -> ApiError {
+    match err.downcast_ref::<storage::StorageError>() {
+        Some(storage::StorageError::RemoteAccountAlreadyExists { .. }) => {
+            ApiError::conflict("remote_account_exists", "Remote account already exists")
+        }
+        _ => ApiError::Internal(err),
+    }
+}
+
+fn map_update_sub2api_account_error(err: anyhow::Error) -> ApiError {
+    match err.downcast_ref::<storage::StorageError>() {
+        Some(storage::StorageError::RemoteAccountNotFound { .. }) => {
+            ApiError::not_found("remote_account_not_found", "Remote account not found")
+        }
+        Some(storage::StorageError::RemoteAccountAlreadyExists { .. }) => {
+            ApiError::conflict("remote_account_exists", "Remote account already exists")
+        }
+        _ => ApiError::Internal(err),
+    }
+}
+
+fn count_managed_channels_by_group_name(channels: &[storage::Channel]) -> HashMap<String, usize> {
+    channels.iter().fold(HashMap::new(), |mut acc, channel| {
+        if let Some(group_name) = channel.managed_group_name() {
+            *acc.entry(group_name.to_string()).or_default() += 1;
+        }
+        acc
+    })
+}
+
+fn count_sub2api_managed_channels(
+    channels: &[storage::Channel],
+) -> (HashMap<i64, usize>, HashMap<String, usize>) {
+    let mut counts_by_id = HashMap::<i64, usize>::new();
+    let mut counts_by_name = HashMap::<String, usize>::new();
+    for channel in channels {
+        if let Some(group_id) = channel.managed_group_id() {
+            *counts_by_id.entry(group_id).or_default() += 1;
+        } else if let Some(group_name) = channel.managed_group_name() {
+            *counts_by_name.entry(group_name.to_string()).or_default() += 1;
+        }
+    }
+    (counts_by_id, counts_by_name)
+}
+
+fn map_sub2api_key_response(key: sub2api_client::Sub2ApiKey) -> RemoteKeyResponse {
+    RemoteKeyResponse {
+        id: key.id,
+        key: key.key,
+        name: key.name,
+        group_id: key.group_id,
+        status: key.status,
+    }
+}
+
+fn find_sub2api_group<'a>(
+    groups: &'a [sub2api_client::Sub2ApiGroupOption],
+    input: &PreparedCreateRemoteManagedChannelInput,
+) -> Result<&'a sub2api_client::Sub2ApiGroupOption, ApiError> {
+    let selected_group = if let Some(group_id) = input.group_id {
+        groups
+            .iter()
+            .find(|item| item.id == group_id)
+            .or_else(|| groups.iter().find(|item| item.name == input.group_name))
+    } else {
+        groups.iter().find(|item| item.name == input.group_name)
+    };
+    selected_group.ok_or_else(remote_group_not_found_error)
+}
+
+async fn sync_delete_managed_channels_if_requested(
+    state: &AppState,
+    provider: storage::ManagedRemoteProvider,
+    account_id: &str,
+    options: DeleteRemoteAccountOptions,
+) -> Result<(), ApiError> {
+    if options.delete_managed_channels && options.sync_remote_delete {
+        sync_delete_managed_channels_for_account(state, provider, account_id).await?;
+    }
+    Ok(())
+}
+
+fn finalize_remote_account_delete(
+    state: &AppState,
+    provider: storage::ManagedRemoteProvider,
+    account_id: &str,
+    options: DeleteRemoteAccountOptions,
+    result: &storage::DeleteNewApiAccountResult,
+) {
+    if options.delete_managed_channels {
+        remove_channels_from_cache(state, &result.deleted_managed_channel_ids);
+    } else {
+        clear_managed_links_in_cache(state, provider, account_id);
+    }
+    newapi_handlers::notify_background_tasks(state);
+}
+
+async fn create_newapi_remote_account_impl(
+    state: &AppState,
+    input: CreateRemoteAccountInput,
+) -> Result<RemoteAccountResponse, ApiError> {
+    let user_id = input.user_id.unwrap_or_default();
+    let user_token = input.user_token.unwrap_or_default();
+    let (request_checkin_mode, auto_checkin_enabled) =
+        normalize_newapi_create_checkin_mode(input.checkin_mode);
+    let create_input = storage::CreateNewApiAccount {
+        base_url: input.base_url,
+        api_url: input.api_url,
+        user_id,
+        user_token,
+        page_checkin_url: input.page_checkin_url,
+        checkin_mode: Some(request_checkin_mode),
+        auto_checkin_enabled: Some(auto_checkin_enabled),
+        auto_checkin_time: input.auto_checkin_time,
+        low_balance_alert_threshold: input.low_balance_alert_threshold,
+        recharge_currency: input.recharge_currency,
+    };
+    let candidate = newapi_handlers::build_candidate_from_create(&create_input)?;
+    let account = storage::create_newapi_account(state.db_path(), create_input)
+        .await
+        .map_err(map_create_newapi_account_error)?;
+    let account =
+        newapi_handlers::sync_account_if_possible(state, account.id.clone(), &candidate).await?;
+    newapi_handlers::notify_background_tasks(state);
+    Ok(RemoteAccountResponse::from(account))
+}
+
+async fn create_sub2api_remote_account_impl(
+    state: &AppState,
+    input: CreateRemoteAccountInput,
+) -> Result<RemoteAccountResponse, ApiError> {
+    let base_url = detect_provider_from_base_url(&input.base_url)?;
+    let access_token = input.bearer_token.unwrap_or_default();
+    let checkin_mode = input
+        .checkin_mode
+        .unwrap_or(RemoteAccountCheckinMode::Disabled);
+    let auto_checkin_time = input
+        .auto_checkin_time
+        .clone()
+        .unwrap_or_else(|| "00:05:00".to_string());
+    validate_sub2api_candidate(
+        &base_url,
+        input.page_checkin_url.as_deref(),
+        checkin_mode,
+        &auto_checkin_time,
+        input.low_balance_alert_threshold.unwrap_or(0.0),
+        !access_token.trim().is_empty(),
+    )?;
+    let overview =
+        sub2api_client::fetch_account_overview(&state.http_client, &base_url, &access_token)
+            .await
+            .map_err(|err| {
+                ApiError::bad_gateway(
+                    "remote_sync_failed",
+                    format!("Failed to validate sub2api account: {err}"),
+                )
+            })?;
+    let account = storage::create_remote_account(
+        state.db_path(),
+        storage::CreateRemoteAccount {
+            provider: storage::RemoteAccountProvider::Sub2Api,
+            base_url,
+            api_url: input.api_url,
+            access_token,
+            page_checkin_url: input.page_checkin_url,
+            checkin_mode: Some(normalize_sub2api_checkin_mode_to_storage(checkin_mode)),
+            auto_checkin_time: Some(auto_checkin_time),
+            low_balance_alert_threshold: input.low_balance_alert_threshold,
+            recharge_currency: input.recharge_currency,
+        },
+    )
+    .await
+    .map_err(map_create_sub2api_account_error)?;
+    let account = persist_sub2api_overview(state, account, &overview).await?;
+    Ok(RemoteAccountResponse::from(account))
+}
+
+async fn update_newapi_remote_account_impl(
+    state: &AppState,
+    account_id: String,
+    current: storage::NewApiAccount,
+    input: UpdateRemoteAccountInput,
+) -> Result<RemoteAccountResponse, ApiError> {
+    ensure_provider_matches(input.provider, RemoteAccountProvider::Newapi)?;
+    let (request_checkin_mode, auto_checkin_enabled) =
+        normalize_newapi_update_checkin_mode(input.checkin_mode);
+    let update_input = storage::UpdateNewApiAccount {
+        base_url: input.base_url,
+        api_url: input.api_url,
+        user_id: input.user_id,
+        user_token: input.user_token,
+        page_checkin_url: input.page_checkin_url,
+        checkin_mode: request_checkin_mode,
+        auto_checkin_enabled,
+        auto_checkin_time: input.auto_checkin_time,
+        low_balance_alert_threshold: input.low_balance_alert_threshold,
+        recharge_currency: input.recharge_currency,
+    };
+    let candidate = newapi_handlers::build_candidate_from_update(&current, &update_input)?;
+    storage::update_newapi_account(state.db_path(), account_id.clone(), update_input)
+        .await
+        .map_err(map_update_newapi_account_error)?;
+    let account = newapi_handlers::sync_account_if_possible(state, account_id, &candidate).await?;
+    newapi_handlers::notify_background_tasks(state);
+    Ok(RemoteAccountResponse::from(account))
+}
+
+async fn update_sub2api_remote_account_impl(
+    state: &AppState,
+    account_id: String,
+    current: storage::RemoteAccount,
+    input: UpdateRemoteAccountInput,
+) -> Result<RemoteAccountResponse, ApiError> {
+    ensure_provider_matches(input.provider, RemoteAccountProvider::Sub2Api)?;
+    let effective_base_url = input
+        .base_url
+        .as_deref()
+        .map(detect_provider_from_base_url)
+        .transpose()?
+        .unwrap_or_else(|| current.base_url.clone());
+    let effective_token = input
+        .bearer_token
+        .clone()
+        .or_else(|| current.access_token.clone())
+        .unwrap_or_default();
+    let effective_checkin_mode =
+        input
+            .checkin_mode
+            .unwrap_or(normalize_sub2api_checkin_mode_from_storage(
+                current.checkin_mode,
+            ));
+    let effective_auto_checkin_time = input
+        .auto_checkin_time
+        .clone()
+        .unwrap_or_else(|| current.auto_checkin_time.clone());
+    let effective_threshold = input
+        .low_balance_alert_threshold
+        .unwrap_or(current.low_balance_alert_threshold);
+    validate_sub2api_candidate(
+        &effective_base_url,
+        input
+            .page_checkin_url
+            .as_deref()
+            .or(current.page_checkin_url.as_deref()),
+        effective_checkin_mode,
+        &effective_auto_checkin_time,
+        effective_threshold,
+        !effective_token.trim().is_empty(),
+    )?;
+    let overview = sub2api_client::fetch_account_overview(
+        &state.http_client,
+        &effective_base_url,
+        &effective_token,
+    )
+    .await
+    .map_err(|err| {
+        ApiError::bad_gateway(
+            "remote_sync_failed",
+            format!("Failed to validate sub2api account: {err}"),
+        )
+    })?;
+    let account = storage::update_remote_account(
+        state.db_path(),
+        account_id,
+        storage::UpdateRemoteAccount {
+            base_url: Some(effective_base_url),
+            api_url: input.api_url,
+            access_token: Some(effective_token),
+            page_checkin_url: input.page_checkin_url,
+            checkin_mode: Some(normalize_sub2api_checkin_mode_to_storage(
+                effective_checkin_mode,
+            )),
+            auto_checkin_time: Some(effective_auto_checkin_time),
+            low_balance_alert_threshold: Some(effective_threshold),
+            recharge_currency: input.recharge_currency,
+        },
+    )
+    .await
+    .map_err(map_update_sub2api_account_error)?;
+    let account = persist_sub2api_overview(state, account, &overview).await?;
+    Ok(RemoteAccountResponse::from(account))
 }
 
 fn validate_threshold(threshold: f64) -> Result<(), ApiError> {
@@ -508,44 +1141,49 @@ fn validate_sub2api_candidate(
     Ok(())
 }
 
-async fn fetch_and_persist_sub2api_snapshot(
+fn build_sub2api_snapshot(
+    overview: &sub2api_client::Sub2ApiAccountOverview,
+    synced_at_ms: i64,
+) -> storage::RemoteAccountRemoteSnapshot {
+    storage::RemoteAccountRemoteSnapshot {
+        remote_user_id: Some(overview.remote_user_id.to_string()),
+        remote_role: overview.remote_role.clone(),
+        remote_username: overview.remote_username.clone(),
+        remote_display_name: overview.remote_display_name.clone(),
+        last_balance_amount: overview.balance,
+        last_synced_at_ms: Some(synced_at_ms),
+    }
+}
+
+fn apply_sub2api_overview_to_account(
+    account: &mut storage::RemoteAccount,
+    overview: &sub2api_client::Sub2ApiAccountOverview,
+    synced_at_ms: i64,
+) {
+    account.remote_user_id = Some(overview.remote_user_id.to_string());
+    account.remote_role = overview.remote_role.clone();
+    account.remote_username = overview.remote_username.clone();
+    account.remote_display_name = overview.remote_display_name.clone();
+    account.last_balance_amount = overview.balance;
+    account.last_sync_error = None;
+    account.last_synced_at_ms = Some(synced_at_ms);
+    account.updated_at_ms = synced_at_ms;
+}
+
+async fn persist_sub2api_overview(
     state: &AppState,
-    account_id: String,
+    mut account: storage::RemoteAccount,
+    overview: &sub2api_client::Sub2ApiAccountOverview,
 ) -> Result<storage::RemoteAccount, ApiError> {
-    let account =
-        storage::get_remote_account_with_secret(state.db_path(), account_id.clone()).await?;
-    let token = account
-        .access_token
-        .as_deref()
-        .filter(|value| !value.trim().is_empty())
-        .ok_or_else(|| {
-            ApiError::bad_request("remote_credentials_required", "bearer_token is required")
-        })?;
-    let overview =
-        sub2api_client::fetch_account_overview(&state.http_client, &account.base_url, token)
-            .await
-            .map_err(|err| {
-                ApiError::bad_gateway(
-                    "remote_sync_failed",
-                    format!("Failed to sync sub2api account: {err}"),
-                )
-            })?;
+    let synced_at_ms = storage::now_ms();
     storage::apply_remote_account_sync_success(
         state.db_path(),
-        account_id.clone(),
-        storage::RemoteAccountRemoteSnapshot {
-            remote_user_id: Some(overview.remote_user_id.to_string()),
-            remote_role: overview.remote_role.clone(),
-            remote_username: overview.remote_username.clone(),
-            remote_display_name: overview.remote_display_name.clone(),
-            last_balance_amount: overview.balance,
-            last_synced_at_ms: Some(storage::now_ms()),
-        },
+        account.id.clone(),
+        build_sub2api_snapshot(overview, synced_at_ms),
     )
     .await?;
-    storage::get_remote_account_without_secret(state.db_path(), account_id)
-        .await
-        .map_err(ApiError::Internal)
+    apply_sub2api_overview_to_account(&mut account, overview, synced_at_ms);
+    Ok(account)
 }
 
 async fn record_sub2api_sync_failure(
@@ -561,6 +1199,395 @@ async fn record_sub2api_sync_failure(
     )
     .await?;
     Ok(())
+}
+
+async fn refresh_newapi_remote_account_impl(
+    state: &AppState,
+    account: storage::NewApiAccount,
+) -> Result<RemoteAccountResponse, ApiError> {
+    if !newapi_client::account_has_user_api_credentials(&account) {
+        let cleared =
+            newapi_handlers::clear_account_remote_state(state, account.id.clone()).await?;
+        return Ok(RemoteAccountResponse::from(cleared));
+    }
+    let overview = match newapi_client::fetch_account_overview(&state.http_client, &account).await {
+        Ok(overview) => overview,
+        Err(err) => {
+            let _ =
+                newapi_handlers::record_account_sync_failure(state, account.id.clone(), &err).await;
+            return Err(newapi_handlers::sync_error(err));
+        }
+    };
+    let account =
+        newapi_handlers::apply_account_overview(state, account.id.clone(), &overview).await?;
+    Ok(RemoteAccountResponse::from(account))
+}
+
+async fn refresh_sub2api_remote_account_impl(
+    state: &AppState,
+    account: storage::RemoteAccount,
+) -> Result<RemoteAccountResponse, ApiError> {
+    let account_id = account.id.clone();
+    let token = require_sub2api_access_token(&account)?;
+    let overview =
+        sub2api_client::fetch_account_overview(&state.http_client, &account.base_url, token)
+            .await
+            .map_err(|err| {
+                ApiError::bad_gateway(
+                    "remote_sync_failed",
+                    format!("Failed to sync sub2api account: {err}"),
+                )
+            });
+    match overview {
+        Ok(overview) => {
+            let account = persist_sub2api_overview(state, account, &overview).await?;
+            Ok(RemoteAccountResponse::from(account))
+        }
+        Err(err) => {
+            if let ApiError::BadGateway { message, .. } = &err {
+                let anyhow_err = anyhow::anyhow!(message.clone());
+                let _ = record_sub2api_sync_failure(state, account_id, &anyhow_err).await;
+            }
+            Err(err)
+        }
+    }
+}
+
+async fn list_newapi_remote_account_groups_impl(
+    state: &AppState,
+    account: storage::NewApiAccount,
+) -> Result<Vec<RemoteGroupResponse>, ApiError> {
+    if !newapi_client::account_has_user_api_credentials(&account) {
+        return Err(newapi_credentials_required_error());
+    }
+    let groups = newapi_client::list_groups(&state.http_client, &account)
+        .await
+        .map_err(newapi_handlers::sync_error)?;
+    let channels = list_managed_channels_for_account(
+        state,
+        storage::ManagedRemoteProvider::Newapi,
+        &account.id,
+    )
+    .await?;
+    let managed_counts = count_managed_channels_by_group_name(&channels);
+    Ok(groups
+        .into_iter()
+        .map(|item| RemoteGroupResponse {
+            id: None,
+            name: item.name.clone(),
+            ratio: item.ratio,
+            description: item.description,
+            platform: None,
+            managed_channel_count: managed_counts.get(&item.name).copied().unwrap_or(0),
+        })
+        .collect())
+}
+
+async fn list_sub2api_remote_account_groups_impl(
+    state: &AppState,
+    account: storage::RemoteAccount,
+) -> Result<Vec<RemoteGroupResponse>, ApiError> {
+    let token = require_sub2api_access_token(&account)?;
+    let groups = sub2api_client::list_groups(&state.http_client, &account.base_url, token)
+        .await
+        .map_err(|err| ApiError::bad_gateway("remote_groups_load_failed", err.to_string()))?;
+    let channels = list_managed_channels_for_account(
+        state,
+        storage::ManagedRemoteProvider::Sub2Api,
+        &account.id,
+    )
+    .await?;
+    let (managed_counts_by_id, managed_counts_by_name) = count_sub2api_managed_channels(&channels);
+    Ok(groups
+        .into_iter()
+        .map(|item| RemoteGroupResponse {
+            id: Some(item.id),
+            managed_channel_count: managed_counts_by_id
+                .get(&item.id)
+                .copied()
+                .or_else(|| managed_counts_by_name.get(item.name.as_str()).copied())
+                .unwrap_or(0),
+            name: item.name,
+            ratio: item.rate_multiplier,
+            description: item.description,
+            platform: item.platform,
+        })
+        .collect())
+}
+
+async fn create_sub2api_remote_account_key_impl(
+    state: &AppState,
+    account: storage::RemoteAccount,
+    input: CreateRemoteKeyInput,
+) -> Result<RemoteKeyResponse, ApiError> {
+    let token = require_sub2api_access_token(&account)?;
+    let name = validate_remote_key_name(&input.name)?;
+    let key = sub2api_client::create_key(
+        &state.http_client,
+        &account.base_url,
+        token,
+        &sub2api_client::CreateSub2ApiKeyRequest {
+            name,
+            group_id: input.group_id,
+        },
+    )
+    .await
+    .map_err(|err| ApiError::bad_gateway("remote_key_create_failed", err.to_string()))?;
+    Ok(map_sub2api_key_response(key))
+}
+
+async fn create_newapi_remote_managed_channel_impl(
+    state: &AppState,
+    account: storage::NewApiAccount,
+    input: PreparedCreateRemoteManagedChannelInput,
+) -> Result<CreateRemoteManagedChannelResponse, ApiError> {
+    if !newapi_client::account_has_user_api_credentials(&account) {
+        return Err(newapi_credentials_required_error());
+    }
+    let PreparedCreateRemoteManagedChannelInput {
+        name,
+        protocol,
+        group_name,
+        group_id: _,
+        base_url_override,
+        priority,
+        enabled,
+    } = input;
+    let remote = newapi_client::create_managed_channel(
+        &state.http_client,
+        &account,
+        &newapi_client::CreateManagedChannelRequest {
+            name: name.clone(),
+            group_name: group_name.clone(),
+        },
+    )
+    .await
+    .map_err(|err| {
+        ApiError::bad_gateway("remote_managed_channel_create_failed", err.to_string())
+    })?;
+    let create_local = storage::CreateChannel {
+        name,
+        protocol,
+        base_url: managed_channel_base_url_for_newapi(&account, base_url_override),
+        auth_type: Some("auto".to_string()),
+        auth_ref: remote.token_key.clone(),
+        checkin_url: None,
+        priority,
+        recharge_currency: Some(account.recharge_currency),
+        real_multiplier: Some(remote.group_ratio),
+        enabled,
+        managed_by_remote: Some(true),
+        managed_remote_provider: Some(storage::ManagedRemoteProvider::Newapi),
+        managed_remote_account_id: Some(account.id.clone()),
+        managed_remote_resource_id: Some(remote.token_id.to_string()),
+        managed_remote_resource_name: Some(remote.token_name.clone()),
+        managed_remote_group_name: Some(remote.group_name.clone()),
+        managed_remote_group_id: None,
+    };
+    let channel = match storage::create_channel(state.db_path(), create_local).await {
+        Ok(channel) => channel,
+        Err(err) => {
+            let _ =
+                newapi_client::delete_token(&state.http_client, &account, remote.token_id).await;
+            return Err(ApiError::Internal(err));
+        }
+    };
+    add_channel_to_cache(state, &channel);
+    publish_remote_managed_channel_created_if_enabled(
+        state,
+        storage::ManagedRemoteProvider::Newapi,
+        &account.id,
+        &account.base_url,
+        &channel,
+    );
+    Ok(CreateRemoteManagedChannelResponse { channel })
+}
+
+async fn create_sub2api_remote_managed_channel_impl(
+    state: &AppState,
+    account: storage::RemoteAccount,
+    input: PreparedCreateRemoteManagedChannelInput,
+) -> Result<CreateRemoteManagedChannelResponse, ApiError> {
+    let token = require_sub2api_access_token(&account)?;
+    let groups = sub2api_client::list_groups(&state.http_client, &account.base_url, token)
+        .await
+        .map_err(|err| ApiError::bad_gateway("remote_groups_load_failed", err.to_string()))?;
+    let selected_group = find_sub2api_group(&groups, &input)?;
+    let selected_group_id = selected_group.id;
+    let selected_group_name = selected_group.name.clone();
+    let selected_group_ratio = selected_group.rate_multiplier.unwrap_or(1.0);
+    let PreparedCreateRemoteManagedChannelInput {
+        name,
+        protocol,
+        group_name: _,
+        group_id: _,
+        base_url_override,
+        priority,
+        enabled,
+    } = input;
+    let created_key = sub2api_client::create_key(
+        &state.http_client,
+        &account.base_url,
+        token,
+        &sub2api_client::CreateSub2ApiKeyRequest {
+            name: name.clone(),
+            group_id: Some(selected_group_id),
+        },
+    )
+    .await
+    .map_err(|err| {
+        ApiError::bad_gateway("remote_managed_channel_create_failed", err.to_string())
+    })?;
+    let create_local = storage::CreateChannel {
+        name,
+        protocol,
+        base_url: managed_channel_base_url_for_sub2api(&account, base_url_override),
+        auth_type: Some("auto".to_string()),
+        auth_ref: created_key.key.clone(),
+        checkin_url: None,
+        priority,
+        recharge_currency: Some(account.recharge_currency),
+        real_multiplier: Some(selected_group_ratio),
+        enabled,
+        managed_by_remote: Some(true),
+        managed_remote_provider: Some(storage::ManagedRemoteProvider::Sub2Api),
+        managed_remote_account_id: Some(account.id.clone()),
+        managed_remote_resource_id: Some(created_key.id.to_string()),
+        managed_remote_resource_name: Some(created_key.name.clone()),
+        managed_remote_group_name: Some(selected_group_name),
+        managed_remote_group_id: Some(selected_group_id),
+    };
+    let channel = match storage::create_channel(state.db_path(), create_local).await {
+        Ok(channel) => channel,
+        Err(err) => {
+            let _ = sub2api_client::delete_key(
+                &state.http_client,
+                &account.base_url,
+                token,
+                created_key.id,
+            )
+            .await;
+            return Err(ApiError::Internal(err));
+        }
+    };
+    add_channel_to_cache(state, &channel);
+    publish_remote_managed_channel_created_if_enabled(
+        state,
+        storage::ManagedRemoteProvider::Sub2Api,
+        &account.id,
+        &account.base_url,
+        &channel,
+    );
+    Ok(CreateRemoteManagedChannelResponse { channel })
+}
+
+async fn delete_newapi_remote_account_impl(
+    state: &AppState,
+    account_id: String,
+    options: DeleteRemoteAccountOptions,
+) -> Result<storage::DeleteNewApiAccountResult, ApiError> {
+    sync_delete_managed_channels_if_requested(
+        state,
+        storage::ManagedRemoteProvider::Newapi,
+        &account_id,
+        options,
+    )
+    .await?;
+    let result = storage::delete_newapi_account(
+        state.db_path(),
+        account_id.clone(),
+        options.delete_managed_channels,
+    )
+    .await
+    .map_err(map_delete_newapi_account_error)?;
+    finalize_remote_account_delete(
+        state,
+        storage::ManagedRemoteProvider::Newapi,
+        &account_id,
+        options,
+        &result,
+    );
+    Ok(result)
+}
+
+async fn delete_sub2api_remote_account_impl(
+    state: &AppState,
+    account_id: String,
+    options: DeleteRemoteAccountOptions,
+) -> Result<storage::DeleteNewApiAccountResult, ApiError> {
+    let linked_channel_ids = storage::list_channel_ids_by_managed_account(
+        state.db_path(),
+        storage::ManagedRemoteProvider::Sub2Api,
+        account_id.clone(),
+    )
+    .await?;
+    sync_delete_managed_channels_if_requested(
+        state,
+        storage::ManagedRemoteProvider::Sub2Api,
+        &account_id,
+        options,
+    )
+    .await?;
+    let result = if options.delete_managed_channels {
+        for channel_id in &linked_channel_ids {
+            storage::delete_channel(state.db_path(), channel_id.clone()).await?;
+        }
+        storage::delete_remote_account(state.db_path(), account_id.clone()).await?;
+        storage::DeleteNewApiAccountResult {
+            deleted_managed_channel_ids: linked_channel_ids,
+            detached_channel_ids: Vec::new(),
+        }
+    } else {
+        let detached_channel_ids = storage::detach_channels_from_managed_account(
+            state.db_path(),
+            storage::ManagedRemoteProvider::Sub2Api,
+            account_id.clone(),
+        )
+        .await?;
+        storage::delete_remote_account(state.db_path(), account_id.clone()).await?;
+        storage::DeleteNewApiAccountResult {
+            deleted_managed_channel_ids: Vec::new(),
+            detached_channel_ids,
+        }
+    };
+    finalize_remote_account_delete(
+        state,
+        storage::ManagedRemoteProvider::Sub2Api,
+        &account_id,
+        options,
+        &result,
+    );
+    Ok(result)
+}
+
+async fn complete_newapi_remote_account_checkin_today_impl(
+    state: &AppState,
+    account_id: String,
+) -> Result<axum::http::StatusCode, ApiError> {
+    let res =
+        storage::complete_newapi_account_checkin_today(state.db_path(), account_id, "manual_page")
+            .await;
+    map_storage_unit_no_content_err(res, map_complete_newapi_checkin_error)
+}
+
+async fn complete_sub2api_remote_account_checkin_today_impl(
+    state: &AppState,
+    account_id: String,
+) -> Result<axum::http::StatusCode, ApiError> {
+    let res = storage::complete_remote_account_checkin_today(state.db_path(), account_id).await;
+    map_storage_unit_no_content_err(res, map_complete_sub2api_checkin_error)
+}
+
+async fn perform_newapi_remote_account_system_checkin_impl(
+    state: AppState,
+    account_id: String,
+) -> Result<axum::response::Response, ApiError> {
+    newapi_handlers::perform_newapi_account_system_checkin(
+        State(state),
+        axum::extract::Path(account_id),
+    )
+    .await
+    .map(IntoResponse::into_response)
 }
 
 pub(in crate::server) async fn detect_remote_account(
@@ -623,24 +1650,11 @@ pub(in crate::server) async fn detect_remote_account(
 pub(in crate::server) async fn list_remote_accounts(
     State(state): State<AppState>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let mut items = Vec::new();
-    items.extend(
-        storage::list_newapi_accounts(state.db_path())
-            .await?
-            .into_iter()
-            .map(map_newapi_account),
-    );
-    items.extend(
-        storage::list_remote_accounts(state.db_path())
-            .await?
-            .into_iter()
-            .map(map_remote_account),
-    );
-    items.sort_by(|a, b| {
-        a.sort_order()
-            .cmp(&b.sort_order())
-            .then_with(|| a.created_at_ms().cmp(&b.created_at_ms()))
-    });
+    let items = storage::list_all_remote_accounts(state.db_path())
+        .await?
+        .into_iter()
+        .map(RemoteAccountResponse::from)
+        .collect::<Vec<_>>();
     Ok(Json(items))
 }
 
@@ -658,38 +1672,36 @@ pub(in crate::server) async fn reorder_remote_accounts(
         }
     }
 
-    let newapi_accounts = storage::list_newapi_accounts(state.db_path()).await?;
-    let remote_accounts = storage::list_remote_accounts(state.db_path()).await?;
-    let total = newapi_accounts.len() + remote_accounts.len();
-    if total != input.account_ids.len() {
+    let accounts = storage::list_all_remote_accounts(state.db_path()).await?;
+    if accounts.len() != input.account_ids.len() {
         return Err(ApiError::bad_request(
             "remote_account_ids_mismatch",
             "account_ids must cover all accounts",
         ));
     }
 
-    let newapi_ids = newapi_accounts
+    let accounts_by_id = accounts
         .into_iter()
-        .map(|item| item.id)
-        .collect::<HashSet<_>>();
-    let remote_ids = remote_accounts
-        .into_iter()
-        .map(|item| item.id)
-        .collect::<HashSet<_>>();
+        .map(|account| (account.id().to_string(), account.managed_provider()))
+        .collect::<HashMap<_, _>>();
 
     let mut newapi_orders = Vec::new();
     let mut remote_orders = Vec::new();
     for (index, account_id) in input.account_ids.iter().enumerate() {
         let sort_order = index as i64;
-        if newapi_ids.contains(account_id) {
-            newapi_orders.push((account_id.clone(), sort_order));
-        } else if remote_ids.contains(account_id) {
-            remote_orders.push((account_id.clone(), sort_order));
-        } else {
-            return Err(ApiError::bad_request(
-                "remote_account_ids_mismatch",
-                "account_ids contains unknown account",
-            ));
+        match accounts_by_id.get(account_id).copied() {
+            Some(storage::ManagedRemoteProvider::Newapi) => {
+                newapi_orders.push((account_id.clone(), sort_order));
+            }
+            Some(storage::ManagedRemoteProvider::Sub2Api) => {
+                remote_orders.push((account_id.clone(), sort_order));
+            }
+            None => {
+                return Err(ApiError::bad_request(
+                    "remote_account_ids_mismatch",
+                    "account_ids contains unknown account",
+                ));
+            }
         }
     }
 
@@ -706,131 +1718,19 @@ pub(in crate::server) async fn reorder_remote_accounts(
 pub(in crate::server) async fn remote_account_checkins_today(
     State(state): State<AppState>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let legacy = storage::get_newapi_accounts_checkins_today(state.db_path()).await?;
-    let remote = storage::get_remote_accounts_checkins_today(state.db_path()).await?;
-    let mut ids = legacy.completed_account_ids;
-    ids.extend(remote.completed_account_ids);
-    ids.sort();
-    ids.dedup();
-    Ok(Json(storage::RemoteAccountCheckinsToday {
-        date: remote.date,
-        completed_account_ids: ids,
-    }))
+    let checkins = storage::get_all_remote_accounts_checkins_today(state.db_path()).await?;
+    Ok(Json(checkins))
 }
 
 pub(in crate::server) async fn create_remote_account(
     State(state): State<AppState>,
     Json(input): Json<CreateRemoteAccountInput>,
 ) -> Result<impl IntoResponse, ApiError> {
-    match input.provider {
-        RemoteAccountProvider::Newapi => {
-            let user_id = input.user_id.unwrap_or_default();
-            let user_token = input.user_token.unwrap_or_default();
-            let request_checkin_mode = match input
-                .checkin_mode
-                .unwrap_or(RemoteAccountCheckinMode::Disabled)
-            {
-                RemoteAccountCheckinMode::Disabled | RemoteAccountCheckinMode::SystemApi => {
-                    storage::NewApiAccountCheckinMode::SystemApi
-                }
-                RemoteAccountCheckinMode::PageOpen => storage::NewApiAccountCheckinMode::PageOpen,
-            };
-            let auto_checkin_enabled = matches!(
-                input.checkin_mode,
-                Some(RemoteAccountCheckinMode::SystemApi)
-            );
-            let create_input = storage::CreateNewApiAccount {
-                base_url: input.base_url,
-                api_url: input.api_url,
-                user_id,
-                user_token,
-                page_checkin_url: input.page_checkin_url,
-                checkin_mode: Some(request_checkin_mode),
-                auto_checkin_enabled: Some(auto_checkin_enabled),
-                auto_checkin_time: input.auto_checkin_time,
-                low_balance_alert_threshold: input.low_balance_alert_threshold,
-                recharge_currency: input.recharge_currency,
-            };
-            let candidate = newapi_handlers::build_candidate_from_create(&create_input)?;
-            let account = storage::create_newapi_account(state.db_path(), create_input)
-                .await
-                .map_err(|e| match e.downcast_ref::<storage::StorageError>() {
-                    Some(storage::StorageError::NewApiAccountAlreadyExists { .. }) => {
-                        ApiError::conflict(
-                            "newapi_account_exists",
-                            "New API account already exists",
-                        )
-                    }
-                    _ => ApiError::Internal(e),
-                })?;
-            let account =
-                newapi_handlers::sync_account_if_possible(&state, account.id.clone(), &candidate)
-                    .await?;
-            newapi_handlers::notify_background_tasks(&state);
-            return Ok((
-                axum::http::StatusCode::CREATED,
-                Json(map_newapi_account(account)),
-            ));
-        }
-        RemoteAccountProvider::Sub2Api => {}
-    }
-
-    let base_url = detect_provider_from_base_url(&input.base_url)?;
-    let access_token = input.bearer_token.unwrap_or_default();
-    let checkin_mode = input
-        .checkin_mode
-        .unwrap_or(RemoteAccountCheckinMode::Disabled);
-    let auto_checkin_time = input
-        .auto_checkin_time
-        .clone()
-        .unwrap_or_else(|| "00:05:00".to_string());
-    validate_sub2api_candidate(
-        &base_url,
-        input.page_checkin_url.as_deref(),
-        checkin_mode,
-        &auto_checkin_time,
-        input.low_balance_alert_threshold.unwrap_or(0.0),
-        !access_token.trim().is_empty(),
-    )?;
-    let _overview =
-        sub2api_client::fetch_account_overview(&state.http_client, &base_url, &access_token)
-            .await
-            .map_err(|err| {
-                ApiError::bad_gateway(
-                    "remote_sync_failed",
-                    format!("Failed to validate sub2api account: {err}"),
-                )
-            })?;
-    let account = storage::create_remote_account(
-        state.db_path(),
-        storage::CreateRemoteAccount {
-            provider: storage::RemoteAccountProvider::Sub2Api,
-            base_url,
-            api_url: input.api_url,
-            access_token,
-            page_checkin_url: input.page_checkin_url,
-            checkin_mode: Some(match checkin_mode {
-                RemoteAccountCheckinMode::Disabled => storage::RemoteAccountCheckinMode::Disabled,
-                RemoteAccountCheckinMode::PageOpen => storage::RemoteAccountCheckinMode::PageOpen,
-                RemoteAccountCheckinMode::SystemApi => storage::RemoteAccountCheckinMode::Disabled,
-            }),
-            auto_checkin_time: Some(auto_checkin_time),
-            low_balance_alert_threshold: input.low_balance_alert_threshold,
-            recharge_currency: input.recharge_currency,
-        },
-    )
-    .await
-    .map_err(|e| match e.downcast_ref::<storage::StorageError>() {
-        Some(storage::StorageError::RemoteAccountAlreadyExists { .. }) => {
-            ApiError::conflict("remote_account_exists", "Remote account already exists")
-        }
-        _ => ApiError::Internal(e),
-    })?;
-    let account = fetch_and_persist_sub2api_snapshot(&state, account.id.clone()).await?;
-    Ok((
-        axum::http::StatusCode::CREATED,
-        Json(map_remote_account(account)),
-    ))
+    let response = match input.provider {
+        RemoteAccountProvider::Newapi => create_newapi_remote_account_impl(&state, input).await?,
+        RemoteAccountProvider::Sub2Api => create_sub2api_remote_account_impl(&state, input).await?,
+    };
+    Ok((axum::http::StatusCode::CREATED, Json(response)))
 }
 
 pub(in crate::server) async fn update_remote_account(
@@ -838,293 +1738,45 @@ pub(in crate::server) async fn update_remote_account(
     axum::extract::Path(account_id): axum::extract::Path<String>,
     Json(input): Json<UpdateRemoteAccountInput>,
 ) -> Result<impl IntoResponse, ApiError> {
-    match resolve_remote_account_with_secret(&state, &account_id).await? {
-        ResolvedRemoteAccount::Newapi(current) => {
-            let provider = input.provider.unwrap_or(RemoteAccountProvider::Newapi);
-            if provider != RemoteAccountProvider::Newapi {
-                return Err(ApiError::bad_request(
-                    "remote_provider_mismatch",
-                    "provider does not match account type",
-                ));
-            }
-            let request_checkin_mode = match input.checkin_mode {
-                Some(RemoteAccountCheckinMode::PageOpen) => {
-                    Some(storage::NewApiAccountCheckinMode::PageOpen)
-                }
-                Some(RemoteAccountCheckinMode::Disabled | RemoteAccountCheckinMode::SystemApi) => {
-                    Some(storage::NewApiAccountCheckinMode::SystemApi)
-                }
-                None => None,
-            };
-            let auto_checkin_enabled = match input.checkin_mode {
-                Some(RemoteAccountCheckinMode::SystemApi) => Some(true),
-                Some(RemoteAccountCheckinMode::Disabled | RemoteAccountCheckinMode::PageOpen) => {
-                    Some(false)
-                }
-                None => None,
-            };
-            let update_input = storage::UpdateNewApiAccount {
-                base_url: input.base_url,
-                api_url: input.api_url,
-                user_id: input.user_id,
-                user_token: input.user_token,
-                page_checkin_url: input.page_checkin_url,
-                checkin_mode: request_checkin_mode,
-                auto_checkin_enabled,
-                auto_checkin_time: input.auto_checkin_time,
-                low_balance_alert_threshold: input.low_balance_alert_threshold,
-                recharge_currency: input.recharge_currency,
-            };
-            let candidate = newapi_handlers::build_candidate_from_update(&current, &update_input)?;
-            storage::update_newapi_account(state.db_path(), account_id.clone(), update_input)
-                .await
-                .map_err(|e| match e.downcast_ref::<storage::StorageError>() {
-                    Some(storage::StorageError::NewApiAccountNotFound { .. }) => {
-                        ApiError::not_found("newapi_account_not_found", "New API account not found")
-                    }
-                    Some(storage::StorageError::NewApiAccountAlreadyExists { .. }) => {
-                        ApiError::conflict(
-                            "newapi_account_exists",
-                            "New API account already exists",
-                        )
-                    }
-                    _ => ApiError::Internal(e),
-                })?;
-            let account =
-                newapi_handlers::sync_account_if_possible(&state, account_id, &candidate).await?;
-            newapi_handlers::notify_background_tasks(&state);
-            Ok(Json(map_newapi_account(account)))
+    let response = match resolve_remote_account_with_secret(&state, &account_id).await? {
+        storage::UnifiedRemoteAccount::Newapi(current) => {
+            update_newapi_remote_account_impl(&state, account_id, current, input).await?
         }
-        ResolvedRemoteAccount::Sub2Api(current) => {
-            let provider = input.provider.unwrap_or(RemoteAccountProvider::Sub2Api);
-            if provider != RemoteAccountProvider::Sub2Api {
-                return Err(ApiError::bad_request(
-                    "remote_provider_mismatch",
-                    "provider does not match account type",
-                ));
-            }
-            let effective_base_url = input
-                .base_url
-                .as_deref()
-                .map(detect_provider_from_base_url)
-                .transpose()?
-                .unwrap_or_else(|| current.base_url.clone());
-            let effective_token = input
-                .bearer_token
-                .clone()
-                .or_else(|| current.access_token.clone())
-                .unwrap_or_default();
-            let effective_checkin_mode = input.checkin_mode.unwrap_or(match current.checkin_mode {
-                storage::RemoteAccountCheckinMode::Disabled => RemoteAccountCheckinMode::Disabled,
-                storage::RemoteAccountCheckinMode::PageOpen => RemoteAccountCheckinMode::PageOpen,
-            });
-            let effective_auto_checkin_time = input
-                .auto_checkin_time
-                .clone()
-                .unwrap_or_else(|| current.auto_checkin_time.clone());
-            let effective_threshold = input
-                .low_balance_alert_threshold
-                .unwrap_or(current.low_balance_alert_threshold);
-            validate_sub2api_candidate(
-                &effective_base_url,
-                input
-                    .page_checkin_url
-                    .as_deref()
-                    .or(current.page_checkin_url.as_deref()),
-                effective_checkin_mode,
-                &effective_auto_checkin_time,
-                effective_threshold,
-                !effective_token.trim().is_empty(),
-            )?;
-            let _overview = sub2api_client::fetch_account_overview(
-                &state.http_client,
-                &effective_base_url,
-                &effective_token,
-            )
-            .await
-            .map_err(|err| {
-                ApiError::bad_gateway(
-                    "remote_sync_failed",
-                    format!("Failed to validate sub2api account: {err}"),
-                )
-            })?;
-            storage::update_remote_account(
-                state.db_path(),
-                account_id.clone(),
-                storage::UpdateRemoteAccount {
-                    base_url: Some(effective_base_url),
-                    api_url: input.api_url,
-                    access_token: Some(effective_token),
-                    page_checkin_url: input.page_checkin_url,
-                    checkin_mode: Some(match effective_checkin_mode {
-                        RemoteAccountCheckinMode::Disabled => {
-                            storage::RemoteAccountCheckinMode::Disabled
-                        }
-                        RemoteAccountCheckinMode::PageOpen => {
-                            storage::RemoteAccountCheckinMode::PageOpen
-                        }
-                        RemoteAccountCheckinMode::SystemApi => {
-                            storage::RemoteAccountCheckinMode::Disabled
-                        }
-                    }),
-                    auto_checkin_time: Some(effective_auto_checkin_time),
-                    low_balance_alert_threshold: Some(effective_threshold),
-                    recharge_currency: input.recharge_currency,
-                },
-            )
-            .await
-            .map_err(|e| match e.downcast_ref::<storage::StorageError>() {
-                Some(storage::StorageError::RemoteAccountNotFound { .. }) => {
-                    ApiError::not_found("remote_account_not_found", "Remote account not found")
-                }
-                Some(storage::StorageError::RemoteAccountAlreadyExists { .. }) => {
-                    ApiError::conflict("remote_account_exists", "Remote account already exists")
-                }
-                _ => ApiError::Internal(e),
-            })?;
-            let account = fetch_and_persist_sub2api_snapshot(&state, account_id).await?;
-            Ok(Json(map_remote_account(account)))
+        storage::UnifiedRemoteAccount::Sub2Api(current) => {
+            update_sub2api_remote_account_impl(&state, account_id, current, input).await?
         }
-    }
+    };
+    Ok(Json(response))
 }
 
 pub(in crate::server) async fn refresh_remote_account(
     State(state): State<AppState>,
     axum::extract::Path(account_id): axum::extract::Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
-    match resolve_remote_account_with_secret(&state, &account_id).await? {
-        ResolvedRemoteAccount::Newapi(account) => {
-            if !newapi_client::account_has_user_api_credentials(&account) {
-                let cleared =
-                    newapi_handlers::clear_account_remote_state(&state, account_id.clone()).await?;
-                return Ok(Json(map_newapi_account(cleared)));
-            }
-            let overview =
-                match newapi_client::fetch_account_overview(&state.http_client, &account).await {
-                    Ok(overview) => overview,
-                    Err(err) => {
-                        let _ = newapi_handlers::record_account_sync_failure(
-                            &state,
-                            account_id.clone(),
-                            &err,
-                        )
-                        .await;
-                        return Err(newapi_handlers::sync_error(err));
-                    }
-                };
-            let account =
-                newapi_handlers::apply_account_overview(&state, account.id.clone(), &overview)
-                    .await?;
-            Ok(Json(map_newapi_account(account)))
+    let response = match resolve_remote_account_with_secret(&state, &account_id).await? {
+        storage::UnifiedRemoteAccount::Newapi(account) => {
+            refresh_newapi_remote_account_impl(&state, account).await?
         }
-        ResolvedRemoteAccount::Sub2Api(_) => {
-            let result = fetch_and_persist_sub2api_snapshot(&state, account_id.clone()).await;
-            match result {
-                Ok(account) => Ok(Json(map_remote_account(account))),
-                Err(err) => {
-                    if let ApiError::BadGateway { message, .. } = &err {
-                        let anyhow_err = anyhow::anyhow!(message.clone());
-                        let _ = record_sub2api_sync_failure(&state, account_id, &anyhow_err).await;
-                    }
-                    Err(err)
-                }
-            }
+        storage::UnifiedRemoteAccount::Sub2Api(account) => {
+            refresh_sub2api_remote_account_impl(&state, account).await?
         }
-    }
+    };
+    Ok(Json(response))
 }
 
 pub(in crate::server) async fn list_remote_account_groups(
     State(state): State<AppState>,
     axum::extract::Path(account_id): axum::extract::Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
-    match resolve_remote_account_with_secret(&state, &account_id).await? {
-        ResolvedRemoteAccount::Newapi(account) => {
-            if !newapi_client::account_has_user_api_credentials(&account) {
-                return Err(ApiError::bad_request(
-                    "newapi_credentials_required",
-                    "user_id and user_token are required for this action",
-                ));
-            }
-            let groups = newapi_client::list_groups(&state.http_client, &account)
-                .await
-                .map_err(newapi_handlers::sync_error)?;
-            let managed_counts = storage::list_channels(state.db_path())
-                .await?
-                .into_iter()
-                .filter(|channel| {
-                    channel.is_managed_by_account(
-                        storage::ManagedRemoteProvider::Newapi,
-                        account.id.as_str(),
-                    )
-                })
-                .fold(HashMap::<String, usize>::new(), |mut acc, channel| {
-                    if let Some(group) = channel.managed_group_name() {
-                        *acc.entry(group.to_string()).or_default() += 1;
-                    }
-                    acc
-                });
-            let out = groups
-                .into_iter()
-                .map(|item| RemoteGroupResponse {
-                    id: None,
-                    name: item.name.clone(),
-                    ratio: item.ratio,
-                    description: item.description,
-                    platform: None,
-                    managed_channel_count: managed_counts.get(&item.name).copied().unwrap_or(0),
-                })
-                .collect::<Vec<_>>();
-            Ok(Json(out))
+    let groups = match resolve_remote_account_with_secret(&state, &account_id).await? {
+        storage::UnifiedRemoteAccount::Newapi(account) => {
+            list_newapi_remote_account_groups_impl(&state, account).await?
         }
-        ResolvedRemoteAccount::Sub2Api(account) => {
-            let token = account
-                .access_token
-                .as_deref()
-                .filter(|value| !value.trim().is_empty())
-                .ok_or_else(|| {
-                    ApiError::bad_request("remote_credentials_required", "bearer_token is required")
-                })?;
-            let groups = sub2api_client::list_groups(&state.http_client, &account.base_url, token)
-                .await
-                .map_err(|err| {
-                    ApiError::bad_gateway("remote_groups_load_failed", err.to_string())
-                })?;
-            let channels = storage::list_channels(state.db_path()).await?;
-            let mut managed_counts_by_id = HashMap::<i64, usize>::new();
-            let mut managed_counts_by_name = HashMap::<String, usize>::new();
-            for channel in channels.into_iter().filter(|channel| {
-                channel.is_managed_by_account(
-                    storage::ManagedRemoteProvider::Sub2Api,
-                    account.id.as_str(),
-                )
-            }) {
-                if let Some(group_id) = channel.managed_group_id() {
-                    *managed_counts_by_id.entry(group_id).or_default() += 1;
-                } else if let Some(group_name) = channel.managed_group_name() {
-                    *managed_counts_by_name
-                        .entry(group_name.to_string())
-                        .or_default() += 1;
-                }
-            }
-            Ok(Json(
-                groups
-                    .into_iter()
-                    .map(|item| RemoteGroupResponse {
-                        id: Some(item.id),
-                        managed_channel_count: managed_counts_by_id
-                            .get(&item.id)
-                            .copied()
-                            .or_else(|| managed_counts_by_name.get(item.name.as_str()).copied())
-                            .unwrap_or(0),
-                        name: item.name,
-                        ratio: item.rate_multiplier,
-                        description: item.description,
-                        platform: item.platform,
-                    })
-                    .collect::<Vec<_>>(),
-            ))
+        storage::UnifiedRemoteAccount::Sub2Api(account) => {
+            list_sub2api_remote_account_groups_impl(&state, account).await?
         }
-    }
+    };
+    Ok(Json(groups))
 }
 
 pub(in crate::server) async fn complete_remote_account_checkin_today(
@@ -1132,35 +1784,25 @@ pub(in crate::server) async fn complete_remote_account_checkin_today(
     axum::extract::Path(account_id): axum::extract::Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
     match resolve_remote_account_with_secret(&state, &account_id).await? {
-        ResolvedRemoteAccount::Newapi(_) => {
-            let res = storage::complete_newapi_account_checkin_today(
-                state.db_path(),
-                account_id,
-                "manual_page",
-            )
-            .await;
-            map_storage_unit_no_content_err(res, |e| {
-                matches!(
-                    e.downcast_ref::<storage::StorageError>(),
-                    Some(storage::StorageError::NewApiAccountNotFound { .. })
-                )
-                .then(|| {
-                    ApiError::not_found("newapi_account_not_found", "New API account not found")
-                })
-            })
+        storage::UnifiedRemoteAccount::Newapi(_) => {
+            complete_newapi_remote_account_checkin_today_impl(&state, account_id).await
         }
-        ResolvedRemoteAccount::Sub2Api(_) => {
-            let res =
-                storage::complete_remote_account_checkin_today(state.db_path(), account_id).await;
-            map_storage_unit_no_content_err(res, |e| {
-                matches!(
-                    e.downcast_ref::<storage::StorageError>(),
-                    Some(storage::StorageError::RemoteAccountNotFound { .. })
-                )
-                .then(|| {
-                    ApiError::not_found("remote_account_not_found", "Remote account not found")
-                })
-            })
+        storage::UnifiedRemoteAccount::Sub2Api(_) => {
+            complete_sub2api_remote_account_checkin_today_impl(&state, account_id).await
+        }
+    }
+}
+
+pub(in crate::server) async fn perform_remote_account_system_checkin(
+    State(state): State<AppState>,
+    axum::extract::Path(account_id): axum::extract::Path<String>,
+) -> Result<impl IntoResponse, ApiError> {
+    match resolve_remote_account_with_secret(&state, &account_id).await? {
+        storage::UnifiedRemoteAccount::Newapi(_) => {
+            perform_newapi_remote_account_system_checkin_impl(state, account_id).await
+        }
+        storage::UnifiedRemoteAccount::Sub2Api(_) => {
+            Err(remote_system_checkin_unsupported_provider_error())
         }
     }
 }
@@ -1170,46 +1812,15 @@ pub(in crate::server) async fn create_remote_account_key(
     axum::extract::Path(account_id): axum::extract::Path<String>,
     Json(input): Json<CreateRemoteKeyInput>,
 ) -> Result<impl IntoResponse, ApiError> {
-    match resolve_remote_account_with_secret(&state, &account_id).await? {
-        ResolvedRemoteAccount::Newapi(_) => Err(ApiError::bad_request(
-            "remote_key_unsupported_provider",
-            "Only sub2api accounts support key creation",
-        )),
-        ResolvedRemoteAccount::Sub2Api(account) => {
-            let token = account
-                .access_token
-                .as_deref()
-                .filter(|value| !value.trim().is_empty())
-                .ok_or_else(|| {
-                    ApiError::bad_request("remote_credentials_required", "bearer_token is required")
-                })?;
-            let name = input.name.trim();
-            if name.is_empty() {
-                return Err(ApiError::bad_request(
-                    "remote_key_name_required",
-                    "name is required",
-                ));
-            }
-            let key = sub2api_client::create_key(
-                &state.http_client,
-                &account.base_url,
-                token,
-                &sub2api_client::CreateSub2ApiKeyRequest {
-                    name: name.to_string(),
-                    group_id: input.group_id,
-                },
-            )
-            .await
-            .map_err(|err| ApiError::bad_gateway("remote_key_create_failed", err.to_string()))?;
-            Ok(Json(RemoteKeyResponse {
-                id: key.id,
-                key: key.key,
-                name: key.name,
-                group_id: key.group_id,
-                status: key.status,
-            }))
+    let response = match resolve_remote_account_with_secret(&state, &account_id).await? {
+        storage::UnifiedRemoteAccount::Newapi(_) => {
+            return Err(remote_key_unsupported_provider_error());
         }
-    }
+        storage::UnifiedRemoteAccount::Sub2Api(account) => {
+            create_sub2api_remote_account_key_impl(&state, account, input).await?
+        }
+    };
+    Ok(Json(response))
 }
 
 pub(in crate::server) async fn create_remote_managed_channel(
@@ -1217,229 +1828,16 @@ pub(in crate::server) async fn create_remote_managed_channel(
     axum::extract::Path(account_id): axum::extract::Path<String>,
     Json(input): Json<CreateRemoteManagedChannelInput>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let protocol = input
-        .protocol
-        .ok_or_else(|| ApiError::bad_request("remote_protocol_required", "protocol is required"))?;
-    let name = validate_managed_channel_name(&input.name)?;
-    let base_url_override = newapi_handlers::validate_optional_http_url(
-        input.base_url_override.as_deref(),
-        "remote_managed_base_url_invalid",
-    )?;
-    match resolve_remote_account_with_secret(&state, &account_id).await? {
-        ResolvedRemoteAccount::Newapi(account) => {
-            if !newapi_client::account_has_user_api_credentials(&account) {
-                return Err(ApiError::bad_request(
-                    "newapi_credentials_required",
-                    "user_id and user_token are required for this action",
-                ));
-            }
-            let group_name = input.group_name.trim().to_string();
-            if group_name.is_empty() {
-                return Err(ApiError::bad_request(
-                    "remote_group_required",
-                    "group_name is required",
-                ));
-            }
-            let remote = newapi_client::create_managed_channel(
-                &state.http_client,
-                &account,
-                &newapi_client::CreateManagedChannelRequest {
-                    name: name.clone(),
-                    group_name: group_name.clone(),
-                },
-            )
-            .await
-            .map_err(|err| {
-                ApiError::bad_gateway("remote_managed_channel_create_failed", err.to_string())
-            })?;
-            let create_local = storage::CreateChannel {
-                name,
-                protocol,
-                base_url: managed_channel_base_url_for_newapi(&account, base_url_override),
-                auth_type: Some("auto".to_string()),
-                auth_ref: remote.token_key.clone(),
-                checkin_url: None,
-                priority: input.priority.unwrap_or(0),
-                recharge_currency: Some(account.recharge_currency),
-                real_multiplier: Some(remote.group_ratio),
-                enabled: input.enabled.unwrap_or(true),
-                managed_by_remote: Some(true),
-                managed_remote_provider: Some(storage::ManagedRemoteProvider::Newapi),
-                managed_remote_account_id: Some(account_id.clone()),
-                managed_remote_resource_id: Some(remote.token_id.to_string()),
-                managed_remote_resource_name: Some(remote.token_name.clone()),
-                managed_remote_group_name: Some(remote.group_name.clone()),
-                managed_remote_group_id: None,
-                managed_by_newapi: Some(true),
-                newapi_account_id: Some(account_id.clone()),
-                newapi_channel_id: None,
-                newapi_token_id: Some(remote.token_id),
-                newapi_token_name: Some(remote.token_name.clone()),
-                newapi_group: Some(remote.group_name.clone()),
-            };
-            let channel = match storage::create_channel(state.db_path(), create_local).await {
-                Ok(channel) => channel,
-                Err(err) => {
-                    let _ =
-                        newapi_client::delete_token(&state.http_client, &account, remote.token_id)
-                            .await;
-                    return Err(ApiError::Internal(err));
-                }
-            };
-            state.channels_cache.send_modify(|cur| {
-                let mut next = (**cur).clone();
-                next.push(channel.clone());
-                next.sort_by(|a, b| {
-                    let rank = |p: storage::Protocol| match p {
-                        storage::Protocol::Openai => 0,
-                        storage::Protocol::Anthropic => 1,
-                        storage::Protocol::Gemini => 2,
-                    };
-                    rank(a.protocol)
-                        .cmp(&rank(b.protocol))
-                        .then_with(|| b.priority.cmp(&a.priority))
-                        .then_with(|| a.name.cmp(&b.name))
-                });
-                *cur = std::sync::Arc::new(next);
-            });
-            if state
-                .settings_snapshot()
-                .newapi_managed_channel_missing_prompt_enabled
-            {
-                events::publish(AppEvent::RemoteManagedChannelCreated(
-                    RemoteManagedChannelCreated {
-                        channel_id: channel.id.clone(),
-                        channel_name: channel.name.clone(),
-                        account_id: account.id.clone(),
-                        account_base_url: account.base_url.clone(),
-                        provider: storage::ManagedRemoteProvider::Newapi,
-                        group_name: channel.managed_group_name().map(ToOwned::to_owned),
-                        resource_name: channel.managed_resource_name().map(ToOwned::to_owned),
-                    },
-                ));
-            }
-            Ok((
-                axum::http::StatusCode::CREATED,
-                Json(CreateRemoteManagedChannelResponse { channel }),
-            ))
+    let input = prepare_create_remote_managed_channel_input(input)?;
+    let response = match resolve_remote_account_with_secret(&state, &account_id).await? {
+        storage::UnifiedRemoteAccount::Newapi(account) => {
+            create_newapi_remote_managed_channel_impl(&state, account, input).await?
         }
-        ResolvedRemoteAccount::Sub2Api(account) => {
-            let token = account
-                .access_token
-                .as_deref()
-                .filter(|value| !value.trim().is_empty())
-                .ok_or_else(|| {
-                    ApiError::bad_request("remote_credentials_required", "bearer_token is required")
-                })?;
-            let groups = sub2api_client::list_groups(&state.http_client, &account.base_url, token)
-                .await
-                .map_err(|err| {
-                    ApiError::bad_gateway("remote_groups_load_failed", err.to_string())
-                })?;
-            let requested_group_name = input.group_name.trim();
-            let selected_group = if let Some(group_id) = input.group_id {
-                groups
-                    .iter()
-                    .find(|item| item.id == group_id)
-                    .or_else(|| groups.iter().find(|item| item.name == requested_group_name))
-            } else {
-                groups.iter().find(|item| item.name == requested_group_name)
-            }
-            .ok_or_else(|| {
-                ApiError::bad_request(
-                    "remote_group_not_found",
-                    "selected remote group was not found",
-                )
-            })?;
-            let created_key = sub2api_client::create_key(
-                &state.http_client,
-                &account.base_url,
-                token,
-                &sub2api_client::CreateSub2ApiKeyRequest {
-                    name: name.clone(),
-                    group_id: Some(selected_group.id),
-                },
-            )
-            .await
-            .map_err(|err| {
-                ApiError::bad_gateway("remote_managed_channel_create_failed", err.to_string())
-            })?;
-            let create_local = storage::CreateChannel {
-                name,
-                protocol,
-                base_url: managed_channel_base_url_for_sub2api(&account, base_url_override),
-                auth_type: Some("auto".to_string()),
-                auth_ref: created_key.key.clone(),
-                checkin_url: None,
-                priority: input.priority.unwrap_or(0),
-                recharge_currency: Some(account.recharge_currency),
-                real_multiplier: Some(selected_group.rate_multiplier.unwrap_or(1.0)),
-                enabled: input.enabled.unwrap_or(true),
-                managed_by_remote: Some(true),
-                managed_remote_provider: Some(storage::ManagedRemoteProvider::Sub2Api),
-                managed_remote_account_id: Some(account_id.clone()),
-                managed_remote_resource_id: Some(created_key.id.to_string()),
-                managed_remote_resource_name: Some(created_key.name.clone()),
-                managed_remote_group_name: Some(selected_group.name.clone()),
-                managed_remote_group_id: Some(selected_group.id),
-                managed_by_newapi: Some(false),
-                newapi_account_id: None,
-                newapi_channel_id: None,
-                newapi_token_id: None,
-                newapi_token_name: None,
-                newapi_group: None,
-            };
-            let channel = match storage::create_channel(state.db_path(), create_local).await {
-                Ok(channel) => channel,
-                Err(err) => {
-                    let _ = sub2api_client::delete_key(
-                        &state.http_client,
-                        &account.base_url,
-                        token,
-                        created_key.id,
-                    )
-                    .await;
-                    return Err(ApiError::Internal(err));
-                }
-            };
-            state.channels_cache.send_modify(|cur| {
-                let mut next = (**cur).clone();
-                next.push(channel.clone());
-                next.sort_by(|a, b| {
-                    let rank = |p: storage::Protocol| match p {
-                        storage::Protocol::Openai => 0,
-                        storage::Protocol::Anthropic => 1,
-                        storage::Protocol::Gemini => 2,
-                    };
-                    rank(a.protocol)
-                        .cmp(&rank(b.protocol))
-                        .then_with(|| b.priority.cmp(&a.priority))
-                        .then_with(|| a.name.cmp(&b.name))
-                });
-                *cur = std::sync::Arc::new(next);
-            });
-            if state
-                .settings_snapshot()
-                .newapi_managed_channel_missing_prompt_enabled
-            {
-                events::publish(AppEvent::RemoteManagedChannelCreated(
-                    RemoteManagedChannelCreated {
-                        channel_id: channel.id.clone(),
-                        channel_name: channel.name.clone(),
-                        account_id: account.id.clone(),
-                        account_base_url: account.base_url.clone(),
-                        provider: storage::ManagedRemoteProvider::Sub2Api,
-                        group_name: channel.managed_group_name().map(ToOwned::to_owned),
-                        resource_name: channel.managed_resource_name().map(ToOwned::to_owned),
-                    },
-                ));
-            }
-            Ok((
-                axum::http::StatusCode::CREATED,
-                Json(CreateRemoteManagedChannelResponse { channel }),
-            ))
+        storage::UnifiedRemoteAccount::Sub2Api(account) => {
+            create_sub2api_remote_managed_channel_impl(&state, account, input).await?
         }
-    }
+    };
+    Ok((axum::http::StatusCode::CREATED, Json(response)))
 }
 
 pub(in crate::server) async fn delete_remote_account(
@@ -1447,199 +1845,463 @@ pub(in crate::server) async fn delete_remote_account(
     axum::extract::Path(account_id): axum::extract::Path<String>,
     input: Option<Json<DeleteRemoteAccountInput>>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let input = input.map(|Json(input)| input).unwrap_or_default();
-    let delete_managed_channels = input.delete_managed_channels.unwrap_or(false);
-    let sync_remote_delete = input.sync_remote_delete.unwrap_or(false);
-    if sync_remote_delete && !delete_managed_channels {
-        return Err(ApiError::bad_request(
-            "remote_delete_remote_requires_channel_delete",
-            "sync_remote_delete requires delete_managed_channels=true",
-        ));
-    }
-    match resolve_remote_account_with_secret(&state, &account_id).await? {
-        ResolvedRemoteAccount::Newapi(_account) => {
-            if delete_managed_channels && sync_remote_delete {
-                let channels = storage::list_channels(state.db_path())
-                    .await?
-                    .into_iter()
-                    .filter(|channel| {
-                        channel.is_managed_by_account(
-                            storage::ManagedRemoteProvider::Newapi,
-                            account_id.as_str(),
-                        )
-                    })
-                    .collect::<Vec<_>>();
-                let mut deleted_channel_ids = Vec::new();
-                let mut failures = Vec::new();
-                for channel in &channels {
-                    match delete_remote_managed_channel_resources(&state, channel).await {
-                        Ok(()) => deleted_channel_ids.push(channel.id.clone()),
-                        Err(err) => {
-                            failures.push(format!("{} ({}): {err}", channel.name, channel.id))
-                        }
-                    }
-                }
-                if !deleted_channel_ids.is_empty() && !failures.is_empty() {
-                    for channel_id in &deleted_channel_ids {
-                        storage::delete_channel(state.db_path(), channel_id.clone()).await?;
-                    }
-                    state.channels_cache.send_modify(|cur| {
-                        let deleted = deleted_channel_ids.clone();
-                        let mut next = (**cur).clone();
-                        next.retain(|channel| !deleted.contains(&channel.id));
-                        *cur = std::sync::Arc::new(next);
-                    });
-                }
-                if !failures.is_empty() {
-                    return Err(ApiError::bad_gateway(
-                        "remote_delete_partial_failed",
-                        format!(
-                            "Remote delete failed for some managed channels; account was kept. {}",
-                            failures.join(" ; ")
-                        ),
-                    ));
-                }
-            }
-            let res = storage::delete_newapi_account(
-                state.db_path(),
-                account_id.clone(),
-                delete_managed_channels,
-            )
-            .await;
-            match res {
-                Ok(result) => {
-                    if delete_managed_channels {
-                        let deleted = result.deleted_managed_channel_ids.clone();
-                        state.channels_cache.send_modify(|cur| {
-                            let deleted = deleted.clone();
-                            let mut next = (**cur).clone();
-                            next.retain(|channel| !deleted.contains(&channel.id));
-                            *cur = std::sync::Arc::new(next);
-                        });
-                    } else {
-                        let account_id = account_id.clone();
-                        state.channels_cache.send_modify(|cur| {
-                            let mut next = (**cur).clone();
-                            for channel in &mut next {
-                                if channel.is_managed_by_account(
-                                    storage::ManagedRemoteProvider::Newapi,
-                                    account_id.as_str(),
-                                ) {
-                                    channel.clear_managed_remote_link();
-                                }
-                            }
-                            *cur = std::sync::Arc::new(next);
-                        });
-                    }
-                    newapi_handlers::notify_background_tasks(&state);
-                    Ok(Json(result).into_response())
-                }
-                Err(err) => Err(match err.downcast_ref::<storage::StorageError>() {
-                    Some(storage::StorageError::NewApiAccountNotFound { .. }) => {
-                        ApiError::not_found("newapi_account_not_found", "New API account not found")
-                    }
-                    _ => ApiError::Internal(err),
-                }),
-            }
+    let options =
+        parse_delete_remote_account_options(input.map(|Json(input)| input).unwrap_or_default())?;
+    let result = match resolve_remote_account_with_secret(&state, &account_id).await? {
+        storage::UnifiedRemoteAccount::Newapi(_) => {
+            delete_newapi_remote_account_impl(&state, account_id, options).await?
         }
-        ResolvedRemoteAccount::Sub2Api(account) => {
-            let linked_channel_ids = storage::list_channel_ids_by_managed_account(
-                state.db_path(),
-                storage::ManagedRemoteProvider::Sub2Api,
-                account_id.clone(),
-            )
-            .await?;
-            if delete_managed_channels && sync_remote_delete {
-                let channels = storage::list_channels(state.db_path())
-                    .await?
-                    .into_iter()
-                    .filter(|channel| {
-                        channel.is_managed_by_account(
-                            storage::ManagedRemoteProvider::Sub2Api,
-                            account_id.as_str(),
-                        )
-                    })
-                    .collect::<Vec<_>>();
-                let mut deleted_channel_ids = Vec::new();
-                let mut failures = Vec::new();
-                for channel in &channels {
-                    match delete_remote_managed_channel_resources(&state, channel).await {
-                        Ok(()) => deleted_channel_ids.push(channel.id.clone()),
-                        Err(err) => {
-                            failures.push(format!("{} ({}): {err}", channel.name, channel.id))
-                        }
-                    }
-                }
-                if !deleted_channel_ids.is_empty() && !failures.is_empty() {
-                    for channel_id in &deleted_channel_ids {
-                        storage::delete_channel(state.db_path(), channel_id.clone()).await?;
-                    }
-                    state.channels_cache.send_modify(|cur| {
-                        let deleted = deleted_channel_ids.clone();
-                        let mut next = (**cur).clone();
-                        next.retain(|channel| !deleted.contains(&channel.id));
-                        *cur = std::sync::Arc::new(next);
-                    });
-                }
-                if !failures.is_empty() {
-                    return Err(ApiError::bad_gateway(
-                        "remote_delete_partial_failed",
-                        format!(
-                            "Remote delete failed for some managed channels; account was kept. {}",
-                            failures.join(" ; ")
-                        ),
-                    ));
-                }
-            }
+        storage::UnifiedRemoteAccount::Sub2Api(_) => {
+            delete_sub2api_remote_account_impl(&state, account_id, options).await?
+        }
+    };
+    Ok(Json(result).into_response())
+}
 
-            let result = if delete_managed_channels {
-                for channel_id in &linked_channel_ids {
-                    storage::delete_channel(state.db_path(), channel_id.clone()).await?;
-                }
-                storage::delete_remote_account(state.db_path(), account_id.clone()).await?;
-                storage::DeleteNewApiAccountResult {
-                    deleted_managed_channel_ids: linked_channel_ids.clone(),
-                    detached_channel_ids: Vec::new(),
-                }
-            } else {
-                let detached_channel_ids = storage::detach_channels_from_managed_account(
-                    state.db_path(),
-                    storage::ManagedRemoteProvider::Sub2Api,
-                    account_id.clone(),
-                )
-                .await?;
-                storage::delete_remote_account(state.db_path(), account_id.clone()).await?;
-                storage::DeleteNewApiAccountResult {
-                    deleted_managed_channel_ids: Vec::new(),
-                    detached_channel_ids,
-                }
-            };
-            if delete_managed_channels {
-                let deleted = result.deleted_managed_channel_ids.clone();
-                state.channels_cache.send_modify(|cur| {
-                    let deleted = deleted.clone();
-                    let mut next = (**cur).clone();
-                    next.retain(|channel| !deleted.contains(&channel.id));
-                    *cur = std::sync::Arc::new(next);
-                });
-            } else {
-                let account_id = account_id.clone();
-                state.channels_cache.send_modify(|cur| {
-                    let mut next = (**cur).clone();
-                    for channel in &mut next {
-                        if channel.is_managed_by_account(
-                            storage::ManagedRemoteProvider::Sub2Api,
-                            account_id.as_str(),
-                        ) {
-                            channel.clear_managed_remote_link();
-                        }
-                    }
-                    *cur = std::sync::Arc::new(next);
-                });
-            }
-            newapi_handlers::notify_background_tasks(&state);
-            let _ = account;
-            Ok(Json(result).into_response())
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::chat_bridge::weixin::{WeixinControl, WeixinStatus};
+    use crate::chat_bridge::whatsapp_web::{WhatsAppWebControl, WhatsAppWebStatus};
+    use crate::update;
+    use axum::body::to_bytes;
+    use axum::http::StatusCode;
+    use axum::response::IntoResponse;
+    use axum::routing::{get, post};
+    use axum::{Json as AxumJson, Router};
+    use std::path::{Path, PathBuf};
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use tokio::sync::{mpsc, watch};
+
+    fn remove_sqlite_artifacts(path: &Path) {
+        let _ = std::fs::remove_file(path);
+        let _ = std::fs::remove_file(PathBuf::from(format!("{}-wal", path.display())));
+        let _ = std::fs::remove_file(PathBuf::from(format!("{}-shm", path.display())));
+    }
+
+    fn temp_db_path() -> PathBuf {
+        std::env::temp_dir().join(format!(
+            "cliswitch-test-remote-handler-{}.sqlite",
+            uuid::Uuid::new_v4()
+        ))
+    }
+
+    async fn build_test_state(db_path: PathBuf) -> AppState {
+        let settings = Arc::new(
+            storage::get_app_settings(db_path.clone())
+                .await
+                .expect("load settings"),
+        );
+        let channels = Arc::new(
+            storage::list_channels(db_path.clone())
+                .await
+                .expect("list channels"),
+        );
+
+        let (settings_notify, _) = watch::channel(0_u64);
+        let (settings_cache, settings_cache_rx) = watch::channel(settings);
+        let (channels_cache, channels_cache_rx) = watch::channel(channels);
+        let (whatsapp_control_tx, _) = mpsc::channel::<WhatsAppWebControl>(1);
+        let (_, whatsapp_status_rx) = watch::channel(WhatsAppWebStatus::default());
+        let (weixin_control_tx, _) = mpsc::channel::<WeixinControl>(1);
+        let (_, weixin_status_rx) = watch::channel(WeixinStatus::default());
+
+        AppState {
+            listen_addr: "127.0.0.1:0".parse().expect("listen addr"),
+            db_path: Arc::new(db_path),
+            http_client: reqwest::Client::new(),
+            settings_notify,
+            settings_cache,
+            settings_cache_rx,
+            channels_cache,
+            channels_cache_rx,
+            update_runtime: Arc::new(tokio::sync::Mutex::new(update::UpdateRuntime::default())),
+            whatsapp_control_tx,
+            whatsapp_status_rx,
+            weixin_control_tx,
+            weixin_status_rx,
         }
+    }
+
+    async fn spawn_sub2api_detect_server() -> String {
+        let app = Router::new().route(
+            "/tenant/api/v1/settings/public",
+            get(|| async {
+                AxumJson(serde_json::json!({
+                    "code": 0,
+                    "message": "",
+                    "data": {
+                        "api_base_url": "openapi/v1",
+                        "site_name": "Demo",
+                        "backend_mode_enabled": true
+                    }
+                }))
+            }),
+        );
+
+        let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+            .await
+            .expect("bind detect server");
+        let addr = listener.local_addr().expect("local addr");
+        tokio::spawn(async move {
+            let _ = axum::serve(listener, app).await;
+        });
+        format!("http://127.0.0.1:{}/tenant/", addr.port())
+    }
+
+    async fn spawn_sub2api_overview_server() -> (String, Arc<AtomicUsize>) {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let calls_for_handler = calls.clone();
+        let app = Router::new().route(
+            "/api/v1/auth/me",
+            get(move || {
+                let calls = calls_for_handler.clone();
+                async move {
+                    calls.fetch_add(1, Ordering::SeqCst);
+                    AxumJson(serde_json::json!({
+                        "code": 0,
+                        "message": "",
+                        "data": {
+                            "id": 42,
+                            "email": "demo@example.com",
+                            "username": "demo-user",
+                            "role": "admin",
+                            "balance": 12.5
+                        }
+                    }))
+                }
+            }),
+        );
+
+        let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+            .await
+            .expect("bind overview server");
+        let addr = listener.local_addr().expect("local addr");
+        tokio::spawn(async move {
+            let _ = axum::serve(listener, app).await;
+        });
+        (format!("http://127.0.0.1:{}", addr.port()), calls)
+    }
+
+    async fn spawn_newapi_system_checkin_server() -> (String, Arc<AtomicUsize>) {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let calls_for_checkin = calls.clone();
+        let app = Router::new()
+            .route(
+                "/api/status",
+                get(|| async {
+                    AxumJson(serde_json::json!({
+                        "success": true,
+                        "message": "",
+                        "data": {
+                            "quota_display_type": "USD",
+                            "quota_per_unit": 500000.0,
+                            "usd_exchange_rate": 1.0,
+                            "checkin_enabled": true,
+                            "turnstile_check": false
+                        }
+                    }))
+                }),
+            )
+            .route(
+                "/api/user/self",
+                get(|| async {
+                    AxumJson(serde_json::json!({
+                        "success": true,
+                        "message": "",
+                        "data": {
+                            "role": 100,
+                            "username": "demo-user",
+                            "display_name": "Demo User",
+                            "group": "default",
+                            "quota": 2000000,
+                            "used_quota": 500000
+                        }
+                    }))
+                }),
+            )
+            .route(
+                "/api/user/checkin",
+                post(move || {
+                    let calls = calls_for_checkin.clone();
+                    async move {
+                        calls.fetch_add(1, Ordering::SeqCst);
+                        AxumJson(serde_json::json!({
+                            "success": true,
+                            "message": "",
+                            "data": {
+                                "quota_awarded": 777,
+                                "checkin_date": "2026-03-30"
+                            }
+                        }))
+                    }
+                }),
+            );
+
+        let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+            .await
+            .expect("bind newapi checkin server");
+        let addr = listener.local_addr().expect("local addr");
+        tokio::spawn(async move {
+            let _ = axum::serve(listener, app).await;
+        });
+        (format!("http://127.0.0.1:{}", addr.port()), calls)
+    }
+
+    #[tokio::test]
+    async fn detect_remote_account_preserves_base_path_and_uses_public_api_base_url() {
+        let db_path = temp_db_path();
+        remove_sqlite_artifacts(&db_path);
+        storage::init_db(&db_path).expect("init db");
+        let state = build_test_state(db_path.clone()).await;
+        let base_url = spawn_sub2api_detect_server().await;
+
+        let response = detect_remote_account(
+            State(state),
+            Json(DetectRemoteAccountInput {
+                base_url: base_url.clone(),
+            }),
+        )
+        .await
+        .expect("detect should succeed")
+        .into_response();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("read body");
+        let payload: serde_json::Value = serde_json::from_slice(&body).expect("parse json");
+
+        assert_eq!(
+            payload["normalized_base_url"],
+            serde_json::Value::String(base_url.trim_end_matches('/').to_string())
+        );
+        assert_eq!(
+            payload["recommended_api_url"],
+            serde_json::Value::String(format!("{}/openapi/v1", base_url.trim_end_matches('/')))
+        );
+
+        remove_sqlite_artifacts(&db_path);
+    }
+
+    #[tokio::test]
+    async fn create_sub2api_account_uses_single_remote_fetch_and_persists_snapshot() {
+        let db_path = temp_db_path();
+        remove_sqlite_artifacts(&db_path);
+        storage::init_db(&db_path).expect("init db");
+        let state = build_test_state(db_path.clone()).await;
+        let (base_url, calls) = spawn_sub2api_overview_server().await;
+
+        let response = create_remote_account(
+            State(state),
+            Json(CreateRemoteAccountInput {
+                provider: RemoteAccountProvider::Sub2Api,
+                base_url: base_url.clone(),
+                api_url: None,
+                user_id: None,
+                user_token: None,
+                bearer_token: Some("Bearer secret-token".to_string()),
+                page_checkin_url: None,
+                checkin_mode: Some(RemoteAccountCheckinMode::Disabled),
+                auto_checkin_time: None,
+                low_balance_alert_threshold: Some(3.0),
+                recharge_currency: Some(RechargeCurrency::Cny),
+            }),
+        )
+        .await
+        .expect("create should succeed")
+        .into_response();
+
+        assert_eq!(response.status(), StatusCode::CREATED);
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+
+        let accounts = storage::list_remote_accounts(db_path.clone())
+            .await
+            .expect("list accounts");
+        assert_eq!(accounts.len(), 1);
+        assert_eq!(accounts[0].remote_user_id.as_deref(), Some("42"));
+        assert_eq!(accounts[0].remote_username.as_deref(), Some("demo-user"));
+        assert_eq!(
+            accounts[0].remote_display_name.as_deref(),
+            Some("demo@example.com")
+        );
+        assert_eq!(accounts[0].last_balance_amount, Some(12.5));
+        assert_eq!(accounts[0].last_sync_error, None);
+
+        remove_sqlite_artifacts(&db_path);
+    }
+
+    #[tokio::test]
+    async fn update_sub2api_account_uses_single_remote_fetch_and_persists_snapshot() {
+        let db_path = temp_db_path();
+        remove_sqlite_artifacts(&db_path);
+        storage::init_db(&db_path).expect("init db");
+        let state = build_test_state(db_path.clone()).await;
+        let (base_url, calls) = spawn_sub2api_overview_server().await;
+
+        let account = storage::create_remote_account(
+            db_path.clone(),
+            storage::CreateRemoteAccount {
+                provider: storage::RemoteAccountProvider::Sub2Api,
+                base_url: base_url.clone(),
+                api_url: None,
+                access_token: "Bearer secret-token".to_string(),
+                page_checkin_url: None,
+                checkin_mode: Some(storage::RemoteAccountCheckinMode::Disabled),
+                auto_checkin_time: None,
+                low_balance_alert_threshold: Some(0.0),
+                recharge_currency: Some(RechargeCurrency::Cny),
+            },
+        )
+        .await
+        .expect("seed remote account");
+
+        let response = update_remote_account(
+            State(state),
+            axum::extract::Path(account.id.clone()),
+            Json(UpdateRemoteAccountInput {
+                low_balance_alert_threshold: Some(5.0),
+                ..Default::default()
+            }),
+        )
+        .await
+        .expect("update should succeed")
+        .into_response();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+
+        let updated = storage::get_remote_account_without_secret(db_path.clone(), account.id)
+            .await
+            .expect("reload updated account");
+        assert_eq!(updated.low_balance_alert_threshold, 5.0);
+        assert_eq!(updated.remote_user_id.as_deref(), Some("42"));
+        assert_eq!(updated.remote_username.as_deref(), Some("demo-user"));
+        assert_eq!(
+            updated.remote_display_name.as_deref(),
+            Some("demo@example.com")
+        );
+        assert_eq!(updated.last_balance_amount, Some(12.5));
+        assert_eq!(updated.last_sync_error, None);
+
+        remove_sqlite_artifacts(&db_path);
+    }
+
+    #[tokio::test]
+    async fn remote_system_checkin_delegates_to_newapi_accounts() {
+        let db_path = temp_db_path();
+        remove_sqlite_artifacts(&db_path);
+        storage::init_db(&db_path).expect("init db");
+        let state = build_test_state(db_path.clone()).await;
+        let (base_url, calls) = spawn_newapi_system_checkin_server().await;
+
+        let account = storage::create_newapi_account(
+            db_path.clone(),
+            storage::CreateNewApiAccount {
+                base_url,
+                api_url: None,
+                user_id: "demo-user-id".to_string(),
+                user_token: "demo-user-token".to_string(),
+                page_checkin_url: None,
+                checkin_mode: Some(storage::NewApiAccountCheckinMode::SystemApi),
+                auto_checkin_enabled: Some(false),
+                auto_checkin_time: None,
+                low_balance_alert_threshold: Some(0.0),
+                recharge_currency: Some(RechargeCurrency::Cny),
+            },
+        )
+        .await
+        .expect("seed newapi account");
+
+        let response = perform_remote_account_system_checkin(
+            State(state),
+            axum::extract::Path(account.id.clone()),
+        )
+        .await
+        .expect("system checkin should succeed")
+        .into_response();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("read body");
+        let payload: serde_json::Value = serde_json::from_slice(&body).expect("parse json");
+        assert_eq!(
+            payload["already_checked_in"],
+            serde_json::Value::Bool(false)
+        );
+        assert_eq!(
+            payload["quota_awarded"],
+            serde_json::Value::Number(777.into())
+        );
+        assert_eq!(
+            payload["checkin_date"],
+            serde_json::Value::String("2026-03-30".to_string())
+        );
+
+        let updated =
+            storage::get_newapi_account_without_secret(db_path.clone(), account.id.clone())
+                .await
+                .expect("reload newapi account");
+        assert_eq!(updated.remote_username.as_deref(), Some("demo-user"));
+        assert_eq!(updated.remote_display_name.as_deref(), Some("Demo User"));
+        assert_eq!(updated.last_sync_error, None);
+
+        let checkins = storage::get_newapi_accounts_checkins_today(db_path.clone())
+            .await
+            .expect("load checkins");
+        assert!(checkins.completed_account_ids.contains(&account.id));
+
+        remove_sqlite_artifacts(&db_path);
+    }
+
+    #[tokio::test]
+    async fn remote_system_checkin_rejects_sub2api_accounts() {
+        let db_path = temp_db_path();
+        remove_sqlite_artifacts(&db_path);
+        storage::init_db(&db_path).expect("init db");
+        let state = build_test_state(db_path.clone()).await;
+
+        let account = storage::create_remote_account(
+            db_path.clone(),
+            storage::CreateRemoteAccount {
+                provider: storage::RemoteAccountProvider::Sub2Api,
+                base_url: "http://127.0.0.1:65535".to_string(),
+                api_url: None,
+                access_token: "Bearer demo-token".to_string(),
+                page_checkin_url: None,
+                checkin_mode: Some(storage::RemoteAccountCheckinMode::Disabled),
+                auto_checkin_time: None,
+                low_balance_alert_threshold: Some(0.0),
+                recharge_currency: Some(RechargeCurrency::Cny),
+            },
+        )
+        .await
+        .expect("seed sub2api account");
+
+        let response = match perform_remote_account_system_checkin(
+            State(state),
+            axum::extract::Path(account.id),
+        )
+        .await
+        {
+            Ok(_) => panic!("sub2api should be rejected"),
+            Err(err) => err.into_response(),
+        };
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("read body");
+        let payload: serde_json::Value = serde_json::from_slice(&body).expect("parse json");
+        assert_eq!(
+            payload["code"],
+            serde_json::Value::String("remote_checkin_unsupported_provider".to_string())
+        );
+
+        remove_sqlite_artifacts(&db_path);
     }
 }

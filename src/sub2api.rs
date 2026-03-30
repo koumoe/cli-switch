@@ -94,13 +94,21 @@ struct KeyListData {
 }
 
 fn join_url(base_url: &str, path: &str) -> anyhow::Result<String> {
-    let mut url = reqwest::Url::parse(base_url).with_context(|| format!("无效 URL：{base_url}"))?;
-    if path.starts_with('/') {
-        url.set_path(path);
-        url.set_query(None);
-        return Ok(url.to_string());
-    }
-    Ok(url.join(path)?.to_string())
+    let mut base =
+        reqwest::Url::parse(base_url).with_context(|| format!("无效 URL：{base_url}"))?;
+    base.set_query(None);
+    base.set_fragment(None);
+
+    let base_dir = match base.path().trim_end_matches('/') {
+        "" => "/".to_string(),
+        path => format!("{path}/"),
+    };
+    base.set_path(&base_dir);
+
+    let joined = base
+        .join(path.trim_start_matches('/'))
+        .with_context(|| format!("拼接 sub2api URL 失败：base={base_url}, path={path}"))?;
+    Ok(joined.to_string().trim_end_matches('/').to_string())
 }
 
 fn auth_headers(access_token: &str) -> anyhow::Result<HeaderMap> {
@@ -298,4 +306,22 @@ pub async fn delete_key(
     let url = join_url(base_url, &format!("/api/v1/keys/{key_id}"))?;
     let headers = auth_headers(access_token)?;
     send_no_data(http_client.delete(url).headers(headers)).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::join_url;
+
+    #[test]
+    fn join_url_preserves_base_path_for_api_endpoints() {
+        let joined =
+            join_url("https://example.com/tenant", "/api/v1/settings/public").expect("join url");
+        assert_eq!(joined, "https://example.com/tenant/api/v1/settings/public");
+    }
+
+    #[test]
+    fn join_url_keeps_root_instances_stable() {
+        let joined = join_url("https://example.com", "/api/v1/auth/me").expect("join url");
+        assert_eq!(joined, "https://example.com/api/v1/auth/me");
+    }
 }

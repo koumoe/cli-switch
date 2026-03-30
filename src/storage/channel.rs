@@ -105,12 +105,6 @@ pub struct Channel {
     pub managed_remote_resource_name: Option<String>,
     pub managed_remote_group_name: Option<String>,
     pub managed_remote_group_id: Option<i64>,
-    pub managed_by_newapi: bool,
-    pub newapi_account_id: Option<String>,
-    pub newapi_channel_id: Option<i64>,
-    pub newapi_token_id: Option<i64>,
-    pub newapi_token_name: Option<String>,
-    pub newapi_group: Option<String>,
     pub enabled: bool,
     pub auto_disabled_until_ms: i64,
     pub created_at_ms: i64,
@@ -119,13 +113,9 @@ pub struct Channel {
 
 impl Channel {
     pub fn managed_provider(&self) -> Option<ManagedRemoteProvider> {
-        if self.managed_by_remote {
-            return self.managed_remote_provider;
-        }
-        if self.managed_by_newapi {
-            return Some(ManagedRemoteProvider::Newapi);
-        }
-        None
+        self.managed_by_remote
+            .then_some(self.managed_remote_provider)
+            .flatten()
     }
 
     pub fn is_managed_by_remote(&self) -> bool {
@@ -133,38 +123,33 @@ impl Channel {
     }
 
     pub fn managed_account_id(&self) -> Option<&str> {
-        if self.managed_by_remote {
-            return self.managed_remote_account_id.as_deref();
-        }
-        self.newapi_account_id.as_deref()
+        self.managed_by_remote
+            .then_some(self.managed_remote_account_id.as_deref())
+            .flatten()
     }
 
     pub fn managed_resource_id(&self) -> Option<String> {
-        if self.managed_by_remote {
-            return self.managed_remote_resource_id.clone();
-        }
-        self.newapi_token_id.map(|value| value.to_string())
+        self.managed_by_remote
+            .then_some(self.managed_remote_resource_id.clone())
+            .flatten()
     }
 
     pub fn managed_resource_name(&self) -> Option<&str> {
-        if self.managed_by_remote {
-            return self.managed_remote_resource_name.as_deref();
-        }
-        self.newapi_token_name.as_deref()
+        self.managed_by_remote
+            .then_some(self.managed_remote_resource_name.as_deref())
+            .flatten()
     }
 
     pub fn managed_group_name(&self) -> Option<&str> {
-        if self.managed_by_remote {
-            return self.managed_remote_group_name.as_deref();
-        }
-        self.newapi_group.as_deref()
+        self.managed_by_remote
+            .then_some(self.managed_remote_group_name.as_deref())
+            .flatten()
     }
 
     pub fn managed_group_id(&self) -> Option<i64> {
-        if self.managed_by_remote {
-            return self.managed_remote_group_id;
-        }
-        None
+        self.managed_by_remote
+            .then_some(self.managed_remote_group_id)
+            .flatten()
     }
 
     pub fn clear_managed_remote_link(&mut self) {
@@ -175,12 +160,6 @@ impl Channel {
         self.managed_remote_resource_name = None;
         self.managed_remote_group_name = None;
         self.managed_remote_group_id = None;
-        self.managed_by_newapi = false;
-        self.newapi_account_id = None;
-        self.newapi_channel_id = None;
-        self.newapi_token_id = None;
-        self.newapi_token_name = None;
-        self.newapi_group = None;
     }
 
     pub fn is_managed_by_account(&self, provider: ManagedRemoteProvider, account_id: &str) -> bool {
@@ -196,9 +175,7 @@ const CHANNEL_SELECT_COLUMNS: &str = r#"
     id, name, protocol, base_url, auth_type, auth_ref, checkin_url, priority, recharge_currency,
     real_multiplier, managed_by_remote, managed_remote_provider, managed_remote_account_id,
     managed_remote_resource_id, managed_remote_resource_name, managed_remote_group_name,
-    managed_remote_group_id, managed_by_newapi, newapi_account_id, newapi_channel_id,
-    newapi_token_id, newapi_token_name, newapi_group, enabled, auto_disabled_until_ms,
-    created_at_ms, updated_at_ms
+    managed_remote_group_id, enabled, auto_disabled_until_ms, created_at_ms, updated_at_ms
 "#;
 
 fn channel_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Channel> {
@@ -222,16 +199,10 @@ fn channel_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Channel> {
         managed_remote_resource_name: row.get(14)?,
         managed_remote_group_name: row.get(15)?,
         managed_remote_group_id: row.get(16)?,
-        managed_by_newapi: row.get::<_, i64>(17)? != 0,
-        newapi_account_id: row.get(18)?,
-        newapi_channel_id: row.get(19)?,
-        newapi_token_id: row.get(20)?,
-        newapi_token_name: row.get(21)?,
-        newapi_group: row.get(22)?,
-        enabled: row.get::<_, i64>(23)? != 0,
-        auto_disabled_until_ms: row.get(24)?,
-        created_at_ms: row.get(25)?,
-        updated_at_ms: row.get(26)?,
+        enabled: row.get::<_, i64>(17)? != 0,
+        auto_disabled_until_ms: row.get(18)?,
+        created_at_ms: row.get(19)?,
+        updated_at_ms: row.get(20)?,
     })
 }
 
@@ -353,13 +324,6 @@ pub struct CreateChannel {
     pub managed_remote_resource_name: Option<String>,
     pub managed_remote_group_name: Option<String>,
     pub managed_remote_group_id: Option<i64>,
-    #[serde(default)]
-    pub managed_by_newapi: Option<bool>,
-    pub newapi_account_id: Option<String>,
-    pub newapi_channel_id: Option<i64>,
-    pub newapi_token_id: Option<i64>,
-    pub newapi_token_name: Option<String>,
-    pub newapi_group: Option<String>,
 }
 
 pub async fn create_channel(db_path: PathBuf, input: CreateChannel) -> anyhow::Result<Channel> {
@@ -378,38 +342,29 @@ pub async fn create_channel(db_path: PathBuf, input: CreateChannel) -> anyhow::R
             .filter(|s| !s.is_empty());
         let recharge_currency = input.recharge_currency.unwrap_or(RechargeCurrency::Cny);
         let real_multiplier = input.real_multiplier.unwrap_or(1.0);
-        let managed_by_newapi = input.managed_by_newapi.unwrap_or(false);
-        let newapi_account_id = normalize_optional_text(input.newapi_account_id);
-        let newapi_token_name = normalize_optional_text(input.newapi_token_name);
-        let newapi_group = normalize_optional_text(input.newapi_group);
-        let managed_by_remote = input.managed_by_remote.unwrap_or(managed_by_newapi);
+        let managed_by_remote = input.managed_by_remote.unwrap_or(false);
         let managed_remote_provider = if managed_by_remote {
-            input.managed_remote_provider.or_else(|| {
-                managed_by_newapi.then_some(ManagedRemoteProvider::Newapi)
-            })
+            input.managed_remote_provider
         } else {
             None
         };
         let managed_remote_account_id = if managed_by_remote {
             normalize_optional_text(input.managed_remote_account_id)
-                .or_else(|| newapi_account_id.clone())
         } else {
             None
         };
         let managed_remote_resource_id = if managed_by_remote {
             normalize_optional_text(input.managed_remote_resource_id)
-                .or_else(|| input.newapi_token_id.map(|value| value.to_string()))
         } else {
             None
         };
         let managed_remote_resource_name = if managed_by_remote {
             normalize_optional_text(input.managed_remote_resource_name)
-                .or_else(|| newapi_token_name.clone())
         } else {
             None
         };
         let managed_remote_group_name = if managed_by_remote {
-            normalize_optional_text(input.managed_remote_group_name).or_else(|| newapi_group.clone())
+            normalize_optional_text(input.managed_remote_group_name)
         } else {
             None
         };
@@ -424,10 +379,9 @@ pub async fn create_channel(db_path: PathBuf, input: CreateChannel) -> anyhow::R
                 id, name, protocol, base_url, auth_type, auth_ref, checkin_url, priority, recharge_currency, real_multiplier,
                 managed_by_remote, managed_remote_provider, managed_remote_account_id, managed_remote_resource_id,
                 managed_remote_resource_name, managed_remote_group_name, managed_remote_group_id,
-                managed_by_newapi, newapi_account_id, newapi_channel_id, newapi_token_id, newapi_token_name, newapi_group,
                 enabled, created_at_ms, updated_at_ms
             )
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)
             "#,
             params![
                 id,
@@ -447,12 +401,6 @@ pub async fn create_channel(db_path: PathBuf, input: CreateChannel) -> anyhow::R
                 managed_remote_resource_name,
                 managed_remote_group_name,
                 managed_remote_group_id,
-                if managed_by_newapi { 1 } else { 0 },
-                newapi_account_id,
-                input.newapi_channel_id,
-                input.newapi_token_id,
-                newapi_token_name,
-                newapi_group,
                 if input.enabled { 1 } else { 0 },
                 ts,
                 ts,
@@ -477,12 +425,6 @@ pub async fn create_channel(db_path: PathBuf, input: CreateChannel) -> anyhow::R
             managed_remote_resource_name,
             managed_remote_group_name,
             managed_remote_group_id,
-            managed_by_newapi,
-            newapi_account_id,
-            newapi_channel_id: input.newapi_channel_id,
-            newapi_token_id: input.newapi_token_id,
-            newapi_token_name,
-            newapi_group,
             enabled: input.enabled,
             auto_disabled_until_ms: 0,
             created_at_ms: ts,
@@ -575,8 +517,7 @@ pub async fn update_channel(
             SET name = ?2, base_url = ?3, auth_type = ?4, auth_ref = ?5, checkin_url = ?6, priority = ?7, recharge_currency = ?8, real_multiplier = ?9,
                 managed_by_remote = ?10, managed_remote_provider = ?11, managed_remote_account_id = ?12, managed_remote_resource_id = ?13,
                 managed_remote_resource_name = ?14, managed_remote_group_name = ?15, managed_remote_group_id = ?16,
-                managed_by_newapi = ?17, newapi_account_id = ?18, newapi_channel_id = ?19, newapi_token_id = ?20, newapi_token_name = ?21, newapi_group = ?22,
-                enabled = ?23, auto_disabled_until_ms = ?24, updated_at_ms = ?25
+                enabled = ?17, auto_disabled_until_ms = ?18, updated_at_ms = ?19
             WHERE id = ?1
             "#,
             params![
@@ -598,12 +539,6 @@ pub async fn update_channel(
                 channel.managed_remote_resource_name,
                 channel.managed_remote_group_name,
                 channel.managed_remote_group_id,
-                if channel.managed_by_newapi { 1 } else { 0 },
-                channel.newapi_account_id,
-                channel.newapi_channel_id,
-                channel.newapi_token_id,
-                channel.newapi_token_name,
-                channel.newapi_group,
                 if channel.enabled { 1 } else { 0 },
                 channel.auto_disabled_until_ms,
                 channel.updated_at_ms,
@@ -836,8 +771,9 @@ pub async fn list_channel_ids_by_managed_account(
                 r#"
                 SELECT id
                 FROM channels
-                WHERE (managed_by_remote = 1 AND managed_remote_provider = 'newapi' AND managed_remote_account_id = ?1)
-                   OR (newapi_account_id = ?1)
+                WHERE managed_by_remote = 1
+                  AND managed_remote_provider = 'newapi'
+                  AND managed_remote_account_id = ?1
                 ORDER BY created_at_ms ASC
                 "#,
             )?,
@@ -883,15 +819,10 @@ pub async fn detach_channels_from_managed_account(
                         managed_remote_resource_name = NULL,
                         managed_remote_group_name = NULL,
                         managed_remote_group_id = NULL,
-                        managed_by_newapi = 0,
-                        newapi_account_id = NULL,
-                        newapi_channel_id = NULL,
-                        newapi_token_id = NULL,
-                        newapi_token_name = NULL,
-                        newapi_group = NULL,
                         updated_at_ms = ?2
-                    WHERE (managed_by_remote = 1 AND managed_remote_provider = 'newapi' AND managed_remote_account_id = ?1)
-                       OR (newapi_account_id = ?1)
+                    WHERE managed_by_remote = 1
+                      AND managed_remote_provider = 'newapi'
+                      AND managed_remote_account_id = ?1
                     "#,
                     params![account_id, ts],
                 )?;
@@ -997,12 +928,6 @@ mod tests {
             managed_remote_resource_name: None,
             managed_remote_group_name: None,
             managed_remote_group_id: None,
-            managed_by_newapi: Some(false),
-            newapi_account_id: None,
-            newapi_channel_id: None,
-            newapi_token_id: None,
-            newapi_token_name: None,
-            newapi_group: None,
         }
     }
 
@@ -1047,6 +972,32 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec![3, 2, 1]
         );
+
+        remove_sqlite_artifacts(&db_path);
+    }
+
+    #[tokio::test]
+    async fn fresh_schema_omits_legacy_newapi_managed_columns() {
+        let db_path = temp_db_path();
+        remove_sqlite_artifacts(&db_path);
+        storage::init_db(&db_path).unwrap();
+
+        let conn = rusqlite::Connection::open(&db_path).unwrap();
+        let mut stmt = conn
+            .prepare("SELECT name FROM pragma_table_info('channels')")
+            .unwrap();
+        let rows = stmt
+            .query_map([], |row| row.get::<_, String>(0))
+            .unwrap()
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .unwrap();
+
+        assert!(!rows.contains(&"managed_by_newapi".to_string()));
+        assert!(!rows.contains(&"newapi_account_id".to_string()));
+        assert!(!rows.contains(&"newapi_channel_id".to_string()));
+        assert!(!rows.contains(&"newapi_token_id".to_string()));
+        assert!(!rows.contains(&"newapi_token_name".to_string()));
+        assert!(!rows.contains(&"newapi_group".to_string()));
 
         remove_sqlite_artifacts(&db_path);
     }

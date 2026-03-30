@@ -1,5 +1,4 @@
 import type {
-  NewApiGroupOption,
   NewapiRemoteAccount,
   Protocol,
   RechargeCurrency,
@@ -31,6 +30,7 @@ export type ManagedChannelDraft = {
   name: string;
   protocol: Protocol | null;
   group_name: string;
+  group_id: number | null;
   base_url_override: string;
 };
 
@@ -82,12 +82,13 @@ export function defaultManagedDraft(account: RemoteAccount): ManagedChannelDraft
   return {
     name: defaultManagedName(account, null),
     group_name: account.provider === "newapi" ? (account.remote_group ?? "") : "",
+    group_id: null,
     protocol: null,
     base_url_override: "",
   };
 }
 
-export function formatGroupLabel(group: Pick<NewApiGroupOption | RemoteGroupOption, "name" | "ratio">): string {
+export function formatGroupLabel(group: Pick<RemoteGroupOption, "name" | "ratio">): string {
   const ratio = group.ratio !== null && group.ratio !== undefined ? ` (x${group.ratio})` : "";
   return `${group.name}${ratio}`;
 }

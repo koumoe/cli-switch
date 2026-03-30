@@ -47,12 +47,12 @@ export type AppSettings = {
   chat_bridge_turn_timeout_minutes: number;
   chat_bridge_allow_new_projects: boolean;
   system_notifications_enabled: boolean;
-  newapi_low_balance_system_notification_enabled: boolean;
-  newapi_managed_channel_missing_system_notification_enabled: boolean;
-  newapi_managed_channel_multiplier_system_notification_enabled: boolean;
-  newapi_managed_channel_missing_prompt_enabled: boolean;
-  newapi_managed_channel_sync_multiplier_enabled: boolean;
-  newapi_managed_channel_sync_free_multiplier_enabled: boolean;
+  remote_low_balance_system_notification_enabled: boolean;
+  remote_managed_channel_missing_system_notification_enabled: boolean;
+  remote_managed_channel_multiplier_system_notification_enabled: boolean;
+  remote_managed_channel_missing_prompt_enabled: boolean;
+  remote_managed_channel_sync_multiplier_enabled: boolean;
+  remote_managed_channel_sync_free_multiplier_enabled: boolean;
 };
 
 export type ChatPlatform = "telegram" | "discord" | "whatsapp" | "weixin";
@@ -235,12 +235,6 @@ export type Channel = {
   managed_remote_resource_name?: string | null;
   managed_remote_group_name?: string | null;
   managed_remote_group_id?: number | null;
-  managed_by_newapi: boolean;
-  newapi_account_id?: string | null;
-  newapi_channel_id?: number | null;
-  newapi_token_id?: number | null;
-  newapi_token_name?: string | null;
-  newapi_group?: string | null;
   created_at_ms: number;
   updated_at_ms: number;
 };
@@ -390,87 +384,13 @@ export type RemoteKey = {
   status: string;
 };
 
-export type NewApiAccountCheckinMode = "system_api" | "page_open";
-
-export type NewApiAccount = {
-  id: string;
-  base_url: string;
-  api_url: string | null;
-  user_id: string;
-  user_token_configured: boolean;
-  page_checkin_url: string | null;
-  checkin_mode: NewApiAccountCheckinMode;
-  auto_checkin_enabled: boolean;
-  auto_checkin_time: string;
-  low_balance_alert_threshold: number;
-  recharge_currency: "USD" | "CNY";
-  remote_role: number | null;
-  remote_username: string | null;
-  remote_display_name: string | null;
-  remote_group: string | null;
-  quota_display_type: string;
-  quota_per_unit: number;
-  usd_exchange_rate: number;
-  custom_currency_symbol: string | null;
-  custom_currency_exchange_rate: number;
-  remote_checkin_enabled: boolean;
-  remote_turnstile_check_enabled: boolean;
-  last_quota: number | null;
-  last_used_quota: number | null;
-  last_balance_amount: number | null;
-  last_sync_error: string | null;
-  last_synced_at_ms: number | null;
-  low_balance_alert_notified: boolean;
-  last_balance_alert_at_ms: number | null;
-  created_at_ms: number;
-  updated_at_ms: number;
-};
-
-export type CreateNewApiAccountInput = {
-  base_url: string;
-  api_url?: string | null;
-  user_id: string;
-  user_token: string;
-  page_checkin_url?: string | null;
-  checkin_mode?: NewApiAccountCheckinMode;
-  auto_checkin_enabled?: boolean;
-  auto_checkin_time?: string;
-  low_balance_alert_threshold?: number;
-  recharge_currency?: "USD" | "CNY";
-};
-
-export type UpdateNewApiAccountInput = Partial<{
-  base_url: string;
-  api_url: string | null;
-  user_id: string;
-  user_token: string;
-  page_checkin_url: string | null;
-  checkin_mode: NewApiAccountCheckinMode;
-  auto_checkin_enabled: boolean;
-  auto_checkin_time: string;
-  low_balance_alert_threshold: number;
-  recharge_currency: "USD" | "CNY";
-}>;
-
-export type NewApiAccountCheckinsToday = {
-  date: string;
-  completed_account_ids: string[];
-};
-
-export type NewApiSystemCheckinResult = {
+export type RemoteAccountSystemCheckinResult = {
   quota_awarded: number | null;
   checkin_date: string | null;
   already_checked_in: boolean;
 };
 
-export type NewApiGroupOption = {
-  name: string;
-  ratio: number | null;
-  description: string | null;
-  managed_channel_count: number;
-};
-
-export type NewApiManagedChannelMissingPrompt = {
+export type RemoteManagedChannelMissingPrompt = {
   provider: RemoteAccountProvider;
   channel_id: string;
   channel_name: string;
@@ -482,9 +402,7 @@ export type NewApiManagedChannelMissingPrompt = {
   missing_resource: boolean;
 };
 
-export type RemoteManagedChannelMissingPrompt = NewApiManagedChannelMissingPrompt;
-
-export type NewApiManagedChannelMultiplierPrompt = {
+export type RemoteManagedChannelMultiplierPrompt = {
   provider: RemoteAccountProvider;
   channel_id: string;
   channel_name: string;
@@ -495,9 +413,7 @@ export type NewApiManagedChannelMultiplierPrompt = {
   remote_multiplier: number;
 };
 
-export type RemoteManagedChannelMultiplierPrompt = NewApiManagedChannelMultiplierPrompt;
-
-export type CreateNewApiManagedChannelInput = {
+export type CreateRemoteManagedChannelInput = {
   name: string;
   protocol: Protocol;
   group_name: string;
@@ -505,17 +421,8 @@ export type CreateNewApiManagedChannelInput = {
   base_url_override?: string | null;
 };
 
-export type CreateNewApiManagedChannelResponse = {
+export type CreateRemoteManagedChannelResponse = {
   channel: Channel;
-};
-
-export type CreateRemoteManagedChannelInput = CreateNewApiManagedChannelInput;
-
-export type CreateRemoteManagedChannelResponse = CreateNewApiManagedChannelResponse;
-
-export type DeleteNewApiAccountResponse = {
-  deleted_managed_channel_ids: string[];
-  detached_channel_ids: string[];
 };
 
 export type ChannelTestResponse = {
@@ -1021,48 +928,19 @@ export function completeRemoteAccountCheckinToday(id: string): Promise<void> {
   return http<void>("POST", `/api/remote/accounts/${encodeURIComponent(id)}/checkins/complete`, {});
 }
 
+export function remoteAccountSystemCheckin(id: string): Promise<RemoteAccountSystemCheckinResult> {
+  return http<RemoteAccountSystemCheckinResult>(
+    "POST",
+    `/api/remote/accounts/${encodeURIComponent(id)}/checkins/system`,
+    {}
+  );
+}
+
 export function deleteRemoteAccount(
   id: string,
   input?: { delete_managed_channels?: boolean; sync_remote_delete?: boolean }
 ): Promise<void> {
   return http<void>("DELETE", `/api/remote/accounts/${encodeURIComponent(id)}`, input);
-}
-
-export function listNewApiAccounts(): Promise<NewApiAccount[]> {
-  return http<NewApiAccount[]>("GET", "/api/newapi/accounts");
-}
-
-export function createNewApiAccount(input: CreateNewApiAccountInput): Promise<NewApiAccount> {
-  return http<NewApiAccount>("POST", "/api/newapi/accounts", input);
-}
-
-export function updateNewApiAccount(
-  id: string,
-  input: UpdateNewApiAccountInput
-): Promise<NewApiAccount> {
-  return http<NewApiAccount>("PUT", `/api/newapi/accounts/${encodeURIComponent(id)}`, input);
-}
-
-export function refreshNewApiAccount(id: string): Promise<NewApiAccount> {
-  return http<NewApiAccount>("POST", `/api/newapi/accounts/${encodeURIComponent(id)}/refresh`, {});
-}
-
-export function listNewApiGroups(accountId: string): Promise<NewApiGroupOption[]> {
-  return http<NewApiGroupOption[]>(
-    "GET",
-    `/api/newapi/accounts/${encodeURIComponent(accountId)}/groups`
-  );
-}
-
-export function createNewApiManagedChannel(
-  accountId: string,
-  input: CreateNewApiManagedChannelInput
-): Promise<CreateNewApiManagedChannelResponse> {
-  return http<CreateNewApiManagedChannelResponse>(
-    "POST",
-    `/api/newapi/accounts/${encodeURIComponent(accountId)}/managed_channel`,
-    input
-  );
 }
 
 export function createRemoteManagedChannel(
@@ -1074,33 +952,6 @@ export function createRemoteManagedChannel(
     `/api/remote/accounts/${encodeURIComponent(accountId)}/managed_channel`,
     input
   );
-}
-
-export function reorderNewApiAccounts(accountIds: string[]): Promise<void> {
-  return http<void>("POST", "/api/newapi/accounts/reorder", { account_ids: accountIds });
-}
-
-export function newApiAccountCheckinsToday(): Promise<NewApiAccountCheckinsToday> {
-  return http<NewApiAccountCheckinsToday>("GET", "/api/newapi/accounts/checkins/today");
-}
-
-export function completeNewApiAccountCheckinToday(id: string): Promise<void> {
-  return http<void>("POST", `/api/newapi/accounts/${encodeURIComponent(id)}/checkins/complete`, {});
-}
-
-export function newApiSystemCheckin(id: string): Promise<NewApiSystemCheckinResult> {
-  return http<NewApiSystemCheckinResult>(
-    "POST",
-    `/api/newapi/accounts/${encodeURIComponent(id)}/checkins/system`,
-    {}
-  );
-}
-
-export function deleteNewApiAccount(
-  id: string,
-  input?: { delete_managed_channels?: boolean; sync_remote_delete?: boolean }
-): Promise<DeleteNewApiAccountResponse> {
-  return http<DeleteNewApiAccountResponse>("DELETE", `/api/newapi/accounts/${encodeURIComponent(id)}`, input);
 }
 
 export function openInBrowser(url: string): Promise<void> {

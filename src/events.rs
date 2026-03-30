@@ -78,11 +78,11 @@ impl SystemNotificationSettings {
     pub fn from_settings(settings: &storage::AppSettings) -> Self {
         Self {
             enabled: settings.system_notifications_enabled,
-            remote_low_balance_enabled: settings.newapi_low_balance_system_notification_enabled,
+            remote_low_balance_enabled: settings.remote_low_balance_system_notification_enabled,
             remote_managed_channel_missing_enabled: settings
-                .newapi_managed_channel_missing_system_notification_enabled,
+                .remote_managed_channel_missing_system_notification_enabled,
             remote_managed_channel_multiplier_enabled: settings
-                .newapi_managed_channel_multiplier_system_notification_enabled,
+                .remote_managed_channel_multiplier_system_notification_enabled,
         }
     }
 }

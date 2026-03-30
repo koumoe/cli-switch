@@ -12,9 +12,9 @@ import {
   deleteRemoteAccount,
   listRemoteAccountGroups,
   listRemoteAccounts,
-  newApiSystemCheckin,
   openInBrowser,
   refreshRemoteAccount,
+  remoteAccountSystemCheckin,
   remoteAccountCheckinsToday,
   reorderRemoteAccounts,
   updateRemoteAccount,
@@ -299,7 +299,7 @@ export function AccountsPage() {
     if (!isNewApiAccount(item)) return;
     setSystemChecking((current) => ({ ...current, [item.id]: true }));
     try {
-      await newApiSystemCheckin(item.id);
+      await remoteAccountSystemCheckin(item.id);
       setCheckinDoneMap((current) => ({ ...current, [item.id]: true }));
       toast.success(t("accounts.toast.systemCheckinOk"));
       await refreshAll();
@@ -405,10 +405,17 @@ export function AccountsPage() {
       const groups = await listRemoteAccountGroups(item.id);
       setManagedGroups(groups);
       const preferred = (item.provider === "newapi" ? item.remote_group : "")?.trim() ?? "";
-      if (preferred && groups.some((group) => group.name === preferred)) {
-        setManagedDraft((current) => (current ? { ...current, group_name: preferred } : current));
-      } else if (groups[0]?.name) {
-        setManagedDraft((current) => (current ? { ...current, group_name: groups[0].name } : current));
+      const preferredGroup = preferred
+        ? groups.find((group) => group.name === preferred) ?? null
+        : null;
+      const fallbackGroup = groups[0] ?? null;
+      const nextGroup = preferredGroup ?? fallbackGroup;
+      if (nextGroup) {
+        setManagedDraft((current) => (current ? {
+          ...current,
+          group_name: nextGroup.name,
+          group_id: nextGroup.id,
+        } : current));
       }
     } catch (e) {
       toast.error(t("accounts.toast.loadGroupsFail"), { description: humanizeApiError(e, t) });
@@ -423,7 +430,9 @@ export function AccountsPage() {
     const protocol = managedDraft.protocol;
     const groupName = managedDraft.group_name.trim();
     const baseUrlOverride = managedDraft.base_url_override.trim();
-    const selectedGroup = managedGroups.find((group) => group.name === groupName) ?? null;
+    const selectedGroup = managedDraft.group_id !== null
+      ? managedGroups.find((group) => group.id === managedDraft.group_id) ?? null
+      : managedGroups.find((group) => group.name === groupName) ?? null;
     if (!name || !groupName || !protocol) {
       toast.error(t("accounts.toast.actionFail"), { description: t("accounts.toast.managedRequired") });
       return;

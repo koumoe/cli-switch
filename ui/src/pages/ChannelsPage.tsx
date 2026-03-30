@@ -1028,7 +1028,7 @@ export function ChannelsPage() {
                 : t("channels.deleteDialog.confirm")}
             </DialogDescription>
           </DialogHeader>
-          {deleteTarget && (deleteTarget.managed_by_remote || deleteTarget.managed_by_newapi) ? (
+          {deleteTarget?.managed_by_remote ? (
             <div className="flex items-center justify-between rounded-md border p-3">
               <div className="space-y-1">
                 <div className="text-sm font-medium">{t("channels.deleteDialog.syncDeleteRemote")}</div>

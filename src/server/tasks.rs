@@ -815,7 +815,7 @@ async fn run_newapi_account_maintenance(
             account.low_balance_alert_threshold,
             overview.last_balance_amount,
             account.low_balance_alert_notified,
-            settings.newapi_low_balance_system_notification_enabled(),
+            settings.remote_low_balance_system_notification_enabled(),
         ) {
             LowBalanceAlertAction::None => {}
             LowBalanceAlertAction::MarkNotifiedSilently => {
@@ -881,8 +881,8 @@ async fn run_newapi_account_maintenance(
         .cloned()
         .unwrap_or_default();
     if managed_channels.is_empty()
-        || (!settings.newapi_managed_channel_missing_prompt_enabled
-            && !settings.newapi_managed_channel_sync_multiplier_enabled)
+        || (!settings.remote_managed_channel_missing_prompt_enabled
+            && !settings.remote_managed_channel_sync_multiplier_enabled)
     {
         return;
     }
@@ -905,7 +905,7 @@ async fn run_newapi_account_maintenance(
             (None, None)
         }
     };
-    let remote_token_ids = if settings.newapi_managed_channel_missing_prompt_enabled {
+    let remote_token_ids = if settings.remote_managed_channel_missing_prompt_enabled {
         match newapi::list_tokens(http_client, account).await {
             Ok(tokens) => Some(
                 tokens
@@ -925,15 +925,14 @@ async fn run_newapi_account_maintenance(
     for channel in managed_channels {
         let managed_resource_id = channel
             .managed_resource_id()
-            .and_then(|value| value.parse::<i64>().ok())
-            .or(channel.newapi_token_id);
-        let missing_resource = settings.newapi_managed_channel_missing_prompt_enabled
+            .and_then(|value| value.parse::<i64>().ok());
+        let missing_resource = settings.remote_managed_channel_missing_prompt_enabled
             && channel.enabled
             && match (managed_resource_id, remote_token_ids.as_ref()) {
                 (Some(token_id), Some(remote_token_ids)) => !remote_token_ids.contains(&token_id),
                 _ => false,
             };
-        let missing_group = settings.newapi_managed_channel_missing_prompt_enabled
+        let missing_group = settings.remote_managed_channel_missing_prompt_enabled
             && channel.enabled
             && match (channel.managed_group_name(), remote_group_names.as_ref()) {
                 (Some(group_name), Some(remote_group_names)) => {
@@ -957,7 +956,7 @@ async fn run_newapi_account_maintenance(
             ));
         }
 
-        if !settings.newapi_managed_channel_sync_multiplier_enabled {
+        if !settings.remote_managed_channel_sync_multiplier_enabled {
             continue;
         }
         let Some(group_name) = channel.managed_group_name() else {
@@ -969,7 +968,7 @@ async fn run_newapi_account_maintenance(
         let Some(remote_multiplier) = remote_groups.get(group_name).copied() else {
             continue;
         };
-        if settings.newapi_managed_channel_sync_free_multiplier_enabled
+        if settings.remote_managed_channel_sync_free_multiplier_enabled
             && channel.real_multiplier.abs() < 1e-9
         {
             continue;
@@ -1054,7 +1053,7 @@ async fn run_sub2api_account_maintenance(
             account.low_balance_alert_threshold,
             overview.balance,
             account.low_balance_alert_notified,
-            settings.newapi_low_balance_system_notification_enabled(),
+            settings.remote_low_balance_system_notification_enabled(),
         ) {
             LowBalanceAlertAction::None => {}
             LowBalanceAlertAction::MarkNotifiedSilently => {
@@ -1118,8 +1117,8 @@ async fn run_sub2api_account_maintenance(
         .cloned()
         .unwrap_or_default();
     if managed_channels.is_empty()
-        || (!settings.newapi_managed_channel_missing_prompt_enabled
-            && !settings.newapi_managed_channel_sync_multiplier_enabled)
+        || (!settings.remote_managed_channel_missing_prompt_enabled
+            && !settings.remote_managed_channel_sync_multiplier_enabled)
     {
         return;
     }
@@ -1156,7 +1155,7 @@ async fn run_sub2api_account_maintenance(
         }
     };
     let (remote_key_ids, remote_key_names) = if settings
-        .newapi_managed_channel_missing_prompt_enabled
+        .remote_managed_channel_missing_prompt_enabled
     {
         match sub2api::list_keys(http_client, &account.base_url, token).await {
             Ok(keys) => (
@@ -1180,7 +1179,7 @@ async fn run_sub2api_account_maintenance(
         let managed_resource_id = channel
             .managed_resource_id()
             .and_then(|value| value.parse::<i64>().ok());
-        let missing_resource = settings.newapi_managed_channel_missing_prompt_enabled
+        let missing_resource = settings.remote_managed_channel_missing_prompt_enabled
             && channel.enabled
             && match (
                 managed_resource_id,
@@ -1194,7 +1193,7 @@ async fn run_sub2api_account_maintenance(
                 }
                 _ => false,
             };
-        let missing_group = settings.newapi_managed_channel_missing_prompt_enabled
+        let missing_group = settings.remote_managed_channel_missing_prompt_enabled
             && channel.enabled
             && match (
                 channel.managed_group_id(),
@@ -1226,7 +1225,7 @@ async fn run_sub2api_account_maintenance(
             ));
         }
 
-        if !settings.newapi_managed_channel_sync_multiplier_enabled {
+        if !settings.remote_managed_channel_sync_multiplier_enabled {
             continue;
         }
         let remote_multiplier = channel
@@ -1246,7 +1245,7 @@ async fn run_sub2api_account_maintenance(
         let Some(remote_multiplier) = remote_multiplier else {
             continue;
         };
-        if settings.newapi_managed_channel_sync_free_multiplier_enabled
+        if settings.remote_managed_channel_sync_free_multiplier_enabled
             && channel.real_multiplier.abs() < 1e-9
         {
             continue;
@@ -1289,19 +1288,7 @@ pub(crate) async fn remote_accounts_maintenance_loop(
             }
         };
 
-        let newapi_accounts = match storage::list_newapi_accounts_with_secret(db_path.clone()).await
-        {
-            Ok(accounts) => accounts,
-            Err(err) => {
-                tracing::warn!(err = %err, "load newapi accounts failed");
-                if !wait_for_retry_or_shutdown(&mut notify).await {
-                    break;
-                }
-                continue;
-            }
-        };
-        let remote_accounts = match storage::list_remote_accounts_with_secret(db_path.clone()).await
-        {
+        let accounts = match storage::list_all_remote_accounts_with_secret(db_path.clone()).await {
             Ok(accounts) => accounts,
             Err(err) => {
                 tracing::warn!(err = %err, "load remote accounts failed");
@@ -1311,8 +1298,8 @@ pub(crate) async fn remote_accounts_maintenance_loop(
                 continue;
             }
         };
-        let managed_channels_by_account = if settings.newapi_managed_channel_missing_prompt_enabled
-            || settings.newapi_managed_channel_sync_multiplier_enabled
+        let managed_channels_by_account = if settings.remote_managed_channel_missing_prompt_enabled
+            || settings.remote_managed_channel_sync_multiplier_enabled
         {
             match storage::list_channels(db_path.clone()).await {
                 Ok(channels) => group_managed_channels_by_account(channels),
@@ -1326,38 +1313,41 @@ pub(crate) async fn remote_accounts_maintenance_loop(
         };
 
         let mut completed_ids =
-            match storage::get_newapi_accounts_checkins_today(db_path.clone()).await {
+            match storage::get_all_remote_accounts_checkins_today(db_path.clone()).await {
                 Ok(checkins) => checkins
                     .completed_account_ids
                     .into_iter()
                     .collect::<HashSet<_>>(),
                 Err(err) => {
-                    tracing::warn!(err = %err, "load newapi account checkins failed");
+                    tracing::warn!(err = %err, "load remote account checkins failed");
                     HashSet::new()
                 }
             };
 
-        for mut account in newapi_accounts {
-            run_newapi_account_maintenance(
-                db_path.clone(),
-                &http_client,
-                &settings,
-                &mut account,
-                &managed_channels_by_account,
-                &mut completed_ids,
-            )
-            .await;
-        }
-
-        for mut account in remote_accounts {
-            run_sub2api_account_maintenance(
-                db_path.clone(),
-                &http_client,
-                &settings,
-                &mut account,
-                &managed_channels_by_account,
-            )
-            .await;
+        for account in accounts {
+            match account {
+                storage::UnifiedRemoteAccount::Newapi(mut account) => {
+                    run_newapi_account_maintenance(
+                        db_path.clone(),
+                        &http_client,
+                        &settings,
+                        &mut account,
+                        &managed_channels_by_account,
+                        &mut completed_ids,
+                    )
+                    .await;
+                }
+                storage::UnifiedRemoteAccount::Sub2Api(mut account) => {
+                    run_sub2api_account_maintenance(
+                        db_path.clone(),
+                        &http_client,
+                        &settings,
+                        &mut account,
+                        &managed_channels_by_account,
+                    )
+                    .await;
+                }
+            }
         }
 
         if !wait_for_interval_or_shutdown(interval, &mut notify).await {

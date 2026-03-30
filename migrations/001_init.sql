@@ -12,12 +12,6 @@ CREATE TABLE IF NOT EXISTS channels (
   priority INTEGER NOT NULL DEFAULT 0,
   recharge_currency TEXT NOT NULL DEFAULT 'CNY' CHECK(recharge_currency IN ('CNY','USD')),
   real_multiplier REAL NOT NULL DEFAULT 1.0,
-  managed_by_newapi INTEGER NOT NULL DEFAULT 0,
-  newapi_account_id TEXT NULL,
-  newapi_channel_id INTEGER NULL,
-  newapi_token_id INTEGER NULL,
-  newapi_token_name TEXT NULL,
-  newapi_group TEXT NULL,
   enabled INTEGER NOT NULL,
   auto_disabled_until_ms INTEGER NOT NULL DEFAULT 0,
   created_at_ms INTEGER NOT NULL,
@@ -97,18 +91,22 @@ CREATE TABLE IF NOT EXISTS channel_checkins (
 
 CREATE INDEX IF NOT EXISTS idx_channel_checkins_date ON channel_checkins(date, completed_at_ms);
 
-CREATE TABLE IF NOT EXISTS newapi_accounts (
+CREATE TABLE IF NOT EXISTS remote_accounts (
   id TEXT PRIMARY KEY,
+  provider TEXT NOT NULL CHECK(provider IN ('newapi','sub2api')),
   base_url TEXT NOT NULL,
   api_url TEXT NULL,
-  user_id TEXT NOT NULL,
-  user_token TEXT NOT NULL,
+  user_id TEXT NOT NULL DEFAULT '',
+  user_token TEXT NOT NULL DEFAULT '',
+  access_token TEXT NOT NULL DEFAULT '',
   page_checkin_url TEXT NULL,
-  checkin_mode TEXT NOT NULL DEFAULT 'system_api' CHECK(checkin_mode IN ('system_api','page_open')),
+  checkin_mode TEXT NOT NULL DEFAULT 'disabled' CHECK(checkin_mode IN ('disabled','system_api','page_open')),
   auto_checkin_enabled INTEGER NOT NULL DEFAULT 0,
   auto_checkin_time TEXT NOT NULL DEFAULT '00:05:00',
   low_balance_alert_threshold REAL NOT NULL DEFAULT 0,
-  remote_role INTEGER NULL,
+  recharge_currency TEXT NOT NULL DEFAULT 'CNY' CHECK(recharge_currency IN ('CNY','USD')),
+  remote_user_id TEXT NULL,
+  remote_role NULL,
   remote_username TEXT NULL,
   remote_display_name TEXT NULL,
   remote_group TEXT NULL,
@@ -131,14 +129,10 @@ CREATE TABLE IF NOT EXISTS newapi_accounts (
   updated_at_ms INTEGER NOT NULL
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_newapi_accounts_base_user
-ON newapi_accounts(base_url, user_id)
-WHERE user_id <> '';
+CREATE UNIQUE INDEX IF NOT EXISTS idx_remote_accounts_provider_base_user
+ON remote_accounts(provider, base_url, user_id);
 
-CREATE INDEX IF NOT EXISTS idx_channels_newapi_account_id
-ON channels(newapi_account_id);
-
-CREATE TABLE IF NOT EXISTS newapi_account_checkins (
+CREATE TABLE IF NOT EXISTS remote_account_checkins (
   account_id TEXT NOT NULL,
   date TEXT NOT NULL,
   method TEXT NOT NULL DEFAULT 'manual_page' CHECK(method IN ('manual_page','system_api','remote_detected')),
@@ -146,8 +140,8 @@ CREATE TABLE IF NOT EXISTS newapi_account_checkins (
   PRIMARY KEY (account_id, date)
 );
 
-CREATE INDEX IF NOT EXISTS idx_newapi_account_checkins_date
-ON newapi_account_checkins(date, completed_at_ms);
+CREATE INDEX IF NOT EXISTS idx_remote_account_checkins_date
+ON remote_account_checkins(date, completed_at_ms);
 
 CREATE TABLE IF NOT EXISTS app_settings (
   key TEXT PRIMARY KEY,
