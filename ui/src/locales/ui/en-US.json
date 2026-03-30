@@ -216,13 +216,8 @@
     },
     "remoteMissing": {
       "title": "Managed Channel Remote Reference Missing",
-      "descriptionGeneric": "A remote reference linked to {{name}} was not found in the latest list. Choose how to handle the local channel.",
-      "descriptionToken": "The remote token linked to {{name}} was not found in the latest list. Choose how to handle the local channel.",
-      "descriptionGroup": "The remote group linked to {{name}} was not found in the latest list. Choose how to handle the local channel.",
-      "descriptionTokenAndGroup": "The remote token and group linked to {{name}} were not found in the latest list. Choose how to handle the local channel.",
       "baseUrl": "Account Base URL: {{value}}",
       "group": "Group: {{value}}",
-      "token": "Token name: {{value}}",
       "hint": "Disable keeps the local config but stops using it. Delete removes the local channel record.",
       "later": "Later",
       "disable": "Disable",

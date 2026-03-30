@@ -216,13 +216,8 @@
     },
     "remoteMissing": {
       "title": "托管渠道远端关联缺失",
-      "descriptionGeneric": "检测到 {{name}} 对应的远端关联未在列表中找到，请选择处理方式。",
-      "descriptionToken": "检测到 {{name}} 对应的远端 token 未在列表中找到，请选择处理方式。",
-      "descriptionGroup": "检测到 {{name}} 对应的远端分组未在列表中找到，请选择处理方式。",
-      "descriptionTokenAndGroup": "检测到 {{name}} 对应的远端 token 和分组均未在列表中找到，请选择处理方式。",
       "baseUrl": "账号 Base URL：{{value}}",
       "group": "分组：{{value}}",
-      "token": "Token 名称：{{value}}",
       "hint": "禁用后会保留本地配置但停止使用；删除会移除本地渠道记录。",
       "later": "稍后处理",
       "disable": "禁用",
