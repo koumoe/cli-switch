@@ -1,3 +1,17 @@
+## [0.56.0](https://github.com/koumoe/cli-switch/compare/v0.55.0...v0.56.0) (2026-03-30)
+
+### Features
+
+* add remote account backend for sub2api ([66c1309](https://github.com/koumoe/cli-switch/commit/66c130999d47102aa2df99107d34f856c9318b09))
+* add remote account wizard for users ([53537b0](https://github.com/koumoe/cli-switch/commit/53537b08fc88008c2b38522601c572ff5bbc96c2))
+* unify remote account managed channels and maintenance ([4265db6](https://github.com/koumoe/cli-switch/commit/4265db692e4efda9695833562f5acc9af0c1ace4))
+* unify remote account wizard flows ([006c3c4](https://github.com/koumoe/cli-switch/commit/006c3c44a6ea402d47cc7c0b3772069a9b247481))
+
+### Bug Fixes
+
+* apply rustfmt after remote account changes ([716be6b](https://github.com/koumoe/cli-switch/commit/716be6b8d7daefa33b094f5341cfca9de76d79a2))
+* harden remote account provider handling ([579ee42](https://github.com/koumoe/cli-switch/commit/579ee421cf33a38bbbabc76e217316ded5c0ee5b))
+* remove stale i18n keys after remote account unification ([b735ec9](https://github.com/koumoe/cli-switch/commit/b735ec95cdbf4884ea8659922ded2a1b5f671467))
 ## [0.55.0](https://github.com/koumoe/cli-switch/compare/v0.54.0...v0.55.0) (2026-03-29)
 
 ### Features
