@@ -17,40 +17,44 @@ pub struct NpmEnvInstallProgress {
 }
 
 #[derive(Debug, Clone, Serialize)]
-pub struct NewApiLowBalanceAlert {
+pub struct RemoteLowBalanceAlert {
     pub account_id: String,
-    pub base_url: String,
+    pub provider: storage::ManagedRemoteProvider,
+    pub account_base_url: String,
     pub balance_text: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
-pub struct NewApiManagedChannelMissingPrompt {
+pub struct RemoteManagedChannelMissingPrompt {
     pub channel_id: String,
     pub channel_name: String,
     pub account_id: String,
     pub account_base_url: String,
+    pub provider: storage::ManagedRemoteProvider,
     pub group_name: Option<String>,
-    pub token_name: Option<String>,
+    pub resource_name: Option<String>,
     pub missing_group: bool,
-    pub missing_token: bool,
+    pub missing_resource: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
-pub struct NewApiManagedChannelCreated {
+pub struct RemoteManagedChannelCreated {
     pub channel_id: String,
     pub channel_name: String,
     pub account_id: String,
     pub account_base_url: String,
+    pub provider: storage::ManagedRemoteProvider,
     pub group_name: Option<String>,
-    pub token_name: Option<String>,
+    pub resource_name: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
-pub struct NewApiManagedChannelMultiplierPrompt {
+pub struct RemoteManagedChannelMultiplierPrompt {
     pub channel_id: String,
     pub channel_name: String,
     pub account_id: String,
     pub account_base_url: String,
+    pub provider: storage::ManagedRemoteProvider,
     pub group_name: Option<String>,
     pub current_multiplier: f64,
     pub remote_multiplier: f64,
@@ -59,9 +63,9 @@ pub struct NewApiManagedChannelMultiplierPrompt {
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct SystemNotificationSettings {
     pub enabled: bool,
-    pub newapi_low_balance_enabled: bool,
-    pub newapi_managed_channel_missing_enabled: bool,
-    pub newapi_managed_channel_multiplier_enabled: bool,
+    pub remote_low_balance_enabled: bool,
+    pub remote_managed_channel_missing_enabled: bool,
+    pub remote_managed_channel_multiplier_enabled: bool,
 }
 
 impl Default for SystemNotificationSettings {
@@ -74,11 +78,11 @@ impl SystemNotificationSettings {
     pub fn from_settings(settings: &storage::AppSettings) -> Self {
         Self {
             enabled: settings.system_notifications_enabled,
-            newapi_low_balance_enabled: settings.newapi_low_balance_system_notification_enabled,
-            newapi_managed_channel_missing_enabled: settings
-                .newapi_managed_channel_missing_system_notification_enabled,
-            newapi_managed_channel_multiplier_enabled: settings
-                .newapi_managed_channel_multiplier_system_notification_enabled,
+            remote_low_balance_enabled: settings.remote_low_balance_system_notification_enabled,
+            remote_managed_channel_missing_enabled: settings
+                .remote_managed_channel_missing_system_notification_enabled,
+            remote_managed_channel_multiplier_enabled: settings
+                .remote_managed_channel_multiplier_system_notification_enabled,
         }
     }
 }
@@ -90,10 +94,10 @@ pub enum AppEvent {
     ChannelsChanged { at_ms: i64 },
     NpmEnvInstallProgress(NpmEnvInstallProgress),
     SystemNotificationSettingsChanged(SystemNotificationSettings),
-    NewApiLowBalanceAlert(NewApiLowBalanceAlert),
-    NewApiManagedChannelCreated(NewApiManagedChannelCreated),
-    NewApiManagedChannelMissingPrompt(NewApiManagedChannelMissingPrompt),
-    NewApiManagedChannelMultiplierPrompt(NewApiManagedChannelMultiplierPrompt),
+    RemoteLowBalanceAlert(RemoteLowBalanceAlert),
+    RemoteManagedChannelCreated(RemoteManagedChannelCreated),
+    RemoteManagedChannelMissingPrompt(RemoteManagedChannelMissingPrompt),
+    RemoteManagedChannelMultiplierPrompt(RemoteManagedChannelMultiplierPrompt),
 }
 
 fn sender() -> &'static broadcast::Sender<AppEvent> {

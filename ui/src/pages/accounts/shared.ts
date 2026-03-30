@@ -1,37 +1,52 @@
-import type { NewApiAccount, NewApiAccountCheckinMode, NewApiGroupOption, Protocol } from "@/api";
+import type {
+  NewapiRemoteAccount,
+  Protocol,
+  RechargeCurrency,
+  RemoteAccount,
+  RemoteAccountBase,
+  RemoteAccountCheckinMode,
+  RemoteAccountProvider,
+  RemoteGroupOption,
+  Sub2ApiRemoteAccount,
+} from "@/api";
 
-export type AccountCheckinModeOption = "disabled" | NewApiAccountCheckinMode;
+export type AccountCheckinModeOption = RemoteAccountCheckinMode;
 
 export type AccountDraft = {
+  provider: RemoteAccountProvider;
   base_url: string;
   api_url: string;
   user_id: string;
   user_token: string;
+  bearer_token: string;
   page_checkin_url: string;
   checkin_mode: AccountCheckinModeOption;
   auto_checkin_time: string;
   low_balance_alert_threshold: string;
-  recharge_currency: "USD" | "CNY";
+  recharge_currency: RechargeCurrency;
 };
 
 export type ManagedChannelDraft = {
   name: string;
   protocol: Protocol | null;
   group_name: string;
+  group_id: number | null;
   base_url_override: string;
 };
 
-export function emptyAccountDraft(): AccountDraft {
+export function emptyAccountDraft(rechargeCurrency: RechargeCurrency = "CNY"): AccountDraft {
   return {
+    provider: "newapi",
     base_url: "",
     api_url: "",
     user_id: "",
     user_token: "",
+    bearer_token: "",
     page_checkin_url: "",
     checkin_mode: "disabled",
     auto_checkin_time: "00:05:00",
     low_balance_alert_threshold: "0",
-    recharge_currency: "CNY",
+    recharge_currency: rechargeCurrency,
   };
 }
 
@@ -43,8 +58,11 @@ export function ymdLocal(ms: number): string {
   return `${y}-${m}-${day}`;
 }
 
-export function formatAmount(account: NewApiAccount, v: number | null): string {
+export function formatAmount(account: RemoteAccount, v: number | null): string {
   if (v === null || v === undefined || !Number.isFinite(v)) return "-";
+  if (account.provider === "sub2api") {
+    return `${account.recharge_currency === "CNY" ? "¥" : "$"}${v.toFixed(2)}`;
+  }
   if (account.quota_display_type === "TOKENS") return v.toFixed(0);
   const symbol = account.quota_display_type === "CNY"
     ? "¥"
@@ -54,44 +72,75 @@ export function formatAmount(account: NewApiAccount, v: number | null): string {
   return `${symbol}${v.toFixed(2)}`;
 }
 
-export function defaultManagedName(account: NewApiAccount, protocol: Protocol | null): string {
-  if (!protocol) return account.user_id;
-  return `${account.user_id}-${protocol}`;
+export function defaultManagedName(account: RemoteAccount, protocol: Protocol | null): string {
+  const userId = account.user_id.trim() || account.remote_username?.trim() || "remote";
+  if (!protocol) return userId;
+  return `${userId}-${protocol}`;
 }
 
-export function defaultManagedDraft(account: NewApiAccount): ManagedChannelDraft {
+export function defaultManagedDraft(account: RemoteAccount): ManagedChannelDraft {
   return {
     name: defaultManagedName(account, null),
+    group_name: account.provider === "newapi" ? (account.remote_group ?? "") : "",
+    group_id: null,
     protocol: null,
-    group_name: account.remote_group ?? "",
     base_url_override: "",
   };
 }
 
-export function formatGroupLabel(group: NewApiGroupOption): string {
+export function formatGroupLabel(group: Pick<RemoteGroupOption, "name" | "ratio">): string {
   const ratio = group.ratio !== null && group.ratio !== undefined ? ` (x${group.ratio})` : "";
   return `${group.name}${ratio}`;
 }
 
-export function resolveCheckinMode(account: NewApiAccount): AccountCheckinModeOption {
-  if (account.checkin_mode === "page_open") return "page_open";
-  return account.auto_checkin_enabled ? "system_api" : "disabled";
+export function resolveCheckinMode(account: RemoteAccount): AccountCheckinModeOption {
+  return account.checkin_mode;
+}
+
+export function providerSupportsSystemCheckin(provider: RemoteAccountProvider): boolean {
+  return provider === "newapi";
+}
+
+export function supportedCheckinModes(provider: RemoteAccountProvider): AccountCheckinModeOption[] {
+  return providerSupportsSystemCheckin(provider)
+    ? ["disabled", "system_api", "page_open"]
+    : ["disabled", "page_open"];
 }
 
 export function accountHasUserApiCredentials(
-  account: Pick<NewApiAccount, "user_id" | "user_token_configured">
+  account: Pick<RemoteAccountBase, "user_id" | "user_token_configured"> & Pick<RemoteAccount, "provider">
 ): boolean {
-  return !!account.user_id.trim() && !!account.user_token_configured;
+  if (account.provider === "newapi") {
+    return !!account.user_id.trim() && !!account.user_token_configured;
+  }
+  return !!account.user_token_configured;
+}
+
+export function isNewApiAccount(account: RemoteAccount): account is NewapiRemoteAccount {
+  return account.provider === "newapi";
+}
+
+export function isSub2ApiAccount(account: RemoteAccount): account is Sub2ApiRemoteAccount {
+  return account.provider === "sub2api";
+}
+
+export function resolveAccountDisplayName(
+  account: Pick<RemoteAccountBase, "base_url" | "remote_display_name" | "remote_username" | "user_id">
+): string {
+  return account.remote_display_name?.trim()
+    || account.remote_username?.trim()
+    || account.user_id.trim()
+    || account.base_url;
 }
 
 export type DragState = {
   dragId: string | null;
   dragOverId: string | null;
-  snapshot: NewApiAccount[] | null;
+  snapshot: RemoteAccount[] | null;
 };
 
 export type DragAction =
-  | { type: "start"; dragId: string; snapshot: NewApiAccount[] }
+  | { type: "start"; dragId: string; snapshot: RemoteAccount[] }
   | { type: "over"; dragOverId: string | null }
   | { type: "clear" };
 
@@ -116,7 +165,7 @@ export function dragReducer(state: DragState, action: DragAction): DragState {
   }
 }
 
-export function moveInList(list: NewApiAccount[], fromId: string, toId: string): NewApiAccount[] {
+export function moveInList(list: RemoteAccount[], fromId: string, toId: string): RemoteAccount[] {
   if (fromId === toId) return list;
   const fromIdx = list.findIndex((item) => item.id === fromId);
   const toIdx = list.findIndex((item) => item.id === toId);
@@ -127,7 +176,7 @@ export function moveInList(list: NewApiAccount[], fromId: string, toId: string):
   return next;
 }
 
-export function moveToEndList(list: NewApiAccount[], fromId: string): NewApiAccount[] {
+export function moveToEndList(list: RemoteAccount[], fromId: string): RemoteAccount[] {
   const fromIdx = list.findIndex((item) => item.id === fromId);
   if (fromIdx < 0) return list;
   const next = [...list];

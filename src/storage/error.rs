@@ -12,6 +12,12 @@ pub enum StorageError {
     #[error("newapi account already exists: base_url={base_url} user_id={user_id}")]
     NewApiAccountAlreadyExists { base_url: String, user_id: String },
 
+    #[error("remote account not found: {account_id}")]
+    RemoteAccountNotFound { account_id: String },
+
+    #[error("remote account already exists: provider={provider} base_url={base_url}")]
+    RemoteAccountAlreadyExists { provider: String, base_url: String },
+
     #[error("channel protocol mismatch: route={route_protocol} channel={channel_protocol}")]
     ChannelProtocolMismatch {
         route_protocol: String,
@@ -23,6 +29,9 @@ pub enum StorageError {
 
     #[error("newapi account reorder mismatch: {reason}")]
     NewApiAccountReorderMismatch { reason: &'static str },
+
+    #[error("remote account reorder mismatch: {reason}")]
+    RemoteAccountReorderMismatch { reason: &'static str },
 
     #[error("prompt project not found: {project_id}")]
     PromptProjectNotFound { project_id: String },

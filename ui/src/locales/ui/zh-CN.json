@@ -216,13 +216,8 @@
     },
     "remoteMissing": {
       "title": "托管渠道远端关联缺失",
-      "descriptionGeneric": "检测到 {{name}} 对应的远端关联未在列表中找到，请选择处理方式。",
-      "descriptionToken": "检测到 {{name}} 对应的远端 token 未在列表中找到，请选择处理方式。",
-      "descriptionGroup": "检测到 {{name}} 对应的远端分组未在列表中找到，请选择处理方式。",
-      "descriptionTokenAndGroup": "检测到 {{name}} 对应的远端 token 和分组均未在列表中找到，请选择处理方式。",
       "baseUrl": "账号 Base URL：{{value}}",
       "group": "分组：{{value}}",
-      "token": "Token 名称：{{value}}",
       "hint": "禁用后会保留本地配置但停止使用；删除会移除本地渠道记录。",
       "later": "稍后处理",
       "disable": "禁用",
@@ -249,6 +244,10 @@
   "accounts": {
     "title": "账号管理",
     "new": "新增账号",
+    "providers": {
+      "newapi": "newapi",
+      "sub2api": "sub2api"
+    },
     "table": {
       "baseUrl": "Base URL",
       "balance": "余额",
@@ -275,19 +274,45 @@
       "systemCheckin": "系统签到",
       "manualCheckin": "手动签到",
       "createManaged": "创建 key 与渠道",
+      "createKey": "创建 key",
       "edit": "编辑账号",
       "delete": "删除账号"
     },
+    "wizard": {
+      "title": "新增账号",
+      "description": "按步骤接入远端账号，先探测账号体系，再填写认证与策略。",
+      "steps": {
+        "detect": "探测账号体系",
+        "auth": "填写认证",
+        "options": "补充配置"
+      },
+      "stepLabel": "第 {{step}} 步",
+      "baseUrlHint": "输入平台首页地址，例如 new-api 面板地址或 sub2api 站点地址。",
+      "detectedApiUrl": "推荐 API 地址：{{value}}",
+      "newapiAuthHint": "如果只是页面签到或只做基础记录，这一步可以暂时留空。",
+      "detect": "探测并继续",
+      "detecting": "探测中...",
+      "detectFailed": "探测账号体系失败",
+      "back": "上一步",
+      "next": "下一步",
+      "create": "完成添加",
+      "creating": "添加中..."
+    },
     "editor": {
-      "createTitle": "新增账号",
       "editTitle": "编辑账号",
-      "description": "配置 new-api 账号信息和签到",
+      "description": "修改远端账号信息、签到策略和余额告警设置",
+      "providerLocked": "账号体系在创建后固定，编辑时不可切换。",
       "baseUrl": "Base URL",
       "apiUrl": "API 地址",
       "apiUrlHint": "留空则创建渠道时回退到 Base URL",
       "userId": "User ID",
       "userToken": "User Token",
       "userTokenKeepHint": "留空表示保持原 token 不变",
+      "bearerToken": "Authorization / Bearer Token",
+      "bearerTokenKeepHint": "留空表示保持原 authorization 不变",
+      "bearerTokenHint": "sub2api 可先打开登录页完成登录，再把浏览器请求头中的 Authorization 粘贴到这里。",
+      "openLoginPage": "打开登录页",
+      "openLoginPageOpening": "打开中...",
       "rechargeCurrency": "默认充值货币",
       "rechargeCurrencyOptions": {
         "cny": "人民币（CNY）",
@@ -312,6 +337,19 @@
       "baseUrlOverrideHint": "不填则优先使用账号 API 地址，否则使用账号 Base URL",
       "create": "创建并同步"
     },
+    "createKey": {
+      "title": "创建 key",
+      "description": "为 {{name}} 创建 sub2api key",
+      "name": "Key 名称",
+      "nameRequired": "请输入 key 名称",
+      "group": "分组",
+      "groupPlaceholder": "可选，选择后会绑定到对应分组",
+      "noGroup": "不指定分组",
+      "keyValue": "生成的 key",
+      "keyMeta": "状态：{{status}} · 分组：{{group}}",
+      "copy": "复制 key",
+      "create": "创建 key"
+    },
     "deleteDialog": {
       "title": "删除账号",
       "descriptionWithName": "确定删除账号 {{name}}？",
@@ -325,6 +363,7 @@
       "loadFail": "加载账号失败",
       "actionFail": "操作失败",
       "baseUrlRequired": "Base URL 不能为空",
+      "bearerTokenRequired": "sub2api 账号需要填写 Authorization / Bearer Token",
       "thresholdInvalid": "低余额阈值必须是 >= 0 的数字",
       "createOk": "账号创建成功",
       "updateOk": "账号更新成功",
@@ -340,8 +379,13 @@
       "managedRequired": "请填写名称、选择协议并选择分组",
       "credentialsRequiredForSystem": "newapi 自动签到需要同时填写 User ID 和 User Token",
       "credentialsRequiredForManaged": "创建 key 需要同时填写 User ID 和 User Token",
+      "credentialsRequiredForKey": "创建 key 需要先配置 sub2api Authorization / Bearer Token",
       "createManagedOk": "渠道已创建并同步",
       "createManagedFail": "创建渠道失败",
+      "createKeyOk": "key 创建成功",
+      "createKeyFail": "创建 key 失败",
+      "copyKeyOk": "key 已复制到剪贴板",
+      "copyKeyFail": "复制 key 失败",
       "reorderOk": "排序已保存",
       "reorderFail": "保存排序失败"
     }
@@ -548,23 +592,23 @@
     "systemNotifications": {
       "title": "系统通知",
       "subtitle": "控制系统通知总开关",
-      "newApiSubtitle": "管理 New API 低余额与托管渠道相关提醒",
+      "newApiSubtitle": "管理远端账号低余额与托管渠道相关提醒",
       "enable": "启用系统通知",
       "enableHint": "关闭后不再发送任何系统级通知",
       "lowBalance": "低余额提醒",
       "lowBalanceHint": "当账号余额低于设定阈值时发送系统通知",
       "managedChannelMissing": "托管渠道缺失提醒",
-      "managedChannelMissingHint": "当远端 token 或分组缺失时发送系统通知",
+      "managedChannelMissingHint": "当远端资源或分组缺失时发送系统通知",
       "managedChannelMultiplier": "托管渠道倍率差异提醒",
       "managedChannelMultiplierHint": "当检测到本地与远端倍率不一致时发送系统通知",
       "saved": "系统通知设置已保存",
       "saveFail": "保存系统通知设置失败"
     },
     "newApiManaged": {
-      "title": "New API 托管渠道",
+      "title": "远端托管渠道",
       "subtitle": "管理托管渠道的变更检测与倍率同步确认",
       "missingPrompt": "渠道变更检测",
-      "missingPromptHint": "开启后，会检测远端 token 或分组是否仍存在；发现缺失时，会打开窗口并弹框提示禁用或删除；若“设置-系统通知”中的「托管渠道缺失提醒」已开启，也会同步发送系统通知",
+      "missingPromptHint": "开启后，会检测远端资源或分组是否仍存在；发现缺失时，会打开窗口并弹框提示禁用或删除；若“设置-系统通知”中的「托管渠道缺失提醒」已开启，也会同步发送系统通知",
       "syncMultiplier": "同步渠道倍率",
       "syncMultiplierHint": "开启后每 30 分钟检查远端分组倍率；发现差异时，若窗口已打开则直接弹窗，未打开则在你主动打开窗口后询问是否修改本地真实倍率；若“设置-系统通知”中的「托管渠道倍率差异提醒」已开启，也会同步发送系统通知",
       "ignoreFreeMultiplier": "忽略免费倍率",

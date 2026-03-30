@@ -10,11 +10,13 @@ import {
   DialogTitle,
 } from "@/components/ui";
 import { useI18n } from "@/lib/i18n";
-import type { NewApiAccount } from "@/api";
+import type { RemoteAccount } from "@/api";
+
+import { resolveAccountDisplayName } from "./shared";
 
 type ManualCheckinDialogProps = {
   open: boolean;
-  target: NewApiAccount | null;
+  target: RemoteAccount | null;
   completing: boolean;
   onOpenChange: (open: boolean) => void;
   onCancel: () => void;
@@ -38,7 +40,7 @@ export function ManualCheckinDialog({
           <DialogTitle>{t("accounts.checkin.dialog.title")}</DialogTitle>
           <DialogDescription>
             {t("accounts.checkin.dialog.description", {
-              name: target?.user_id || target?.base_url || "",
+              name: target ? resolveAccountDisplayName(target) : "",
             })}
           </DialogDescription>
         </DialogHeader>

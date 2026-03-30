@@ -1,5 +1,6 @@
 pub mod app;
 pub mod autostart;
+pub(crate) mod bearer_token;
 pub mod changelog;
 pub mod chat_bridge;
 pub mod cli_tool_proxy_config;
@@ -15,5 +16,6 @@ pub mod proxy;
 pub mod server;
 pub mod shell_env;
 pub mod storage;
+pub(crate) mod sub2api;
 pub mod terminal;
 pub mod update;

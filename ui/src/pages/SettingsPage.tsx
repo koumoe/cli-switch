@@ -1830,10 +1830,10 @@ export function SettingsPage() {
                   <div className="text-xs text-muted-foreground">{t("settings.newApiManaged.missingPromptHint")}</div>
                 </div>
                 <Switch
-                  checked={appSettings?.newapi_managed_channel_missing_prompt_enabled ?? true}
+                  checked={appSettings?.remote_managed_channel_missing_prompt_enabled ?? true}
                   onCheckedChange={(v) => {
                     setAppSettings((prev) => (
-                      prev ? { ...prev, newapi_managed_channel_missing_prompt_enabled: v } : prev
+                      prev ? { ...prev, remote_managed_channel_missing_prompt_enabled: v } : prev
                     ));
                   }}
                   disabled={!appSettings}
@@ -1846,27 +1846,27 @@ export function SettingsPage() {
                   <div className="text-xs text-muted-foreground">{t("settings.newApiManaged.syncMultiplierHint")}</div>
                 </div>
                 <Switch
-                  checked={appSettings?.newapi_managed_channel_sync_multiplier_enabled ?? true}
+                  checked={appSettings?.remote_managed_channel_sync_multiplier_enabled ?? true}
                   onCheckedChange={(v) => {
                     setAppSettings((prev) => (
-                      prev ? { ...prev, newapi_managed_channel_sync_multiplier_enabled: v } : prev
+                      prev ? { ...prev, remote_managed_channel_sync_multiplier_enabled: v } : prev
                     ));
                   }}
                   disabled={!appSettings}
                 />
               </div>
 
-              {appSettings?.newapi_managed_channel_sync_multiplier_enabled ? (
+              {appSettings?.remote_managed_channel_sync_multiplier_enabled ? (
                 <div className="flex items-center justify-between gap-4">
                   <div>
                     <div className="font-medium text-sm">{t("settings.newApiManaged.ignoreFreeMultiplier")}</div>
                     <div className="text-xs text-muted-foreground">{t("settings.newApiManaged.ignoreFreeMultiplierHint")}</div>
                   </div>
                   <Switch
-                    checked={appSettings?.newapi_managed_channel_sync_free_multiplier_enabled ?? false}
+                    checked={appSettings?.remote_managed_channel_sync_free_multiplier_enabled ?? false}
                     onCheckedChange={(v) => {
                       setAppSettings((prev) => (
-                        prev ? { ...prev, newapi_managed_channel_sync_free_multiplier_enabled: v } : prev
+                        prev ? { ...prev, remote_managed_channel_sync_free_multiplier_enabled: v } : prev
                       ));
                     }}
                     disabled={!appSettings}
@@ -1882,12 +1882,12 @@ export function SettingsPage() {
                     setNewApiManagedSaving(true);
                     try {
                       const next = await updateSettings({
-                        newapi_managed_channel_missing_prompt_enabled:
-                          appSettings.newapi_managed_channel_missing_prompt_enabled,
-                        newapi_managed_channel_sync_multiplier_enabled:
-                          appSettings.newapi_managed_channel_sync_multiplier_enabled,
-                        newapi_managed_channel_sync_free_multiplier_enabled:
-                          appSettings.newapi_managed_channel_sync_free_multiplier_enabled,
+                        remote_managed_channel_missing_prompt_enabled:
+                          appSettings.remote_managed_channel_missing_prompt_enabled,
+                        remote_managed_channel_sync_multiplier_enabled:
+                          appSettings.remote_managed_channel_sync_multiplier_enabled,
+                        remote_managed_channel_sync_free_multiplier_enabled:
+                          appSettings.remote_managed_channel_sync_free_multiplier_enabled,
                       });
                       setAppSettings(next);
                       toast.success(t("settings.newApiManaged.saved"));
@@ -2096,10 +2096,10 @@ export function SettingsPage() {
                     <div className="text-xs text-muted-foreground">{t("settings.systemNotifications.lowBalanceHint")}</div>
                   </div>
                   <Switch
-                    checked={appSettings?.newapi_low_balance_system_notification_enabled ?? true}
+                    checked={appSettings?.remote_low_balance_system_notification_enabled ?? true}
                     onCheckedChange={(v) => {
                       setAppSettings((prev) => (
-                        prev ? { ...prev, newapi_low_balance_system_notification_enabled: v } : prev
+                        prev ? { ...prev, remote_low_balance_system_notification_enabled: v } : prev
                       ));
                     }}
                     disabled={!appSettings || systemNotificationSaving}
@@ -2112,11 +2112,11 @@ export function SettingsPage() {
                     <div className="text-xs text-muted-foreground">{t("settings.systemNotifications.managedChannelMissingHint")}</div>
                   </div>
                   <Switch
-                    checked={appSettings?.newapi_managed_channel_missing_system_notification_enabled ?? true}
+                    checked={appSettings?.remote_managed_channel_missing_system_notification_enabled ?? true}
                     onCheckedChange={(v) => {
                       setAppSettings((prev) => (
                         prev
-                          ? { ...prev, newapi_managed_channel_missing_system_notification_enabled: v }
+                          ? { ...prev, remote_managed_channel_missing_system_notification_enabled: v }
                           : prev
                       ));
                     }}
@@ -2130,13 +2130,13 @@ export function SettingsPage() {
                     <div className="text-xs text-muted-foreground">{t("settings.systemNotifications.managedChannelMultiplierHint")}</div>
                   </div>
                   <Switch
-                    checked={appSettings?.newapi_managed_channel_multiplier_system_notification_enabled ?? true}
+                    checked={appSettings?.remote_managed_channel_multiplier_system_notification_enabled ?? true}
                     onCheckedChange={(v) => {
                       setAppSettings((prev) => (
                         prev
                           ? {
                               ...prev,
-                              newapi_managed_channel_multiplier_system_notification_enabled: v,
+                              remote_managed_channel_multiplier_system_notification_enabled: v,
                             }
                           : prev
                       ));
@@ -2153,12 +2153,12 @@ export function SettingsPage() {
                       setSystemNotificationSaving(true);
                       try {
                         const next = await updateSettings({
-                          newapi_low_balance_system_notification_enabled:
-                            appSettings.newapi_low_balance_system_notification_enabled,
-                          newapi_managed_channel_missing_system_notification_enabled:
-                            appSettings.newapi_managed_channel_missing_system_notification_enabled,
-                          newapi_managed_channel_multiplier_system_notification_enabled:
-                            appSettings.newapi_managed_channel_multiplier_system_notification_enabled,
+                          remote_low_balance_system_notification_enabled:
+                            appSettings.remote_low_balance_system_notification_enabled,
+                          remote_managed_channel_missing_system_notification_enabled:
+                            appSettings.remote_managed_channel_missing_system_notification_enabled,
+                          remote_managed_channel_multiplier_system_notification_enabled:
+                            appSettings.remote_managed_channel_multiplier_system_notification_enabled,
                         });
                         setAppSettings(next);
                         toast.success(t("settings.systemNotifications.saved"));

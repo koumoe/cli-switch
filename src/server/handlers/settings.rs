@@ -48,12 +48,12 @@ pub(in crate::server) struct UpdateSettingsInput {
     chat_bridge_turn_timeout_minutes: Option<i64>,
     chat_bridge_allow_new_projects: Option<bool>,
     system_notifications_enabled: Option<bool>,
-    newapi_low_balance_system_notification_enabled: Option<bool>,
-    newapi_managed_channel_missing_system_notification_enabled: Option<bool>,
-    newapi_managed_channel_multiplier_system_notification_enabled: Option<bool>,
-    newapi_managed_channel_missing_prompt_enabled: Option<bool>,
-    newapi_managed_channel_sync_multiplier_enabled: Option<bool>,
-    newapi_managed_channel_sync_free_multiplier_enabled: Option<bool>,
+    remote_low_balance_system_notification_enabled: Option<bool>,
+    remote_managed_channel_missing_system_notification_enabled: Option<bool>,
+    remote_managed_channel_multiplier_system_notification_enabled: Option<bool>,
+    remote_managed_channel_missing_prompt_enabled: Option<bool>,
+    remote_managed_channel_sync_multiplier_enabled: Option<bool>,
+    remote_managed_channel_sync_free_multiplier_enabled: Option<bool>,
 }
 
 pub(in crate::server) async fn update_settings(
@@ -158,39 +158,39 @@ pub(in crate::server) async fn update_settings(
             input.system_notifications_enabled.is_some(),
         ),
         (
-            "newapi_low_balance_system_notification_enabled",
+            "remote_low_balance_system_notification_enabled",
             input
-                .newapi_low_balance_system_notification_enabled
+                .remote_low_balance_system_notification_enabled
                 .is_some(),
         ),
         (
-            "newapi_managed_channel_missing_system_notification_enabled",
+            "remote_managed_channel_missing_system_notification_enabled",
             input
-                .newapi_managed_channel_missing_system_notification_enabled
+                .remote_managed_channel_missing_system_notification_enabled
                 .is_some(),
         ),
         (
-            "newapi_managed_channel_multiplier_system_notification_enabled",
+            "remote_managed_channel_multiplier_system_notification_enabled",
             input
-                .newapi_managed_channel_multiplier_system_notification_enabled
+                .remote_managed_channel_multiplier_system_notification_enabled
                 .is_some(),
         ),
         (
-            "newapi_managed_channel_missing_prompt_enabled",
+            "remote_managed_channel_missing_prompt_enabled",
             input
-                .newapi_managed_channel_missing_prompt_enabled
+                .remote_managed_channel_missing_prompt_enabled
                 .is_some(),
         ),
         (
-            "newapi_managed_channel_sync_multiplier_enabled",
+            "remote_managed_channel_sync_multiplier_enabled",
             input
-                .newapi_managed_channel_sync_multiplier_enabled
+                .remote_managed_channel_sync_multiplier_enabled
                 .is_some(),
         ),
         (
-            "newapi_managed_channel_sync_free_multiplier_enabled",
+            "remote_managed_channel_sync_free_multiplier_enabled",
             input
-                .newapi_managed_channel_sync_free_multiplier_enabled
+                .remote_managed_channel_sync_free_multiplier_enabled
                 .is_some(),
         ),
     ]
@@ -300,18 +300,18 @@ pub(in crate::server) async fn update_settings(
             chat_bridge_turn_timeout_minutes: input.chat_bridge_turn_timeout_minutes,
             chat_bridge_allow_new_projects: input.chat_bridge_allow_new_projects,
             system_notifications_enabled: input.system_notifications_enabled,
-            newapi_low_balance_system_notification_enabled: input
-                .newapi_low_balance_system_notification_enabled,
-            newapi_managed_channel_missing_system_notification_enabled: input
-                .newapi_managed_channel_missing_system_notification_enabled,
-            newapi_managed_channel_multiplier_system_notification_enabled: input
-                .newapi_managed_channel_multiplier_system_notification_enabled,
-            newapi_managed_channel_missing_prompt_enabled: input
-                .newapi_managed_channel_missing_prompt_enabled,
-            newapi_managed_channel_sync_multiplier_enabled: input
-                .newapi_managed_channel_sync_multiplier_enabled,
-            newapi_managed_channel_sync_free_multiplier_enabled: input
-                .newapi_managed_channel_sync_free_multiplier_enabled,
+            remote_low_balance_system_notification_enabled: input
+                .remote_low_balance_system_notification_enabled,
+            remote_managed_channel_missing_system_notification_enabled: input
+                .remote_managed_channel_missing_system_notification_enabled,
+            remote_managed_channel_multiplier_system_notification_enabled: input
+                .remote_managed_channel_multiplier_system_notification_enabled,
+            remote_managed_channel_missing_prompt_enabled: input
+                .remote_managed_channel_missing_prompt_enabled,
+            remote_managed_channel_sync_multiplier_enabled: input
+                .remote_managed_channel_sync_multiplier_enabled,
+            remote_managed_channel_sync_free_multiplier_enabled: input
+                .remote_managed_channel_sync_free_multiplier_enabled,
             ..Default::default()
         },
     )

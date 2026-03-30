@@ -216,13 +216,8 @@
     },
     "remoteMissing": {
       "title": "Managed Channel Remote Reference Missing",
-      "descriptionGeneric": "A remote reference linked to {{name}} was not found in the latest list. Choose how to handle the local channel.",
-      "descriptionToken": "The remote token linked to {{name}} was not found in the latest list. Choose how to handle the local channel.",
-      "descriptionGroup": "The remote group linked to {{name}} was not found in the latest list. Choose how to handle the local channel.",
-      "descriptionTokenAndGroup": "The remote token and group linked to {{name}} were not found in the latest list. Choose how to handle the local channel.",
       "baseUrl": "Account Base URL: {{value}}",
       "group": "Group: {{value}}",
-      "token": "Token name: {{value}}",
       "hint": "Disable keeps the local config but stops using it. Delete removes the local channel record.",
       "later": "Later",
       "disable": "Disable",
@@ -249,6 +244,10 @@
   "accounts": {
     "title": "Account Management",
     "new": "New Account",
+    "providers": {
+      "newapi": "newapi",
+      "sub2api": "sub2api"
+    },
     "table": {
       "baseUrl": "Base URL",
       "balance": "Balance",
@@ -275,19 +274,45 @@
       "systemCheckin": "System check-in",
       "manualCheckin": "Manual check-in",
       "createManaged": "Create key and channel",
+      "createKey": "Create key",
       "edit": "Edit account",
       "delete": "Delete account"
     },
+    "wizard": {
+      "title": "New Account",
+      "description": "Connect a remote account step by step: detect the provider, then fill in authentication and policy settings.",
+      "steps": {
+        "detect": "Detect provider",
+        "auth": "Authentication",
+        "options": "Additional settings"
+      },
+      "stepLabel": "Step {{step}}",
+      "baseUrlHint": "Enter the site homepage, such as a new-api panel URL or a sub2api site URL.",
+      "detectedApiUrl": "Suggested API URL: {{value}}",
+      "newapiAuthHint": "You can leave this empty for now if you only need page check-in or basic local records.",
+      "detect": "Detect and continue",
+      "detecting": "Detecting...",
+      "detectFailed": "Failed to detect account provider",
+      "back": "Back",
+      "next": "Next",
+      "create": "Finish",
+      "creating": "Creating..."
+    },
     "editor": {
-      "createTitle": "New Account",
       "editTitle": "Edit Account",
-      "description": "Configure new-api account and check-in",
+      "description": "Update remote account settings, check-in policy, and low-balance alerts",
+      "providerLocked": "The provider is fixed after creation and cannot be changed during editing.",
       "baseUrl": "Base URL",
       "apiUrl": "API URL",
       "apiUrlHint": "Leave empty to fall back to Base URL when creating channels",
       "userId": "User ID",
       "userToken": "User Token",
       "userTokenKeepHint": "Leave empty to keep existing token",
+      "bearerToken": "Authorization / Bearer Token",
+      "bearerTokenKeepHint": "Leave empty to keep the existing authorization",
+      "bearerTokenHint": "For sub2api, open the login page first if needed, then paste the Authorization header captured from your browser requests here.",
+      "openLoginPage": "Open login page",
+      "openLoginPageOpening": "Opening...",
       "rechargeCurrency": "Default recharge currency",
       "rechargeCurrencyOptions": {
         "cny": "CNY (RMB)",
@@ -312,6 +337,19 @@
       "baseUrlOverrideHint": "Leave empty to prefer the account API URL, then fall back to the account Base URL",
       "create": "Create and sync"
     },
+    "createKey": {
+      "title": "Create Key",
+      "description": "Create a sub2api key for {{name}}",
+      "name": "Key name",
+      "nameRequired": "Key name is required",
+      "group": "Group",
+      "groupPlaceholder": "Optional. Bind the key to a group",
+      "noGroup": "No group",
+      "keyValue": "Generated key",
+      "keyMeta": "Status: {{status}} · Group: {{group}}",
+      "copy": "Copy key",
+      "create": "Create key"
+    },
     "deleteDialog": {
       "title": "Delete Account",
       "descriptionWithName": "Delete account {{name}}?",
@@ -325,6 +363,7 @@
       "loadFail": "Failed to load accounts",
       "actionFail": "Operation failed",
       "baseUrlRequired": "Base URL is required",
+      "bearerTokenRequired": "Authorization / Bearer Token is required for sub2api accounts",
       "thresholdInvalid": "Threshold must be a finite number >= 0",
       "createOk": "Account created",
       "updateOk": "Account updated",
@@ -340,8 +379,13 @@
       "managedRequired": "Name, protocol, and group are required",
       "credentialsRequiredForSystem": "User ID and User Token are required for New API auto check-in",
       "credentialsRequiredForManaged": "User ID and User Token are required to create a key",
+      "credentialsRequiredForKey": "Authorization / Bearer Token must be configured before creating a key",
       "createManagedOk": "Channel created and synced",
       "createManagedFail": "Failed to create channel",
+      "createKeyOk": "Key created",
+      "createKeyFail": "Failed to create key",
+      "copyKeyOk": "Key copied to clipboard",
+      "copyKeyFail": "Failed to copy key",
       "reorderOk": "Order saved",
       "reorderFail": "Failed to save order"
     }
@@ -548,23 +592,23 @@
     "systemNotifications": {
       "title": "System Notifications",
       "subtitle": "Control the global system notification switch",
-      "newApiSubtitle": "Manage low-balance and managed-channel alerts for New API",
+      "newApiSubtitle": "Manage low-balance and managed-channel alerts for remote accounts",
       "enable": "Enable system notifications",
       "enableHint": "When disabled, no system-level notifications will be sent",
       "lowBalance": "Low-balance alerts",
       "lowBalanceHint": "Send a system notification when an account balance falls below its threshold",
       "managedChannelMissing": "Managed channel missing alerts",
-      "managedChannelMissingHint": "Send a system notification when a remote token or group is missing",
+      "managedChannelMissingHint": "Send a system notification when a remote resource or group is missing",
       "managedChannelMultiplier": "Managed channel multiplier mismatch alerts",
       "managedChannelMultiplierHint": "Send a system notification when local and remote multipliers differ",
       "saved": "System notification settings saved",
       "saveFail": "Failed to save system notification settings"
     },
     "newApiManaged": {
-      "title": "New API Managed Channels",
+      "title": "Remote Managed Channels",
       "subtitle": "Control managed channel change detection and multiplier sync confirmations",
       "missingPrompt": "Managed channel change detection",
-      "missingPromptHint": "When enabled, detect whether remote tokens or groups still exist; if any are missing, open the window and show a disable/delete prompt; if Managed channel missing alerts are enabled in Settings > Notifications, also send a system notification",
+      "missingPromptHint": "When enabled, detect whether remote resources or groups still exist; if any are missing, open the window and show a disable/delete prompt; if Managed channel missing alerts are enabled in Settings > Notifications, also send a system notification",
       "syncMultiplier": "Sync channel multipliers",
       "syncMultiplierHint": "When enabled, check remote group ratios every 30 minutes; when a mismatch is found, ask immediately if the window is already open, or wait until you open the window to ask whether to update the local real multiplier; if Managed channel multiplier mismatch alerts are enabled in Settings > Notifications, also send a system notification",
       "ignoreFreeMultiplier": "Ignore free multipliers",

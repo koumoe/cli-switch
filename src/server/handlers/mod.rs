@@ -8,6 +8,7 @@ pub(super) mod newapi;
 pub(super) mod pricing;
 pub(super) mod prompt;
 pub(super) mod proxy;
+pub(super) mod remote;
 pub(super) mod route;
 pub(super) mod settings;
 pub(super) mod stats;
@@ -31,18 +32,19 @@ pub(super) use chat_bridge_whatsapp::{
 };
 pub(super) use health::health;
 pub(super) use maintenance::{db_size, frontend_log_ingest, logs_clear, logs_size, records_clear};
-pub(super) use newapi::{
-    complete_newapi_account_checkin_today, create_newapi_account, create_newapi_managed_channel,
-    delete_newapi_account, list_newapi_account_groups, list_newapi_accounts,
-    newapi_account_checkins_today, perform_newapi_account_system_checkin, refresh_newapi_account,
-    reorder_newapi_accounts, update_newapi_account,
-};
 pub(super) use pricing::{pricing_models, pricing_status, pricing_sync};
 pub(super) use prompt::{
     delete_prompt_document, delete_prompt_project, get_prompt_document, list_prompt_projects,
     save_prompt_document,
 };
 pub(super) use proxy::{proxy_anthropic, proxy_gemini, proxy_openai};
+pub(super) use remote::{
+    complete_remote_account_checkin_today, create_remote_account, create_remote_account_key,
+    create_remote_managed_channel, delete_remote_account, detect_remote_account,
+    list_remote_account_groups, list_remote_accounts, perform_remote_account_system_checkin,
+    refresh_remote_account, remote_account_checkins_today, reorder_remote_accounts,
+    update_remote_account,
+};
 pub(super) use route::{
     create_route, delete_route, list_route_channels, list_routes, reorder_route_channels,
     update_route,

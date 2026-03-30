@@ -53,13 +53,13 @@ import {
   type ChangelogSection,
   type CliToolId,
   type CliToolsStatus,
-  type NewApiManagedChannelMissingPrompt,
-  type NewApiManagedChannelMultiplierPrompt,
+  type RemoteManagedChannelMissingPrompt,
+  type RemoteManagedChannelMultiplierPrompt,
 } from "./api";
 import { logger, setLogLevel } from "@/lib/logger";
 import type {
-  CliswitchNewApiManagedChannelMissingEvent,
-  CliswitchNewApiManagedChannelMultiplierEvent,
+  CliswitchRemoteManagedChannelMissingEvent,
+  CliswitchRemoteManagedChannelMultiplierEvent,
   CliswitchUpdateStatusEvent,
 } from "@/lib/cliswitchEvents";
 import { isUpdateReadyShown, markUpdateReadyShown } from "@/lib/updateReadyPrompt";
@@ -96,22 +96,47 @@ function formatMultiplier(value: number): string {
   return `×${value.toFixed(2)}`;
 }
 
-function managedMissingDescriptionKey(
-  prompt: NewApiManagedChannelMissingPrompt | null,
+function managedResourceLabel(
+  prompt: RemoteManagedChannelMissingPrompt | null,
+  locale: string,
 ): string {
   if (!prompt) {
-    return "channels.remoteMissing.descriptionGeneric";
+    return locale === "zh-CN" ? "远端资源" : "remote resource";
   }
-  if (prompt.missing_group && prompt.missing_token) {
-    return "channels.remoteMissing.descriptionTokenAndGroup";
+  if (prompt.provider === "sub2api") {
+    return locale === "zh-CN" ? "Key" : "Key";
+  }
+  return "Token";
+}
+
+function managedMissingDescription(
+  prompt: RemoteManagedChannelMissingPrompt | null,
+  locale: string,
+): string {
+  if (!prompt) {
+    return locale === "zh-CN"
+      ? "检测到远端托管资源异常，请确认是否禁用或删除本地渠道。"
+      : "A remote managed resource changed. Disable or delete the local channel as needed.";
+  }
+  const resource = managedResourceLabel(prompt, locale);
+  if (prompt.missing_group && prompt.missing_resource) {
+    return locale === "zh-CN"
+      ? `检测到渠道 ${prompt.channel_name} 对应的远端 ${resource} 和分组均未在列表中找到，请选择禁用或删除。`
+      : `The remote ${resource} and group for channel ${prompt.channel_name} were not found in the latest list. Disable or delete the local channel.`;
   }
   if (prompt.missing_group) {
-    return "channels.remoteMissing.descriptionGroup";
+    return locale === "zh-CN"
+      ? `检测到渠道 ${prompt.channel_name} 对应的远端分组未在列表中找到，请选择禁用或删除。`
+      : `The remote group for channel ${prompt.channel_name} was not found in the latest list. Disable or delete the local channel.`;
   }
-  if (prompt.missing_token) {
-    return "channels.remoteMissing.descriptionToken";
+  if (prompt.missing_resource) {
+    return locale === "zh-CN"
+      ? `检测到渠道 ${prompt.channel_name} 对应的远端 ${resource} 未在列表中找到，请选择禁用或删除。`
+      : `The remote ${resource} for channel ${prompt.channel_name} was not found in the latest list. Disable or delete the local channel.`;
   }
-  return "channels.remoteMissing.descriptionGeneric";
+  return locale === "zh-CN"
+    ? "检测到远端托管资源异常，请确认是否禁用或删除本地渠道。"
+    : "A remote managed resource changed. Disable or delete the local channel as needed.";
 }
 
 function routeFromPath(pathname: string): AppRoute {
@@ -268,9 +293,9 @@ export default function App() {
   const [closePromptOpen, setClosePromptOpen] = useState(false);
   const [closeRemember, setCloseRemember] = useState(false);
   const [closeDecisionSent, setCloseDecisionSent] = useState(false);
-  const [managedMissingQueue, setManagedMissingQueue] = useState<NewApiManagedChannelMissingPrompt[]>([]);
+  const [managedMissingQueue, setManagedMissingQueue] = useState<RemoteManagedChannelMissingPrompt[]>([]);
   const [managedMissingBusyAction, setManagedMissingBusyAction] = useState<"disable" | "delete" | null>(null);
-  const [managedMultiplierQueue, setManagedMultiplierQueue] = useState<NewApiManagedChannelMultiplierPrompt[]>([]);
+  const [managedMultiplierQueue, setManagedMultiplierQueue] = useState<RemoteManagedChannelMultiplierPrompt[]>([]);
   const [managedMultiplierBusy, setManagedMultiplierBusy] = useState(false);
   const updatePromptOpenRef = useRef(false);
   const updatePromptedVersionRef = useRef<string | null>(null);
@@ -450,7 +475,7 @@ export default function App() {
 
   useEffect(() => {
     const onManagedMissing = (e: Event) => {
-      const detail = (e as CliswitchNewApiManagedChannelMissingEvent).detail;
+      const detail = (e as CliswitchRemoteManagedChannelMissingEvent).detail;
       if (!detail?.channel_id) return;
       setManagedMissingQueue((current) => {
         const idx = current.findIndex((item) => item.channel_id === detail.channel_id);
@@ -461,12 +486,12 @@ export default function App() {
       });
     };
     window.addEventListener(
-      "cliswitch-newapi-managed-channel-missing",
+      "cliswitch-remote-managed-channel-missing",
       onManagedMissing as EventListener,
     );
     return () => {
       window.removeEventListener(
-        "cliswitch-newapi-managed-channel-missing",
+        "cliswitch-remote-managed-channel-missing",
         onManagedMissing as EventListener,
       );
     };
@@ -474,7 +499,7 @@ export default function App() {
 
   useEffect(() => {
     const onManagedMultiplier = (e: Event) => {
-      const detail = (e as CliswitchNewApiManagedChannelMultiplierEvent).detail;
+      const detail = (e as CliswitchRemoteManagedChannelMultiplierEvent).detail;
       if (!detail?.channel_id) return;
       setManagedMultiplierQueue((current) => {
         const idx = current.findIndex((item) => item.channel_id === detail.channel_id);
@@ -485,12 +510,12 @@ export default function App() {
       });
     };
     window.addEventListener(
-      "cliswitch-newapi-managed-channel-multiplier",
+      "cliswitch-remote-managed-channel-multiplier",
       onManagedMultiplier as EventListener,
     );
     return () => {
       window.removeEventListener(
-        "cliswitch-newapi-managed-channel-multiplier",
+        "cliswitch-remote-managed-channel-multiplier",
         onManagedMultiplier as EventListener,
       );
     };
@@ -690,9 +715,7 @@ export default function App() {
           <DialogHeader>
             <DialogTitle>{t("channels.remoteMissing.title")}</DialogTitle>
             <DialogDescription>
-              {t(managedMissingDescriptionKey(activeManagedMissing), {
-                name: activeManagedMissing?.channel_name ?? "",
-              })}
+              {managedMissingDescription(activeManagedMissing, locale)}
             </DialogDescription>
           </DialogHeader>
 
@@ -712,11 +735,11 @@ export default function App() {
                     })}
                   </div>
                 ) : null}
-                {activeManagedMissing.token_name ? (
+                {activeManagedMissing.resource_name ? (
                   <div className="text-xs text-muted-foreground">
-                    {t("channels.remoteMissing.token", {
-                      value: activeManagedMissing.token_name,
-                    })}
+                    {(locale === "zh-CN"
+                      ? `${managedResourceLabel(activeManagedMissing, locale)}：${activeManagedMissing.resource_name}`
+                      : `${managedResourceLabel(activeManagedMissing, locale)}: ${activeManagedMissing.resource_name}`)}
                   </div>
                 ) : null}
               </div>

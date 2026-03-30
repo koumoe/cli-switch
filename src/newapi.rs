@@ -165,6 +165,26 @@ struct GroupValueData {
     desc: Option<String>,
 }
 
+impl StatusData {
+    fn looks_like_newapi_status(&self) -> bool {
+        self.quota_per_unit.is_some()
+            || self
+                .quota_display_type
+                .as_deref()
+                .map(str::trim)
+                .is_some_and(|value| !value.is_empty())
+            || self.usd_exchange_rate.is_some()
+            || self
+                .custom_currency_symbol
+                .as_deref()
+                .map(str::trim)
+                .is_some_and(|value| !value.is_empty())
+            || self.custom_currency_exchange_rate.is_some()
+            || self.checkin_enabled.is_some()
+            || self.turnstile_check.is_some()
+    }
+}
+
 fn auth_headers(account: &NewApiAccount) -> anyhow::Result<HeaderMap> {
     let token = account
         .user_token
@@ -237,6 +257,15 @@ async fn send_no_data(req: reqwest::RequestBuilder) -> anyhow::Result<()> {
                 message
             }
         );
+    }
+    Ok(())
+}
+
+pub async fn probe_instance(http_client: &reqwest::Client, base_url: &str) -> anyhow::Result<()> {
+    let status_url = join_url(base_url, "/api/status");
+    let status = send_json::<StatusData>(http_client.get(status_url)).await?;
+    if !status.looks_like_newapi_status() {
+        anyhow::bail!("newapi probe status missing expected fields");
     }
     Ok(())
 }
@@ -579,16 +608,6 @@ async fn get_token_key(
     let url = join_url(&account.base_url, &format!("/api/token/{token_id}/key"));
     let data = send_json::<TokenKeyData>(http_client.post(url).headers(headers)).await?;
     Ok(data.key)
-}
-
-pub async fn delete_channel(
-    http_client: &reqwest::Client,
-    account: &NewApiAccount,
-    channel_id: i64,
-) -> anyhow::Result<()> {
-    let headers = auth_headers(account)?;
-    let url = join_url(&account.base_url, &format!("/api/channel/{channel_id}"));
-    send_no_data(http_client.delete(url).headers(headers)).await
 }
 
 pub async fn delete_token(
