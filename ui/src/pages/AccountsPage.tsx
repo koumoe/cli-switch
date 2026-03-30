@@ -2,7 +2,12 @@ import React, { useEffect, useReducer, useRef, useState } from "react";
 import { Plus, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
-import { type RemoteAccount, type RemoteGroupOption } from "@/api";
+import {
+  type NewapiRemoteAccount,
+  type RemoteAccount,
+  type RemoteGroupOption,
+  type Sub2ApiRemoteAccount,
+} from "@/api";
 import {
   createNewApiManagedChannel,
   deleteRemoteAccount,
@@ -36,6 +41,7 @@ import {
   emptyAccountDraft,
   initialDragState,
   isNewApiAccount,
+  isSub2ApiAccount,
   resolveCheckinMode,
   resolveAccountDisplayName,
   ymdLocal,
@@ -81,14 +87,14 @@ export function AccountsPage() {
   const [deleting, setDeleting] = useState(false);
 
   const [managedOpen, setManagedOpen] = useState(false);
-  const [managedTarget, setManagedTarget] = useState<RemoteAccount | null>(null);
+  const [managedTarget, setManagedTarget] = useState<NewapiRemoteAccount | null>(null);
   const [managedDraft, setManagedDraft] = useState<ManagedChannelDraft | null>(null);
   const [managedGroups, setManagedGroups] = useState<RemoteGroupOption[]>([]);
   const [managedLoadingGroups, setManagedLoadingGroups] = useState(false);
   const [managedCreating, setManagedCreating] = useState(false);
 
   const [createKeyOpen, setCreateKeyOpen] = useState(false);
-  const [createKeyTarget, setCreateKeyTarget] = useState<RemoteAccount | null>(null);
+  const [createKeyTarget, setCreateKeyTarget] = useState<Sub2ApiRemoteAccount | null>(null);
 
   const [today, setToday] = useState(() => ymdLocal(Date.now()));
 
@@ -440,7 +446,7 @@ export function AccountsPage() {
   }
 
   function openCreateKeyDialog(item: RemoteAccount) {
-    if (isNewApiAccount(item)) return;
+    if (!isSub2ApiAccount(item)) return;
     if (!accountHasUserApiCredentials(item)) {
       toast.error(t("accounts.toast.actionFail"), { description: t("accounts.toast.credentialsRequiredForKey") });
       return;

@@ -1,11 +1,14 @@
 import type {
   NewApiGroupOption,
+  NewapiRemoteAccount,
   Protocol,
   RechargeCurrency,
   RemoteAccount,
+  RemoteAccountBase,
   RemoteAccountCheckinMode,
   RemoteAccountProvider,
   RemoteGroupOption,
+  Sub2ApiRemoteAccount,
 } from "@/api";
 
 export type AccountCheckinModeOption = RemoteAccountCheckinMode;
@@ -75,7 +78,7 @@ export function defaultManagedName(account: RemoteAccount, protocol: Protocol | 
   return `${userId}-${protocol}`;
 }
 
-export function defaultManagedDraft(account: RemoteAccount): ManagedChannelDraft {
+export function defaultManagedDraft(account: NewapiRemoteAccount): ManagedChannelDraft {
   return {
     name: defaultManagedName(account, null),
     group_name: account.remote_group ?? "",
@@ -104,7 +107,7 @@ export function supportedCheckinModes(provider: RemoteAccountProvider): AccountC
 }
 
 export function accountHasUserApiCredentials(
-  account: Pick<RemoteAccount, "provider" | "user_id" | "user_token_configured">
+  account: Pick<RemoteAccountBase, "user_id" | "user_token_configured"> & Pick<RemoteAccount, "provider">
 ): boolean {
   if (account.provider === "newapi") {
     return !!account.user_id.trim() && !!account.user_token_configured;
@@ -112,12 +115,16 @@ export function accountHasUserApiCredentials(
   return !!account.user_token_configured;
 }
 
-export function isNewApiAccount(account: Pick<RemoteAccount, "provider">): boolean {
+export function isNewApiAccount(account: RemoteAccount): account is NewapiRemoteAccount {
   return account.provider === "newapi";
 }
 
+export function isSub2ApiAccount(account: RemoteAccount): account is Sub2ApiRemoteAccount {
+  return account.provider === "sub2api";
+}
+
 export function resolveAccountDisplayName(
-  account: Pick<RemoteAccount, "base_url" | "remote_display_name" | "remote_username" | "user_id">
+  account: Pick<RemoteAccountBase, "base_url" | "remote_display_name" | "remote_username" | "user_id">
 ): string {
   return account.remote_display_name?.trim()
     || account.remote_username?.trim()

@@ -27,9 +27,8 @@ pub(in crate::server) enum RemoteAccountCheckinMode {
 }
 
 #[derive(Debug, Clone, Serialize)]
-pub(in crate::server) struct RemoteAccountResponse {
+pub(in crate::server) struct RemoteAccountCommonResponse {
     pub id: String,
-    pub provider: RemoteAccountProvider,
     pub base_url: String,
     pub api_url: Option<String>,
     pub user_id: String,
@@ -40,10 +39,21 @@ pub(in crate::server) struct RemoteAccountResponse {
     pub auto_checkin_time: String,
     pub low_balance_alert_threshold: f64,
     pub recharge_currency: RechargeCurrency,
-    pub remote_role: Option<i64>,
-    pub remote_role_text: Option<String>,
     pub remote_username: Option<String>,
     pub remote_display_name: Option<String>,
+    pub last_balance_amount: Option<f64>,
+    pub last_sync_error: Option<String>,
+    pub last_synced_at_ms: Option<i64>,
+    pub low_balance_alert_notified: bool,
+    pub last_balance_alert_at_ms: Option<i64>,
+    pub sort_order: i64,
+    pub created_at_ms: i64,
+    pub updated_at_ms: i64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(in crate::server) struct NewapiRemoteAccountResponse {
+    pub remote_role: Option<i64>,
     pub remote_group: Option<String>,
     pub quota_display_type: String,
     pub quota_per_unit: f64,
@@ -54,14 +64,42 @@ pub(in crate::server) struct RemoteAccountResponse {
     pub remote_turnstile_check_enabled: bool,
     pub last_quota: Option<i64>,
     pub last_used_quota: Option<i64>,
-    pub last_balance_amount: Option<f64>,
-    pub last_sync_error: Option<String>,
-    pub last_synced_at_ms: Option<i64>,
-    pub low_balance_alert_notified: bool,
-    pub last_balance_alert_at_ms: Option<i64>,
-    pub sort_order: i64,
-    pub created_at_ms: i64,
-    pub updated_at_ms: i64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(in crate::server) struct Sub2ApiRemoteAccountResponse {
+    pub remote_role_text: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(tag = "provider", rename_all = "snake_case")]
+pub(in crate::server) enum RemoteAccountResponse {
+    Newapi {
+        #[serde(flatten)]
+        common: RemoteAccountCommonResponse,
+        #[serde(flatten)]
+        newapi: NewapiRemoteAccountResponse,
+    },
+    Sub2Api {
+        #[serde(flatten)]
+        common: RemoteAccountCommonResponse,
+        #[serde(flatten)]
+        sub2api: Sub2ApiRemoteAccountResponse,
+    },
+}
+
+impl RemoteAccountResponse {
+    fn sort_order(&self) -> i64 {
+        match self {
+            Self::Newapi { common, .. } | Self::Sub2Api { common, .. } => common.sort_order,
+        }
+    }
+
+    fn created_at_ms(&self) -> i64 {
+        match self {
+            Self::Newapi { common, .. } | Self::Sub2Api { common, .. } => common.created_at_ms,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -219,37 +257,23 @@ fn resolve_newapi_checkin_mode(account: &storage::NewApiAccount) -> RemoteAccoun
     }
 }
 
-fn map_newapi_account(account: storage::NewApiAccount) -> RemoteAccountResponse {
-    let checkin_mode = resolve_newapi_checkin_mode(&account);
-    RemoteAccountResponse {
-        id: account.id,
-        provider: RemoteAccountProvider::Newapi,
-        base_url: account.base_url,
-        api_url: account.api_url,
-        user_id: account.user_id,
+fn map_newapi_common(account: &storage::NewApiAccount) -> RemoteAccountCommonResponse {
+    RemoteAccountCommonResponse {
+        id: account.id.clone(),
+        base_url: account.base_url.clone(),
+        api_url: account.api_url.clone(),
+        user_id: account.user_id.clone(),
         user_token_configured: account.user_token_configured,
-        page_checkin_url: account.page_checkin_url,
-        checkin_mode,
+        page_checkin_url: account.page_checkin_url.clone(),
+        checkin_mode: resolve_newapi_checkin_mode(account),
         auto_checkin_enabled: account.auto_checkin_enabled,
-        auto_checkin_time: account.auto_checkin_time,
+        auto_checkin_time: account.auto_checkin_time.clone(),
         low_balance_alert_threshold: account.low_balance_alert_threshold,
         recharge_currency: account.recharge_currency,
-        remote_role: account.remote_role,
-        remote_role_text: account.remote_role.map(|value| value.to_string()),
-        remote_username: account.remote_username,
-        remote_display_name: account.remote_display_name,
-        remote_group: account.remote_group,
-        quota_display_type: account.quota_display_type,
-        quota_per_unit: account.quota_per_unit,
-        usd_exchange_rate: account.usd_exchange_rate,
-        custom_currency_symbol: account.custom_currency_symbol,
-        custom_currency_exchange_rate: account.custom_currency_exchange_rate,
-        remote_checkin_enabled: account.remote_checkin_enabled,
-        remote_turnstile_check_enabled: account.remote_turnstile_check_enabled,
-        last_quota: account.last_quota,
-        last_used_quota: account.last_used_quota,
+        remote_username: account.remote_username.clone(),
+        remote_display_name: account.remote_display_name.clone(),
         last_balance_amount: account.last_balance_amount,
-        last_sync_error: account.last_sync_error,
+        last_sync_error: account.last_sync_error.clone(),
         last_synced_at_ms: account.last_synced_at_ms,
         low_balance_alert_notified: account.low_balance_alert_notified,
         last_balance_alert_at_ms: account.last_balance_alert_at_ms,
@@ -259,11 +283,29 @@ fn map_newapi_account(account: storage::NewApiAccount) -> RemoteAccountResponse 
     }
 }
 
+fn map_newapi_account(account: storage::NewApiAccount) -> RemoteAccountResponse {
+    let common = map_newapi_common(&account);
+    RemoteAccountResponse::Newapi {
+        common,
+        newapi: NewapiRemoteAccountResponse {
+            remote_role: account.remote_role,
+            remote_group: account.remote_group,
+            quota_display_type: account.quota_display_type,
+            quota_per_unit: account.quota_per_unit,
+            usd_exchange_rate: account.usd_exchange_rate,
+            custom_currency_symbol: account.custom_currency_symbol,
+            custom_currency_exchange_rate: account.custom_currency_exchange_rate,
+            remote_checkin_enabled: account.remote_checkin_enabled,
+            remote_turnstile_check_enabled: account.remote_turnstile_check_enabled,
+            last_quota: account.last_quota,
+            last_used_quota: account.last_used_quota,
+        },
+    }
+}
+
 fn map_remote_account(account: storage::RemoteAccount) -> RemoteAccountResponse {
-    let quota_display_type = account.recharge_currency.as_str().to_string();
-    RemoteAccountResponse {
+    let common = RemoteAccountCommonResponse {
         id: account.id,
-        provider: RemoteAccountProvider::Sub2Api,
         base_url: account.base_url,
         api_url: account.api_url,
         user_id: account.remote_user_id.unwrap_or_default(),
@@ -277,20 +319,8 @@ fn map_remote_account(account: storage::RemoteAccount) -> RemoteAccountResponse 
         auto_checkin_time: account.auto_checkin_time,
         low_balance_alert_threshold: account.low_balance_alert_threshold,
         recharge_currency: account.recharge_currency,
-        remote_role: None,
-        remote_role_text: account.remote_role,
         remote_username: account.remote_username,
         remote_display_name: account.remote_display_name,
-        remote_group: None,
-        quota_display_type,
-        quota_per_unit: 1.0,
-        usd_exchange_rate: 1.0,
-        custom_currency_symbol: None,
-        custom_currency_exchange_rate: 1.0,
-        remote_checkin_enabled: false,
-        remote_turnstile_check_enabled: false,
-        last_quota: None,
-        last_used_quota: None,
         last_balance_amount: account.last_balance_amount,
         last_sync_error: account.last_sync_error,
         last_synced_at_ms: account.last_synced_at_ms,
@@ -299,6 +329,12 @@ fn map_remote_account(account: storage::RemoteAccount) -> RemoteAccountResponse 
         sort_order: account.sort_order,
         created_at_ms: account.created_at_ms,
         updated_at_ms: account.updated_at_ms,
+    };
+    RemoteAccountResponse::Sub2Api {
+        common,
+        sub2api: Sub2ApiRemoteAccountResponse {
+            remote_role_text: account.remote_role,
+        },
     }
 }
 
@@ -495,9 +531,9 @@ pub(in crate::server) async fn list_remote_accounts(
             .map(map_remote_account),
     );
     items.sort_by(|a, b| {
-        a.sort_order
-            .cmp(&b.sort_order)
-            .then_with(|| a.created_at_ms.cmp(&b.created_at_ms))
+        a.sort_order()
+            .cmp(&b.sort_order())
+            .then_with(|| a.created_at_ms().cmp(&b.created_at_ms()))
     });
     Ok(Json(items))
 }

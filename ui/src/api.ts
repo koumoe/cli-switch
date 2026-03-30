@@ -274,9 +274,8 @@ export type RemoteAccountProvider = "newapi" | "sub2api";
 
 export type RemoteAccountCheckinMode = "disabled" | "system_api" | "page_open";
 
-export type RemoteAccount = {
+export type RemoteAccountBase = {
   id: string;
-  provider: RemoteAccountProvider;
   base_url: string;
   api_url: string | null;
   user_id: string;
@@ -287,10 +286,21 @@ export type RemoteAccount = {
   auto_checkin_time: string;
   low_balance_alert_threshold: number;
   recharge_currency: RechargeCurrency;
-  remote_role: number | null;
-  remote_role_text: string | null;
   remote_username: string | null;
   remote_display_name: string | null;
+  last_balance_amount: number | null;
+  last_sync_error: string | null;
+  last_synced_at_ms: number | null;
+  low_balance_alert_notified: boolean;
+  last_balance_alert_at_ms: number | null;
+  sort_order: number;
+  created_at_ms: number;
+  updated_at_ms: number;
+};
+
+export type NewapiRemoteAccount = RemoteAccountBase & {
+  provider: "newapi";
+  remote_role: number | null;
   remote_group: string | null;
   quota_display_type: string;
   quota_per_unit: number;
@@ -301,15 +311,14 @@ export type RemoteAccount = {
   remote_turnstile_check_enabled: boolean;
   last_quota: number | null;
   last_used_quota: number | null;
-  last_balance_amount: number | null;
-  last_sync_error: string | null;
-  last_synced_at_ms: number | null;
-  low_balance_alert_notified: boolean;
-  last_balance_alert_at_ms: number | null;
-  sort_order: number;
-  created_at_ms: number;
-  updated_at_ms: number;
 };
+
+export type Sub2ApiRemoteAccount = RemoteAccountBase & {
+  provider: "sub2api";
+  remote_role_text: string | null;
+};
+
+export type RemoteAccount = NewapiRemoteAccount | Sub2ApiRemoteAccount;
 
 export type RemoteAccountDetection = {
   provider: RemoteAccountProvider;

@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Copy, KeyRound } from "lucide-react";
 import { toast } from "sonner";
 
-import type { RemoteAccount, RemoteGroupOption, RemoteKey } from "@/api";
+import type { RemoteGroupOption, RemoteKey, Sub2ApiRemoteAccount } from "@/api";
 import { createRemoteAccountKey, listRemoteAccountGroups } from "@/api";
 import {
   Button,
@@ -26,7 +26,7 @@ import { formatGroupLabel, resolveAccountDisplayName } from "./shared";
 
 type CreateKeyDialogProps = {
   open: boolean;
-  target: RemoteAccount | null;
+  target: Sub2ApiRemoteAccount | null;
   onOpenChange: (open: boolean) => void;
 };
 
