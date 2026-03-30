@@ -3,13 +3,12 @@ import { Plus, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
 import {
-  type NewapiRemoteAccount,
   type RemoteAccount,
   type RemoteGroupOption,
   type Sub2ApiRemoteAccount,
 } from "@/api";
 import {
-  createNewApiManagedChannel,
+  createRemoteManagedChannel,
   deleteRemoteAccount,
   listRemoteAccountGroups,
   listRemoteAccounts,
@@ -87,7 +86,7 @@ export function AccountsPage() {
   const [deleting, setDeleting] = useState(false);
 
   const [managedOpen, setManagedOpen] = useState(false);
-  const [managedTarget, setManagedTarget] = useState<NewapiRemoteAccount | null>(null);
+  const [managedTarget, setManagedTarget] = useState<RemoteAccount | null>(null);
   const [managedDraft, setManagedDraft] = useState<ManagedChannelDraft | null>(null);
   const [managedGroups, setManagedGroups] = useState<RemoteGroupOption[]>([]);
   const [managedLoadingGroups, setManagedLoadingGroups] = useState(false);
@@ -348,10 +347,9 @@ export function AccountsPage() {
   }
 
   function openDeleteDialog(item: RemoteAccount) {
-    const newapi = isNewApiAccount(item);
     setDeleteTarget(item);
-    setDeleteManagedChannels(newapi);
-    setDeleteSyncRemote(newapi);
+    setDeleteManagedChannels(true);
+    setDeleteSyncRemote(true);
     setDeleteOpen(true);
   }
 
@@ -361,12 +359,10 @@ export function AccountsPage() {
     try {
       await deleteRemoteAccount(
         deleteTarget.id,
-        isNewApiAccount(deleteTarget)
-          ? {
-            delete_managed_channels: deleteManagedChannels,
-            sync_remote_delete: deleteSyncRemote,
-          }
-          : undefined
+        {
+          delete_managed_channels: deleteManagedChannels,
+          sync_remote_delete: deleteSyncRemote,
+        }
       );
       toast.success(t("accounts.toast.deleteOk"));
       setDeleteOpen(false);
@@ -390,9 +386,14 @@ export function AccountsPage() {
   }
 
   async function openCreateManagedChannelDialog(item: RemoteAccount) {
-    if (!isNewApiAccount(item)) return;
     if (!accountHasUserApiCredentials(item)) {
-      toast.error(t("accounts.toast.actionFail"), { description: t("accounts.toast.credentialsRequiredForManaged") });
+      toast.error(t("accounts.toast.actionFail"), {
+        description: t(
+          item.provider === "newapi"
+            ? "accounts.toast.credentialsRequiredForManaged"
+            : "accounts.toast.credentialsRequiredForKey"
+        ),
+      });
       return;
     }
     setManagedTarget(item);
@@ -403,7 +404,7 @@ export function AccountsPage() {
     try {
       const groups = await listRemoteAccountGroups(item.id);
       setManagedGroups(groups);
-      const preferred = (item.remote_group ?? "").trim();
+      const preferred = (item.provider === "newapi" ? item.remote_group : "")?.trim() ?? "";
       if (preferred && groups.some((group) => group.name === preferred)) {
         setManagedDraft((current) => (current ? { ...current, group_name: preferred } : current));
       } else if (groups[0]?.name) {
@@ -422,16 +423,18 @@ export function AccountsPage() {
     const protocol = managedDraft.protocol;
     const groupName = managedDraft.group_name.trim();
     const baseUrlOverride = managedDraft.base_url_override.trim();
+    const selectedGroup = managedGroups.find((group) => group.name === groupName) ?? null;
     if (!name || !groupName || !protocol) {
       toast.error(t("accounts.toast.actionFail"), { description: t("accounts.toast.managedRequired") });
       return;
     }
     setManagedCreating(true);
     try {
-      await createNewApiManagedChannel(managedTarget.id, {
+      await createRemoteManagedChannel(managedTarget.id, {
         name,
         protocol,
         group_name: groupName,
+        group_id: selectedGroup?.id ?? null,
         base_url_override: baseUrlOverride || null,
       });
       toast.success(t("accounts.toast.createManagedOk"));

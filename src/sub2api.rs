@@ -1,6 +1,7 @@
 use anyhow::Context as _;
 use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
 use serde::Deserialize;
+use serde_json::Value;
 
 use crate::bearer_token::normalize_bearer_token;
 
@@ -86,6 +87,12 @@ struct KeyData {
     status: String,
 }
 
+#[derive(Debug, Deserialize)]
+struct KeyListData {
+    items: Vec<KeyData>,
+    pages: Option<i64>,
+}
+
 fn join_url(base_url: &str, path: &str) -> anyhow::Result<String> {
     let mut url = reqwest::Url::parse(base_url).with_context(|| format!("无效 URL：{base_url}"))?;
     if path.starts_with('/') {
@@ -133,6 +140,29 @@ where
         );
     }
     parsed.data.context("sub2api 响应缺少 data")
+}
+
+async fn send_no_data(request: reqwest::RequestBuilder) -> anyhow::Result<()> {
+    let response = request.send().await.context("发送 sub2api 请求失败")?;
+    let status = response.status();
+    let text = response.text().await.context("读取 sub2api 响应失败")?;
+    if !status.is_success() {
+        anyhow::bail!("sub2api 响应失败：HTTP {} {}", status.as_u16(), text);
+    }
+    let parsed: ApiEnvelope<Value> =
+        serde_json::from_str(&text).with_context(|| format!("解析 sub2api 响应失败：{text}"))?;
+    if parsed.code != 0 {
+        let message = parsed.message.trim();
+        anyhow::bail!(
+            "{}",
+            if message.is_empty() {
+                "sub2api 请求失败"
+            } else {
+                message
+            }
+        );
+    }
+    Ok(())
 }
 
 pub async fn fetch_public_settings(
@@ -216,4 +246,56 @@ pub async fn create_key(
         group_id: data.group_id,
         status: data.status,
     })
+}
+
+pub async fn list_keys(
+    http_client: &reqwest::Client,
+    base_url: &str,
+    access_token: &str,
+) -> anyhow::Result<Vec<Sub2ApiKey>> {
+    const PAGE_SIZE: usize = 100;
+    const MAX_PAGES: usize = 100;
+
+    let url = join_url(base_url, "/api/v1/keys")?;
+    let headers = auth_headers(access_token)?;
+    let page_size = PAGE_SIZE.to_string();
+    let mut out = Vec::new();
+
+    for page in 1..=MAX_PAGES {
+        let page_s = page.to_string();
+        let data = send_json::<KeyListData>(
+            http_client
+                .get(url.clone())
+                .headers(headers.clone())
+                .query(&[("page", page_s.as_str()), ("page_size", page_size.as_str())]),
+        )
+        .await?;
+        let reached_last_page = data
+            .pages
+            .and_then(|value| usize::try_from(value).ok())
+            .is_some_and(|pages| page >= pages);
+        out.extend(data.items.into_iter().map(|item| Sub2ApiKey {
+            id: item.id,
+            key: item.key,
+            name: item.name,
+            group_id: item.group_id,
+            status: item.status,
+        }));
+        if reached_last_page || out.len() < page.saturating_mul(PAGE_SIZE) {
+            break;
+        }
+    }
+
+    Ok(out)
+}
+
+pub async fn delete_key(
+    http_client: &reqwest::Client,
+    base_url: &str,
+    access_token: &str,
+    key_id: i64,
+) -> anyhow::Result<()> {
+    let url = join_url(base_url, &format!("/api/v1/keys/{key_id}"))?;
+    let headers = auth_headers(access_token)?;
+    send_no_data(http_client.delete(url).headers(headers)).await
 }

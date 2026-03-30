@@ -46,9 +46,9 @@ pub(super) use prompt::{
 pub(super) use proxy::{proxy_anthropic, proxy_gemini, proxy_openai};
 pub(super) use remote::{
     complete_remote_account_checkin_today, create_remote_account, create_remote_account_key,
-    delete_remote_account, detect_remote_account, list_remote_account_groups, list_remote_accounts,
-    refresh_remote_account, remote_account_checkins_today, reorder_remote_accounts,
-    update_remote_account,
+    create_remote_managed_channel, delete_remote_account, detect_remote_account,
+    list_remote_account_groups, list_remote_accounts, refresh_remote_account,
+    remote_account_checkins_today, reorder_remote_accounts, update_remote_account,
 };
 pub(super) use route::{
     create_route, delete_route, list_route_channels, list_routes, reorder_route_channels,

@@ -4,6 +4,7 @@ use axum::response::IntoResponse;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
+use crate::events::{self, AppEvent, RemoteManagedChannelCreated};
 use super::newapi as newapi_handlers;
 use crate::newapi as newapi_client;
 use crate::server::AppState;
@@ -174,6 +175,105 @@ pub(in crate::server) struct UpdateRemoteAccountInput {
 pub(in crate::server) struct CreateRemoteKeyInput {
     name: String,
     group_id: Option<i64>,
+}
+
+#[derive(Debug, Deserialize)]
+pub(in crate::server) struct CreateRemoteManagedChannelInput {
+    name: String,
+    protocol: Option<storage::Protocol>,
+    group_name: String,
+    group_id: Option<i64>,
+    base_url_override: Option<String>,
+    priority: Option<i64>,
+    enabled: Option<bool>,
+}
+
+#[derive(Debug, Serialize)]
+pub(in crate::server) struct CreateRemoteManagedChannelResponse {
+    pub channel: storage::Channel,
+}
+
+#[derive(Debug, Deserialize, Default)]
+pub(in crate::server) struct DeleteRemoteAccountInput {
+    pub delete_managed_channels: Option<bool>,
+    pub sync_remote_delete: Option<bool>,
+}
+
+fn validate_managed_channel_name(name: &str) -> Result<String, ApiError> {
+    let name = name.trim();
+    if name.is_empty() {
+        return Err(ApiError::bad_request(
+            "remote_managed_name_required",
+            "name is required",
+        ));
+    }
+    Ok(name.to_string())
+}
+
+fn managed_channel_base_url_for_newapi(
+    account: &storage::NewApiAccount,
+    base_url_override: Option<String>,
+) -> String {
+    base_url_override
+        .or_else(|| account.api_url.clone())
+        .unwrap_or_else(|| account.base_url.clone())
+}
+
+fn managed_channel_base_url_for_sub2api(
+    account: &storage::RemoteAccount,
+    base_url_override: Option<String>,
+) -> String {
+    base_url_override
+        .or_else(|| account.api_url.clone())
+        .unwrap_or_else(|| format!("{}/v1", account.base_url.trim_end_matches('/')))
+}
+
+pub(super) async fn delete_remote_managed_channel_resources(
+    state: &AppState,
+    channel: &storage::Channel,
+) -> anyhow::Result<()> {
+    let Some(provider) = channel.managed_provider() else {
+        return Ok(());
+    };
+    let account_id = channel.managed_account_id().ok_or_else(|| {
+        anyhow::anyhow!("managed channel {} missing linked remote account id", channel.id)
+    })?;
+    match provider {
+        storage::ManagedRemoteProvider::Newapi => {
+            let account =
+                storage::get_newapi_account_with_secret(state.db_path(), account_id.to_string())
+                    .await?;
+            if let Some(remote_channel_id) = channel.newapi_channel_id {
+                newapi_client::delete_channel(&state.http_client, &account, remote_channel_id)
+                    .await?;
+            }
+            if let Some(remote_token_id) = channel
+                .managed_resource_id()
+                .as_deref()
+                .and_then(|value| value.parse::<i64>().ok())
+                .or(channel.newapi_token_id)
+            {
+                newapi_client::delete_token(&state.http_client, &account, remote_token_id).await?;
+            }
+        }
+        storage::ManagedRemoteProvider::Sub2Api => {
+            let account =
+                storage::get_remote_account_with_secret(state.db_path(), account_id.to_string())
+                    .await?;
+            let token = account
+                .access_token
+                .as_deref()
+                .filter(|value| !value.trim().is_empty())
+                .ok_or_else(|| anyhow::anyhow!("sub2api account missing access token"))?;
+            let key_id = channel
+                .managed_resource_id()
+                .as_deref()
+                .and_then(|value| value.parse::<i64>().ok())
+                .ok_or_else(|| anyhow::anyhow!("managed channel {} missing remote key id", channel.id))?;
+            sub2api_client::delete_key(&state.http_client, &account.base_url, token, key_id).await?;
+        }
+    }
+    Ok(())
 }
 
 fn detect_provider_from_base_url(raw: &str) -> Result<String, ApiError> {
@@ -946,11 +1046,13 @@ pub(in crate::server) async fn list_remote_account_groups(
                 .await?
                 .into_iter()
                 .filter(|channel| {
-                    channel.managed_by_newapi
-                        && channel.newapi_account_id.as_deref() == Some(account.id.as_str())
+                    channel.is_managed_by_account(
+                        storage::ManagedRemoteProvider::Newapi,
+                        account.id.as_str(),
+                    )
                 })
                 .fold(HashMap::<String, usize>::new(), |mut acc, channel| {
-                    if let Some(group) = channel.newapi_group.as_deref() {
+                    if let Some(group) = channel.managed_group_name() {
                         *acc.entry(group.to_string()).or_default() += 1;
                     }
                     acc
@@ -981,16 +1083,37 @@ pub(in crate::server) async fn list_remote_account_groups(
                 .map_err(|err| {
                     ApiError::bad_gateway("remote_groups_load_failed", err.to_string())
                 })?;
+            let channels = storage::list_channels(state.db_path()).await?;
+            let mut managed_counts_by_id = HashMap::<i64, usize>::new();
+            let mut managed_counts_by_name = HashMap::<String, usize>::new();
+            for channel in channels.into_iter().filter(|channel| {
+                channel.is_managed_by_account(
+                    storage::ManagedRemoteProvider::Sub2Api,
+                    account.id.as_str(),
+                )
+            }) {
+                if let Some(group_id) = channel.managed_group_id() {
+                    *managed_counts_by_id.entry(group_id).or_default() += 1;
+                } else if let Some(group_name) = channel.managed_group_name() {
+                    *managed_counts_by_name
+                        .entry(group_name.to_string())
+                        .or_default() += 1;
+                }
+            }
             Ok(Json(
                 groups
                     .into_iter()
                     .map(|item| RemoteGroupResponse {
                         id: Some(item.id),
+                        managed_channel_count: managed_counts_by_id
+                            .get(&item.id)
+                            .copied()
+                            .or_else(|| managed_counts_by_name.get(item.name.as_str()).copied())
+                            .unwrap_or(0),
                         name: item.name,
                         ratio: item.rate_multiplier,
                         description: item.description,
                         platform: item.platform,
-                        managed_channel_count: 0,
                     })
                     .collect::<Vec<_>>(),
             ))
@@ -1083,39 +1206,263 @@ pub(in crate::server) async fn create_remote_account_key(
     }
 }
 
+pub(in crate::server) async fn create_remote_managed_channel(
+    State(state): State<AppState>,
+    axum::extract::Path(account_id): axum::extract::Path<String>,
+    Json(input): Json<CreateRemoteManagedChannelInput>,
+) -> Result<impl IntoResponse, ApiError> {
+    let protocol = input
+        .protocol
+        .ok_or_else(|| ApiError::bad_request("remote_protocol_required", "protocol is required"))?;
+    let name = validate_managed_channel_name(&input.name)?;
+    let base_url_override = newapi_handlers::validate_optional_http_url(
+        input.base_url_override.as_deref(),
+        "remote_managed_base_url_invalid",
+    )?;
+    match resolve_remote_account_with_secret(&state, &account_id).await? {
+        ResolvedRemoteAccount::Newapi(account) => {
+            if !newapi_client::account_has_user_api_credentials(&account) {
+                return Err(ApiError::bad_request(
+                    "newapi_credentials_required",
+                    "user_id and user_token are required for this action",
+                ));
+            }
+            let group_name = input.group_name.trim().to_string();
+            if group_name.is_empty() {
+                return Err(ApiError::bad_request(
+                    "remote_group_required",
+                    "group_name is required",
+                ));
+            }
+            let remote = newapi_client::create_managed_channel(
+                &state.http_client,
+                &account,
+                &newapi_client::CreateManagedChannelRequest {
+                    name: name.clone(),
+                    group_name: group_name.clone(),
+                },
+            )
+            .await
+            .map_err(|err| {
+                ApiError::bad_gateway("remote_managed_channel_create_failed", err.to_string())
+            })?;
+            let create_local = storage::CreateChannel {
+                name,
+                protocol,
+                base_url: managed_channel_base_url_for_newapi(&account, base_url_override),
+                auth_type: Some("auto".to_string()),
+                auth_ref: remote.token_key.clone(),
+                checkin_url: None,
+                priority: input.priority.unwrap_or(0),
+                recharge_currency: Some(account.recharge_currency),
+                real_multiplier: Some(remote.group_ratio),
+                enabled: input.enabled.unwrap_or(true),
+                managed_by_remote: Some(true),
+                managed_remote_provider: Some(storage::ManagedRemoteProvider::Newapi),
+                managed_remote_account_id: Some(account_id.clone()),
+                managed_remote_resource_id: Some(remote.token_id.to_string()),
+                managed_remote_resource_name: Some(remote.token_name.clone()),
+                managed_remote_group_name: Some(remote.group_name.clone()),
+                managed_remote_group_id: None,
+                managed_by_newapi: Some(true),
+                newapi_account_id: Some(account_id.clone()),
+                newapi_channel_id: None,
+                newapi_token_id: Some(remote.token_id),
+                newapi_token_name: Some(remote.token_name.clone()),
+                newapi_group: Some(remote.group_name.clone()),
+            };
+            let channel = match storage::create_channel(state.db_path(), create_local).await {
+                Ok(channel) => channel,
+                Err(err) => {
+                    let _ = newapi_client::delete_token(&state.http_client, &account, remote.token_id)
+                        .await;
+                    return Err(ApiError::Internal(err));
+                }
+            };
+            state.channels_cache.send_modify(|cur| {
+                let mut next = (**cur).clone();
+                next.push(channel.clone());
+                next.sort_by(|a, b| {
+                    let rank = |p: storage::Protocol| match p {
+                        storage::Protocol::Openai => 0,
+                        storage::Protocol::Anthropic => 1,
+                        storage::Protocol::Gemini => 2,
+                    };
+                    rank(a.protocol)
+                        .cmp(&rank(b.protocol))
+                        .then_with(|| b.priority.cmp(&a.priority))
+                        .then_with(|| a.name.cmp(&b.name))
+                });
+                *cur = std::sync::Arc::new(next);
+            });
+            if state
+                .settings_snapshot()
+                .newapi_managed_channel_missing_prompt_enabled
+            {
+                events::publish(AppEvent::RemoteManagedChannelCreated(
+                    RemoteManagedChannelCreated {
+                        channel_id: channel.id.clone(),
+                        channel_name: channel.name.clone(),
+                        account_id: account.id.clone(),
+                        account_base_url: account.base_url.clone(),
+                        provider: storage::ManagedRemoteProvider::Newapi,
+                        group_name: channel.managed_group_name().map(ToOwned::to_owned),
+                        resource_name: channel.managed_resource_name().map(ToOwned::to_owned),
+                    },
+                ));
+            }
+            Ok((
+                axum::http::StatusCode::CREATED,
+                Json(CreateRemoteManagedChannelResponse { channel }),
+            ))
+        }
+        ResolvedRemoteAccount::Sub2Api(account) => {
+            let token = account
+                .access_token
+                .as_deref()
+                .filter(|value| !value.trim().is_empty())
+                .ok_or_else(|| {
+                    ApiError::bad_request("remote_credentials_required", "bearer_token is required")
+                })?;
+            let groups = sub2api_client::list_groups(&state.http_client, &account.base_url, token)
+                .await
+                .map_err(|err| {
+                    ApiError::bad_gateway("remote_groups_load_failed", err.to_string())
+                })?;
+            let requested_group_name = input.group_name.trim();
+            let selected_group = if let Some(group_id) = input.group_id {
+                groups
+                    .iter()
+                    .find(|item| item.id == group_id)
+                    .or_else(|| groups.iter().find(|item| item.name == requested_group_name))
+            } else {
+                groups.iter().find(|item| item.name == requested_group_name)
+            }
+            .ok_or_else(|| {
+                ApiError::bad_request("remote_group_not_found", "selected remote group was not found")
+            })?;
+            let created_key = sub2api_client::create_key(
+                &state.http_client,
+                &account.base_url,
+                token,
+                &sub2api_client::CreateSub2ApiKeyRequest {
+                    name: name.clone(),
+                    group_id: Some(selected_group.id),
+                },
+            )
+            .await
+            .map_err(|err| {
+                ApiError::bad_gateway("remote_managed_channel_create_failed", err.to_string())
+            })?;
+            let create_local = storage::CreateChannel {
+                name,
+                protocol,
+                base_url: managed_channel_base_url_for_sub2api(&account, base_url_override),
+                auth_type: Some("auto".to_string()),
+                auth_ref: created_key.key.clone(),
+                checkin_url: None,
+                priority: input.priority.unwrap_or(0),
+                recharge_currency: Some(account.recharge_currency),
+                real_multiplier: Some(selected_group.rate_multiplier.unwrap_or(1.0)),
+                enabled: input.enabled.unwrap_or(true),
+                managed_by_remote: Some(true),
+                managed_remote_provider: Some(storage::ManagedRemoteProvider::Sub2Api),
+                managed_remote_account_id: Some(account_id.clone()),
+                managed_remote_resource_id: Some(created_key.id.to_string()),
+                managed_remote_resource_name: Some(created_key.name.clone()),
+                managed_remote_group_name: Some(selected_group.name.clone()),
+                managed_remote_group_id: Some(selected_group.id),
+                managed_by_newapi: Some(false),
+                newapi_account_id: None,
+                newapi_channel_id: None,
+                newapi_token_id: None,
+                newapi_token_name: None,
+                newapi_group: None,
+            };
+            let channel = match storage::create_channel(state.db_path(), create_local).await {
+                Ok(channel) => channel,
+                Err(err) => {
+                    let _ = sub2api_client::delete_key(
+                        &state.http_client,
+                        &account.base_url,
+                        token,
+                        created_key.id,
+                    )
+                    .await;
+                    return Err(ApiError::Internal(err));
+                }
+            };
+            state.channels_cache.send_modify(|cur| {
+                let mut next = (**cur).clone();
+                next.push(channel.clone());
+                next.sort_by(|a, b| {
+                    let rank = |p: storage::Protocol| match p {
+                        storage::Protocol::Openai => 0,
+                        storage::Protocol::Anthropic => 1,
+                        storage::Protocol::Gemini => 2,
+                    };
+                    rank(a.protocol)
+                        .cmp(&rank(b.protocol))
+                        .then_with(|| b.priority.cmp(&a.priority))
+                        .then_with(|| a.name.cmp(&b.name))
+                });
+                *cur = std::sync::Arc::new(next);
+            });
+            if state
+                .settings_snapshot()
+                .newapi_managed_channel_missing_prompt_enabled
+            {
+                events::publish(AppEvent::RemoteManagedChannelCreated(
+                    RemoteManagedChannelCreated {
+                        channel_id: channel.id.clone(),
+                        channel_name: channel.name.clone(),
+                        account_id: account.id.clone(),
+                        account_base_url: account.base_url.clone(),
+                        provider: storage::ManagedRemoteProvider::Sub2Api,
+                        group_name: channel.managed_group_name().map(ToOwned::to_owned),
+                        resource_name: channel.managed_resource_name().map(ToOwned::to_owned),
+                    },
+                ));
+            }
+            Ok((
+                axum::http::StatusCode::CREATED,
+                Json(CreateRemoteManagedChannelResponse { channel }),
+            ))
+        }
+    }
+}
+
 pub(in crate::server) async fn delete_remote_account(
     State(state): State<AppState>,
     axum::extract::Path(account_id): axum::extract::Path<String>,
-    input: Option<Json<super::newapi::DeleteNewApiAccountInput>>,
+    input: Option<Json<DeleteRemoteAccountInput>>,
 ) -> Result<impl IntoResponse, ApiError> {
+    let input = input.map(|Json(input)| input).unwrap_or_default();
+    let delete_managed_channels = input.delete_managed_channels.unwrap_or(false);
+    let sync_remote_delete = input.sync_remote_delete.unwrap_or(false);
+    if sync_remote_delete && !delete_managed_channels {
+        return Err(ApiError::bad_request(
+            "remote_delete_remote_requires_channel_delete",
+            "sync_remote_delete requires delete_managed_channels=true",
+        ));
+    }
     match resolve_remote_account_with_secret(&state, &account_id).await? {
-        ResolvedRemoteAccount::Newapi(account) => {
-            let input = input.map(|Json(input)| input).unwrap_or_default();
-            let delete_managed_channels = input.delete_managed_channels.unwrap_or(false);
-            let sync_remote_delete = input.sync_remote_delete.unwrap_or(false);
-            if sync_remote_delete && !delete_managed_channels {
-                return Err(ApiError::bad_request(
-                    "newapi_delete_remote_requires_channel_delete",
-                    "sync_remote_delete requires delete_managed_channels=true",
-                ));
-            }
+        ResolvedRemoteAccount::Newapi(_account) => {
             if delete_managed_channels && sync_remote_delete {
                 let channels = storage::list_channels(state.db_path())
                     .await?
                     .into_iter()
                     .filter(|channel| {
-                        channel.managed_by_newapi
-                            && channel.newapi_account_id.as_deref() == Some(account_id.as_str())
+                        channel.is_managed_by_account(
+                            storage::ManagedRemoteProvider::Newapi,
+                            account_id.as_str(),
+                        )
                     })
                     .collect::<Vec<_>>();
                 let mut deleted_channel_ids = Vec::new();
                 let mut failures = Vec::new();
                 for channel in &channels {
-                    match super::newapi::delete_remote_managed_channel_resources(
-                        &state, &account, channel,
-                    )
-                    .await
-                    {
+                    match delete_remote_managed_channel_resources(&state, channel).await {
                         Ok(()) => deleted_channel_ids.push(channel.id.clone()),
                         Err(err) => {
                             failures.push(format!("{} ({}): {err}", channel.name, channel.id))
@@ -1135,7 +1482,7 @@ pub(in crate::server) async fn delete_remote_account(
                 }
                 if !failures.is_empty() {
                     return Err(ApiError::bad_gateway(
-                        "newapi_remote_delete_partial_failed",
+                        "remote_delete_partial_failed",
                         format!(
                             "Remote delete failed for some managed channels; account was kept. {}",
                             failures.join(" ; ")
@@ -1164,14 +1511,11 @@ pub(in crate::server) async fn delete_remote_account(
                         state.channels_cache.send_modify(|cur| {
                             let mut next = (**cur).clone();
                             for channel in &mut next {
-                                if channel.newapi_account_id.as_deref() == Some(account_id.as_str())
-                                {
-                                    channel.managed_by_newapi = false;
-                                    channel.newapi_account_id = None;
-                                    channel.newapi_channel_id = None;
-                                    channel.newapi_token_id = None;
-                                    channel.newapi_token_name = None;
-                                    channel.newapi_group = None;
+                                if channel.is_managed_by_account(
+                                    storage::ManagedRemoteProvider::Newapi,
+                                    account_id.as_str(),
+                                ) {
+                                    channel.clear_managed_remote_link();
                                 }
                             }
                             *cur = std::sync::Arc::new(next);
@@ -1188,18 +1532,104 @@ pub(in crate::server) async fn delete_remote_account(
                 }),
             }
         }
-        ResolvedRemoteAccount::Sub2Api(_) => {
-            let res = storage::delete_remote_account(state.db_path(), account_id).await;
-            map_storage_unit_no_content_err(res, |e| {
-                matches!(
-                    e.downcast_ref::<storage::StorageError>(),
-                    Some(storage::StorageError::RemoteAccountNotFound { .. })
+        ResolvedRemoteAccount::Sub2Api(account) => {
+            let linked_channel_ids = storage::list_channel_ids_by_managed_account(
+                state.db_path(),
+                storage::ManagedRemoteProvider::Sub2Api,
+                account_id.clone(),
+            )
+            .await?;
+            if delete_managed_channels && sync_remote_delete {
+                let channels = storage::list_channels(state.db_path())
+                    .await?
+                    .into_iter()
+                    .filter(|channel| {
+                        channel.is_managed_by_account(
+                            storage::ManagedRemoteProvider::Sub2Api,
+                            account_id.as_str(),
+                        )
+                    })
+                    .collect::<Vec<_>>();
+                let mut deleted_channel_ids = Vec::new();
+                let mut failures = Vec::new();
+                for channel in &channels {
+                    match delete_remote_managed_channel_resources(&state, channel).await {
+                        Ok(()) => deleted_channel_ids.push(channel.id.clone()),
+                        Err(err) => {
+                            failures.push(format!("{} ({}): {err}", channel.name, channel.id))
+                        }
+                    }
+                }
+                if !deleted_channel_ids.is_empty() && !failures.is_empty() {
+                    for channel_id in &deleted_channel_ids {
+                        storage::delete_channel(state.db_path(), channel_id.clone()).await?;
+                    }
+                    state.channels_cache.send_modify(|cur| {
+                        let deleted = deleted_channel_ids.clone();
+                        let mut next = (**cur).clone();
+                        next.retain(|channel| !deleted.contains(&channel.id));
+                        *cur = std::sync::Arc::new(next);
+                    });
+                }
+                if !failures.is_empty() {
+                    return Err(ApiError::bad_gateway(
+                        "remote_delete_partial_failed",
+                        format!(
+                            "Remote delete failed for some managed channels; account was kept. {}",
+                            failures.join(" ; ")
+                        ),
+                    ));
+                }
+            }
+
+            let result = if delete_managed_channels {
+                for channel_id in &linked_channel_ids {
+                    storage::delete_channel(state.db_path(), channel_id.clone()).await?;
+                }
+                storage::delete_remote_account(state.db_path(), account_id.clone()).await?;
+                storage::DeleteNewApiAccountResult {
+                    deleted_managed_channel_ids: linked_channel_ids.clone(),
+                    detached_channel_ids: Vec::new(),
+                }
+            } else {
+                let detached_channel_ids = storage::detach_channels_from_managed_account(
+                    state.db_path(),
+                    storage::ManagedRemoteProvider::Sub2Api,
+                    account_id.clone(),
                 )
-                .then(|| {
-                    ApiError::not_found("remote_account_not_found", "Remote account not found")
-                })
-            })
-            .map(IntoResponse::into_response)
+                .await?;
+                storage::delete_remote_account(state.db_path(), account_id.clone()).await?;
+                storage::DeleteNewApiAccountResult {
+                    deleted_managed_channel_ids: Vec::new(),
+                    detached_channel_ids,
+                }
+            };
+            if delete_managed_channels {
+                let deleted = result.deleted_managed_channel_ids.clone();
+                state.channels_cache.send_modify(|cur| {
+                    let deleted = deleted.clone();
+                    let mut next = (**cur).clone();
+                    next.retain(|channel| !deleted.contains(&channel.id));
+                    *cur = std::sync::Arc::new(next);
+                });
+            } else {
+                let account_id = account_id.clone();
+                state.channels_cache.send_modify(|cur| {
+                    let mut next = (**cur).clone();
+                    for channel in &mut next {
+                        if channel.is_managed_by_account(
+                            storage::ManagedRemoteProvider::Sub2Api,
+                            account_id.as_str(),
+                        ) {
+                            channel.clear_managed_remote_link();
+                        }
+                    }
+                    *cur = std::sync::Arc::new(next);
+                });
+            }
+            newapi_handlers::notify_background_tasks(&state);
+            let _ = account;
+            Ok(Json(result).into_response())
         }
     }
 }

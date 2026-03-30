@@ -228,6 +228,13 @@ export type Channel = {
   real_multiplier: number;
   enabled: boolean;
   auto_disabled_until_ms: number;
+  managed_by_remote: boolean;
+  managed_remote_provider?: "newapi" | "sub2api" | null;
+  managed_remote_account_id?: string | null;
+  managed_remote_resource_id?: string | null;
+  managed_remote_resource_name?: string | null;
+  managed_remote_group_name?: string | null;
+  managed_remote_group_id?: number | null;
   managed_by_newapi: boolean;
   newapi_account_id?: string | null;
   newapi_channel_id?: number | null;
@@ -464,17 +471,21 @@ export type NewApiGroupOption = {
 };
 
 export type NewApiManagedChannelMissingPrompt = {
+  provider: RemoteAccountProvider;
   channel_id: string;
   channel_name: string;
   account_id: string;
   account_base_url: string;
   group_name: string | null;
-  token_name: string | null;
+  resource_name: string | null;
   missing_group: boolean;
-  missing_token: boolean;
+  missing_resource: boolean;
 };
 
+export type RemoteManagedChannelMissingPrompt = NewApiManagedChannelMissingPrompt;
+
 export type NewApiManagedChannelMultiplierPrompt = {
+  provider: RemoteAccountProvider;
   channel_id: string;
   channel_name: string;
   account_id: string;
@@ -484,16 +495,23 @@ export type NewApiManagedChannelMultiplierPrompt = {
   remote_multiplier: number;
 };
 
+export type RemoteManagedChannelMultiplierPrompt = NewApiManagedChannelMultiplierPrompt;
+
 export type CreateNewApiManagedChannelInput = {
   name: string;
   protocol: Protocol;
   group_name: string;
+  group_id?: number | null;
   base_url_override?: string | null;
 };
 
 export type CreateNewApiManagedChannelResponse = {
   channel: Channel;
 };
+
+export type CreateRemoteManagedChannelInput = CreateNewApiManagedChannelInput;
+
+export type CreateRemoteManagedChannelResponse = CreateNewApiManagedChannelResponse;
 
 export type DeleteNewApiAccountResponse = {
   deleted_managed_channel_ids: string[];
@@ -1043,6 +1061,17 @@ export function createNewApiManagedChannel(
   return http<CreateNewApiManagedChannelResponse>(
     "POST",
     `/api/newapi/accounts/${encodeURIComponent(accountId)}/managed_channel`,
+    input
+  );
+}
+
+export function createRemoteManagedChannel(
+  accountId: string,
+  input: CreateRemoteManagedChannelInput
+): Promise<CreateRemoteManagedChannelResponse> {
+  return http<CreateRemoteManagedChannelResponse>(
+    "POST",
+    `/api/remote/accounts/${encodeURIComponent(accountId)}/managed_channel`,
     input
   );
 }

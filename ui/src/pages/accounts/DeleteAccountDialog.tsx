@@ -13,7 +13,7 @@ import {
 } from "@/components/ui";
 import { useI18n } from "@/lib/i18n";
 
-import { isNewApiAccount, resolveAccountDisplayName } from "./shared";
+import { resolveAccountDisplayName } from "./shared";
 
 type DeleteAccountDialogProps = {
   open: boolean;
@@ -39,7 +39,7 @@ export function DeleteAccountDialog({
   onConfirmDelete,
 }: DeleteAccountDialogProps) {
   const { t } = useI18n();
-  const canDeleteManaged = target ? isNewApiAccount(target) : false;
+  const canDeleteManaged = !!target;
   const targetName = target ? resolveAccountDisplayName(target) : "";
 
   return (

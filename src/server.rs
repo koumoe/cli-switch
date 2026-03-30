@@ -69,6 +69,9 @@ fn request_endpoint_template(method: &Method, path: &str) -> Option<&'static str
         ("GET", "/api/remote/accounts/checkins/today") => {
             Some("/api/remote/accounts/checkins/today")
         }
+        ("POST", "/api/remote/accounts/{id}/managed_channel") => {
+            Some("/api/remote/accounts/{id}/managed_channel")
+        }
         ("GET", "/api/newapi/accounts") => Some("/api/newapi/accounts"),
         ("POST", "/api/newapi/accounts") => Some("/api/newapi/accounts"),
         ("POST", "/api/newapi/accounts/reorder") => Some("/api/newapi/accounts/reorder"),
@@ -116,6 +119,9 @@ fn request_endpoint_template(method: &Method, path: &str) -> Option<&'static str
                 }
                 ["api", "remote", "accounts", _, "keys"] if method == Method::POST => {
                     Some("/api/remote/accounts/{id}/keys")
+                }
+                ["api", "remote", "accounts", _, "managed_channel"] if method == Method::POST => {
+                    Some("/api/remote/accounts/{id}/managed_channel")
                 }
                 ["api", "remote", "accounts", _, "checkins", "complete"]
                     if method == Method::POST =>
@@ -208,6 +214,9 @@ fn request_purpose(method: &Method, path: &str) -> &'static str {
         ("POST", "/api/remote/accounts/detect") => "handlers::detect_remote_account",
         ("POST", "/api/remote/accounts/reorder") => "handlers::reorder_remote_accounts",
         ("GET", "/api/remote/accounts/checkins/today") => "handlers::remote_account_checkins_today",
+        ("POST", "/api/remote/accounts/{id}/managed_channel") => {
+            "handlers::create_remote_managed_channel"
+        }
         ("GET", "/api/newapi/accounts") => "handlers::list_newapi_accounts",
         ("POST", "/api/newapi/accounts") => "handlers::create_newapi_account",
         ("POST", "/api/newapi/accounts/reorder") => "handlers::reorder_newapi_accounts",
@@ -453,6 +462,10 @@ fn build_app(state: AppState) -> Router {
             post(handlers::create_remote_account_key),
         )
         .route(
+            "/api/remote/accounts/{id}/managed_channel",
+            post(handlers::create_remote_managed_channel),
+        )
+        .route(
             "/api/remote/accounts/{id}/checkins/complete",
             post(handlers::complete_remote_account_checkin_today),
         )
@@ -670,7 +683,7 @@ pub async fn serve_with_listener(
         settings_rx5,
     ));
 
-    bg.spawn(tasks::newapi_accounts_maintenance_loop(
+    bg.spawn(tasks::remote_accounts_maintenance_loop(
         (*db_path).clone(),
         http_client.clone(),
         settings_rx6,

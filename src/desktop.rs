@@ -64,9 +64,9 @@ struct DesktopState {
     locale: AppLocale,
     system_notifications: cliswitch::events::SystemNotificationSettings,
     ui_ready: bool,
-    pending_managed_channel_missing: Vec<cliswitch::events::NewApiManagedChannelMissingPrompt>,
+    pending_managed_channel_missing: Vec<cliswitch::events::RemoteManagedChannelMissingPrompt>,
     pending_managed_channel_multiplier:
-        Vec<cliswitch::events::NewApiManagedChannelMultiplierPrompt>,
+        Vec<cliswitch::events::RemoteManagedChannelMultiplierPrompt>,
 }
 
 fn dispatch_custom_event<T: Serialize>(webview: &wry::WebView, name: &str, detail: &T) {
@@ -166,10 +166,10 @@ fn low_balance_notification_title(locale: AppLocale) -> String {
 
 fn low_balance_notification_body(
     locale: AppLocale,
-    alert: &cliswitch::events::NewApiLowBalanceAlert,
+    alert: &cliswitch::events::RemoteLowBalanceAlert,
 ) -> String {
     let args = desktop_args([
-        ("base_url", alert.base_url.clone()),
+        ("base_url", alert.account_base_url.clone()),
         ("balance", alert.balance_text.clone()),
     ]);
     desktop_text_args(
@@ -177,8 +177,12 @@ fn low_balance_notification_body(
         "desktop.notifications.lowBalance.body",
         &args,
         match locale {
-            AppLocale::ZhCN => format!("{} 余额 {}", alert.base_url, alert.balance_text),
-            AppLocale::EnUS => format!("{} balance {}", alert.base_url, alert.balance_text),
+            AppLocale::ZhCN => {
+                format!("{} 余额 {}", alert.account_base_url, alert.balance_text)
+            }
+            AppLocale::EnUS => {
+                format!("{} balance {}", alert.account_base_url, alert.balance_text)
+            }
         },
     )
 }
@@ -194,24 +198,37 @@ fn managed_channel_notification_title(locale: AppLocale) -> String {
     )
 }
 
+fn managed_resource_label(
+    locale: AppLocale,
+    provider: storage::ManagedRemoteProvider,
+) -> &'static str {
+    match (locale, provider) {
+        (AppLocale::ZhCN, storage::ManagedRemoteProvider::Newapi) => "token",
+        (AppLocale::ZhCN, storage::ManagedRemoteProvider::Sub2Api) => "key",
+        (AppLocale::EnUS, storage::ManagedRemoteProvider::Newapi) => "token",
+        (AppLocale::EnUS, storage::ManagedRemoteProvider::Sub2Api) => "key",
+    }
+}
+
 fn managed_channel_missing_body(
     locale: AppLocale,
-    event: &cliswitch::events::NewApiManagedChannelMissingPrompt,
+    event: &cliswitch::events::RemoteManagedChannelMissingPrompt,
 ) -> String {
     let args = desktop_args([("channel", event.channel_name.clone())]);
-    if event.missing_group && event.missing_token {
+    let resource_label = managed_resource_label(locale, event.provider);
+    if event.missing_group && event.missing_resource {
         return desktop_text_args(
             locale,
             "desktop.notifications.managedChannel.tokenAndGroupMissingBody",
             &args,
             match locale {
                 AppLocale::ZhCN => format!(
-                    "检测到渠道 {} 对应的远端 token 和分组均未在列表中找到，请选择禁用或删除",
-                    event.channel_name
+                    "检测到渠道 {} 对应的远端 {} 和分组均未在列表中找到，请选择禁用或删除",
+                    event.channel_name, resource_label
                 ),
                 AppLocale::EnUS => format!(
-                    "Remote token and group for channel {} were not found in the latest list. Disable or delete the local channel.",
-                    event.channel_name
+                    "Remote {} and group for channel {} were not found in the latest list. Disable or delete the local channel.",
+                    resource_label, event.channel_name
                 ),
             },
         );
@@ -239,12 +256,12 @@ fn managed_channel_missing_body(
         &args,
         match locale {
             AppLocale::ZhCN => format!(
-                "检测到渠道 {} 对应的远端 token 未在列表中找到，请选择禁用或删除",
-                event.channel_name
+                "检测到渠道 {} 对应的远端 {} 未在列表中找到，请选择禁用或删除",
+                event.channel_name, resource_label
             ),
             AppLocale::EnUS => format!(
-                "Remote token for channel {} was not found in the latest list. Disable or delete the local channel.",
-                event.channel_name
+                "Remote {} for channel {} was not found in the latest list. Disable or delete the local channel.",
+                resource_label, event.channel_name
             ),
         },
     )
@@ -252,7 +269,7 @@ fn managed_channel_missing_body(
 
 fn managed_channel_multiplier_body(
     locale: AppLocale,
-    event: &cliswitch::events::NewApiManagedChannelMultiplierPrompt,
+    event: &cliswitch::events::RemoteManagedChannelMultiplierPrompt,
 ) -> String {
     let args = desktop_args([
         ("channel", event.channel_name.clone()),
@@ -283,8 +300,8 @@ fn managed_channel_multiplier_body(
 }
 
 fn upsert_pending_missing_prompt(
-    queue: &mut Vec<cliswitch::events::NewApiManagedChannelMissingPrompt>,
-    prompt: &cliswitch::events::NewApiManagedChannelMissingPrompt,
+    queue: &mut Vec<cliswitch::events::RemoteManagedChannelMissingPrompt>,
+    prompt: &cliswitch::events::RemoteManagedChannelMissingPrompt,
 ) {
     if let Some(existing) = queue
         .iter_mut()
@@ -297,8 +314,8 @@ fn upsert_pending_missing_prompt(
 }
 
 fn upsert_pending_multiplier_prompt(
-    queue: &mut Vec<cliswitch::events::NewApiManagedChannelMultiplierPrompt>,
-    prompt: &cliswitch::events::NewApiManagedChannelMultiplierPrompt,
+    queue: &mut Vec<cliswitch::events::RemoteManagedChannelMultiplierPrompt>,
+    prompt: &cliswitch::events::RemoteManagedChannelMultiplierPrompt,
 ) {
     if let Some(existing) = queue
         .iter_mut()
@@ -644,14 +661,14 @@ fn handle_user_event(
                     for prompt in std::mem::take(&mut state.pending_managed_channel_missing) {
                         dispatch_custom_event(
                             webview,
-                            "cliswitch-newapi-managed-channel-missing",
+                            "cliswitch-remote-managed-channel-missing",
                             &prompt,
                         );
                     }
                     for prompt in std::mem::take(&mut state.pending_managed_channel_multiplier) {
                         dispatch_custom_event(
                             webview,
-                            "cliswitch-newapi-managed-channel-multiplier",
+                            "cliswitch-remote-managed-channel-multiplier",
                             &prompt,
                         );
                     }
@@ -662,9 +679,9 @@ fn handle_user_event(
             if let AppEvent::SystemNotificationSettingsChanged(ref next) = ev {
                 state.system_notifications = next.clone();
             }
-            if let AppEvent::NewApiLowBalanceAlert(ref alert) = ev {
+            if let AppEvent::RemoteLowBalanceAlert(ref alert) = ev {
                 if state.system_notifications.enabled
-                    && state.system_notifications.newapi_low_balance_enabled
+                    && state.system_notifications.remote_low_balance_enabled
                 {
                     let title = low_balance_notification_title(state.locale);
                     let body = low_balance_notification_body(state.locale, alert);
@@ -673,11 +690,11 @@ fn handle_user_event(
                     }
                 }
             }
-            if let AppEvent::NewApiManagedChannelMissingPrompt(ref prompt) = ev {
+            if let AppEvent::RemoteManagedChannelMissingPrompt(ref prompt) = ev {
                 if state.system_notifications.enabled
                     && state
                         .system_notifications
-                        .newapi_managed_channel_missing_enabled
+                        .remote_managed_channel_missing_enabled
                 {
                     let title = managed_channel_notification_title(state.locale);
                     let body = managed_channel_missing_body(state.locale, prompt);
@@ -687,11 +704,11 @@ fn handle_user_event(
                 }
                 apply_window_visible(window, state, tray_show, tray_hide, true, true);
             }
-            if let AppEvent::NewApiManagedChannelMultiplierPrompt(ref prompt) = ev {
+            if let AppEvent::RemoteManagedChannelMultiplierPrompt(ref prompt) = ev {
                 if state.system_notifications.enabled
                     && state
                         .system_notifications
-                        .newapi_managed_channel_multiplier_enabled
+                        .remote_managed_channel_multiplier_enabled
                 {
                     let title = managed_channel_notification_title(state.locale);
                     let body = managed_channel_multiplier_body(state.locale, prompt);
@@ -703,13 +720,13 @@ fn handle_user_event(
 
             if !state.ui_ready {
                 match ev {
-                    AppEvent::NewApiManagedChannelMissingPrompt(ref prompt) => {
+                    AppEvent::RemoteManagedChannelMissingPrompt(ref prompt) => {
                         upsert_pending_missing_prompt(
                             &mut state.pending_managed_channel_missing,
                             prompt,
                         );
                     }
-                    AppEvent::NewApiManagedChannelMultiplierPrompt(ref prompt) => {
+                    AppEvent::RemoteManagedChannelMultiplierPrompt(ref prompt) => {
                         upsert_pending_multiplier_prompt(
                             &mut state.pending_managed_channel_multiplier,
                             prompt,
@@ -741,21 +758,21 @@ fn handle_user_event(
                     dispatch_custom_event(webview, "cliswitch-npm-env-install-progress", &progress);
                 }
                 AppEvent::SystemNotificationSettingsChanged(_) => {}
-                AppEvent::NewApiLowBalanceAlert(alert) => {
-                    dispatch_custom_event(webview, "cliswitch-newapi-low-balance-alert", &alert);
+                AppEvent::RemoteLowBalanceAlert(alert) => {
+                    dispatch_custom_event(webview, "cliswitch-remote-low-balance-alert", &alert);
                 }
-                AppEvent::NewApiManagedChannelCreated(_) => {}
-                AppEvent::NewApiManagedChannelMissingPrompt(prompt) => {
+                AppEvent::RemoteManagedChannelCreated(_) => {}
+                AppEvent::RemoteManagedChannelMissingPrompt(prompt) => {
                     dispatch_custom_event(
                         webview,
-                        "cliswitch-newapi-managed-channel-missing",
+                        "cliswitch-remote-managed-channel-missing",
                         &prompt,
                     );
                 }
-                AppEvent::NewApiManagedChannelMultiplierPrompt(prompt) => {
+                AppEvent::RemoteManagedChannelMultiplierPrompt(prompt) => {
                     dispatch_custom_event(
                         webview,
-                        "cliswitch-newapi-managed-channel-multiplier",
+                        "cliswitch-remote-managed-channel-multiplier",
                         &prompt,
                     );
                 }

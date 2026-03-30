@@ -4,7 +4,7 @@ use axum::extract::State;
 use axum::response::IntoResponse;
 use serde::{Deserialize, Serialize};
 
-use crate::events::{self, AppEvent, NewApiManagedChannelCreated};
+use crate::events::{self, AppEvent, RemoteManagedChannelCreated};
 use crate::newapi as newapi_client;
 use crate::server::AppState;
 use crate::server::error::{ApiError, map_storage_unit_no_content_err};
@@ -514,13 +514,12 @@ pub(in crate::server) async fn list_newapi_account_groups(
         .await?
         .into_iter()
         .filter(|channel| {
-            channel.managed_by_newapi
-                && channel.newapi_account_id.as_deref() == Some(account.id.as_str())
+            channel.is_managed_by_account(storage::ManagedRemoteProvider::Newapi, account.id.as_str())
         })
         .fold(
             std::collections::HashMap::<String, usize>::new(),
             |mut acc, channel| {
-                if let Some(group) = channel.newapi_group.as_deref() {
+                if let Some(group) = channel.managed_group_name() {
                     *acc.entry(group.to_string()).or_default() += 1;
                 }
                 acc
@@ -675,6 +674,13 @@ pub(in crate::server) async fn create_newapi_managed_channel(
         recharge_currency: Some(managed_channel_recharge_currency(&account)),
         real_multiplier: Some(remote.group_ratio),
         enabled: input.enabled.unwrap_or(true),
+        managed_by_remote: Some(true),
+        managed_remote_provider: Some(storage::ManagedRemoteProvider::Newapi),
+        managed_remote_account_id: Some(account_id.clone()),
+        managed_remote_resource_id: Some(remote.token_id.to_string()),
+        managed_remote_resource_name: Some(remote.token_name.clone()),
+        managed_remote_group_name: Some(remote.group_name.clone()),
+        managed_remote_group_id: None,
         managed_by_newapi: Some(true),
         newapi_account_id: Some(account_id),
         newapi_channel_id: None,
@@ -712,14 +718,15 @@ pub(in crate::server) async fn create_newapi_managed_channel(
         .settings_snapshot()
         .newapi_managed_channel_missing_prompt_enabled
     {
-        events::publish(AppEvent::NewApiManagedChannelCreated(
-            NewApiManagedChannelCreated {
+        events::publish(AppEvent::RemoteManagedChannelCreated(
+            RemoteManagedChannelCreated {
                 channel_id: channel.id.clone(),
                 channel_name: channel.name.clone(),
                 account_id: account.id.clone(),
                 account_base_url: account.base_url.clone(),
-                group_name: channel.newapi_group.clone(),
-                token_name: channel.newapi_token_name.clone(),
+                provider: storage::ManagedRemoteProvider::Newapi,
+                group_name: channel.managed_group_name().map(str::to_string),
+                resource_name: channel.managed_resource_name().map(str::to_string),
             },
         ));
     }
@@ -752,8 +759,7 @@ pub(in crate::server) async fn delete_newapi_account(
             .await?
             .into_iter()
             .filter(|channel| {
-                channel.managed_by_newapi
-                    && channel.newapi_account_id.as_deref() == Some(account_id.as_str())
+                channel.is_managed_by_account(storage::ManagedRemoteProvider::Newapi, account_id.as_str())
             })
             .collect::<Vec<_>>();
         let mut deleted_channel_ids = Vec::new();
@@ -807,13 +813,11 @@ pub(in crate::server) async fn delete_newapi_account(
                 state.channels_cache.send_modify(|cur| {
                     let mut next = (**cur).clone();
                     for channel in &mut next {
-                        if channel.newapi_account_id.as_deref() == Some(account_id.as_str()) {
-                            channel.managed_by_newapi = false;
-                            channel.newapi_account_id = None;
-                            channel.newapi_channel_id = None;
-                            channel.newapi_token_id = None;
-                            channel.newapi_token_name = None;
-                            channel.newapi_group = None;
+                        if channel.is_managed_by_account(
+                            storage::ManagedRemoteProvider::Newapi,
+                            account_id.as_str(),
+                        ) {
+                            channel.clear_managed_remote_link();
                         }
                     }
                     *cur = std::sync::Arc::new(next);

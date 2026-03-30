@@ -78,10 +78,10 @@ export function defaultManagedName(account: RemoteAccount, protocol: Protocol | 
   return `${userId}-${protocol}`;
 }
 
-export function defaultManagedDraft(account: NewapiRemoteAccount): ManagedChannelDraft {
+export function defaultManagedDraft(account: RemoteAccount): ManagedChannelDraft {
   return {
     name: defaultManagedName(account, null),
-    group_name: account.remote_group ?? "",
+    group_name: account.provider === "newapi" ? (account.remote_group ?? "") : "",
     protocol: null,
     base_url_override: "",
   };

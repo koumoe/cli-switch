@@ -23,10 +23,11 @@ mod usage;
 pub use error::StorageError;
 
 pub use channel::{
-    Channel, CreateChannel, RechargeCurrency, UpdateChannel, channel_is_auto_disabled,
-    clear_channel_failures, create_channel, delete_channel, get_channel, list_channels,
-    record_channel_failure_and_maybe_disable, reorder_channels, set_channel_enabled,
-    update_channel,
+    Channel, CreateChannel, ManagedRemoteProvider, RechargeCurrency, UpdateChannel,
+    channel_is_auto_disabled, clear_channel_failures, create_channel, delete_channel,
+    detach_channels_from_managed_account, get_channel, list_channel_ids_by_managed_account,
+    list_channels, record_channel_failure_and_maybe_disable, reorder_channels,
+    set_channel_enabled, update_channel,
 };
 pub use chat_bridge::{
     BridgeKnownProject, BridgePermissionMode, BridgeSession, BridgeSessionStatus,
@@ -103,6 +104,7 @@ fn open_conn(db_path: &Path) -> anyhow::Result<Connection> {
 }
 
 fn ensure_schema_upgrades(conn: &Connection) -> anyhow::Result<()> {
+    channel::ensure_channel_schema(conn)?;
     chat_bridge::ensure_chat_bridge_schema(conn)?;
     newapi::ensure_newapi_schema(conn)?;
     remote_account::ensure_remote_account_schema(conn)?;

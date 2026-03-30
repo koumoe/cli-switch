@@ -1053,6 +1053,7 @@ pub async fn list_channels_by_newapi_account(
             SELECT id
             FROM channels
             WHERE newapi_account_id = ?1
+               OR (managed_by_remote = 1 AND managed_remote_provider = 'newapi' AND managed_remote_account_id = ?1)
             ORDER BY created_at_ms ASC
             "#,
         )?;
@@ -1073,6 +1074,7 @@ pub async fn detach_channels_from_newapi_account(
             SELECT id
             FROM channels
             WHERE newapi_account_id = ?1
+               OR (managed_by_remote = 1 AND managed_remote_provider = 'newapi' AND managed_remote_account_id = ?1)
             ORDER BY created_at_ms ASC
             "#,
         )?;
@@ -1081,7 +1083,14 @@ pub async fn detach_channels_from_newapi_account(
         conn.execute(
             r#"
             UPDATE channels
-            SET managed_by_newapi = 0,
+            SET managed_by_remote = 0,
+                managed_remote_provider = NULL,
+                managed_remote_account_id = NULL,
+                managed_remote_resource_id = NULL,
+                managed_remote_resource_name = NULL,
+                managed_remote_group_name = NULL,
+                managed_remote_group_id = NULL,
+                managed_by_newapi = 0,
                 newapi_account_id = NULL,
                 newapi_channel_id = NULL,
                 newapi_token_id = NULL,
@@ -1089,6 +1098,7 @@ pub async fn detach_channels_from_newapi_account(
                 newapi_group = NULL,
                 updated_at_ms = ?2
             WHERE newapi_account_id = ?1
+               OR (managed_by_remote = 1 AND managed_remote_provider = 'newapi' AND managed_remote_account_id = ?1)
             "#,
             params![account_id, now_ms()],
         )?;
@@ -1122,6 +1132,7 @@ pub async fn delete_newapi_account(
             SELECT id
             FROM channels
             WHERE newapi_account_id = ?1
+               OR (managed_by_remote = 1 AND managed_remote_provider = 'newapi' AND managed_remote_account_id = ?1)
             ORDER BY created_at_ms ASC
             "#,
         )?;
@@ -1145,7 +1156,14 @@ pub async fn delete_newapi_account(
             tx.execute(
                 r#"
                 UPDATE channels
-                SET managed_by_newapi = 0,
+                SET managed_by_remote = 0,
+                    managed_remote_provider = NULL,
+                    managed_remote_account_id = NULL,
+                    managed_remote_resource_id = NULL,
+                    managed_remote_resource_name = NULL,
+                    managed_remote_group_name = NULL,
+                    managed_remote_group_id = NULL,
+                    managed_by_newapi = 0,
                     newapi_account_id = NULL,
                     newapi_channel_id = NULL,
                     newapi_token_id = NULL,
@@ -1153,6 +1171,7 @@ pub async fn delete_newapi_account(
                     newapi_group = NULL,
                     updated_at_ms = ?2
                 WHERE newapi_account_id = ?1
+                   OR (managed_by_remote = 1 AND managed_remote_provider = 'newapi' AND managed_remote_account_id = ?1)
                 "#,
                 params![account_id.clone(), now_ms()],
             )?;
