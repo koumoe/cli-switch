@@ -250,6 +250,7 @@
     },
     "table": {
       "baseUrl": "Base URL",
+      "provider": "账号体系",
       "balance": "余额",
       "checkin": "签到",
       "empty": "暂无账号，点击「新增账号」添加"

@@ -19,7 +19,6 @@ import { useI18n } from "@/lib/i18n";
 import {
   accountHasUserApiCredentials,
   formatAmount,
-  isNewApiAccount,
   moveInList,
   moveToEndList,
   resolveCheckinMode,
@@ -126,6 +125,7 @@ export function AccountsTable({
             <TableRow>
               <TableHead className="w-10"></TableHead>
               <TableHead>{t("accounts.table.baseUrl")}</TableHead>
+              <TableHead className="w-28">{t("accounts.table.provider")}</TableHead>
               <TableHead>{t("accounts.table.balance")}</TableHead>
               <TableHead>{t("accounts.table.checkin")}</TableHead>
               <TableHead className="text-center">{t("common.actions")}</TableHead>
@@ -152,7 +152,7 @@ export function AccountsTable({
           >
             {accounts.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
                   {t("accounts.table.empty")}
                 </TableCell>
               </TableRow>
@@ -168,7 +168,6 @@ export function AccountsTable({
                 const canTriggerCheckin = logicalCheckinMode !== "disabled" && !done;
                 const checkinBusy = !!systemChecking[item.id] || !!pageOpening[item.id];
                 const canManageRemote = accountHasUserApiCredentials(item);
-                const newapi = isNewApiAccount(item);
 
                 return (
                   <TableRow
@@ -224,15 +223,15 @@ export function AccountsTable({
                       </button>
                     </TableCell>
                     <TableCell className="max-w-[360px]">
-                      <div className="space-y-1 text-center">
-                        <div className="truncate font-medium" title={item.base_url}>
-                          {item.base_url}
-                        </div>
-                        <div className="flex items-center justify-center text-xs text-muted-foreground">
-                          <Badge variant={newapi ? "secondary" : "outline"}>
-                            {t(`accounts.providers.${item.provider}`)}
-                          </Badge>
-                        </div>
+                      <div className="truncate font-medium" title={item.base_url}>
+                        {item.base_url}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center justify-center">
+                        <Badge variant={item.provider === "newapi" ? "secondary" : "outline"}>
+                          {t(`accounts.providers.${item.provider}`)}
+                        </Badge>
                       </div>
                     </TableCell>
                     <TableCell>

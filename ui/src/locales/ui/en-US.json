@@ -250,6 +250,7 @@
     },
     "table": {
       "baseUrl": "Base URL",
+      "provider": "Provider",
       "balance": "Balance",
       "checkin": "Check-in",
       "empty": "No accounts yet. Click 'New Account' to add one."
