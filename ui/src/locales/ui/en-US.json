@@ -274,7 +274,6 @@
       "systemCheckin": "System check-in",
       "manualCheckin": "Manual check-in",
       "createManaged": "Create key and channel",
-      "createKey": "Create key",
       "edit": "Edit account",
       "delete": "Delete account"
     },
@@ -338,19 +337,6 @@
       "baseUrlOverrideHint": "Leave empty to prefer the account API URL, then fall back to the account Base URL",
       "create": "Create and sync"
     },
-    "createKey": {
-      "title": "Create Key",
-      "description": "Create a sub2api key for {{name}}",
-      "name": "Key name",
-      "nameRequired": "Key name is required",
-      "group": "Group",
-      "groupPlaceholder": "Optional. Bind the key to a group",
-      "noGroup": "No group",
-      "keyValue": "Generated key",
-      "keyMeta": "Status: {{status}} · Group: {{group}}",
-      "copy": "Copy key",
-      "create": "Create key"
-    },
     "deleteDialog": {
       "title": "Delete Account",
       "descriptionWithName": "Delete account {{name}}?",
@@ -386,10 +372,6 @@
       "sub2apiAuthFailed": "Failed to capture sub2api Authorization",
       "createManagedOk": "Channel created and synced",
       "createManagedFail": "Failed to create channel",
-      "createKeyOk": "Key created",
-      "createKeyFail": "Failed to create key",
-      "copyKeyOk": "Key copied to clipboard",
-      "copyKeyFail": "Failed to copy key",
       "reorderOk": "Order saved",
       "reorderFail": "Failed to save order"
     }

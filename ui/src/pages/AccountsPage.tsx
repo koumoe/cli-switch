@@ -5,7 +5,6 @@ import { toast } from "sonner";
 import {
   type RemoteAccount,
   type RemoteGroupOption,
-  type Sub2ApiRemoteAccount,
 } from "@/api";
 import {
   createRemoteManagedChannel,
@@ -30,7 +29,6 @@ import { requestSub2ApiDesktopAuth } from "@/lib/ipc";
 import { AccountEditorDialog } from "./accounts/AccountEditorDialog";
 import { AccountWizardDialog } from "./accounts/AccountWizardDialog";
 import { AccountsTable } from "./accounts/AccountsTable";
-import { CreateKeyDialog } from "./accounts/CreateKeyDialog";
 import { DeleteAccountDialog } from "./accounts/DeleteAccountDialog";
 import { ManagedChannelDialog } from "./accounts/ManagedChannelDialog";
 import { ManualCheckinDialog } from "./accounts/ManualCheckinDialog";
@@ -41,7 +39,6 @@ import {
   emptyAccountDraft,
   initialDragState,
   isNewApiAccount,
-  isSub2ApiAccount,
   resolveCheckinMode,
   resolveAccountDisplayName,
   ymdLocal,
@@ -92,9 +89,6 @@ export function AccountsPage() {
   const [managedGroups, setManagedGroups] = useState<RemoteGroupOption[]>([]);
   const [managedLoadingGroups, setManagedLoadingGroups] = useState(false);
   const [managedCreating, setManagedCreating] = useState(false);
-
-  const [createKeyOpen, setCreateKeyOpen] = useState(false);
-  const [createKeyTarget, setCreateKeyTarget] = useState<Sub2ApiRemoteAccount | null>(null);
 
   const [today, setToday] = useState(() => ymdLocal(Date.now()));
 
@@ -471,16 +465,6 @@ export function AccountsPage() {
     }
   }
 
-  function openCreateKeyDialog(item: RemoteAccount) {
-    if (!isSub2ApiAccount(item)) return;
-    if (!accountHasUserApiCredentials(item)) {
-      toast.error(t("accounts.toast.actionFail"), { description: t("accounts.toast.credentialsRequiredForKey") });
-      return;
-    }
-    setCreateKeyTarget(item);
-    setCreateKeyOpen(true);
-  }
-
   function handleEditorOpenChange(open: boolean) {
     setEditorOpen(open);
     if (!open) {
@@ -505,11 +489,6 @@ export function AccountsPage() {
   function handleManualCheckinCancel() {
     setManualPromptOpen(false);
     setManualPromptTarget(null);
-  }
-
-  function handleCreateKeyOpenChange(open: boolean) {
-    setCreateKeyOpen(open);
-    if (!open) setCreateKeyTarget(null);
   }
 
   return (
@@ -550,7 +529,6 @@ export function AccountsPage() {
         onSystemCheckin={onSystemCheckin}
         onOpenManualCheckinPrompt={openManualCheckinPrompt}
         onOpenCreateManagedChannelDialog={openCreateManagedChannelDialog}
-        onOpenCreateKeyDialog={openCreateKeyDialog}
         onOpenEdit={openEdit}
         onOpenDeleteDialog={openDeleteDialog}
       />
@@ -605,12 +583,6 @@ export function AccountsPage() {
         onDeleteManagedChannelsChange={handleDeleteManagedChannelsChange}
         onDeleteSyncRemoteChange={handleDeleteSyncRemoteChange}
         onConfirmDelete={confirmDelete}
-      />
-
-      <CreateKeyDialog
-        open={createKeyOpen}
-        target={createKeyTarget}
-        onOpenChange={handleCreateKeyOpenChange}
       />
     </div>
   );

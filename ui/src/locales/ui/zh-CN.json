@@ -274,7 +274,6 @@
       "systemCheckin": "系统签到",
       "manualCheckin": "手动签到",
       "createManaged": "创建 key 与渠道",
-      "createKey": "创建 key",
       "edit": "编辑账号",
       "delete": "删除账号"
     },
@@ -338,19 +337,6 @@
       "baseUrlOverrideHint": "不填则优先使用账号 API 地址，否则使用账号 Base URL",
       "create": "创建并同步"
     },
-    "createKey": {
-      "title": "创建 key",
-      "description": "为 {{name}} 创建 sub2api key",
-      "name": "Key 名称",
-      "nameRequired": "请输入 key 名称",
-      "group": "分组",
-      "groupPlaceholder": "可选，选择后会绑定到对应分组",
-      "noGroup": "不指定分组",
-      "keyValue": "生成的 key",
-      "keyMeta": "状态：{{status}} · 分组：{{group}}",
-      "copy": "复制 key",
-      "create": "创建 key"
-    },
     "deleteDialog": {
       "title": "删除账号",
       "descriptionWithName": "确定删除账号 {{name}}？",
@@ -386,10 +372,6 @@
       "sub2apiAuthFailed": "获取 sub2api Authorization 失败",
       "createManagedOk": "渠道已创建并同步",
       "createManagedFail": "创建渠道失败",
-      "createKeyOk": "key 创建成功",
-      "createKeyFail": "创建 key 失败",
-      "copyKeyOk": "key 已复制到剪贴板",
-      "copyKeyFail": "复制 key 失败",
       "reorderOk": "排序已保存",
       "reorderFail": "保存排序失败"
     }
