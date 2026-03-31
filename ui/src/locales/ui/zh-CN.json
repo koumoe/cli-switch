@@ -274,7 +274,6 @@
       "systemCheckin": "系统签到",
       "manualCheckin": "手动签到",
       "createManaged": "创建 key 与渠道",
-      "createKey": "创建 key",
       "edit": "编辑账号",
       "delete": "删除账号"
     },

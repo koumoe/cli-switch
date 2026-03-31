@@ -274,7 +274,6 @@
       "systemCheckin": "System check-in",
       "manualCheckin": "Manual check-in",
       "createManaged": "Create key and channel",
-      "createKey": "Create key",
       "edit": "Edit account",
       "delete": "Delete account"
     },
