@@ -1,5 +1,5 @@
 import React from "react";
-import { GripVertical, KeyRound, Link2, Pencil, RefreshCw, Trash2 } from "lucide-react";
+import { GripVertical, Link2, Pencil, RefreshCw, Trash2 } from "lucide-react";
 
 import type { RemoteAccount } from "@/api";
 import {
@@ -22,7 +22,6 @@ import {
   isNewApiAccount,
   moveInList,
   moveToEndList,
-  resolveAccountDisplayName,
   resolveCheckinMode,
   type DragAction,
 } from "./shared";
@@ -47,7 +46,6 @@ type AccountsTableProps = {
   onSystemCheckin: (item: RemoteAccount) => void | Promise<void>;
   onOpenManualCheckinPrompt: (item: RemoteAccount) => void | Promise<void>;
   onOpenCreateManagedChannelDialog: (item: RemoteAccount) => void | Promise<void>;
-  onOpenCreateKeyDialog: (item: RemoteAccount) => void | Promise<void>;
   onOpenEdit: (item: RemoteAccount) => void;
   onOpenDeleteDialog: (item: RemoteAccount) => void;
 };
@@ -72,7 +70,6 @@ export function AccountsTable({
   onSystemCheckin,
   onOpenManualCheckinPrompt,
   onOpenCreateManagedChannelDialog,
-  onOpenCreateKeyDialog,
   onOpenEdit,
   onOpenDeleteDialog,
 }: AccountsTableProps) {
@@ -98,15 +95,17 @@ export function AccountsTable({
       title.style.fontSize = "13px";
       title.style.fontWeight = "600";
       title.style.color = "rgba(0,0,0,0.92)";
+      title.style.textAlign = "center";
 
       const meta = document.createElement("div");
-      meta.textContent = `${t(`accounts.providers.${item.provider}`)} · ${resolveAccountDisplayName(item)}`;
+      meta.textContent = t(`accounts.providers.${item.provider}`);
       meta.style.marginTop = "4px";
       meta.style.fontSize = "11px";
       meta.style.color = "rgba(0,0,0,0.6)";
       meta.style.whiteSpace = "nowrap";
       meta.style.overflow = "hidden";
       meta.style.textOverflow = "ellipsis";
+      meta.style.textAlign = "center";
 
       el.appendChild(title);
       el.appendChild(meta);
@@ -170,8 +169,6 @@ export function AccountsTable({
                 const checkinBusy = !!systemChecking[item.id] || !!pageOpening[item.id];
                 const canManageRemote = accountHasUserApiCredentials(item);
                 const newapi = isNewApiAccount(item);
-                const sub2api = item.provider === "sub2api";
-                const identity = resolveAccountDisplayName(item);
 
                 return (
                   <TableRow
@@ -227,15 +224,14 @@ export function AccountsTable({
                       </button>
                     </TableCell>
                     <TableCell className="max-w-[360px]">
-                      <div className="space-y-1">
+                      <div className="space-y-1 text-center">
                         <div className="truncate font-medium" title={item.base_url}>
                           {item.base_url}
                         </div>
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <div className="flex items-center justify-center text-xs text-muted-foreground">
                           <Badge variant={newapi ? "secondary" : "outline"}>
                             {t(`accounts.providers.${item.provider}`)}
                           </Badge>
-                          <span className="truncate" title={identity}>{identity}</span>
                         </div>
                       </div>
                     </TableCell>
@@ -289,17 +285,6 @@ export function AccountsTable({
                         >
                           <Link2 className="h-4 w-4" />
                         </Button>
-                        {sub2api ? (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => void onOpenCreateKeyDialog(item)}
-                            disabled={!canManageRemote}
-                            title={t("accounts.actions.createKey")}
-                          >
-                            <KeyRound className="h-4 w-4" />
-                          </Button>
-                        ) : null}
                         <Button variant="ghost" size="icon" onClick={() => onOpenEdit(item)} title={t("accounts.actions.edit")}>
                           <Pencil className="h-4 w-4" />
                         </Button>

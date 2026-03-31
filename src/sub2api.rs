@@ -70,6 +70,23 @@ struct AuthMeData {
 }
 
 #[derive(Debug, Deserialize)]
+struct SubscriptionProgressItemData {
+    progress: SubscriptionProgressData,
+}
+
+#[derive(Debug, Deserialize)]
+struct SubscriptionProgressData {
+    daily: Option<SubscriptionWindowData>,
+    weekly: Option<SubscriptionWindowData>,
+    monthly: Option<SubscriptionWindowData>,
+}
+
+#[derive(Debug, Deserialize)]
+struct SubscriptionWindowData {
+    remaining_usd: f64,
+}
+
+#[derive(Debug, Deserialize)]
 struct GroupData {
     id: i64,
     name: String,
@@ -194,6 +211,11 @@ pub async fn fetch_account_overview(
     let url = join_url(base_url, "/api/v1/auth/me")?;
     let headers = auth_headers(access_token)?;
     let data = send_json::<AuthMeData>(http_client.get(url).headers(headers)).await?;
+    let subscription_balance =
+        fetch_subscription_remaining_balance(http_client, base_url, access_token)
+            .await
+            .ok()
+            .flatten();
     let remote_username = data.username.filter(|value| !value.trim().is_empty());
     Ok(Sub2ApiAccountOverview {
         remote_user_id: data.id,
@@ -203,8 +225,48 @@ pub async fn fetch_account_overview(
             .filter(|value| !value.trim().is_empty())
             .or(remote_username),
         remote_role: data.role.filter(|value| !value.trim().is_empty()),
-        balance: data.balance,
+        balance: subscription_balance.or(data.balance),
     })
+}
+
+async fn fetch_subscription_remaining_balance(
+    http_client: &reqwest::Client,
+    base_url: &str,
+    access_token: &str,
+) -> anyhow::Result<Option<f64>> {
+    let url = join_url(base_url, "/api/v1/subscriptions/progress")?;
+    let headers = auth_headers(access_token)?;
+    let items =
+        send_json::<Vec<SubscriptionProgressItemData>>(http_client.get(url).headers(headers))
+            .await?;
+    Ok(total_subscription_remaining_balance(&items))
+}
+
+fn total_subscription_remaining_balance(items: &[SubscriptionProgressItemData]) -> Option<f64> {
+    let mut total = 0.0;
+    let mut found = false;
+
+    for item in items {
+        if let Some(remaining) = effective_subscription_remaining(&item.progress) {
+            total += remaining;
+            found = true;
+        }
+    }
+
+    found.then_some(total)
+}
+
+fn effective_subscription_remaining(progress: &SubscriptionProgressData) -> Option<f64> {
+    [
+        progress.daily.as_ref(),
+        progress.weekly.as_ref(),
+        progress.monthly.as_ref(),
+    ]
+    .into_iter()
+    .flatten()
+    .map(|window| window.remaining_usd)
+    .filter(|value| value.is_finite() && *value >= 0.0)
+    .reduce(f64::min)
 }
 
 pub async fn list_groups(
@@ -310,7 +372,10 @@ pub async fn delete_key(
 
 #[cfg(test)]
 mod tests {
-    use super::join_url;
+    use super::{
+        SubscriptionProgressData, SubscriptionProgressItemData, SubscriptionWindowData, join_url,
+        total_subscription_remaining_balance,
+    };
 
     #[test]
     fn join_url_preserves_base_path_for_api_endpoints() {
@@ -323,5 +388,52 @@ mod tests {
     fn join_url_keeps_root_instances_stable() {
         let joined = join_url("https://example.com", "/api/v1/auth/me").expect("join url");
         assert_eq!(joined, "https://example.com/api/v1/auth/me");
+    }
+
+    #[test]
+    fn subscription_remaining_balance_uses_active_subscription_quota() {
+        let items = vec![SubscriptionProgressItemData {
+            progress: SubscriptionProgressData {
+                daily: Some(SubscriptionWindowData {
+                    remaining_usd: 84.472642,
+                }),
+                weekly: None,
+                monthly: None,
+            },
+        }];
+
+        let remaining =
+            total_subscription_remaining_balance(&items).expect("subscription balance exists");
+        assert!((remaining - 84.472642).abs() < 1e-9);
+    }
+
+    #[test]
+    fn subscription_remaining_balance_uses_strictest_window_per_subscription() {
+        let items = vec![
+            SubscriptionProgressItemData {
+                progress: SubscriptionProgressData {
+                    daily: Some(SubscriptionWindowData {
+                        remaining_usd: 80.0,
+                    }),
+                    weekly: Some(SubscriptionWindowData {
+                        remaining_usd: 60.0,
+                    }),
+                    monthly: None,
+                },
+            },
+            SubscriptionProgressItemData {
+                progress: SubscriptionProgressData {
+                    daily: None,
+                    weekly: None,
+                    monthly: Some(SubscriptionWindowData {
+                        remaining_usd: 12.5,
+                    }),
+                },
+            },
+        ];
+
+        let remaining =
+            total_subscription_remaining_balance(&items).expect("subscription balance exists");
+        assert!((remaining - 72.5).abs() < 1e-9);
     }
 }

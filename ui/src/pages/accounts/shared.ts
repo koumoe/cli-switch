@@ -127,8 +127,11 @@ export function isSub2ApiAccount(account: RemoteAccount): account is Sub2ApiRemo
 export function resolveAccountDisplayName(
   account: Pick<RemoteAccountBase, "base_url" | "remote_display_name" | "remote_username" | "user_id">
 ): string {
-  return account.remote_display_name?.trim()
-    || account.remote_username?.trim()
+  const displayName = account.remote_display_name?.trim() ?? "";
+  if (displayName && !displayName.toLowerCase().endsWith(".invalid")) {
+    return displayName;
+  }
+  return account.remote_username?.trim()
     || account.user_id.trim()
     || account.base_url;
 }
