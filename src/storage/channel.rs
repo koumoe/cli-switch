@@ -54,6 +54,7 @@ impl FromSql for RechargeCurrency {
 #[serde(rename_all = "snake_case")]
 pub enum ManagedRemoteProvider {
     Newapi,
+    #[serde(rename = "sub2api")]
     Sub2Api,
 }
 
@@ -895,6 +896,12 @@ mod tests {
     use super::*;
     use crate::storage;
     use std::path::{Path, PathBuf};
+
+    #[test]
+    fn managed_remote_provider_serializes_sub2api_without_extra_underscore() {
+        let json = serde_json::to_string(&ManagedRemoteProvider::Sub2Api).expect("serialize");
+        assert_eq!(json, "\"sub2api\"");
+    }
 
     fn remove_sqlite_artifacts(path: &Path) {
         let _ = std::fs::remove_file(path);

@@ -1,5 +1,5 @@
 use anyhow::Context as _;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::time::Duration;
 
@@ -15,7 +15,7 @@ use tao::platform::macos::{EventLoopWindowTargetExtMacOS, WindowBuilderExtMacOS}
 use tao::{
     event::{Event, WindowEvent},
     event_loop::{ControlFlow, EventLoopBuilder},
-    window::WindowBuilder,
+    window::{WindowBuilder, WindowId},
 };
 use tray_icon::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use wry::WebViewBuilder;
@@ -27,6 +27,11 @@ enum UserEvent {
     Ipc(String),
     CloseRequested(storage::AppSettings),
     BackendEvent(AppEvent),
+    Sub2ApiAuthToken {
+        request_id: String,
+        window_id: WindowId,
+        token: String,
+    },
 }
 
 #[derive(Debug, Clone, Copy, serde::Deserialize)]
@@ -51,8 +56,20 @@ enum IpcMessage {
     RequestQuit,
     #[serde(rename = "request-restart-backend")]
     RequestRestartBackend,
+    #[serde(rename = "request-sub2api-auth")]
+    RequestSub2ApiAuth {
+        request_id: String,
+        base_url: String,
+    },
     #[serde(rename = "ui-ready")]
     UiReady,
+}
+
+#[derive(Debug, serde::Deserialize)]
+#[serde(tag = "type")]
+enum Sub2ApiAuthIpcMessage {
+    #[serde(rename = "sub2api-auth-token")]
+    Token { token: String },
 }
 
 #[derive(Debug, Default)]
@@ -68,6 +85,67 @@ struct DesktopState {
     pending_managed_channel_multiplier:
         Vec<cliswitch::events::RemoteManagedChannelMultiplierPrompt>,
 }
+
+struct Sub2ApiAuthWindow {
+    request_id: String,
+    window: tao::window::Window,
+    webview: wry::WebView,
+}
+
+#[derive(Debug, Serialize)]
+struct Sub2ApiAuthResultEvent {
+    request_id: String,
+    token: Option<String>,
+    cancelled: bool,
+    error: Option<String>,
+}
+
+const SUB2API_AUTH_INIT_SCRIPT: &str = r#"
+(() => {
+  const AUTH_KEY = "auth_token";
+  const REFRESH_KEY = "refresh_token";
+  let lastToken = "";
+
+  const readToken = () => {
+    try {
+      const value = window.localStorage?.getItem(AUTH_KEY);
+      return typeof value === "string" ? value.trim() : "";
+    } catch (_) {
+      return "";
+    }
+  };
+
+  const emit = () => {
+    const token = readToken();
+    if (!token || token === lastToken) return;
+    lastToken = token;
+    try {
+      window.ipc?.postMessage(JSON.stringify({
+        type: "sub2api-auth-token",
+        token,
+        refresh_token: window.localStorage?.getItem(REFRESH_KEY) || null,
+      }));
+    } catch (_) {}
+  };
+
+  const scheduleEmit = () => window.setTimeout(emit, 0);
+
+  try {
+    const originalSetItem = window.localStorage?.setItem?.bind(window.localStorage);
+    if (originalSetItem) {
+      window.localStorage.setItem = function(key, value) {
+        originalSetItem(key, value);
+        if (key === AUTH_KEY || key === REFRESH_KEY) scheduleEmit();
+      };
+    }
+  } catch (_) {}
+
+  window.addEventListener("load", emit, { once: false });
+  window.addEventListener("storage", emit);
+  window.setInterval(emit, 1000);
+  emit();
+})();
+"#;
 
 fn dispatch_custom_event<T: Serialize>(webview: &wry::WebView, name: &str, detail: &T) {
     let detail_json = match serde_json::to_string(detail) {
@@ -90,6 +168,73 @@ fn dispatch_custom_event<T: Serialize>(webview: &wry::WebView, name: &str, detai
     if let Err(e) = webview.evaluate_script(&script) {
         tracing::warn!(err = %e, event = name, "webview evaluate_script failed");
     }
+}
+
+fn dispatch_sub2api_auth_result(
+    webview: &wry::WebView,
+    request_id: impl Into<String>,
+    token: Option<String>,
+    cancelled: bool,
+    error: Option<String>,
+) {
+    dispatch_custom_event(
+        webview,
+        "cliswitch-sub2api-auth-result",
+        &Sub2ApiAuthResultEvent {
+            request_id: request_id.into(),
+            token,
+            cancelled,
+            error,
+        },
+    );
+}
+
+fn create_sub2api_auth_window(
+    event_loop: &tao::event_loop::EventLoopWindowTarget<UserEvent>,
+    proxy: &tao::event_loop::EventLoopProxy<UserEvent>,
+    request_id: String,
+    base_url: String,
+) -> anyhow::Result<Sub2ApiAuthWindow> {
+    let fixed_size = LogicalSize::new(1120.0, 760.0);
+    let window = WindowBuilder::new()
+        .with_title("sub2api Login")
+        .with_inner_size(fixed_size)
+        .with_min_inner_size(LogicalSize::new(960.0, 640.0))
+        .with_window_icon(build_window_icon().ok())
+        .build(event_loop)
+        .context("创建 sub2api 登录窗口失败")?;
+    let window_id = window.id();
+    let proxy_for_auth = proxy.clone();
+    let request_id_for_auth = request_id.clone();
+    let webview = WebViewBuilder::new()
+        .with_initialization_script(SUB2API_AUTH_INIT_SCRIPT)
+        .with_url(&base_url)
+        .with_ipc_handler(move |req| {
+            let Ok(message) = serde_json::from_str::<Sub2ApiAuthIpcMessage>(req.body()) else {
+                return;
+            };
+            match message {
+                Sub2ApiAuthIpcMessage::Token { token } => {
+                    let token = token.trim().to_string();
+                    if token.is_empty() {
+                        return;
+                    }
+                    let _ = proxy_for_auth.send_event(UserEvent::Sub2ApiAuthToken {
+                        request_id: request_id_for_auth.clone(),
+                        window_id,
+                        token,
+                    });
+                }
+            }
+        })
+        .build(&window)
+        .context("创建 sub2api 登录 WebView 失败")?;
+
+    Ok(Sub2ApiAuthWindow {
+        request_id,
+        window,
+        webview,
+    })
 }
 
 fn detect_desktop_locale() -> AppLocale {
@@ -508,13 +653,29 @@ fn handle_close_requested(
     state: &mut DesktopState,
     proxy: &tao::event_loop::EventLoopProxy<UserEvent>,
     db_path: &std::path::Path,
+    main_window_id: WindowId,
+    auth_windows: &mut HashMap<WindowId, Sub2ApiAuthWindow>,
+    webview: &wry::WebView,
 ) -> bool {
-    let Event::WindowEvent { event, .. } = event else {
+    let Event::WindowEvent {
+        event, window_id, ..
+    } = event
+    else {
         return false;
     };
     let WindowEvent::CloseRequested = event else {
         return false;
     };
+
+    if *window_id != main_window_id {
+        if let Some(auth_window) = auth_windows.remove(window_id) {
+            let _ = &auth_window.window;
+            let _ = &auth_window.webview;
+            dispatch_sub2api_auth_result(webview, auth_window.request_id, None, true, None);
+            return true;
+        }
+        return false;
+    }
 
     if state.close_prompt_open || state.close_request_inflight {
         return true;
@@ -530,11 +691,13 @@ fn handle_user_event(
     ev: UserEvent,
     state: &mut DesktopState,
     control_flow: &mut ControlFlow,
+    event_loop: &tao::event_loop::EventLoopWindowTarget<UserEvent>,
     proxy: &tao::event_loop::EventLoopProxy<UserEvent>,
     server_handle: &mut tokio::task::JoinHandle<()>,
     data_dir: &std::path::Path,
     window: &tao::window::Window,
     webview: &wry::WebView,
+    auth_windows: &mut HashMap<WindowId, Sub2ApiAuthWindow>,
     backend_port: u16,
     tray_id: &tray_icon::TrayIconId,
     edit_menu: &Submenu,
@@ -652,6 +815,49 @@ fn handle_user_event(
                 IpcMessage::RequestRestartBackend => {
                     restart_backend(server_handle, backend_port, db_path);
                 }
+                IpcMessage::RequestSub2ApiAuth {
+                    request_id,
+                    base_url,
+                } => {
+                    let base_url = base_url.trim().to_string();
+                    if base_url.is_empty() {
+                        dispatch_sub2api_auth_result(
+                            webview,
+                            request_id,
+                            None,
+                            false,
+                            Some("base_url is required".to_string()),
+                        );
+                        return;
+                    }
+
+                    let already_open = auth_windows
+                        .values()
+                        .any(|item| item.request_id == request_id);
+                    if already_open {
+                        return;
+                    }
+
+                    match create_sub2api_auth_window(
+                        event_loop,
+                        proxy,
+                        request_id.clone(),
+                        base_url,
+                    ) {
+                        Ok(auth_window) => {
+                            auth_windows.insert(auth_window.window.id(), auth_window);
+                        }
+                        Err(err) => {
+                            dispatch_sub2api_auth_result(
+                                webview,
+                                request_id,
+                                None,
+                                false,
+                                Some(err.to_string()),
+                            );
+                        }
+                    }
+                }
                 IpcMessage::UiReady => {
                     state.ui_ready = true;
                     if let Some(status) = events::last_update_status() {
@@ -674,6 +880,18 @@ fn handle_user_event(
                     }
                 }
             }
+        }
+        UserEvent::Sub2ApiAuthToken {
+            request_id,
+            window_id,
+            token,
+        } => {
+            let Some(auth_window) = auth_windows.remove(&window_id) else {
+                return;
+            };
+            let _ = &auth_window.window;
+            let _ = &auth_window.webview;
+            dispatch_sub2api_auth_result(webview, request_id, Some(token), false, None);
         }
         UserEvent::BackendEvent(ev) => {
             if let AppEvent::SystemNotificationSettingsChanged(ref next) = ev {
@@ -1014,11 +1232,20 @@ pub async fn run(
     };
     tray_show.set_enabled(!state.window_visible);
     tray_hide.set_enabled(state.window_visible);
+    let mut auth_windows = HashMap::<WindowId, Sub2ApiAuthWindow>::new();
 
     event_loop.run(move |event, event_loop_target, control_flow| {
         *control_flow = ControlFlow::Wait;
 
-        if handle_close_requested(&event, &mut state, &proxy, &db_path) {
+        if handle_close_requested(
+            &event,
+            &mut state,
+            &proxy,
+            &db_path,
+            window.id(),
+            &mut auth_windows,
+            &webview,
+        ) {
             return;
         }
 
@@ -1027,11 +1254,13 @@ pub async fn run(
                 ev,
                 &mut state,
                 control_flow,
+                event_loop_target,
                 &proxy,
                 &mut server_handle,
                 &data_dir,
                 &window,
                 &webview,
+                &mut auth_windows,
                 actual_addr.port(),
                 &tray_id,
                 &edit_menu,
@@ -1049,6 +1278,10 @@ pub async fn run(
         sync_macos_dock_visibility(event_loop_target, &mut state);
 
         let _ = &webview;
+        for auth_window in auth_windows.values() {
+            let _ = &auth_window.window;
+            let _ = &auth_window.webview;
+        }
         let _ = &menu;
         let _ = &tray_icon;
     })

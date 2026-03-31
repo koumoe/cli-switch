@@ -121,12 +121,13 @@ export function AccountEditorDialog({
                   {loginOpening ? t("accounts.editor.openLoginPageOpening") : t("accounts.editor.openLoginPage")}
                 </Button>
               </div>
-              <Input
-                type="password"
-                value={draft.bearer_token}
-                onChange={(e) => setDraft((d) => ({ ...d, bearer_token: e.target.value }))}
-                placeholder={account?.user_token_configured ? t("accounts.editor.bearerTokenKeepHint") : "Bearer eyJ..."}
-              />
+              <div className="rounded-md border bg-muted/20 px-3 py-2 text-sm">
+                {draft.bearer_token.trim()
+                  ? t("accounts.editor.bearerTokenCaptured")
+                  : account?.user_token_configured
+                    ? t("accounts.editor.bearerTokenExisting")
+                    : t("accounts.editor.bearerTokenMissing")}
+              </div>
               <p className="text-xs text-muted-foreground">{t("accounts.editor.bearerTokenHint")}</p>
             </div>
           )}
