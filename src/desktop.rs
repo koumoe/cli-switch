@@ -88,8 +88,8 @@ struct DesktopState {
 
 struct Sub2ApiAuthWindow {
     request_id: String,
-    window: tao::window::Window,
-    webview: wry::WebView,
+    _window: tao::window::Window,
+    _webview: wry::WebView,
 }
 
 #[derive(Debug, Serialize)]
@@ -140,7 +140,7 @@ const SUB2API_AUTH_INIT_SCRIPT: &str = r#"
     }
   } catch (_) {}
 
-  window.addEventListener("load", emit, { once: false });
+  window.addEventListener("load", emit);
   window.addEventListener("storage", emit);
   window.setInterval(emit, 1000);
   emit();
@@ -232,8 +232,8 @@ fn create_sub2api_auth_window(
 
     Ok(Sub2ApiAuthWindow {
         request_id,
-        window,
-        webview,
+        _window: window,
+        _webview: webview,
     })
 }
 
@@ -669,8 +669,6 @@ fn handle_close_requested(
 
     if *window_id != main_window_id {
         if let Some(auth_window) = auth_windows.remove(window_id) {
-            let _ = &auth_window.window;
-            let _ = &auth_window.webview;
             dispatch_sub2api_auth_result(webview, auth_window.request_id, None, true, None);
             return true;
         }
@@ -845,7 +843,7 @@ fn handle_user_event(
                         base_url,
                     ) {
                         Ok(auth_window) => {
-                            auth_windows.insert(auth_window.window.id(), auth_window);
+                            auth_windows.insert(auth_window._window.id(), auth_window);
                         }
                         Err(err) => {
                             dispatch_sub2api_auth_result(
@@ -886,11 +884,9 @@ fn handle_user_event(
             window_id,
             token,
         } => {
-            let Some(auth_window) = auth_windows.remove(&window_id) else {
+            let Some(_auth_window) = auth_windows.remove(&window_id) else {
                 return;
             };
-            let _ = &auth_window.window;
-            let _ = &auth_window.webview;
             dispatch_sub2api_auth_result(webview, request_id, Some(token), false, None);
         }
         UserEvent::BackendEvent(ev) => {
@@ -1278,10 +1274,6 @@ pub async fn run(
         sync_macos_dock_visibility(event_loop_target, &mut state);
 
         let _ = &webview;
-        for auth_window in auth_windows.values() {
-            let _ = &auth_window.window;
-            let _ = &auth_window.webview;
-        }
         let _ = &menu;
         let _ = &tray_icon;
     })

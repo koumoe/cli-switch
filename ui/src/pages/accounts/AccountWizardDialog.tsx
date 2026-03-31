@@ -224,14 +224,14 @@ export function AccountWizardDialog({
         </div>
 
         {step > 1 && detection ? (
-            <div className="rounded-lg border bg-muted/20 px-4 py-3 space-y-2">
-              <div className="flex items-center gap-2">
-                <Badge variant={detection.provider === "newapi" ? "secondary" : "outline"}>
-                  {t(`accounts.providers.${detection.provider}`)}
-                </Badge>
-                <span className="font-mono text-sm">{draft.base_url}</span>
-              </div>
+          <div className="rounded-lg border bg-muted/20 px-4 py-3 space-y-2">
+            <div className="flex items-center gap-2">
+              <Badge variant={detection.provider === "newapi" ? "secondary" : "outline"}>
+                {t(`accounts.providers.${detection.provider}`)}
+              </Badge>
+              <span className="font-mono text-sm">{draft.base_url}</span>
             </div>
+          </div>
         ) : null}
 
         <div className="flex-1 min-h-0 overflow-y-auto pr-1">
