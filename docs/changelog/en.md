@@ -1,3 +1,8 @@
+## [0.56.3](https://github.com/koumoe/cli-switch/compare/v0.56.2...v0.56.3) (2026-03-31)
+
+### Bug Fixes
+
+* move account provider badge into dedicated table column ([a13eb94](https://github.com/koumoe/cli-switch/commit/a13eb946ae14c090349fd319bc9939ae0b9bdd1d))
 ## [0.56.2](https://github.com/koumoe/cli-switch/compare/v0.56.1...v0.56.2) (2026-03-31)
 
 ### Bug Fixes
