@@ -25,6 +25,7 @@ import { Button } from "@/components/ui";
 import { useCurrency } from "@/lib/currency";
 import { humanizeApiError } from "@/lib/error";
 import { useI18n } from "@/lib/i18n";
+import { requestSub2ApiDesktopAuth } from "@/lib/ipc";
 
 import { AccountEditorDialog } from "./accounts/AccountEditorDialog";
 import { AccountWizardDialog } from "./accounts/AccountWizardDialog";
@@ -271,12 +272,25 @@ export function AccountsPage() {
       toast.error(t("accounts.toast.actionFail"), { description: t("accounts.toast.baseUrlRequired") });
       return;
     }
-    const url = draft.page_checkin_url.trim() || editingSource?.page_checkin_url || `${baseUrl.replace(/\/+$/, "")}/dashboard`;
     setLoginOpening(true);
     try {
-      await openInBrowser(url);
+      const token = await requestSub2ApiDesktopAuth(baseUrl);
+      if (!token) {
+        toast(t("accounts.toast.sub2apiAuthCancelled"));
+        return;
+      }
+      setDraft((current) => ({ ...current, bearer_token: token }));
     } catch (e) {
-      toast.error(t("accounts.toast.actionFail"), { description: humanizeApiError(e, t) });
+      const error = e instanceof Error ? e.message : "";
+      if (error === "sub2api_auth_unsupported") {
+        toast.error(t("accounts.toast.actionFail"), {
+          description: t("accounts.toast.sub2apiAuthUnsupported"),
+        });
+        return;
+      }
+      toast.error(t("accounts.toast.actionFail"), {
+        description: error || t("accounts.toast.sub2apiAuthFailed"),
+      });
     } finally {
       setLoginOpening(false);
     }

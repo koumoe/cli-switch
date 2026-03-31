@@ -15,6 +15,7 @@ const CHECKIN_TIME_FORMAT: &str = "[hour]:[minute]:[second]";
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum RemoteAccountProvider {
+    #[serde(rename = "sub2api")]
     Sub2Api,
 }
 
@@ -743,4 +744,15 @@ pub async fn complete_remote_account_checkin_today(
         Ok(())
     })
     .await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::RemoteAccountProvider;
+
+    #[test]
+    fn remote_account_provider_serializes_sub2api_without_extra_underscore() {
+        let json = serde_json::to_string(&RemoteAccountProvider::Sub2Api).expect("serialize");
+        assert_eq!(json, "\"sub2api\"");
+    }
 }

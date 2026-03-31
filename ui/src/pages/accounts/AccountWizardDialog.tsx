@@ -3,7 +3,7 @@ import { ArrowLeft, ArrowRight, ExternalLink, Search } from "lucide-react";
 import { toast } from "sonner";
 
 import type { RechargeCurrency, RemoteAccountCheckinMode, RemoteAccountDetection } from "@/api";
-import { createRemoteAccount, detectRemoteAccount, openInBrowser } from "@/api";
+import { createRemoteAccount, detectRemoteAccount } from "@/api";
 import {
   Badge,
   Button,
@@ -22,6 +22,7 @@ import {
 } from "@/components/ui";
 import { humanizeApiError } from "@/lib/error";
 import { useI18n } from "@/lib/i18n";
+import { requestSub2ApiDesktopAuth } from "@/lib/ipc";
 import { cn } from "@/lib/utils";
 
 import { emptyAccountDraft, supportedCheckinModes, type AccountDraft } from "./shared";
@@ -78,8 +79,6 @@ export function AccountWizardDialog({
         ...current,
         provider: result.provider,
         base_url: result.normalized_base_url,
-        api_url: current.api_url.trim() || result.recommended_api_url || "",
-        page_checkin_url: current.page_checkin_url.trim() || result.suggested_page_checkin_url || "",
         checkin_mode: result.supported_checkin_modes.includes(current.checkin_mode)
           ? current.checkin_mode
           : "disabled",
@@ -159,18 +158,32 @@ export function AccountWizardDialog({
     }
   }
 
-  async function handleOpenLoginPage() {
+  async function handleCaptureSub2ApiAuth() {
+    if (draft.provider !== "sub2api") return;
     const baseUrl = draft.base_url.trim();
     if (!baseUrl) {
       toast.error(t("accounts.toast.actionFail"), { description: t("accounts.toast.baseUrlRequired") });
       return;
     }
-    const url = detection?.suggested_page_checkin_url || draft.page_checkin_url.trim() || `${baseUrl.replace(/\/+$/, "")}/dashboard`;
     setOpeningLogin(true);
     try {
-      await openInBrowser(url);
+      const token = await requestSub2ApiDesktopAuth(baseUrl);
+      if (!token) {
+        toast(t("accounts.toast.sub2apiAuthCancelled"));
+        return;
+      }
+      setDraft((current) => ({ ...current, bearer_token: token }));
     } catch (e) {
-      toast.error(t("accounts.toast.actionFail"), { description: humanizeApiError(e, t) });
+      const error = e instanceof Error ? e.message : "";
+      if (error === "sub2api_auth_unsupported") {
+        toast.error(t("accounts.toast.actionFail"), {
+          description: t("accounts.toast.sub2apiAuthUnsupported"),
+        });
+        return;
+      }
+      toast.error(t("accounts.toast.actionFail"), {
+        description: error || t("accounts.toast.sub2apiAuthFailed"),
+      });
     } finally {
       setOpeningLogin(false);
     }
@@ -218,11 +231,6 @@ export function AccountWizardDialog({
               </Badge>
               <span className="font-mono text-sm">{draft.base_url}</span>
             </div>
-            {draft.api_url.trim() ? (
-              <div className="text-xs text-muted-foreground">
-                {t("accounts.wizard.detectedApiUrl", { value: draft.api_url.trim() })}
-              </div>
-            ) : null}
           </div>
         ) : null}
 
@@ -271,19 +279,18 @@ export function AccountWizardDialog({
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => void handleOpenLoginPage()}
+                      onClick={() => void handleCaptureSub2ApiAuth()}
                       disabled={saving || detecting || openingLogin}
                     >
                       <ExternalLink className="h-4 w-4 mr-2" />
                       {openingLogin ? t("accounts.editor.openLoginPageOpening") : t("accounts.editor.openLoginPage")}
                     </Button>
                   </div>
-                  <Input
-                    type="password"
-                    value={draft.bearer_token}
-                    onChange={(e) => setDraft((current) => ({ ...current, bearer_token: e.target.value }))}
-                    placeholder="Bearer eyJ..."
-                  />
+                  <div className="rounded-md border bg-muted/20 px-3 py-2 text-sm">
+                    {draft.bearer_token.trim()
+                      ? t("accounts.editor.bearerTokenCaptured")
+                      : t("accounts.editor.bearerTokenMissing")}
+                  </div>
                   <p className="text-xs text-muted-foreground">{t("accounts.editor.bearerTokenHint")}</p>
                 </div>
               )}

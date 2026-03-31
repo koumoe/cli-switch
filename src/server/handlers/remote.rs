@@ -16,6 +16,7 @@ use crate::sub2api as sub2api_client;
 #[serde(rename_all = "snake_case")]
 pub(in crate::server) enum RemoteAccountProvider {
     Newapi,
+    #[serde(rename = "sub2api")]
     Sub2Api,
 }
 
@@ -81,6 +82,7 @@ pub(in crate::server) enum RemoteAccountResponse {
         #[serde(flatten)]
         newapi: NewapiRemoteAccountResponse,
     },
+    #[serde(rename = "sub2api")]
     Sub2Api {
         #[serde(flatten)]
         common: RemoteAccountCommonResponse,
@@ -505,9 +507,7 @@ fn detect_recommended_api_url(
         .and_then(|value| resolve_remote_url_from_base(base_url, value));
     match provider {
         RemoteAccountProvider::Newapi => detected,
-        RemoteAccountProvider::Sub2Api => {
-            detected.or_else(|| Some(format!("{}/v1", base_url.trim_end_matches('/'))))
-        }
+        RemoteAccountProvider::Sub2Api => None,
     }
 }
 
@@ -519,9 +519,7 @@ fn detect_suggested_page_checkin_url(
         RemoteAccountProvider::Newapi => {
             Some(format!("{}/user/checkin", base_url.trim_end_matches('/')))
         }
-        RemoteAccountProvider::Sub2Api => {
-            Some(format!("{}/dashboard", base_url.trim_end_matches('/')))
-        }
+        RemoteAccountProvider::Sub2Api => None,
     }
 }
 
@@ -2074,13 +2072,14 @@ mod tests {
         let payload: serde_json::Value = serde_json::from_slice(&body).expect("parse json");
 
         assert_eq!(
+            payload["provider"],
+            serde_json::Value::String("sub2api".to_string())
+        );
+        assert_eq!(
             payload["normalized_base_url"],
             serde_json::Value::String(base_url.trim_end_matches('/').to_string())
         );
-        assert_eq!(
-            payload["recommended_api_url"],
-            serde_json::Value::String(format!("{}/openapi/v1", base_url.trim_end_matches('/')))
-        );
+        assert_eq!(payload["recommended_api_url"], serde_json::Value::Null);
 
         remove_sqlite_artifacts(&db_path);
     }
