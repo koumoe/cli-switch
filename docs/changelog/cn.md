@@ -1,3 +1,7 @@
+## [0.56.2](https://github.com/koumoe/cli-switch/compare/v0.56.1...v0.56.2) (2026-03-31)
+
+### 修复
+* 修复 sub2api 账号显示与余额 (#179) ([#179](https://github.com/koumoe/cli-switch/issues/179)) ([1b639b2](https://github.com/koumoe/cli-switch/commit/1b639b2f2736c7bf0d96124cd7f430081e24e28d))
 ## [0.56.1](https://github.com/koumoe/cli-switch/compare/v0.56.0...v0.56.1) (2026-03-31)
 
 ### 修复
