@@ -1,3 +1,8 @@
+## [0.56.1](https://github.com/koumoe/cli-switch/compare/v0.56.0...v0.56.1) (2026-03-31)
+
+### 修复
+* 修复 sub2api 接入与授权流程 ([e4cbe25](https://github.com/koumoe/cli-switch/commit/e4cbe25da09b68477998e0c8b749de75f82c5eb2))
+* 移除未使用的 sub2api 语言包键 ([12e38a3](https://github.com/koumoe/cli-switch/commit/12e38a3f98068776432b5a07dd28350dc74a9a0c))
 ## [0.56.0](https://github.com/koumoe/cli-switch/compare/v0.55.0...v0.56.0) (2026-03-30)
 
 ### 功能
