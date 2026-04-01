@@ -1048,12 +1048,15 @@ async fn run_sub2api_account_maintenance(
         }
         Err(err) => {
             tracing::warn!(account_id = %account.id, err = %err, "sync sub2api overview failed");
-            if sub2api_auth::relogin_required_message(&err).is_none() {
-                if let Err(update_err) =
-                    persist_sub2api_sync_failure(db_path.clone(), &account.id, &err).await
-                {
-                    tracing::warn!(account_id = %account.id, err = %update_err, "persist sub2api sync failure failed");
-                }
+            let persist_err = if sub2api_auth::relogin_required_message(&err).is_none() {
+                persist_sub2api_sync_failure(db_path.clone(), &account.id, &err)
+                    .await
+                    .err()
+            } else {
+                None
+            };
+            if let Some(update_err) = persist_err {
+                tracing::warn!(account_id = %account.id, err = %update_err, "persist sub2api sync failure failed");
             }
             None
         }
