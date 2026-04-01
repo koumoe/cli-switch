@@ -78,6 +78,7 @@ pub use remote_account::{
     get_remote_account_without_secret_optional, get_remote_accounts_checkins_today,
     list_remote_accounts, list_remote_accounts_with_secret,
     set_remote_account_balance_alert_notified, update_remote_account,
+    update_remote_account_auth_session,
 };
 pub use route::{
     CreateRoute, Route, RouteChannel, UpdateRoute, create_route, delete_route, get_route,
@@ -146,12 +147,13 @@ impl UnifiedRemoteAccount {
 }
 
 const UNIFIED_REMOTE_ACCOUNT_SELECT_COLUMNS: &str = r#"
-    id, provider, base_url, api_url, user_id, user_token, access_token, page_checkin_url,
-    checkin_mode, auto_checkin_enabled, auto_checkin_time, low_balance_alert_threshold,
-    recharge_currency, remote_user_id, remote_role, remote_username, remote_display_name,
-    remote_group, quota_display_type, quota_per_unit, usd_exchange_rate, custom_currency_symbol,
-    custom_currency_exchange_rate, remote_checkin_enabled, remote_turnstile_check_enabled,
-    last_quota, last_used_quota, last_balance_amount, last_sync_error, last_synced_at_ms,
+    id, provider, base_url, api_url, user_id, user_token, access_token, refresh_token,
+    page_checkin_url, checkin_mode, auto_checkin_enabled, auto_checkin_time,
+    low_balance_alert_threshold, recharge_currency, remote_user_id, remote_role,
+    remote_username, remote_display_name, remote_group, quota_display_type, quota_per_unit,
+    usd_exchange_rate, custom_currency_symbol, custom_currency_exchange_rate,
+    remote_checkin_enabled, remote_turnstile_check_enabled, last_quota, last_used_quota,
+    last_balance_amount, last_sync_error, reauth_required, last_synced_at_ms,
     low_balance_alert_notified, last_balance_alert_at_ms, sort_order, created_at_ms, updated_at_ms
 "#;
 
@@ -164,6 +166,7 @@ struct UnifiedRemoteAccountRow {
     user_id: String,
     user_token_raw: String,
     access_token_raw: String,
+    refresh_token_raw: String,
     page_checkin_url: Option<String>,
     checkin_mode: String,
     auto_checkin_enabled: bool,
@@ -186,6 +189,7 @@ struct UnifiedRemoteAccountRow {
     last_used_quota: Option<i64>,
     last_balance_amount: Option<f64>,
     last_sync_error: Option<String>,
+    reauth_required: bool,
     last_synced_at_ms: Option<i64>,
     low_balance_alert_notified: bool,
     last_balance_alert_at_ms: Option<i64>,
@@ -204,34 +208,36 @@ impl UnifiedRemoteAccountRow {
             user_id: row.get(4)?,
             user_token_raw: row.get(5)?,
             access_token_raw: row.get(6)?,
-            page_checkin_url: row.get(7)?,
-            checkin_mode: row.get(8)?,
-            auto_checkin_enabled: row.get::<_, i64>(9)? != 0,
-            auto_checkin_time: row.get(10)?,
-            low_balance_alert_threshold: row.get(11)?,
-            recharge_currency: row.get(12)?,
-            remote_user_id: row.get(13)?,
-            remote_role: row.get(14)?,
-            remote_username: row.get(15)?,
-            remote_display_name: row.get(16)?,
-            remote_group: row.get(17)?,
-            quota_display_type: row.get(18)?,
-            quota_per_unit: row.get(19)?,
-            usd_exchange_rate: row.get(20)?,
-            custom_currency_symbol: row.get(21)?,
-            custom_currency_exchange_rate: row.get(22)?,
-            remote_checkin_enabled: row.get::<_, i64>(23)? != 0,
-            remote_turnstile_check_enabled: row.get::<_, i64>(24)? != 0,
-            last_quota: row.get(25)?,
-            last_used_quota: row.get(26)?,
-            last_balance_amount: row.get(27)?,
-            last_sync_error: row.get(28)?,
-            last_synced_at_ms: row.get(29)?,
-            low_balance_alert_notified: row.get::<_, i64>(30)? != 0,
-            last_balance_alert_at_ms: row.get(31)?,
-            sort_order: row.get(32)?,
-            created_at_ms: row.get(33)?,
-            updated_at_ms: row.get(34)?,
+            refresh_token_raw: row.get(7)?,
+            page_checkin_url: row.get(8)?,
+            checkin_mode: row.get(9)?,
+            auto_checkin_enabled: row.get::<_, i64>(10)? != 0,
+            auto_checkin_time: row.get(11)?,
+            low_balance_alert_threshold: row.get(12)?,
+            recharge_currency: row.get(13)?,
+            remote_user_id: row.get(14)?,
+            remote_role: row.get(15)?,
+            remote_username: row.get(16)?,
+            remote_display_name: row.get(17)?,
+            remote_group: row.get(18)?,
+            quota_display_type: row.get(19)?,
+            quota_per_unit: row.get(20)?,
+            usd_exchange_rate: row.get(21)?,
+            custom_currency_symbol: row.get(22)?,
+            custom_currency_exchange_rate: row.get(23)?,
+            remote_checkin_enabled: row.get::<_, i64>(24)? != 0,
+            remote_turnstile_check_enabled: row.get::<_, i64>(25)? != 0,
+            last_quota: row.get(26)?,
+            last_used_quota: row.get(27)?,
+            last_balance_amount: row.get(28)?,
+            last_sync_error: row.get(29)?,
+            reauth_required: row.get::<_, i64>(30)? != 0,
+            last_synced_at_ms: row.get(31)?,
+            low_balance_alert_notified: row.get::<_, i64>(32)? != 0,
+            last_balance_alert_at_ms: row.get(33)?,
+            sort_order: row.get(34)?,
+            created_at_ms: row.get(35)?,
+            updated_at_ms: row.get(36)?,
         })
     }
 
@@ -290,8 +296,12 @@ impl UnifiedRemoteAccountRow {
 
     fn into_sub2api_account(self, include_secret: bool) -> anyhow::Result<RemoteAccount> {
         let access_token_configured = token_configured(&self.access_token_raw);
+        let refresh_token_configured = token_configured(&self.refresh_token_raw);
         let access_token = include_secret
             .then_some(self.access_token_raw)
+            .filter(|value| token_configured(value));
+        let refresh_token = include_secret
+            .then_some(self.refresh_token_raw)
             .filter(|value| token_configured(value));
         Ok(RemoteAccount {
             id: self.id,
@@ -299,6 +309,7 @@ impl UnifiedRemoteAccountRow {
             base_url: self.base_url,
             api_url: self.api_url,
             access_token,
+            refresh_token: refresh_token.filter(|_| refresh_token_configured),
             access_token_configured,
             page_checkin_url: self.page_checkin_url,
             checkin_mode: self.checkin_mode.parse()?,
@@ -311,6 +322,7 @@ impl UnifiedRemoteAccountRow {
             remote_display_name: self.remote_display_name,
             last_balance_amount: self.last_balance_amount,
             last_sync_error: self.last_sync_error,
+            reauth_required: self.reauth_required,
             last_synced_at_ms: self.last_synced_at_ms,
             low_balance_alert_notified: self.low_balance_alert_notified,
             last_balance_alert_at_ms: self.last_balance_alert_at_ms,
@@ -605,6 +617,7 @@ mod tests {
                 base_url: "https://sub2api.example.com".to_string(),
                 api_url: Some("https://sub2api.example.com/v1".to_string()),
                 access_token: "Bearer remote-token".to_string(),
+                refresh_token: Some("Bearer remote-refresh".to_string()),
                 page_checkin_url: Some("https://sub2api.example.com/dashboard".to_string()),
                 checkin_mode: Some(RemoteAccountCheckinMode::PageOpen),
                 auto_checkin_time: Some("07:45:00".to_string()),
@@ -694,6 +707,7 @@ mod tests {
         match secret_remote {
             UnifiedRemoteAccount::Sub2Api(account) => {
                 assert_eq!(account.access_token.as_deref(), Some("remote-token"));
+                assert_eq!(account.refresh_token.as_deref(), Some("remote-refresh"));
                 assert_eq!(account.remote_role.as_deref(), Some("admin"));
             }
             UnifiedRemoteAccount::Newapi(_) => panic!("expected sub2api account"),
