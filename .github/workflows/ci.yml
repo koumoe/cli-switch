@@ -86,12 +86,18 @@ jobs:
           - name: Linux
             runs_on: ubuntu-24.04
             install_linux_deps: true
+            build_command: cargo build --release
+            rust_cache_shared_key: ""
           - name: macOS
             runs_on: macos-14
             install_linux_deps: false
+            build_command: cargo build --release
+            rust_cache_shared_key: ""
           - name: Windows
             runs_on: windows-latest
             install_linux_deps: false
+            build_command: cargo build --release --target x86_64-pc-windows-msvc
+            rust_cache_shared_key: desktop-windows-x64-release
 
     steps:
       - name: Checkout
@@ -117,9 +123,11 @@ jobs:
 
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ${{ matrix.rust_cache_shared_key }}
 
       - name: Build (release, default features)
-        run: cargo build --release
+        run: ${{ matrix.build_command }}
 
   ci:
     runs-on: ubuntu-latest

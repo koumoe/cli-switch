@@ -387,6 +387,8 @@ jobs:
 
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: desktop-windows-x64-release
 
       - name: Build
         run: cargo build --release --target x86_64-pc-windows-msvc
