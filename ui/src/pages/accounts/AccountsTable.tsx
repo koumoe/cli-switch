@@ -226,6 +226,11 @@ export function AccountsTable({
                       <div className="truncate font-medium" title={item.base_url}>
                         {item.base_url}
                       </div>
+                      {item.provider === "sub2api" && item.reauth_required ? (
+                        <div className="mt-1 text-xs text-destructive">
+                          {t("accounts.table.reauthRequired")}
+                        </div>
+                      ) : null}
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center justify-center">

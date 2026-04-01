@@ -31,6 +31,7 @@ enum UserEvent {
         request_id: String,
         window_id: WindowId,
         token: String,
+        refresh_token: String,
     },
 }
 
@@ -69,7 +70,10 @@ enum IpcMessage {
 #[serde(tag = "type")]
 enum Sub2ApiAuthIpcMessage {
     #[serde(rename = "sub2api-auth-token")]
-    Token { token: String },
+    Token {
+        token: String,
+        refresh_token: String,
+    },
 }
 
 #[derive(Debug, Default)]
@@ -96,6 +100,7 @@ struct Sub2ApiAuthWindow {
 struct Sub2ApiAuthResultEvent {
     request_id: String,
     token: Option<String>,
+    refresh_token: Option<String>,
     cancelled: bool,
     error: Option<String>,
 }
@@ -104,26 +109,32 @@ const SUB2API_AUTH_INIT_SCRIPT: &str = r#"
 (() => {
   const AUTH_KEY = "auth_token";
   const REFRESH_KEY = "refresh_token";
-  let lastToken = "";
+  let lastSignature = "";
 
-  const readToken = () => {
+  const readAuth = () => {
     try {
-      const value = window.localStorage?.getItem(AUTH_KEY);
-      return typeof value === "string" ? value.trim() : "";
+      const accessToken = window.localStorage?.getItem(AUTH_KEY);
+      const refreshToken = window.localStorage?.getItem(REFRESH_KEY);
+      return {
+        token: typeof accessToken === "string" ? accessToken.trim() : "",
+        refresh_token: typeof refreshToken === "string" ? refreshToken.trim() : "",
+      };
     } catch (_) {
-      return "";
+      return { token: "", refresh_token: "" };
     }
   };
 
   const emit = () => {
-    const token = readToken();
-    if (!token || token === lastToken) return;
-    lastToken = token;
+    const payload = readAuth();
+    if (!payload.token || !payload.refresh_token) return;
+    const signature = `${payload.token}\n${payload.refresh_token}`;
+    if (signature === lastSignature) return;
+    lastSignature = signature;
     try {
       window.ipc?.postMessage(JSON.stringify({
         type: "sub2api-auth-token",
-        token,
-        refresh_token: window.localStorage?.getItem(REFRESH_KEY) || null,
+        token: payload.token,
+        refresh_token: payload.refresh_token,
       }));
     } catch (_) {}
   };
@@ -174,6 +185,7 @@ fn dispatch_sub2api_auth_result(
     webview: &wry::WebView,
     request_id: impl Into<String>,
     token: Option<String>,
+    refresh_token: Option<String>,
     cancelled: bool,
     error: Option<String>,
 ) {
@@ -183,6 +195,7 @@ fn dispatch_sub2api_auth_result(
         &Sub2ApiAuthResultEvent {
             request_id: request_id.into(),
             token,
+            refresh_token,
             cancelled,
             error,
         },
@@ -214,15 +227,20 @@ fn create_sub2api_auth_window(
                 return;
             };
             match message {
-                Sub2ApiAuthIpcMessage::Token { token } => {
+                Sub2ApiAuthIpcMessage::Token {
+                    token,
+                    refresh_token,
+                } => {
                     let token = token.trim().to_string();
-                    if token.is_empty() {
+                    let refresh_token = refresh_token.trim().to_string();
+                    if token.is_empty() || refresh_token.is_empty() {
                         return;
                     }
                     let _ = proxy_for_auth.send_event(UserEvent::Sub2ApiAuthToken {
                         request_id: request_id_for_auth.clone(),
                         window_id,
                         token,
+                        refresh_token,
                     });
                 }
             }
@@ -669,7 +687,7 @@ fn handle_close_requested(
 
     if *window_id != main_window_id {
         if let Some(auth_window) = auth_windows.remove(window_id) {
-            dispatch_sub2api_auth_result(webview, auth_window.request_id, None, true, None);
+            dispatch_sub2api_auth_result(webview, auth_window.request_id, None, None, true, None);
             return true;
         }
         return false;
@@ -823,6 +841,7 @@ fn handle_user_event(
                             webview,
                             request_id,
                             None,
+                            None,
                             false,
                             Some("base_url is required".to_string()),
                         );
@@ -849,6 +868,7 @@ fn handle_user_event(
                             dispatch_sub2api_auth_result(
                                 webview,
                                 request_id,
+                                None,
                                 None,
                                 false,
                                 Some(err.to_string()),
@@ -883,11 +903,19 @@ fn handle_user_event(
             request_id,
             window_id,
             token,
+            refresh_token,
         } => {
             let Some(_auth_window) = auth_windows.remove(&window_id) else {
                 return;
             };
-            dispatch_sub2api_auth_result(webview, request_id, Some(token), false, None);
+            dispatch_sub2api_auth_result(
+                webview,
+                request_id,
+                Some(token),
+                Some(refresh_token),
+                false,
+                None,
+            );
         }
         UserEvent::BackendEvent(ev) => {
             if let AppEvent::SystemNotificationSettingsChanged(ref next) = ev {

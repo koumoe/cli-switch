@@ -22,7 +22,7 @@ import {
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui";
 import { useCurrency } from "@/lib/currency";
-import { humanizeApiError } from "@/lib/error";
+import { humanizeApiError, isApiRequestError } from "@/lib/error";
 import { useI18n } from "@/lib/i18n";
 import { requestSub2ApiDesktopAuth } from "@/lib/ipc";
 
@@ -140,6 +140,10 @@ export function AccountsPage() {
       .catch(() => undefined);
   }, [checkinsDate, today]);
 
+  function isSub2ApiReloginRequired(error: unknown): boolean {
+    return isApiRequestError(error) && error.code === "remote_relogin_required";
+  }
+
   function openCreate() {
     setWizardOpen(true);
   }
@@ -154,6 +158,7 @@ export function AccountsPage() {
       user_id: item.provider === "newapi" ? item.user_id ?? "" : "",
       user_token: "",
       bearer_token: "",
+      refresh_token: "",
       page_checkin_url: item.page_checkin_url ?? "",
       checkin_mode: resolveCheckinMode(item),
       auto_checkin_time: item.auto_checkin_time ?? "00:05:00",
@@ -240,6 +245,7 @@ export function AccountsPage() {
           base_url: baseUrl,
           api_url: apiUrl || null,
           bearer_token: bearerToken || undefined,
+          refresh_token: draft.refresh_token.trim() || undefined,
           page_checkin_url: pageUrl || null,
           checkin_mode: draft.checkin_mode,
           auto_checkin_time: draft.auto_checkin_time || "00:05:00",
@@ -268,12 +274,16 @@ export function AccountsPage() {
     }
     setLoginOpening(true);
     try {
-      const token = await requestSub2ApiDesktopAuth(baseUrl);
-      if (!token) {
+      const auth = await requestSub2ApiDesktopAuth(baseUrl);
+      if (!auth) {
         toast(t("accounts.toast.sub2apiAuthCancelled"));
         return;
       }
-      setDraft((current) => ({ ...current, bearer_token: token }));
+      setDraft((current) => ({
+        ...current,
+        bearer_token: auth.bearerToken,
+        refresh_token: auth.refreshToken,
+      }));
     } catch (e) {
       const error = e instanceof Error ? e.message : "";
       if (error === "sub2api_auth_unsupported") {
@@ -298,6 +308,9 @@ export function AccountsPage() {
       await refreshAll();
     } catch (e) {
       toast.error(t("accounts.toast.refreshFail"), { description: humanizeApiError(e, t) });
+      if (isSub2ApiReloginRequired(e)) {
+        await refreshAll();
+      }
     } finally {
       setRefreshing((current) => ({ ...current, [item.id]: false }));
     }
@@ -427,6 +440,9 @@ export function AccountsPage() {
       }
     } catch (e) {
       toast.error(t("accounts.toast.loadGroupsFail"), { description: humanizeApiError(e, t) });
+      if (isSub2ApiReloginRequired(e)) {
+        await refreshAll();
+      }
     } finally {
       setManagedLoadingGroups(false);
     }
@@ -460,6 +476,9 @@ export function AccountsPage() {
       setManagedDraft(null);
     } catch (e) {
       toast.error(t("accounts.toast.createManagedFail"), { description: humanizeApiError(e, t) });
+      if (isSub2ApiReloginRequired(e)) {
+        await refreshAll();
+      }
     } finally {
       setManagedCreating(false);
     }
