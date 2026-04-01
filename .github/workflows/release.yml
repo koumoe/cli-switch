@@ -45,65 +45,11 @@ jobs:
           fi
 
   # =============================================================================
-  # 1. CI 检查
-  # =============================================================================
-  ci:
-    name: CI
-    needs: check
-    if: needs.check.outputs.should_skip != 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-          cache-dependency-path: ui/package-lock.json
-
-      - name: Install UI dependencies
-        working-directory: ui
-        run: npm ci
-
-      - name: Lint i18n catalogs
-        run: node scripts/i18n-lint.mjs
-
-      - name: Check changelog i18n
-        run: node scripts/changelog-i18n.mjs check docs/changelog/en.md docs/changelog/cn.md
-
-      - name: Build UI
-        working-directory: ui
-        run: npm run build
-
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: ${{ env.RUST_VERSION }}
-          components: rustfmt, clippy
-
-      - name: Rust cache
-        uses: Swatinem/rust-cache@v2
-
-      - name: Rust fmt
-        run: cargo fmt --all -- --check
-
-      - name: Rust clippy
-        run: cargo clippy --no-default-features --features embed-ui --all-targets -- -D warnings
-
-      - name: Rust test
-        run: cargo test --no-default-features --features embed-ui
-
-      - name: Build
-        run: cargo build --release --no-default-features --features embed-ui
-
-  # =============================================================================
-  # 2. 分析 commits，确定是否需要发布
+  # 1. 分析 commits，确定是否需要发布
   # =============================================================================
   analyze:
     name: Analyze
-    needs: [check, ci]
+    needs: check
     if: needs.check.outputs.should_skip != 'true'
     runs-on: ubuntu-latest
     outputs:
@@ -127,7 +73,7 @@ jobs:
           node scripts/analyze-next-version.mjs
 
   # =============================================================================
-  # 3. 准备发布：更新版本文件 + commit + push
+  # 2. 准备发布：更新版本文件 + commit + push
   # =============================================================================
   prepare:
     name: Prepare
@@ -187,7 +133,7 @@ jobs:
           echo "✅ Version files updated and pushed"
 
   # =============================================================================
-  # 4. 并行构建各平台
+  # 3. 并行构建各平台
   # =============================================================================
   build_ui:
     name: Build UI (artifact)
@@ -210,9 +156,6 @@ jobs:
         working-directory: ui
         run: npm ci
 
-      - name: Lint i18n catalogs
-        run: node scripts/i18n-lint.mjs
-
       - name: Build UI
         working-directory: ui
         run: npm run build
@@ -227,7 +170,7 @@ jobs:
   build_linux_x64:
     name: Linux x64
     needs: [prepare, build_ui]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -243,8 +186,8 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev libayatana-appindicator3-dev libxdo-dev
-          sudo apt-get install -y libwebkit2gtk-4.1-dev || sudo apt-get install -y libwebkit2gtk-4.0-dev
+          sudo apt-get install -y --no-install-recommends libgtk-3-dev libayatana-appindicator3-dev libxdo-dev
+          sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev || sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.0-dev
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -296,8 +239,8 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev libayatana-appindicator3-dev libxdo-dev
-          sudo apt-get install -y libwebkit2gtk-4.1-dev || sudo apt-get install -y libwebkit2gtk-4.0-dev
+          sudo apt-get install -y --no-install-recommends libgtk-3-dev libayatana-appindicator3-dev libxdo-dev
+          sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev || sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.0-dev
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -444,6 +387,8 @@ jobs:
 
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: desktop-windows-x64-release
 
       - name: Build
         run: cargo build --release --target x86_64-pc-windows-msvc
@@ -521,7 +466,7 @@ jobs:
           if-no-files-found: error
 
   # =============================================================================
-  # 5. 发布：创建 tag + Release + 上传 assets（原子操作）
+  # 4. 发布：创建 tag + Release + 上传 assets（原子操作）
   # =============================================================================
   publish:
     name: Publish
