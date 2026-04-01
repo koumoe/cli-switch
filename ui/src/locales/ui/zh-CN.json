@@ -374,7 +374,6 @@
       "sub2apiAuthCancelled": "已取消 sub2api 登录授权",
       "sub2apiAuthUnsupported": "当前环境不支持内置 sub2api 登录授权窗口",
       "sub2apiAuthFailed": "获取 sub2api Authorization 失败",
-      "remote_relogin_required": "sub2api 登录状态已失效，请重新登录",
       "createManagedOk": "渠道已创建并同步",
       "createManagedFail": "创建渠道失败",
       "reorderOk": "排序已保存",

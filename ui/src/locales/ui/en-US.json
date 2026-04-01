@@ -374,7 +374,6 @@
       "sub2apiAuthCancelled": "Sub2api authorization was cancelled",
       "sub2apiAuthUnsupported": "The current environment does not support the built-in sub2api auth window",
       "sub2apiAuthFailed": "Failed to capture sub2api Authorization",
-      "remote_relogin_required": "The sub2api login session expired. Sign in again.",
       "createManagedOk": "Channel created and synced",
       "createManagedFail": "Failed to create channel",
       "reorderOk": "Order saved",
