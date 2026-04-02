@@ -139,6 +139,10 @@ function managedMissingDescription(
     : "A remote managed resource changed. Disable or delete the local channel as needed.";
 }
 
+function canSyncDeleteManagedMissing(prompt: RemoteManagedChannelMissingPrompt | null): boolean {
+  return !!prompt && !prompt.missing_resource;
+}
+
 function routeFromPath(pathname: string): AppRoute {
   if (pathname === "/") return "overview";
   if (pathname.startsWith("/channels")) return "channels";
@@ -295,6 +299,7 @@ export default function App() {
   const [closeDecisionSent, setCloseDecisionSent] = useState(false);
   const [managedMissingQueue, setManagedMissingQueue] = useState<RemoteManagedChannelMissingPrompt[]>([]);
   const [managedMissingBusyAction, setManagedMissingBusyAction] = useState<"disable" | "delete" | null>(null);
+  const [managedMissingDeleteSyncRemote, setManagedMissingDeleteSyncRemote] = useState(true);
   const [managedMultiplierQueue, setManagedMultiplierQueue] = useState<RemoteManagedChannelMultiplierPrompt[]>([]);
   const [managedMultiplierBusy, setManagedMultiplierBusy] = useState(false);
   const updatePromptOpenRef = useRef(false);
@@ -305,6 +310,10 @@ export default function App() {
   useEffect(() => {
     updatePromptOpenRef.current = updatePromptOpen;
   }, [updatePromptOpen]);
+
+  useEffect(() => {
+    setManagedMissingDeleteSyncRemote(canSyncDeleteManagedMissing(activeManagedMissing));
+  }, [activeManagedMissing?.channel_id, activeManagedMissing?.missing_resource]);
 
   // 确保主题在应用启动时被应用
   useTheme();
@@ -543,7 +552,10 @@ export default function App() {
         await disableChannel(activeManagedMissing.channel_id);
         toast.success(t("channels.remoteMissing.disableOk", { name: activeManagedMissing.channel_name }));
       } else {
-        await deleteChannel(activeManagedMissing.channel_id, { sync_remote_delete: false });
+        await deleteChannel(activeManagedMissing.channel_id, {
+          sync_remote_delete:
+            managedMissingDeleteSyncRemote && canSyncDeleteManagedMissing(activeManagedMissing),
+        });
         toast.success(t("channels.remoteMissing.deleteOk", { name: activeManagedMissing.channel_name }));
       }
       window.dispatchEvent(
@@ -743,6 +755,25 @@ export default function App() {
                   </div>
                 ) : null}
               </div>
+              {canSyncDeleteManagedMissing(activeManagedMissing) ? (
+                <div className="flex items-center justify-between rounded-md border p-3">
+                  <div className="space-y-1">
+                    <div className="text-sm font-medium">{t("channels.remoteMissing.syncDeleteRemote")}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {t("channels.remoteMissing.syncDeleteRemoteHint")}
+                    </div>
+                  </div>
+                  <Switch
+                    checked={managedMissingDeleteSyncRemote}
+                    onCheckedChange={setManagedMissingDeleteSyncRemote}
+                    disabled={!!managedMissingBusyAction}
+                  />
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  {t("channels.remoteMissing.syncDeleteRemoteUnavailable")}
+                </p>
+              )}
               <p className="text-xs text-muted-foreground">
                 {t("channels.remoteMissing.hint")}
               </p>
