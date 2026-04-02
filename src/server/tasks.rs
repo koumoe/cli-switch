@@ -1004,11 +1004,11 @@ async fn run_sub2api_account_maintenance(
         Vec<storage::Channel>,
     >,
 ) {
-    let Some(_token) = account
+    if account
         .access_token
         .as_deref()
-        .filter(|value| !value.trim().is_empty())
-    else {
+        .is_none_or(|value| value.trim().is_empty())
+    {
         if account.low_balance_alert_notified {
             let _ = storage::set_remote_account_balance_alert_notified(
                 db_path,
@@ -1019,7 +1019,7 @@ async fn run_sub2api_account_maintenance(
             .await;
         }
         return;
-    };
+    }
 
     let latest_overview = match sub2api_auth::run_with_persisted_session(
         db_path.clone(),
