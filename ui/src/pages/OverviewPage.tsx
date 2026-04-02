@@ -15,7 +15,7 @@ import {
 import { PageHeader } from "@/components/PageHeader";
 import { useI18n } from "@/lib/i18n";
 import { humanizeApiError } from "@/lib/error";
-import { useCurrency, formatMoney, parseDecimalLike } from "@/lib/currency";
+import { useCurrency, formatDecimal, formatMoney, parseDecimalLike } from "@/lib/currency";
 import {
   listChannels,
   statsSummary,
@@ -294,6 +294,11 @@ export function OverviewPage() {
     return hasAny ? sum : null;
   }, [channels, channelStats]);
 
+  const estimatedOfficialCost = useMemo(
+    () => parseDecimalLike(stats?.estimated_cost_usd),
+    [stats?.estimated_cost_usd],
+  );
+
   const channelStatsUsed = useMemo(
     () => channelStats.filter((s) => s.success > 0),
     [channelStats],
@@ -389,7 +394,7 @@ export function OverviewPage() {
           </CardHeader>
           <CardContent className="pb-3 px-3">
             <div className="text-xl font-bold">
-              {formatMoney(parseDecimalLike(stats?.estimated_cost_usd), "USD")}
+              {estimatedOfficialCost === null ? "-" : `$${formatDecimal(estimatedOfficialCost)}`}
             </div>
           </CardContent>
         </Card>
