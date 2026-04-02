@@ -303,7 +303,6 @@
       "binding_exists": "该平台账号已绑定，请直接使用已有绑定。",
       "gemini_list_sessions_failed": "执行 Gemini 会话列表命令失败：{{detail}}",
       "gemini_list_sessions_parse_failed": "无法安全解析 Gemini 会话列表：{{detail}}",
-      "gemini_session_mismatch": "Gemini 本地历史里找到了候选 session_id，但当前项目的会话列表里没有它，可能已被外部删除。",
       "gemini_session_missing": "Gemini 当前项目下未找到对应会话，可能已被外部删除或当前 CLI 版本无法安全恢复。",
       "pairing_token_expired": "配对码已过期，请重新生成。",
       "pairing_token_invalid": "配对码无效，请检查后重试。",
