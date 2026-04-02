@@ -105,6 +105,7 @@ export function SettingsPage() {
   });
   const [saving, setSaving] = useState(false);
   const [autoDisableSaving, setAutoDisableSaving] = useState(false);
+  const [channelRetrySaving, setChannelRetrySaving] = useState(false);
   const [systemNotificationSaving, setSystemNotificationSaving] = useState(false);
   const [newApiManagedSaving, setNewApiManagedSaving] = useState(false);
   const [closeSaving, setCloseSaving] = useState(false);
@@ -1808,6 +1809,57 @@ export function SettingsPage() {
                     }
                   }}
                   disabled={!appSettings || autoDisableSaving}
+                >
+                  {t("common.save")}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <RefreshCw className="h-4 w-4" />
+                {t("settings.channelRetry.title")}
+              </CardTitle>
+              <CardDescription>{t("settings.channelRetry.subtitle")}</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <div className="font-medium text-sm">{t("settings.channelRetry.enable")}</div>
+                  <div className="text-xs text-muted-foreground">{t("settings.channelRetry.enableHint")}</div>
+                </div>
+                <Switch
+                  checked={appSettings?.channel_retry_enabled ?? false}
+                  onCheckedChange={(v) => {
+                    setAppSettings((prev) => (prev ? { ...prev, channel_retry_enabled: v } : prev));
+                  }}
+                  disabled={!appSettings}
+                />
+              </div>
+
+              <div className="flex justify-end">
+                <Button
+                  size="sm"
+                  onClick={async () => {
+                    if (!appSettings) return;
+                    setChannelRetrySaving(true);
+                    try {
+                      const next = await updateSettings({
+                        channel_retry_enabled: appSettings.channel_retry_enabled,
+                      });
+                      setAppSettings(next);
+                      toast.success(t("settings.channelRetry.saved"));
+                    } catch (e) {
+                      toast.error(t("settings.channelRetry.saveFail"), {
+                        description: humanizeApiError(e, t),
+                      });
+                    } finally {
+                      setChannelRetrySaving(false);
+                    }
+                  }}
+                  disabled={!appSettings || channelRetrySaving}
                 >
                   {t("common.save")}
                 </Button>

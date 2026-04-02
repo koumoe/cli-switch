@@ -53,8 +53,10 @@ import {
   disableChannel,
   testChannel,
   reorderChannels,
+  getSettings,
   type Channel,
   type CreateChannelInput,
+  type AppSettings,
   type Protocol,
 } from "../api";
 import { protocolLabel } from "../lib";
@@ -70,6 +72,8 @@ function emptyDraft(): ChannelDraft {
     auth_ref: "",
     checkin_url: "",
     priority: 0,
+    retry_times: 1,
+    ignore_channel_protection: false,
     recharge_currency: "CNY",
     real_multiplier: 1,
     enabled: true,
@@ -179,6 +183,7 @@ export function ChannelsPage() {
   const [channelsByProtocol, setChannelsByProtocol] = useState<
     Record<Protocol, Channel[]>
   >({ openai: [], anthropic: [], gemini: [] });
+  const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
   const [reordering, setReordering] = useState(false);
   const [dragState, dispatchDrag] = useReducer(dragReducer, initialDragState);
   const dragId = dragState.dragId;
@@ -203,10 +208,16 @@ export function ChannelsPage() {
 
   async function refresh() {
     try {
-      const cs = await listChannels();
+      const [cs, settings] = await Promise.all([
+        listChannels(),
+        getSettings().catch(() => null),
+      ]);
       const by: Record<Protocol, Channel[]> = { openai: [], anthropic: [], gemini: [] };
       for (const c of cs) by[c.protocol].push(c);
       setChannelsByProtocol(by);
+      if (settings) {
+        setAppSettings(settings);
+      }
     } catch (e) {
       toast.error(t("channels.toast.loadFail"), { description: humanizeApiError(e, t) });
     }
@@ -290,6 +301,8 @@ export function ChannelsPage() {
       auth_ref: c.auth_ref,
       checkin_url: c.checkin_url ?? "",
       priority: c.priority ?? 0,
+      retry_times: c.retry_times ?? 1,
+      ignore_channel_protection: c.ignore_channel_protection ?? false,
       recharge_currency: c.recharge_currency ?? "CNY",
       real_multiplier: c.real_multiplier ?? 1,
       enabled: c.enabled,
@@ -304,14 +317,23 @@ export function ChannelsPage() {
       if (!draft.name.trim()) throw new Error(t("channels.toast.nameRequired"));
       if (!draft.base_url.trim()) throw new Error(t("channels.toast.baseUrlRequired"));
       const real = Number(draft.real_multiplier);
+      const retryTimes = Math.floor(Number(draft.retry_times));
       const scaled = real * 100;
       const twoDecimalsOk = Number.isFinite(real) && Math.abs(scaled - Math.round(scaled)) < 1e-9;
       if (!Number.isFinite(real) || real < 0 || !twoDecimalsOk) {
         throw new Error(t("channels.toast.realMultiplierInvalid"));
       }
+      if (!Number.isFinite(retryTimes) || retryTimes < 1) {
+        throw new Error(t("channels.toast.retryTimesInvalid"));
+      }
 
       if (modalMode === "create") {
-        await createChannel({ ...draft, name: draft.name.trim(), base_url: draft.base_url.trim() });
+        await createChannel({
+          ...draft,
+          name: draft.name.trim(),
+          base_url: draft.base_url.trim(),
+          retry_times: retryTimes,
+        });
         toast.success(t("channels.toast.createOk"));
       } else {
         if (!editId) throw new Error(t("channels.toast.missingId"));
@@ -322,6 +344,8 @@ export function ChannelsPage() {
           auth_ref: draft.auth_ref,
           checkin_url: draft.checkin_url ?? "",
           priority: draft.priority,
+          retry_times: retryTimes,
+          ignore_channel_protection: draft.ignore_channel_protection,
           recharge_currency: draft.recharge_currency,
           real_multiplier: draft.real_multiplier,
           enabled: draft.enabled,
@@ -832,6 +856,29 @@ export function ChannelsPage() {
               />
             </div>
 
+            {appSettings?.channel_retry_enabled ? (
+              <div className="space-y-2">
+                <label className="text-sm font-medium">{t("channels.modal.retryTimes")}</label>
+                <Input
+                  type="number"
+                  min={1}
+                  value={String(draft.retry_times ?? 1)}
+                  onChange={(e) =>
+                    setDraft((d) => ({
+                      ...d,
+                      retry_times: Number.isFinite(Number(e.target.value))
+                        ? Math.max(1, Math.floor(Number(e.target.value)))
+                        : 1,
+                    }))
+                  }
+                  placeholder="1"
+                />
+                <p className="text-xs text-muted-foreground">
+                  {t("channels.modal.retryTimesHint")}
+                </p>
+              </div>
+            ) : null}
+
             <div className="grid gap-4">
               <div className="space-y-2">
                 <label className="text-sm font-medium">
@@ -931,6 +978,21 @@ export function ChannelsPage() {
               <Switch
                 checked={draft.enabled}
                 onCheckedChange={(v) => setDraft((d) => ({ ...d, enabled: v }))}
+              />
+            </div>
+
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <label className="text-sm font-medium">{t("channels.modal.ignoreChannelProtection")}</label>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {t("channels.modal.ignoreChannelProtectionHint")}
+                </p>
+              </div>
+              <Switch
+                checked={draft.ignore_channel_protection}
+                onCheckedChange={(v) =>
+                  setDraft((d) => ({ ...d, ignore_channel_protection: v }))
+                }
               />
             </div>
           </div>

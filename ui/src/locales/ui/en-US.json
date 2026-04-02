@@ -172,6 +172,8 @@
       "name": "Name",
       "terminal": "Terminal",
       "priority": "Priority (higher wins)",
+      "retryTimes": "Retry count",
+      "retryTimesHint": "Only applies when per-channel retry is enabled in Settings; minimum is 1",
       "rechargeCurrency": "Recharge currency",
       "rechargeCurrencyOptions": {
         "cny": "CNY (RMB)",
@@ -182,7 +184,9 @@
       "realMultiplierTooManyDecimals": "Up to 2 decimal places",
       "baseUrl": "Base URL",
       "apiKey": "API Key / Token",
-      "enabled": "Enabled"
+      "enabled": "Enabled",
+      "ignoreChannelProtection": "Ignore channel protection",
+      "ignoreChannelProtectionHint": "When enabled, this channel will never be auto-banned by channel protection"
     },
     "deleteDialog": {
       "title": "Delete Channel",
@@ -204,6 +208,7 @@
       "testFail": "Test failed",
       "nameRequired": "Name is required",
       "baseUrlRequired": "Base URL is required",
+      "retryTimesInvalid": "Retry count must be an integer >= 1",
       "realMultiplierInvalid": "Real multiplier must be a finite number >= 0 with up to 2 decimals",
       "testReachableOkTitle": "{{name}} is reachable",
       "testReachableOkDesc": "Status: {{status}}, Latency: {{latency}}ms",
@@ -526,6 +531,14 @@
       "invalid": "Invalid channel protection parameters",
       "saved": "Saved",
       "saveFail": "Save failed"
+    },
+    "channelRetry": {
+      "title": "Per-channel Retry",
+      "subtitle": "When enabled, each channel can define its own retry count",
+      "enable": "Enable per-channel retry",
+      "enableHint": "When disabled, retry counts are hidden and each channel is tried only once",
+      "saved": "Per-channel retry settings saved",
+      "saveFail": "Failed to save per-channel retry settings"
     },
     "systemNotifications": {
       "title": "System Notifications",
