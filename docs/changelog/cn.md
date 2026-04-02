@@ -1,3 +1,7 @@
+## [0.56.5](https://github.com/koumoe/cli-switch/compare/v0.56.4...v0.56.5) (2026-04-02)
+
+### 修复
+* 修复远端账号同步缺少 User-Agent ([3c6d109](https://github.com/koumoe/cli-switch/commit/3c6d109e3a11babd9da71afe6ff9c2dd0f0a818c))
 ## [0.56.4](https://github.com/koumoe/cli-switch/compare/v0.56.3...v0.56.4) (2026-04-02)
 
 ### 修复
