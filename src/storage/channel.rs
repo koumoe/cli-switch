@@ -7,6 +7,8 @@ use uuid::Uuid;
 use super::protocol::normalize_base_url;
 use super::{Protocol, StorageError, now_ms, with_conn};
 
+const DEFAULT_CHANNEL_RETRY_TIMES: i64 = 1;
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum RechargeCurrency {
     #[serde(rename = "CNY")]
@@ -97,6 +99,8 @@ pub struct Channel {
     pub auth_ref: String,
     pub checkin_url: Option<String>,
     pub priority: i64,
+    pub retry_times: i64,
+    pub ignore_channel_protection: bool,
     pub recharge_currency: RechargeCurrency,
     pub real_multiplier: f64,
     pub managed_by_remote: bool,
@@ -173,10 +177,11 @@ pub fn channel_is_auto_disabled(channel: &Channel, now_ms: i64) -> bool {
 }
 
 const CHANNEL_SELECT_COLUMNS: &str = r#"
-    id, name, protocol, base_url, auth_type, auth_ref, checkin_url, priority, recharge_currency,
-    real_multiplier, managed_by_remote, managed_remote_provider, managed_remote_account_id,
-    managed_remote_resource_id, managed_remote_resource_name, managed_remote_group_name,
-    managed_remote_group_id, enabled, auto_disabled_until_ms, created_at_ms, updated_at_ms
+    id, name, protocol, base_url, auth_type, auth_ref, checkin_url, priority, retry_times,
+    ignore_channel_protection, recharge_currency, real_multiplier, managed_by_remote,
+    managed_remote_provider, managed_remote_account_id, managed_remote_resource_id,
+    managed_remote_resource_name, managed_remote_group_name, managed_remote_group_id, enabled,
+    auto_disabled_until_ms, created_at_ms, updated_at_ms
 "#;
 
 fn channel_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Channel> {
@@ -191,25 +196,69 @@ fn channel_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Channel> {
         auth_ref: row.get(5)?,
         checkin_url: row.get(6)?,
         priority: row.get(7)?,
-        recharge_currency: row.get(8)?,
-        real_multiplier: row.get(9)?,
-        managed_by_remote: row.get::<_, i64>(10)? != 0,
-        managed_remote_provider: row.get(11)?,
-        managed_remote_account_id: row.get(12)?,
-        managed_remote_resource_id: row.get(13)?,
-        managed_remote_resource_name: row.get(14)?,
-        managed_remote_group_name: row.get(15)?,
-        managed_remote_group_id: row.get(16)?,
-        enabled: row.get::<_, i64>(17)? != 0,
-        auto_disabled_until_ms: row.get(18)?,
-        created_at_ms: row.get(19)?,
-        updated_at_ms: row.get(20)?,
+        retry_times: row.get(8)?,
+        ignore_channel_protection: row.get::<_, i64>(9)? != 0,
+        recharge_currency: row.get(10)?,
+        real_multiplier: row.get(11)?,
+        managed_by_remote: row.get::<_, i64>(12)? != 0,
+        managed_remote_provider: row.get(13)?,
+        managed_remote_account_id: row.get(14)?,
+        managed_remote_resource_id: row.get(15)?,
+        managed_remote_resource_name: row.get(16)?,
+        managed_remote_group_name: row.get(17)?,
+        managed_remote_group_id: row.get(18)?,
+        enabled: row.get::<_, i64>(19)? != 0,
+        auto_disabled_until_ms: row.get(20)?,
+        created_at_ms: row.get(21)?,
+        updated_at_ms: row.get(22)?,
     })
 }
 
 fn normalize_optional_text(raw: Option<String>) -> Option<String> {
     raw.map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
+}
+
+fn default_retry_times() -> i64 {
+    DEFAULT_CHANNEL_RETRY_TIMES
+}
+
+fn normalize_retry_times(raw: i64) -> i64 {
+    raw.max(DEFAULT_CHANNEL_RETRY_TIMES)
+}
+
+fn ensure_channel_column(
+    conn: &rusqlite::Connection,
+    column_name: &str,
+    definition: &str,
+) -> anyhow::Result<()> {
+    let exists = conn
+        .query_row(
+            "SELECT 1 FROM pragma_table_info('channels') WHERE name = ?1 LIMIT 1",
+            [column_name],
+            |_| Ok(()),
+        )
+        .optional()?
+        .is_some();
+    if exists {
+        return Ok(());
+    }
+
+    conn.execute(
+        &format!("ALTER TABLE channels ADD COLUMN {column_name} {definition}"),
+        [],
+    )?;
+    Ok(())
+}
+
+pub(crate) fn ensure_channel_schema(conn: &rusqlite::Connection) -> anyhow::Result<()> {
+    ensure_channel_column(conn, "retry_times", "INTEGER NOT NULL DEFAULT 1")?;
+    ensure_channel_column(
+        conn,
+        "ignore_channel_protection",
+        "INTEGER NOT NULL DEFAULT 0",
+    )?;
+    Ok(())
 }
 
 pub async fn record_channel_failure_and_maybe_disable(
@@ -314,6 +363,10 @@ pub struct CreateChannel {
     pub checkin_url: Option<String>,
     #[serde(default)]
     pub priority: i64,
+    #[serde(default = "default_retry_times")]
+    pub retry_times: i64,
+    #[serde(default)]
+    pub ignore_channel_protection: bool,
     pub recharge_currency: Option<RechargeCurrency>,
     pub real_multiplier: Option<f64>,
     pub enabled: bool,
@@ -341,6 +394,7 @@ pub async fn create_channel(db_path: PathBuf, input: CreateChannel) -> anyhow::R
             .checkin_url
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty());
+        let retry_times = normalize_retry_times(input.retry_times);
         let recharge_currency = input.recharge_currency.unwrap_or(RechargeCurrency::Cny);
         let real_multiplier = input.real_multiplier.unwrap_or(1.0);
         let managed_by_remote = input.managed_by_remote.unwrap_or(false);
@@ -377,12 +431,13 @@ pub async fn create_channel(db_path: PathBuf, input: CreateChannel) -> anyhow::R
         conn.execute(
             r#"
             INSERT INTO channels (
-                id, name, protocol, base_url, auth_type, auth_ref, checkin_url, priority, recharge_currency, real_multiplier,
-                managed_by_remote, managed_remote_provider, managed_remote_account_id, managed_remote_resource_id,
-                managed_remote_resource_name, managed_remote_group_name, managed_remote_group_id,
-                enabled, created_at_ms, updated_at_ms
+                id, name, protocol, base_url, auth_type, auth_ref, checkin_url, priority,
+                retry_times, ignore_channel_protection, recharge_currency, real_multiplier,
+                managed_by_remote, managed_remote_provider, managed_remote_account_id,
+                managed_remote_resource_id, managed_remote_resource_name, managed_remote_group_name,
+                managed_remote_group_id, enabled, created_at_ms, updated_at_ms
             )
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22)
             "#,
             params![
                 id,
@@ -393,6 +448,8 @@ pub async fn create_channel(db_path: PathBuf, input: CreateChannel) -> anyhow::R
                 input.auth_ref,
                 checkin_url,
                 input.priority,
+                retry_times,
+                if input.ignore_channel_protection { 1 } else { 0 },
                 recharge_currency.as_str(),
                 real_multiplier,
                 if managed_by_remote { 1 } else { 0 },
@@ -417,6 +474,8 @@ pub async fn create_channel(db_path: PathBuf, input: CreateChannel) -> anyhow::R
             auth_ref: input.auth_ref,
             checkin_url,
             priority: input.priority,
+            retry_times,
+            ignore_channel_protection: input.ignore_channel_protection,
             recharge_currency,
             real_multiplier,
             managed_by_remote,
@@ -443,6 +502,8 @@ pub struct UpdateChannel {
     pub auth_ref: Option<String>,
     pub checkin_url: Option<String>,
     pub priority: Option<i64>,
+    pub retry_times: Option<i64>,
+    pub ignore_channel_protection: Option<bool>,
     pub recharge_currency: Option<RechargeCurrency>,
     pub real_multiplier: Option<f64>,
     pub enabled: Option<bool>,
@@ -455,7 +516,8 @@ pub async fn update_channel(
 ) -> anyhow::Result<()> {
     with_conn(db_path, move |conn| {
         let ts = now_ms();
-        let clear_failures = input.enabled == Some(true);
+        let clear_failures =
+            input.enabled == Some(true) || input.ignore_channel_protection == Some(true);
 
         let mut channel: Channel = {
             let mut stmt = conn.prepare(&format!(
@@ -497,6 +559,15 @@ pub async fn update_channel(
         if let Some(v) = input.priority {
             channel.priority = v;
         }
+        if let Some(v) = input.retry_times {
+            channel.retry_times = normalize_retry_times(v);
+        }
+        if let Some(v) = input.ignore_channel_protection {
+            channel.ignore_channel_protection = v;
+            if v {
+                channel.auto_disabled_until_ms = 0;
+            }
+        }
         if let Some(v) = input.recharge_currency {
             channel.recharge_currency = v;
         }
@@ -515,10 +586,13 @@ pub async fn update_channel(
         tx.execute(
             r#"
             UPDATE channels
-            SET name = ?2, base_url = ?3, auth_type = ?4, auth_ref = ?5, checkin_url = ?6, priority = ?7, recharge_currency = ?8, real_multiplier = ?9,
-                managed_by_remote = ?10, managed_remote_provider = ?11, managed_remote_account_id = ?12, managed_remote_resource_id = ?13,
-                managed_remote_resource_name = ?14, managed_remote_group_name = ?15, managed_remote_group_id = ?16,
-                enabled = ?17, auto_disabled_until_ms = ?18, updated_at_ms = ?19
+            SET name = ?2, base_url = ?3, auth_type = ?4, auth_ref = ?5, checkin_url = ?6,
+                priority = ?7, retry_times = ?8, ignore_channel_protection = ?9,
+                recharge_currency = ?10, real_multiplier = ?11, managed_by_remote = ?12,
+                managed_remote_provider = ?13, managed_remote_account_id = ?14,
+                managed_remote_resource_id = ?15, managed_remote_resource_name = ?16,
+                managed_remote_group_name = ?17, managed_remote_group_id = ?18, enabled = ?19,
+                auto_disabled_until_ms = ?20, updated_at_ms = ?21
             WHERE id = ?1
             "#,
             params![
@@ -529,6 +603,12 @@ pub async fn update_channel(
                 channel.auth_ref,
                 channel.checkin_url,
                 channel.priority,
+                channel.retry_times,
+                if channel.ignore_channel_protection {
+                    1
+                } else {
+                    0
+                },
                 channel.recharge_currency.as_str(),
                 channel.real_multiplier,
                 if channel.managed_by_remote { 1 } else { 0 },
@@ -883,6 +963,8 @@ mod tests {
             auth_ref: format!("sk-{name}"),
             checkin_url: None,
             priority,
+            retry_times: 1,
+            ignore_channel_protection: false,
             recharge_currency: Some(RechargeCurrency::Cny),
             real_multiplier: Some(1.0),
             enabled: true,
@@ -964,12 +1046,66 @@ mod tests {
         assert!(rows.contains(&"managed_remote_resource_name".to_string()));
         assert!(rows.contains(&"managed_remote_group_name".to_string()));
         assert!(rows.contains(&"managed_remote_group_id".to_string()));
+        assert!(rows.contains(&"retry_times".to_string()));
+        assert!(rows.contains(&"ignore_channel_protection".to_string()));
         assert!(!rows.contains(&"managed_by_newapi".to_string()));
         assert!(!rows.contains(&"newapi_account_id".to_string()));
         assert!(!rows.contains(&"newapi_channel_id".to_string()));
         assert!(!rows.contains(&"newapi_token_id".to_string()));
         assert!(!rows.contains(&"newapi_token_name".to_string()));
         assert!(!rows.contains(&"newapi_group".to_string()));
+
+        remove_sqlite_artifacts(&db_path);
+    }
+
+    #[test]
+    fn ensure_channel_schema_adds_retry_columns_to_legacy_tables() {
+        let db_path = temp_db_path();
+        remove_sqlite_artifacts(&db_path);
+
+        let conn = rusqlite::Connection::open(&db_path).unwrap();
+        conn.execute_batch(
+            r#"
+            CREATE TABLE channels (
+              id TEXT PRIMARY KEY,
+              name TEXT NOT NULL,
+              protocol TEXT NOT NULL,
+              base_url TEXT NOT NULL,
+              auth_type TEXT NOT NULL,
+              auth_ref TEXT NOT NULL,
+              checkin_url TEXT NULL,
+              priority INTEGER NOT NULL DEFAULT 0,
+              recharge_currency TEXT NOT NULL DEFAULT 'CNY',
+              real_multiplier REAL NOT NULL DEFAULT 1.0,
+              managed_by_remote INTEGER NOT NULL DEFAULT 0,
+              managed_remote_provider TEXT NULL,
+              managed_remote_account_id TEXT NULL,
+              managed_remote_resource_id TEXT NULL,
+              managed_remote_resource_name TEXT NULL,
+              managed_remote_group_name TEXT NULL,
+              managed_remote_group_id INTEGER NULL,
+              enabled INTEGER NOT NULL,
+              auto_disabled_until_ms INTEGER NOT NULL DEFAULT 0,
+              created_at_ms INTEGER NOT NULL,
+              updated_at_ms INTEGER NOT NULL
+            );
+            "#,
+        )
+        .unwrap();
+
+        ensure_channel_schema(&conn).unwrap();
+
+        let mut stmt = conn
+            .prepare("SELECT name FROM pragma_table_info('channels')")
+            .unwrap();
+        let rows = stmt
+            .query_map([], |row| row.get::<_, String>(0))
+            .unwrap()
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .unwrap();
+
+        assert!(rows.contains(&"retry_times".to_string()));
+        assert!(rows.contains(&"ignore_channel_protection".to_string()));
 
         remove_sqlite_artifacts(&db_path);
     }

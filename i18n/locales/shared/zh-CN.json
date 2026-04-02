@@ -46,6 +46,7 @@
     "channel_ids_mismatch": "channel_ids 需要覆盖所有渠道",
     "channel_name_required": "渠道名称不能为空",
     "channel_base_url_required": "base_url 不能为空",
+    "channel_retry_times_invalid": "重试次数必须大于等于 1",
     "channel_real_multiplier_invalid": "倍率参数无效",
     "channel_base_url_invalid": "base_url 无效",
     "channel_auth_apply_failed": "渠道鉴权配置无效",

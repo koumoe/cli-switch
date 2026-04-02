@@ -2309,6 +2309,8 @@ mod tests {
                 auth_ref: "env:TEST_KEY".to_string(),
                 checkin_url: None,
                 priority: 10,
+                retry_times: 1,
+                ignore_channel_protection: false,
                 recharge_currency: None,
                 real_multiplier: None,
                 enabled: true,

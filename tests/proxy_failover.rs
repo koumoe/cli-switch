@@ -71,6 +71,80 @@ async fn spawn_upstream_counted(
     (format!("http://127.0.0.1:{}", addr.port()), calls)
 }
 
+async fn spawn_upstream_sequence(
+    responses: Vec<(StatusCode, &'static str)>,
+) -> (String, Arc<AtomicUsize>) {
+    let calls = Arc::new(AtomicUsize::new(0));
+    let calls2 = calls.clone();
+    let responses = Arc::new(responses);
+    let app = Router::new().route(
+        "/{*path}",
+        any(move || {
+            let calls = calls2.clone();
+            let responses = responses.clone();
+            async move {
+                let idx = calls.fetch_add(1, Ordering::Relaxed);
+                let (status, body) = responses
+                    .get(idx)
+                    .copied()
+                    .or_else(|| responses.last().copied())
+                    .expect("responses");
+                (
+                    status,
+                    [(axum::http::header::CONTENT_TYPE, "application/json")],
+                    body,
+                )
+            }
+        }),
+    );
+
+    let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+        .await
+        .expect("bind");
+    let addr = listener.local_addr().expect("local_addr");
+    tokio::spawn(async move {
+        let _ = axum::serve(listener, app).await;
+    });
+
+    (format!("http://127.0.0.1:{}", addr.port()), calls)
+}
+
+async fn create_openai_channel(
+    db_path: std::path::PathBuf,
+    name: &str,
+    base_url: String,
+    priority: i64,
+    retry_times: i64,
+    ignore_channel_protection: bool,
+) {
+    storage::create_channel(
+        db_path,
+        storage::CreateChannel {
+            name: name.to_string(),
+            protocol: storage::Protocol::Openai,
+            base_url,
+            auth_type: None,
+            auth_ref: format!("token-{name}"),
+            checkin_url: None,
+            priority,
+            retry_times,
+            ignore_channel_protection,
+            recharge_currency: None,
+            real_multiplier: None,
+            managed_by_remote: None,
+            managed_remote_provider: None,
+            managed_remote_account_id: None,
+            managed_remote_resource_id: None,
+            managed_remote_resource_name: None,
+            managed_remote_group_name: None,
+            managed_remote_group_id: None,
+            enabled: true,
+        },
+    )
+    .await
+    .expect("create channel");
+}
+
 async fn spawn_upstream_stream_error() -> String {
     // Use a raw TCP server that sends a truncated chunked response so reqwest can
     // successfully receive response headers, but fail while reading the body stream.
@@ -391,6 +465,8 @@ async fn failover_on_non_200_until_success() {
             auth_ref: "t1".to_string(),
             checkin_url: None,
             priority: 30,
+            retry_times: 1,
+            ignore_channel_protection: false,
             recharge_currency: None,
             real_multiplier: None,
             managed_by_remote: None,
@@ -415,6 +491,8 @@ async fn failover_on_non_200_until_success() {
             auth_ref: "t2".to_string(),
             checkin_url: None,
             priority: 20,
+            retry_times: 1,
+            ignore_channel_protection: false,
             recharge_currency: None,
             real_multiplier: None,
             managed_by_remote: None,
@@ -439,6 +517,8 @@ async fn failover_on_non_200_until_success() {
             auth_ref: "t3".to_string(),
             checkin_url: None,
             priority: 10,
+            retry_times: 1,
+            ignore_channel_protection: false,
             recharge_currency: None,
             real_multiplier: None,
             managed_by_remote: None,
@@ -499,6 +579,8 @@ async fn return_last_error_when_all_channels_fail() {
                 auth_ref: "t".to_string(),
                 checkin_url: None,
                 priority,
+                retry_times: 1,
+                ignore_channel_protection: false,
                 recharge_currency: None,
                 real_multiplier: None,
                 managed_by_remote: None,
@@ -541,6 +623,165 @@ async fn return_last_error_when_all_channels_fail() {
 }
 
 #[tokio::test]
+async fn channel_retry_retries_same_channel_until_success() {
+    let (base, calls) = spawn_upstream_sequence(vec![
+        (StatusCode::INTERNAL_SERVER_ERROR, r#"{"err":"retry-1"}"#),
+        (StatusCode::BAD_GATEWAY, r#"{"err":"retry-2"}"#),
+        (StatusCode::OK, r#"{"ok":true}"#),
+    ])
+    .await;
+
+    let db_path = temp_db_path();
+    storage::init_db(&db_path).expect("init_db");
+    storage::update_app_settings(
+        db_path.clone(),
+        storage::AppSettingsPatch {
+            channel_retry_enabled: Some(true),
+            ..Default::default()
+        },
+    )
+    .await
+    .expect("update settings");
+
+    create_openai_channel(db_path.clone(), "c1", format!("{base}/v1"), 10, 3, false).await;
+
+    let client = reqwest::Client::builder().build().expect("client");
+    let req = Request::builder()
+        .method("POST")
+        .uri("/v1/chat/completions")
+        .header(axum::http::header::CONTENT_TYPE, "application/json")
+        .body(Body::from(r#"{"model":"gpt-test"}"#))
+        .expect("req");
+
+    let resp = proxy::forward(
+        &client,
+        db_path.clone(),
+        storage::Protocol::Openai,
+        "/v1",
+        req,
+    )
+    .await
+    .expect("forward");
+
+    assert_eq!(resp.status(), StatusCode::OK);
+    assert_eq!(calls.load(Ordering::Relaxed), 3);
+}
+
+#[tokio::test]
+async fn channel_retry_stops_after_channel_protection_triggers() {
+    let (base1, c1_calls) =
+        spawn_upstream_counted(StatusCode::INTERNAL_SERVER_ERROR, r#"{"err":"c1"}"#).await;
+    let (base2, c2_calls) = spawn_upstream_counted(StatusCode::OK, r#"{"ok":true}"#).await;
+
+    let db_path = temp_db_path();
+    storage::init_db(&db_path).expect("init_db");
+    storage::update_app_settings(
+        db_path.clone(),
+        storage::AppSettingsPatch {
+            channel_retry_enabled: Some(true),
+            auto_disable_enabled: Some(true),
+            auto_disable_window_minutes: Some(3),
+            auto_disable_failure_times: Some(2),
+            auto_disable_disable_minutes: Some(30),
+            ..Default::default()
+        },
+    )
+    .await
+    .expect("update settings");
+
+    create_openai_channel(db_path.clone(), "c1", format!("{base1}/v1"), 20, 5, false).await;
+    create_openai_channel(db_path.clone(), "c2", format!("{base2}/v1"), 10, 1, false).await;
+
+    let client = reqwest::Client::builder().build().expect("client");
+    let req = Request::builder()
+        .method("POST")
+        .uri("/v1/chat/completions")
+        .header(axum::http::header::CONTENT_TYPE, "application/json")
+        .body(Body::from(r#"{"model":"gpt-test"}"#))
+        .expect("req");
+
+    let resp = proxy::forward(
+        &client,
+        db_path.clone(),
+        storage::Protocol::Openai,
+        "/v1",
+        req,
+    )
+    .await
+    .expect("forward");
+
+    assert_eq!(resp.status(), StatusCode::OK);
+    assert_eq!(c1_calls.load(Ordering::Relaxed), 2);
+    assert_eq!(c2_calls.load(Ordering::Relaxed), 1);
+
+    let channels = storage::list_channels(db_path.clone())
+        .await
+        .expect("list channels");
+    let c1 = channels
+        .iter()
+        .find(|channel| channel.name == "c1")
+        .expect("c1");
+    assert!(c1.auto_disabled_until_ms > 0);
+}
+
+#[tokio::test]
+async fn channel_retry_ignore_channel_protection_keeps_retrying_same_channel() {
+    let (base1, c1_calls) =
+        spawn_upstream_counted(StatusCode::INTERNAL_SERVER_ERROR, r#"{"err":"c1"}"#).await;
+    let (base2, c2_calls) = spawn_upstream_counted(StatusCode::OK, r#"{"ok":true}"#).await;
+
+    let db_path = temp_db_path();
+    storage::init_db(&db_path).expect("init_db");
+    storage::update_app_settings(
+        db_path.clone(),
+        storage::AppSettingsPatch {
+            channel_retry_enabled: Some(true),
+            auto_disable_enabled: Some(true),
+            auto_disable_window_minutes: Some(3),
+            auto_disable_failure_times: Some(1),
+            auto_disable_disable_minutes: Some(30),
+            ..Default::default()
+        },
+    )
+    .await
+    .expect("update settings");
+
+    create_openai_channel(db_path.clone(), "c1", format!("{base1}/v1"), 20, 3, true).await;
+    create_openai_channel(db_path.clone(), "c2", format!("{base2}/v1"), 10, 1, false).await;
+
+    let client = reqwest::Client::builder().build().expect("client");
+    let req = Request::builder()
+        .method("POST")
+        .uri("/v1/chat/completions")
+        .header(axum::http::header::CONTENT_TYPE, "application/json")
+        .body(Body::from(r#"{"model":"gpt-test"}"#))
+        .expect("req");
+
+    let resp = proxy::forward(
+        &client,
+        db_path.clone(),
+        storage::Protocol::Openai,
+        "/v1",
+        req,
+    )
+    .await
+    .expect("forward");
+
+    assert_eq!(resp.status(), StatusCode::OK);
+    assert_eq!(c1_calls.load(Ordering::Relaxed), 3);
+    assert_eq!(c2_calls.load(Ordering::Relaxed), 1);
+
+    let channels = storage::list_channels(db_path.clone())
+        .await
+        .expect("list channels");
+    let c1 = channels
+        .iter()
+        .find(|channel| channel.name == "c1")
+        .expect("c1");
+    assert_eq!(c1.auto_disabled_until_ms, 0);
+}
+
+#[tokio::test]
 async fn gemini_logs_include_model_and_cost() {
     let base = spawn_upstream(
         StatusCode::OK,
@@ -580,6 +821,8 @@ async fn gemini_logs_include_model_and_cost() {
             auth_ref: "t".to_string(),
             checkin_url: None,
             priority: 10,
+            retry_times: 1,
+            ignore_channel_protection: false,
             recharge_currency: None,
             real_multiplier: None,
             managed_by_remote: None,
@@ -639,6 +882,8 @@ async fn stream_error_still_records_usage_event() {
             auth_ref: "t1".to_string(),
             checkin_url: None,
             priority: 10,
+            retry_times: 1,
+            ignore_channel_protection: false,
             recharge_currency: None,
             real_multiplier: None,
             managed_by_remote: None,
@@ -708,6 +953,8 @@ async fn stream_drop_still_records_usage_event() {
             auth_ref: "t1".to_string(),
             checkin_url: None,
             priority: 10,
+            retry_times: 1,
+            ignore_channel_protection: false,
             recharge_currency: None,
             real_multiplier: None,
             managed_by_remote: None,
@@ -774,6 +1021,8 @@ async fn stream_drop_after_openai_terminal_is_success() {
             auth_ref: "t1".to_string(),
             checkin_url: None,
             priority: 10,
+            retry_times: 1,
+            ignore_channel_protection: false,
             recharge_currency: None,
             real_multiplier: None,
             managed_by_remote: None,
@@ -844,6 +1093,8 @@ async fn stream_drop_after_anthropic_terminal_is_success() {
             auth_ref: "t1".to_string(),
             checkin_url: None,
             priority: 10,
+            retry_times: 1,
+            ignore_channel_protection: false,
             recharge_currency: None,
             real_multiplier: None,
             managed_by_remote: None,
@@ -914,6 +1165,8 @@ async fn stream_upstream_error_after_openai_terminal_is_success() {
             auth_ref: "t1".to_string(),
             checkin_url: None,
             priority: 10,
+            retry_times: 1,
+            ignore_channel_protection: false,
             recharge_currency: None,
             real_multiplier: None,
             managed_by_remote: None,
@@ -982,6 +1235,8 @@ async fn stream_upstream_error_after_anthropic_terminal_is_success() {
             auth_ref: "t1".to_string(),
             checkin_url: None,
             priority: 10,
+            retry_times: 1,
+            ignore_channel_protection: false,
             recharge_currency: None,
             real_multiplier: None,
             managed_by_remote: None,
@@ -1055,6 +1310,8 @@ async fn anthropic_count_tokens_failover_and_no_usage_log() {
             auth_ref: "t1".to_string(),
             checkin_url: None,
             priority: 30,
+            retry_times: 1,
+            ignore_channel_protection: false,
             recharge_currency: None,
             real_multiplier: None,
             managed_by_remote: None,
@@ -1079,6 +1336,8 @@ async fn anthropic_count_tokens_failover_and_no_usage_log() {
             auth_ref: "t2".to_string(),
             checkin_url: None,
             priority: 20,
+            retry_times: 1,
+            ignore_channel_protection: false,
             recharge_currency: None,
             real_multiplier: None,
             managed_by_remote: None,
@@ -1159,6 +1418,8 @@ async fn anthropic_count_tokens_does_not_auto_disable() {
             auth_ref: "t1".to_string(),
             checkin_url: None,
             priority: 10,
+            retry_times: 1,
+            ignore_channel_protection: false,
             recharge_currency: None,
             real_multiplier: None,
             managed_by_remote: None,
@@ -1283,6 +1544,8 @@ async fn anthropic_count_tokens_mock_enabled_does_not_hit_upstream() {
             auth_ref: "t1".to_string(),
             checkin_url: None,
             priority: 10,
+            retry_times: 1,
+            ignore_channel_protection: false,
             recharge_currency: None,
             real_multiplier: None,
             managed_by_remote: None,

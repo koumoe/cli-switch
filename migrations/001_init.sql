@@ -10,6 +10,8 @@ CREATE TABLE IF NOT EXISTS channels (
   auth_ref TEXT NOT NULL,
   checkin_url TEXT NULL,
   priority INTEGER NOT NULL DEFAULT 0,
+  retry_times INTEGER NOT NULL DEFAULT 1,
+  ignore_channel_protection INTEGER NOT NULL DEFAULT 0,
   recharge_currency TEXT NOT NULL DEFAULT 'CNY' CHECK(recharge_currency IN ('CNY','USD')),
   real_multiplier REAL NOT NULL DEFAULT 1.0,
   managed_by_remote INTEGER NOT NULL DEFAULT 0,

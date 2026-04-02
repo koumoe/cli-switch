@@ -27,6 +27,7 @@ const KEY_AUTO_DISABLE_ENABLED: &str = "auto_disable_enabled";
 const KEY_AUTO_DISABLE_WINDOW_MINUTES: &str = "auto_disable_window_minutes";
 const KEY_AUTO_DISABLE_FAILURE_TIMES: &str = "auto_disable_failure_times";
 const KEY_AUTO_DISABLE_DISABLE_MINUTES: &str = "auto_disable_disable_minutes";
+const KEY_CHANNEL_RETRY_ENABLED: &str = "channel_retry_enabled";
 const KEY_ANTHROPIC_COUNT_TOKENS_MOCK_ENABLED: &str = "anthropic_count_tokens_mock_enabled";
 const KEY_LOG_LEVEL: &str = "log_level";
 const KEY_LOG_RETENTION_DAYS: &str = "log_retention_days";
@@ -107,6 +108,7 @@ pub struct AppSettings {
     pub auto_disable_window_minutes: i64,
     pub auto_disable_failure_times: i64,
     pub auto_disable_disable_minutes: i64,
+    pub channel_retry_enabled: bool,
     pub anthropic_count_tokens_mock_enabled: bool,
     pub log_level: LogLevel,
     pub log_retention_days: i64,
@@ -154,6 +156,7 @@ impl Default for AppSettings {
             auto_disable_window_minutes: 3,
             auto_disable_failure_times: 5,
             auto_disable_disable_minutes: 30,
+            channel_retry_enabled: false,
             anthropic_count_tokens_mock_enabled: false,
             log_level: LogLevel::Warning,
             log_retention_days: 30,
@@ -231,6 +234,7 @@ pub struct AppSettingsPatch {
     pub auto_disable_window_minutes: Option<i64>,
     pub auto_disable_failure_times: Option<i64>,
     pub auto_disable_disable_minutes: Option<i64>,
+    pub channel_retry_enabled: Option<bool>,
     pub anthropic_count_tokens_mock_enabled: Option<bool>,
     pub log_level: Option<LogLevel>,
     pub log_retention_days: Option<i64>,
@@ -469,6 +473,14 @@ pub async fn get_app_settings(db_path: PathBuf) -> anyhow::Result<AppSettings> {
             )
         {
             out.auto_disable_disable_minutes = n;
+        }
+        if let Some(v) = get_setting(conn, KEY_CHANNEL_RETRY_ENABLED)? {
+            out.channel_retry_enabled = parse_bool_setting(
+                KEY_CHANNEL_RETRY_ENABLED,
+                &v,
+                &mut has_invalid_values,
+                out.channel_retry_enabled,
+            );
         }
         if let Some(v) = get_setting(conn, KEY_ANTHROPIC_COUNT_TOKENS_MOCK_ENABLED)? {
             out.anthropic_count_tokens_mock_enabled = parse_bool_setting(
@@ -771,6 +783,14 @@ pub async fn update_app_settings(
                 conn,
                 KEY_AUTO_DISABLE_DISABLE_MINUTES,
                 &v.to_string(),
+                updated_at_ms,
+            )?;
+        }
+        if let Some(v) = patch.channel_retry_enabled {
+            set_setting(
+                conn,
+                KEY_CHANNEL_RETRY_ENABLED,
+                if v { "true" } else { "false" },
                 updated_at_ms,
             )?;
         }
