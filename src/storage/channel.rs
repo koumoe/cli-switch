@@ -742,10 +742,6 @@ pub async fn delete_channel(db_path: PathBuf, channel_id: String) -> anyhow::Res
             Err(err) => return Err(err.into()),
         };
 
-        tx.execute(
-            r#"DELETE FROM route_channels WHERE channel_id = ?1"#,
-            params![&channel_id],
-        )?;
         let deleted = tx.execute(
             r#"DELETE FROM channels WHERE id = ?1"#,
             params![&channel_id],
@@ -853,44 +849,6 @@ pub async fn detach_channels_from_managed_account(
     .await
 }
 
-fn ensure_channel_column(
-    conn: &rusqlite::Connection,
-    column_name: &str,
-    column_ddl: &str,
-) -> anyhow::Result<()> {
-    let mut stmt = conn.prepare("PRAGMA table_info(channels)")?;
-    let columns = stmt
-        .query_map([], |row| row.get::<_, String>(1))?
-        .collect::<rusqlite::Result<Vec<_>>>()?;
-    if columns.iter().any(|name| name == column_name) {
-        return Ok(());
-    }
-    conn.execute(
-        &format!("ALTER TABLE channels ADD COLUMN {column_name} {column_ddl}"),
-        [],
-    )?;
-    Ok(())
-}
-
-pub fn ensure_channel_schema(conn: &rusqlite::Connection) -> anyhow::Result<()> {
-    ensure_channel_column(conn, "managed_by_remote", "INTEGER NOT NULL DEFAULT 0")?;
-    ensure_channel_column(
-        conn,
-        "managed_remote_provider",
-        "TEXT NULL CHECK(managed_remote_provider IN ('newapi','sub2api'))",
-    )?;
-    ensure_channel_column(conn, "managed_remote_account_id", "TEXT NULL")?;
-    ensure_channel_column(conn, "managed_remote_resource_id", "TEXT NULL")?;
-    ensure_channel_column(conn, "managed_remote_resource_name", "TEXT NULL")?;
-    ensure_channel_column(conn, "managed_remote_group_name", "TEXT NULL")?;
-    ensure_channel_column(conn, "managed_remote_group_id", "INTEGER NULL")?;
-    conn.execute(
-        r#"CREATE INDEX IF NOT EXISTS idx_channels_managed_remote_account ON channels(managed_remote_provider, managed_remote_account_id)"#,
-        [],
-    )?;
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -984,7 +942,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn fresh_schema_omits_legacy_newapi_managed_columns() {
+    async fn fresh_schema_uses_managed_remote_columns() {
         let db_path = temp_db_path();
         remove_sqlite_artifacts(&db_path);
         storage::init_db(&db_path).unwrap();
@@ -999,6 +957,13 @@ mod tests {
             .collect::<rusqlite::Result<Vec<_>>>()
             .unwrap();
 
+        assert!(rows.contains(&"managed_by_remote".to_string()));
+        assert!(rows.contains(&"managed_remote_provider".to_string()));
+        assert!(rows.contains(&"managed_remote_account_id".to_string()));
+        assert!(rows.contains(&"managed_remote_resource_id".to_string()));
+        assert!(rows.contains(&"managed_remote_resource_name".to_string()));
+        assert!(rows.contains(&"managed_remote_group_name".to_string()));
+        assert!(rows.contains(&"managed_remote_group_id".to_string()));
         assert!(!rows.contains(&"managed_by_newapi".to_string()));
         assert!(!rows.contains(&"newapi_account_id".to_string()));
         assert!(!rows.contains(&"newapi_channel_id".to_string()));

@@ -26,10 +26,7 @@ use self::adapter::{ChatAdapter, IncomingAttachmentKind, IncomingMessage};
 #[cfg(test)]
 use self::adapter::{OutgoingMessage, SentMessage, StreamingMessage};
 use self::auth::is_chat_session_not_found;
-use self::cli::{
-    LEGACY_GEMINI_UNTRACKED_SESSION_REF, ValidateResult, adapter_for, cli_type_label,
-    permission_mode_label,
-};
+use self::cli::{ValidateResult, adapter_for, cli_type_label, permission_mode_label};
 use self::i18n::{args, t, t_args};
 #[cfg(test)]
 use self::output::StreamingReply;
@@ -64,8 +61,6 @@ use crate::storage::{self, BridgeSessionStatus, ChatPlatform, StorageError};
 
 const STREAM_UPDATE_INTERVAL: Duration = Duration::from_millis(1200);
 const TYPING_INTERVAL: Duration = Duration::from_secs(4);
-#[allow(dead_code)]
-const MESSAGE_CHAR_LIMIT: usize = 3900;
 const MAX_DISPLAY_JSON_DEPTH: usize = 24;
 
 #[derive(Clone, Copy)]
@@ -546,36 +541,6 @@ impl ChatBridgeRuntime {
                 )
                 .await?;
             }
-            Command::Routes => {
-                let routes = storage::list_routes(self.db_path.clone()).await?;
-                let channels = storage::list_channels(self.db_path.clone()).await?;
-                let channel_names = channels
-                    .iter()
-                    .map(|item| (item.id.clone(), item.name.clone()))
-                    .collect::<HashMap<_, _>>();
-                let mut route_channels = HashMap::<String, Vec<storage::RouteChannel>>::new();
-                for route in &routes {
-                    let items =
-                        storage::list_route_channels(self.db_path.clone(), route.id.clone())
-                            .await?;
-                    route_channels.insert(route.id.clone(), items);
-                }
-                let content = format_routes_list(
-                    &routes,
-                    &route_channels,
-                    &channel_names,
-                    storage::now_ms(),
-                    locale,
-                );
-                self.send_text(
-                    adapter,
-                    &msg.chat_id,
-                    &content,
-                    msg.message_id.as_deref(),
-                    locale,
-                )
-                .await?;
-            }
             Command::Start {
                 tool,
                 project_ref,
@@ -807,7 +772,6 @@ impl ChatBridgeRuntime {
                 let now_ms = storage::now_ms();
                 let settings = self.settings_snapshot();
                 let channels = storage::list_channels(self.db_path.clone()).await?;
-                let routes = storage::list_routes(self.db_path.clone()).await?;
                 let pricing = storage::pricing_status(self.db_path.clone()).await?;
                 let telegram_sessions = storage::count_active_bridge_sessions_for_platform(
                     self.db_path.clone(),
@@ -844,7 +808,6 @@ impl ChatBridgeRuntime {
                     now_ms,
                     settings: settings.as_ref(),
                     channels: &channels,
-                    routes: &routes,
                     tool_statuses: &tool_statuses,
                     telegram_sessions,
                     discord_sessions,
@@ -1007,7 +970,6 @@ impl ChatBridgeRuntime {
 
         let cli_adapter = adapter_for(session.cli_type);
         let mut resume_existing = session.cli_session_ref.is_some();
-        let mut corrected_session_ref = None::<String>;
         let mut generated_session_ref = None::<String>;
 
         if session.cli_type == CliToolId::Claude && session.cli_session_ref.is_none() {
@@ -1023,10 +985,6 @@ impl ChatBridgeRuntime {
                 .await?
             {
                 ValidateResult::Valid => {}
-                ValidateResult::Corrected(corrected) => {
-                    corrected_session_ref = Some(corrected.clone());
-                    session.cli_session_ref = Some(corrected);
-                }
                 ValidateResult::Invalid(reason) => {
                     self.restore_session_after_turn(session.id, None).await;
                     self.send_text(
@@ -1069,17 +1027,10 @@ impl ChatBridgeRuntime {
             .await;
 
         let maybe_session_ref = match &execution {
-            Ok(result) if result.success => generated_session_ref
-                .or(corrected_session_ref.clone())
-                .or_else(|| cli_adapter.extract_session_ref(&result.stdout))
-                .or_else(|| {
-                    if session.cli_type == CliToolId::Gemini && session.cli_session_ref.is_none() {
-                        Some(LEGACY_GEMINI_UNTRACKED_SESSION_REF.to_string())
-                    } else {
-                        None
-                    }
-                }),
-            _ => corrected_session_ref,
+            Ok(result) if result.success => {
+                generated_session_ref.or_else(|| cli_adapter.extract_session_ref(&result.stdout))
+            }
+            _ => None,
         };
 
         self.restore_session_after_turn(session.id, maybe_session_ref)
@@ -1431,74 +1382,6 @@ fn channel_protocol_display_label(protocol: storage::Protocol) -> &'static str {
     }
 }
 
-fn format_routes_list(
-    routes: &[storage::Route],
-    route_channels: &HashMap<String, Vec<storage::RouteChannel>>,
-    channel_names: &HashMap<String, String>,
-    now_ms: i64,
-    locale: AppLocale,
-) -> String {
-    if routes.is_empty() {
-        return t(locale, "route.none");
-    }
-
-    let mut lines = vec![t(locale, "route.list_title")];
-    for route in routes {
-        let match_model = route
-            .match_model
-            .as_deref()
-            .filter(|value| !value.trim().is_empty())
-            .map(ToOwned::to_owned)
-            .unwrap_or_else(|| t(locale, "route.match_all"));
-        lines.push(format!(
-            "{} [{}]  {}",
-            route.name,
-            route.protocol.as_str(),
-            route_enabled_label(route.enabled, locale),
-        ));
-        lines.push(format!("    {}: {}", t(locale, "route.id_label"), route.id));
-        lines.push(format!(
-            "    {}: {}",
-            t(locale, "route.match_model_label"),
-            match_model
-        ));
-
-        let items = route_channels.get(&route.id).cloned().unwrap_or_default();
-        if items.is_empty() {
-            lines.push(format!(
-                "    {}: {}",
-                t(locale, "route.channels_label"),
-                t(locale, "route.channels_empty")
-            ));
-            continue;
-        }
-
-        lines.push(format!("    {}:", t(locale, "route.channels_label")));
-        for item in items {
-            let name = channel_names
-                .get(&item.channel_id)
-                .cloned()
-                .unwrap_or_else(|| item.channel_id.clone());
-            let mut line = format!(
-                "    {}. {} ({})",
-                item.priority + 1,
-                name,
-                short_id(&item.channel_id)
-            );
-            if let Some(until_ms) = item.cooldown_until_ms.filter(|value| *value > now_ms) {
-                line.push_str(&format!(
-                    "  {} {}",
-                    t(locale, "route.cooldown_until_label"),
-                    format_local_timestamp_with_relative(now_ms, until_ms, locale)
-                ));
-            }
-            lines.push(line);
-        }
-    }
-
-    lines.join("\n")
-}
-
 fn format_usage_report(
     range: CommandStatsRange,
     summary: &storage::StatsSummary,
@@ -1705,7 +1588,6 @@ struct StatusReportContext<'a> {
     now_ms: i64,
     settings: &'a storage::AppSettings,
     channels: &'a [storage::Channel],
-    routes: &'a [storage::Route],
     tool_statuses: &'a [CliToolSnapshot],
     telegram_sessions: i64,
     discord_sessions: i64,
@@ -1723,7 +1605,6 @@ fn format_status_report(ctx: StatusReportContext<'_>) -> String {
         now_ms,
         settings,
         channels,
-        routes,
         tool_statuses,
         telegram_sessions,
         discord_sessions,
@@ -1741,7 +1622,6 @@ fn format_status_report(ctx: StatusReportContext<'_>) -> String {
         .filter(|item| storage::channel_is_auto_disabled(item, now_ms))
         .count();
     let enabled_channels = channels.iter().filter(|item| item.enabled).count();
-    let enabled_routes = routes.iter().filter(|item| item.enabled).count();
 
     let mut lines = vec![t(locale, "status.title")];
     lines.push(format!(
@@ -1806,14 +1686,6 @@ fn format_status_report(ctx: StatusReportContext<'_>) -> String {
         format_integer(locale, enabled_channels),
         t(locale, "status.auto_disabled_label"),
         format_integer(locale, auto_disabled)
-    ));
-    lines.push(format!(
-        "{}: {}={}  {}={}",
-        t(locale, "status.routes_label"),
-        t(locale, "status.total_label"),
-        format_integer(locale, routes.len()),
-        t(locale, "status.enabled_label"),
-        format_integer(locale, enabled_routes)
     ));
     lines.push(format!(
         "{}: {}={}  {}={}",
@@ -1912,14 +1784,6 @@ fn channel_status_label(channel: &storage::Channel, now_ms: i64, locale: AppLoca
         return t(locale, "channel.status_auto_disabled");
     }
     t(locale, "channel.status_enabled")
-}
-
-fn route_enabled_label(enabled: bool, locale: AppLocale) -> String {
-    if enabled {
-        t(locale, "route.status_enabled")
-    } else {
-        t(locale, "route.status_disabled")
-    }
 }
 
 fn enabled_label(enabled: bool, locale: AppLocale) -> String {
@@ -3068,44 +2932,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn routes_command_lists_bound_channels() {
-        let db_path = temp_db_path();
-        remove_sqlite_artifacts(&db_path);
-        storage::init_db(&db_path).expect("init db");
-        bind_test_user(&db_path, ChatPlatform::Telegram, "tg-user-3").await;
-        let channel = create_test_channel(&db_path, "openai-main", Protocol::Openai).await;
-        let route = storage::create_route(
-            db_path.clone(),
-            storage::CreateRoute {
-                name: "default".to_string(),
-                protocol: Protocol::Openai,
-                match_model: Some("gpt-4o".to_string()),
-                enabled: true,
-            },
-        )
-        .await
-        .expect("create route");
-        storage::set_route_channels(db_path.clone(), route.id, vec![channel.id])
-            .await
-            .expect("set route channels");
-
-        let runtime = test_runtime(&db_path).await;
-        let adapter = FakeAdapter::new(false);
-        runtime
-            .handle_message(
-                Arc::new(adapter.clone()),
-                test_message(ChatPlatform::Telegram, "tg-user-3", "/routes"),
-            )
-            .await;
-
-        let output = adapter.calls().join("\n");
-        assert!(output.contains("路由配置："), "{output}");
-        assert!(output.contains("default [openai]"), "{output}");
-        assert!(output.contains("openai-main"), "{output}");
-        remove_sqlite_artifacts(&db_path);
-    }
-
-    #[tokio::test]
     async fn usage_command_reports_today_summary() {
         let db_path = temp_db_path();
         remove_sqlite_artifacts(&db_path);
@@ -3118,7 +2944,6 @@ mod tests {
                 request_id: None,
                 ts_ms: storage::now_ms(),
                 protocol: Protocol::Openai,
-                route_id: None,
                 channel_id: channel.id,
                 model: Some("gpt-4o".to_string()),
                 success: true,
@@ -3176,7 +3001,6 @@ mod tests {
                 request_id: None,
                 ts_ms: storage::now_ms(),
                 protocol: Protocol::Openai,
-                route_id: None,
                 channel_id: channel.id,
                 model: Some("gpt-4o".to_string()),
                 success: true,
@@ -3226,7 +3050,6 @@ mod tests {
                 request_id: None,
                 ts_ms: storage::now_ms(),
                 protocol: Protocol::Openai,
-                route_id: None,
                 channel_id: channel.id,
                 model: Some("gpt-4o".to_string()),
                 success: true,
@@ -3276,7 +3099,6 @@ mod tests {
                 request_id: None,
                 ts_ms: storage::now_ms(),
                 protocol: Protocol::Openai,
-                route_id: None,
                 channel_id: channel.id,
                 model: Some("gpt-4o".to_string()),
                 success: true,
@@ -3337,7 +3159,6 @@ mod tests {
                 request_id: None,
                 ts_ms: storage::now_ms(),
                 protocol: Protocol::Openai,
-                route_id: None,
                 channel_id: channel.id,
                 model: Some("gpt-4o".to_string()),
                 success: true,
@@ -3387,7 +3208,6 @@ mod tests {
                 request_id: None,
                 ts_ms: storage::now_ms(),
                 protocol: Protocol::Openai,
-                route_id: None,
                 channel_id: channel.id,
                 model: Some("gpt-4o".to_string()),
                 success: true,

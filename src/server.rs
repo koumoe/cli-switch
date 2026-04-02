@@ -85,8 +85,6 @@ fn request_endpoint_template(method: &Method, path: &str) -> Option<&'static str
         ("POST", "/api/system/open") => Some("/api/system/open"),
         ("POST", "/api/system/open_data_dir") => Some("/api/system/open_data_dir"),
         ("POST", "/api/system/pick_folder") => Some("/api/system/pick_folder"),
-        ("GET", "/api/routes") => Some("/api/routes"),
-        ("POST", "/api/routes") => Some("/api/routes"),
         ("GET", "/api/pricing/status") => Some("/api/pricing/status"),
         ("GET", "/api/pricing/models") => Some("/api/pricing/models"),
         ("POST", "/api/pricing/sync") => Some("/api/pricing/sync"),
@@ -142,14 +140,6 @@ fn request_endpoint_template(method: &Method, path: &str) -> Option<&'static str
                 }
                 ["api", "channels", _] if method == Method::PUT => Some("/api/channels/{id}"),
                 ["api", "channels", _] if method == Method::DELETE => Some("/api/channels/{id}"),
-                ["api", "routes", _] if method == Method::PUT => Some("/api/routes/{id}"),
-                ["api", "routes", _] if method == Method::DELETE => Some("/api/routes/{id}"),
-                ["api", "routes", _, "channels"] if method == Method::GET => {
-                    Some("/api/routes/{id}/channels")
-                }
-                ["api", "routes", _, "channels", "reorder"] if method == Method::POST => {
-                    Some("/api/routes/{id}/channels/reorder")
-                }
                 ["v1", "messages", ..] => Some("/v1/messages/{*path}"),
                 ["v1beta", ..] => Some("/v1beta/{*path}"),
                 ["v1", ..] => Some("/v1/{*path}"),
@@ -204,8 +194,6 @@ fn request_purpose(method: &Method, path: &str) -> &'static str {
         ("POST", "/api/system/open") => "handlers::open_in_browser",
         ("POST", "/api/system/open_data_dir") => "handlers::open_data_dir",
         ("POST", "/api/system/pick_folder") => "handlers::pick_folder",
-        ("GET", "/api/routes") => "handlers::list_routes",
-        ("POST", "/api/routes") => "handlers::create_route",
         ("GET", "/api/pricing/status") => "handlers::pricing_status",
         ("GET", "/api/pricing/models") => "handlers::pricing_models",
         ("POST", "/api/pricing/sync") => "handlers::pricing_sync",
@@ -258,14 +246,6 @@ fn request_purpose(method: &Method, path: &str) -> &'static str {
                 }
                 ["api", "channels", _] if method == Method::PUT => "handlers::update_channel",
                 ["api", "channels", _] if method == Method::DELETE => "handlers::delete_channel",
-                ["api", "routes", _] if method == Method::PUT => "handlers::update_route",
-                ["api", "routes", _] if method == Method::DELETE => "handlers::delete_route",
-                ["api", "routes", _, "channels"] if method == Method::GET => {
-                    "handlers::list_route_channels"
-                }
-                ["api", "routes", _, "channels", "reorder"] if method == Method::POST => {
-                    "handlers::reorder_route_channels"
-                }
                 ["v1", "messages", ..] => "handlers::proxy_anthropic",
                 ["v1beta", ..] => "handlers::proxy_gemini",
                 ["v1", ..] => "handlers::proxy_openai",
@@ -450,22 +430,6 @@ fn build_app(state: AppState) -> Router {
         .route("/api/system/open", post(handlers::open_in_browser))
         .route("/api/system/open_data_dir", post(handlers::open_data_dir))
         .route("/api/system/pick_folder", post(handlers::pick_folder))
-        .route(
-            "/api/routes",
-            get(handlers::list_routes).post(handlers::create_route),
-        )
-        .route(
-            "/api/routes/{id}",
-            put(handlers::update_route).delete(handlers::delete_route),
-        )
-        .route(
-            "/api/routes/{id}/channels",
-            get(handlers::list_route_channels),
-        )
-        .route(
-            "/api/routes/{id}/channels/reorder",
-            post(handlers::reorder_route_channels),
-        )
         .route("/api/pricing/status", get(handlers::pricing_status))
         .route("/api/pricing/models", get(handlers::pricing_models))
         .route("/api/pricing/sync", post(handlers::pricing_sync))

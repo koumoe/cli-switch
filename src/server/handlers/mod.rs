@@ -9,7 +9,6 @@ pub(super) mod pricing;
 pub(super) mod prompt;
 pub(super) mod proxy;
 pub(super) mod remote;
-pub(super) mod route;
 pub(super) mod settings;
 pub(super) mod stats;
 pub(super) mod system;
@@ -44,10 +43,6 @@ pub(super) use remote::{
     list_remote_account_groups, list_remote_accounts, perform_remote_account_system_checkin,
     refresh_remote_account, remote_account_checkins_today, reorder_remote_accounts,
     update_remote_account,
-};
-pub(super) use route::{
-    create_route, delete_route, list_route_channels, list_routes, reorder_route_channels,
-    update_route,
 };
 pub(super) use settings::{get_settings, update_settings};
 pub(super) use stats::{stats_channels, stats_summary, stats_trend};

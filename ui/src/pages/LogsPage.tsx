@@ -198,10 +198,6 @@ export function LogsPage() {
                 <div className="break-all">{detailEvent.model ?? "-"}</div>
               </div>
               <div className="grid grid-cols-[120px_1fr] gap-2">
-                <div className="text-muted-foreground">{t("logs.details.routeId")}</div>
-                <div className="font-mono break-all">{detailEvent.route_id ?? "-"}</div>
-              </div>
-              <div className="grid grid-cols-[120px_1fr] gap-2">
                 <div className="text-muted-foreground">{t("logs.headers.result")}</div>
                 <div>
                   {detailEvent.success ? (

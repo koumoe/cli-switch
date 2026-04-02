@@ -712,7 +712,6 @@ dependencies = [
  "flate2",
  "futures-util",
  "hex",
- "hmac",
  "http",
  "image",
  "libc",

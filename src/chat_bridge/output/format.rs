@@ -1209,11 +1209,7 @@ mod tests {
     #[test]
     fn format_streaming_message_keeps_session_label() {
         assert_eq!(
-            format_streaming_message(
-                "[alpha(#1)|claude|demo]",
-                "OK",
-                crate::chat_bridge::MESSAGE_CHAR_LIMIT,
-            ),
+            format_streaming_message("[alpha(#1)|claude|demo]", "OK", 3900,),
             "[alpha(#1)|claude|demo]\nOK"
         );
     }

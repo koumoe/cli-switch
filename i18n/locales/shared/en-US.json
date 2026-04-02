@@ -88,10 +88,6 @@
     "remote_protocol_required": "Protocol is required",
     "remote_relogin_required": "The sub2api login session expired. Sign in again.",
     "remote_sync_failed": "Failed to sync the remote account",
-    "route_name_required": "Route name is required",
-    "route_not_found": "Route not found",
-    "route_channel_ids_duplicate": "channel_ids contains duplicates",
-    "route_channel_protocol_mismatch": "Channel protocol does not match route protocol",
     "maintenance_records_start_ms_required": "start_ms is required for record cleanup",
     "maintenance_records_end_ms_required": "end_ms is required for record cleanup",
     "maintenance_records_start_end_ms_required": "start_ms and end_ms must be provided together for record cleanup",
@@ -162,7 +158,7 @@
       "unknown": "Unknown command: /{{command}}"
     },
     "help": {
-      "full": "Available commands:\n\nBinding\n/bind <pairing-token>\n\nSessions\n/projects\n/codex <project> [-a|-alias <alias>] [-yolo]\n/claude <project> [-a|-alias <alias>] [-yolo]\n/gemini <project> [-a|-alias <alias>] [-yolo]\n/sessions\n/switch <session>\n/chat <session> <message>\n/stop <session|all>\n\nChannels\n/channels [enable|disable <channel>]\n/routes\n\nStats\n/usage [today|yesterday|week|month]\n/costs [today|yesterday|week|month]\n\nOther\n/status\n/help"
+      "full": "Available commands:\n\nBinding\n/bind <pairing-token>\n\nSessions\n/projects\n/codex <project> [-a|-alias <alias>] [-yolo]\n/claude <project> [-a|-alias <alias>] [-yolo]\n/gemini <project> [-a|-alias <alias>] [-yolo]\n/sessions\n/switch <session>\n/chat <session> <message>\n/stop <session|all>\n\nChannels\n/channels [enable|disable <channel>]\n\nStats\n/usage [today|yesterday|week|month]\n/costs [today|yesterday|week|month]\n\nOther\n/status\n/help"
     },
     "channel": {
       "ambiguous_hint": "Use the full channel ID, a unique channel name, or a unique ID prefix.",
@@ -201,18 +197,6 @@
       "stop_all_with_cancel": "Stopped {{count}} sessions and cancelled {{cancelled}} running tasks.",
       "stopped": "Stopped session {{label}}.",
       "stopped_with_cancel": "Stopped session {{label}} and cancelled the running task."
-    },
-    "route": {
-      "channels_empty": "No channels attached",
-      "channels_label": "Channels",
-      "cooldown_until_label": "cooldown until",
-      "id_label": "ID",
-      "list_title": "Routes:",
-      "match_all": "all models",
-      "match_model_label": "Match model",
-      "none": "No routes are configured.",
-      "status_disabled": "disabled",
-      "status_enabled": "enabled"
     },
     "stats": {
       "avg_latency_label": "Average latency",
@@ -261,7 +245,6 @@
       "runtime_state_disabled": "disabled",
       "runtime_state_error": "error",
       "runtime_state_starting": "starting",
-      "routes_label": "Routes",
       "title": "System status:",
       "token_configured": "token configured",
       "token_missing": "token missing",
@@ -320,7 +303,6 @@
       "binding_exists": "This platform account is already bound.",
       "gemini_list_sessions_failed": "Failed to run Gemini session listing: {{detail}}",
       "gemini_list_sessions_parse_failed": "Failed to safely parse the Gemini session list: {{detail}}",
-      "gemini_session_mismatch": "A candidate Gemini session_id was found in local history, but it is missing from the current project session list. It may have been removed externally.",
       "gemini_session_missing": "No matching Gemini session was found for the current project. It may have been removed externally, or the current CLI version cannot recover it safely.",
       "pairing_token_expired": "The pairing token has expired. Generate a new one and try again.",
       "pairing_token_invalid": "The pairing token is invalid.",

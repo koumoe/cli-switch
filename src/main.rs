@@ -67,7 +67,6 @@ enum Command {
         #[arg(long, default_value_t = 3210)]
         port: u16,
     },
-    Migrate,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -124,10 +123,6 @@ async fn async_main() -> anyhow::Result<()> {
         #[cfg(feature = "desktop")]
         Command::Desktop { port } => {
             desktop::run(port, data_dir, db_path, launched_by_autostart).await
-        }
-        Command::Migrate => {
-            println!("ok: {}", db_path.display());
-            Ok(())
         }
     }
 }

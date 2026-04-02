@@ -980,10 +980,6 @@ pub async fn delete_newapi_account(
         let tx = conn.unchecked_transaction()?;
         let result = if delete_managed_channels {
             for channel_id in &linked_channel_ids {
-                tx.execute(
-                    r#"DELETE FROM route_channels WHERE channel_id = ?1"#,
-                    params![channel_id],
-                )?;
                 tx.execute(r#"DELETE FROM channels WHERE id = ?1"#, params![channel_id])?;
             }
             DeleteNewApiAccountResult {

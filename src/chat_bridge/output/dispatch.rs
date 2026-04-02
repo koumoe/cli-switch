@@ -9,8 +9,8 @@ use super::super::cli::{self, cli_type_label};
 use super::super::i18n::{args, t, t_args};
 use super::super::router::format_session_label;
 use super::super::{
-    ActiveTurnRegistration, ChatBridgeRuntime, MESSAGE_CHAR_LIMIT, STREAM_UPDATE_INTERVAL,
-    StreamChunk, StreamKind, TYPING_INTERVAL, read_stream,
+    ActiveTurnRegistration, ChatBridgeRuntime, STREAM_UPDATE_INTERVAL, StreamChunk, StreamKind,
+    TYPING_INTERVAL, read_stream,
 };
 use super::format::{
     RenderedMessage, build_live_output, compose_final_output, format_streaming_message,
@@ -28,12 +28,6 @@ struct PlatformOutputPolicy {
     message_char_limit: usize,
     attachment_threshold: Option<usize>,
 }
-
-#[allow(dead_code)]
-const DEFAULT_OUTPUT_POLICY: PlatformOutputPolicy = PlatformOutputPolicy {
-    message_char_limit: MESSAGE_CHAR_LIMIT,
-    attachment_threshold: None,
-};
 
 const TELEGRAM_OUTPUT_POLICY: PlatformOutputPolicy = PlatformOutputPolicy {
     message_char_limit: 3200,

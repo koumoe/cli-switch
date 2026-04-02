@@ -14,7 +14,6 @@ struct PairingTokenCandidate {
     id: i64,
     platform: String,
     token_hash: String,
-    token_hint: Option<String>,
     expires_at_ms: i64,
     used_at_ms: Option<i64>,
 }
@@ -68,46 +67,28 @@ fn row_to_pairing_token_candidate(
         id: row.get(0)?,
         platform: row.get(1)?,
         token_hash: row.get(2)?,
-        token_hint: row.get(3)?,
-        expires_at_ms: row.get(4)?,
-        used_at_ms: row.get(5)?,
+        expires_at_ms: row.get(3)?,
+        used_at_ms: row.get(4)?,
     })
 }
 
 fn load_pairing_token_candidates(
     conn: &rusqlite::Connection,
-    token_hint: Option<&str>,
+    token_hint: &str,
 ) -> rusqlite::Result<Vec<PairingTokenCandidate>> {
-    let mut stmt = match token_hint {
-        Some(_) => conn.prepare(
-            r#"
-            SELECT id, platform, token_hash, token_hint, expires_at, used_at
-            FROM pairing_tokens
-            WHERE token_hint = ?1
-            ORDER BY created_at DESC
-            LIMIT ?2
-            "#,
-        )?,
-        None => conn.prepare(
-            r#"
-            SELECT id, platform, token_hash, token_hint, expires_at, used_at
-            FROM pairing_tokens
-            ORDER BY created_at DESC
-            LIMIT ?1
-            "#,
-        )?,
-    };
-
-    let rows = match token_hint {
-        Some(hint) => stmt.query_map(
-            params![hint, PAIRING_TOKEN_SCAN_LIMIT],
-            row_to_pairing_token_candidate,
-        )?,
-        None => stmt.query_map(
-            params![PAIRING_TOKEN_SCAN_LIMIT],
-            row_to_pairing_token_candidate,
-        )?,
-    };
+    let mut stmt = conn.prepare(
+        r#"
+        SELECT id, platform, token_hash, expires_at, used_at
+        FROM pairing_tokens
+        WHERE token_hint = ?1
+        ORDER BY created_at DESC
+        LIMIT ?2
+        "#,
+    )?;
+    let rows = stmt.query_map(
+        params![token_hint, PAIRING_TOKEN_SCAN_LIMIT],
+        row_to_pairing_token_candidate,
+    )?;
 
     rows.collect::<rusqlite::Result<Vec<_>>>()
 }
@@ -186,25 +167,12 @@ pub async fn consume_pairing_token(
             .unchecked_transaction()
             .context("begin chat bridge token transaction failed")?;
 
-        let hinted_candidates =
-            load_pairing_token_candidates(&tx, Some(&pairing_token_hint(&token)))?;
+        let hinted_candidates = load_pairing_token_candidates(&tx, &pairing_token_hint(&token))?;
         let mut matched = None;
         for candidate in hinted_candidates {
             if verify_pairing_token(&candidate.token_hash, &token)? {
                 matched = Some(candidate);
                 break;
-            }
-        }
-        if matched.is_none() {
-            let legacy_candidates = load_pairing_token_candidates(&tx, None)?;
-            for candidate in legacy_candidates {
-                if candidate.token_hint.is_some() {
-                    continue;
-                }
-                if verify_pairing_token(&candidate.token_hash, &token)? {
-                    matched = Some(candidate);
-                    break;
-                }
             }
         }
         let Some(candidate) = matched else {

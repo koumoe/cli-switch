@@ -15,7 +15,7 @@ mod gemini;
 
 pub use claude::ClaudeAdapter;
 pub use codex::CodexAdapter;
-pub use gemini::{GeminiAdapter, LEGACY_GEMINI_UNTRACKED_SESSION_REF};
+pub use gemini::GeminiAdapter;
 
 pub struct CliInvocation {
     pub command: TokioCommand,
@@ -24,7 +24,6 @@ pub struct CliInvocation {
 
 pub enum ValidateResult {
     Valid,
-    Corrected(String),
     Invalid(String),
 }
 
