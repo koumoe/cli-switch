@@ -1,3 +1,7 @@
+## [0.56.7](https://github.com/koumoe/cli-switch/compare/v0.56.6...v0.56.7) (2026-04-02)
+
+### 修复
+* 修复首页官方额度美元前缀显示 (#187) ([#187](https://github.com/koumoe/cli-switch/issues/187)) ([ed1f19e](https://github.com/koumoe/cli-switch/commit/ed1f19ee0d8cac9a2ba93bd6a3c17d5b93d34eef))
 ## [0.56.6](https://github.com/koumoe/cli-switch/compare/v0.56.5...v0.56.6) (2026-04-02)
 
 ### 修复
