@@ -1,3 +1,9 @@
+## [0.56.6](https://github.com/koumoe/cli-switch/compare/v0.56.5...v0.56.6) (2026-04-02)
+
+### Bug Fixes
+
+* apply rustfmt cleanup ([b68ce8e](https://github.com/koumoe/cli-switch/commit/b68ce8ef8793cbdb66cd1139f032d282679ebb9d))
+* remove unused locale keys ([4a5c3fd](https://github.com/koumoe/cli-switch/commit/4a5c3fd5e14225f1e1677480dcb0d05c436165fc))
 ## [0.56.5](https://github.com/koumoe/cli-switch/compare/v0.56.4...v0.56.5) (2026-04-02)
 
 ### Bug Fixes
