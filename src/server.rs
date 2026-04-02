@@ -29,6 +29,15 @@ mod ui;
 
 pub use state::AppState;
 
+fn build_http_client() -> anyhow::Result<reqwest::Client> {
+    // Some providers front their panel APIs with CloudFront/WAF and reject
+    // requests without a User-Agent header.
+    reqwest::Client::builder()
+        .user_agent(format!("CliSwitch/{}", env!("CARGO_PKG_VERSION")))
+        .build()
+        .map_err(Into::into)
+}
+
 fn request_endpoint_template(method: &Method, path: &str) -> Option<&'static str> {
     match (method.as_str(), path) {
         ("GET", "/api/health") => Some("/api/health"),
@@ -500,7 +509,7 @@ pub async fn serve_with_listener(
 ) -> anyhow::Result<()> {
     let addr = listener.local_addr()?;
     let (settings_notify, settings_rx) = watch::channel(0u64);
-    let http_client = reqwest::Client::builder().build()?;
+    let http_client = build_http_client()?;
     let db_path = Arc::new(db_path);
 
     let settings0 = storage::get_app_settings((*db_path).clone()).await?;
@@ -703,5 +712,55 @@ fn open_path(path: &std::path::Path) -> std::io::Result<()> {
             std::io::ErrorKind::Unsupported,
             "unsupported platform",
         ))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::build_http_client;
+    use axum::Router;
+    use axum::extract::State;
+    use axum::http::{HeaderMap, StatusCode, header::USER_AGENT};
+    use axum::routing::get;
+
+    #[tokio::test]
+    async fn build_http_client_sets_user_agent_for_outbound_requests() {
+        async fn handler(
+            State(expected): State<String>,
+            headers: HeaderMap,
+        ) -> (StatusCode, String) {
+            let actual = headers
+                .get(USER_AGENT)
+                .and_then(|value| value.to_str().ok())
+                .unwrap_or("")
+                .to_string();
+            if actual == expected {
+                (StatusCode::OK, actual)
+            } else {
+                (StatusCode::BAD_REQUEST, actual)
+            }
+        }
+
+        let expected = format!("CliSwitch/{}", env!("CARGO_PKG_VERSION"));
+        let app = Router::new()
+            .route("/", get(handler))
+            .with_state(expected.clone());
+        let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+            .await
+            .expect("bind test server");
+        let addr = listener.local_addr().expect("read local addr");
+        tokio::spawn(async move {
+            let _ = axum::serve(listener, app).await;
+        });
+
+        let response = build_http_client()
+            .expect("build client")
+            .get(format!("http://127.0.0.1:{}/", addr.port()))
+            .send()
+            .await
+            .expect("send request");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.text().await.expect("read body"), expected);
     }
 }
