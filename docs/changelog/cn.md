@@ -1,3 +1,8 @@
+## [0.56.4](https://github.com/koumoe/cli-switch/compare/v0.56.3...v0.56.4) (2026-04-02)
+
+### 修复
+* 修复托管渠道缺失弹窗远端删除选项 (#183) ([#183](https://github.com/koumoe/cli-switch/issues/183)) ([2797ee0](https://github.com/koumoe/cli-switch/commit/2797ee0c94c1ef5f0d4c39986b2b19cec92543bb))
+* 修复 sub2api 会话刷新 (#184) ([#184](https://github.com/koumoe/cli-switch/issues/184)) ([3307acd](https://github.com/koumoe/cli-switch/commit/3307acdfa04b44473d8805fcfb67a2564c88574b))
 ## [0.56.3](https://github.com/koumoe/cli-switch/compare/v0.56.2...v0.56.3) (2026-03-31)
 
 ### 修复
