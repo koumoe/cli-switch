@@ -19,6 +19,7 @@ export type AccountDraft = {
   user_id: string;
   user_token: string;
   bearer_token: string;
+  refresh_token: string;
   page_checkin_url: string;
   checkin_mode: AccountCheckinModeOption;
   auto_checkin_time: string;
@@ -42,6 +43,7 @@ export function emptyAccountDraft(rechargeCurrency: RechargeCurrency = "CNY"): A
     user_id: "",
     user_token: "",
     bearer_token: "",
+    refresh_token: "",
     page_checkin_url: "",
     checkin_mode: "disabled",
     auto_checkin_time: "00:05:00",

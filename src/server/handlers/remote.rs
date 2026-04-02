@@ -5,10 +5,12 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
 use super::newapi as newapi_handlers;
+use crate::bearer_token::normalize_optional_bearer_token;
 use crate::events::{self, AppEvent, RemoteManagedChannelCreated};
 use crate::newapi as newapi_client;
 use crate::server::AppState;
 use crate::server::error::{ApiError, map_storage_unit_no_content_err};
+use crate::server::sub2api_auth;
 use crate::storage::{self, RechargeCurrency};
 use crate::sub2api as sub2api_client;
 
@@ -35,6 +37,7 @@ pub(in crate::server) struct RemoteAccountCommonResponse {
     pub api_url: Option<String>,
     pub user_id: String,
     pub user_token_configured: bool,
+    pub reauth_required: bool,
     pub page_checkin_url: Option<String>,
     pub checkin_mode: RemoteAccountCheckinMode,
     pub auto_checkin_enabled: bool,
@@ -137,6 +140,7 @@ pub(in crate::server) struct CreateRemoteAccountInput {
     user_id: Option<String>,
     user_token: Option<String>,
     bearer_token: Option<String>,
+    refresh_token: Option<String>,
     page_checkin_url: Option<String>,
     checkin_mode: Option<RemoteAccountCheckinMode>,
     auto_checkin_time: Option<String>,
@@ -152,6 +156,7 @@ pub(in crate::server) struct UpdateRemoteAccountInput {
     user_id: Option<String>,
     user_token: Option<String>,
     bearer_token: Option<String>,
+    refresh_token: Option<String>,
     page_checkin_url: Option<String>,
     checkin_mode: Option<RemoteAccountCheckinMode>,
     auto_checkin_time: Option<String>,
@@ -434,14 +439,9 @@ pub(super) async fn delete_remote_managed_channel_resources(
             }
         }
         storage::ManagedRemoteProvider::Sub2Api => {
-            let account =
+            let mut account =
                 storage::get_remote_account_with_secret(state.db_path(), account_id.to_string())
                     .await?;
-            let token = account
-                .access_token
-                .as_deref()
-                .filter(|value| !value.trim().is_empty())
-                .ok_or_else(|| anyhow::anyhow!("sub2api account missing access token"))?;
             let key_id = channel
                 .managed_resource_id()
                 .as_deref()
@@ -449,8 +449,20 @@ pub(super) async fn delete_remote_managed_channel_resources(
                 .ok_or_else(|| {
                     anyhow::anyhow!("managed channel {} missing remote key id", channel.id)
                 })?;
-            sub2api_client::delete_key(&state.http_client, &account.base_url, token, key_id)
-                .await?;
+            sub2api_auth::run_with_persisted_session(
+                state.db_path(),
+                &state.http_client,
+                &mut account,
+                |http_client, base_url, access_token| {
+                    Box::pin(sub2api_client::delete_key(
+                        http_client,
+                        base_url,
+                        access_token,
+                        key_id,
+                    ))
+                },
+            )
+            .await?;
         }
     }
     Ok(())
@@ -464,10 +476,16 @@ async fn sync_delete_managed_channels_for_account(
     let channels = list_managed_channels_for_account(state, provider, account_id).await?;
     let mut deleted_channel_ids = Vec::new();
     let mut failures = Vec::new();
+    let mut relogin_required = false;
     for channel in &channels {
         match delete_remote_managed_channel_resources(state, channel).await {
             Ok(()) => deleted_channel_ids.push(channel.id.clone()),
-            Err(err) => failures.push(format!("{} ({}): {err}", channel.name, channel.id)),
+            Err(err) => {
+                if sub2api_auth::relogin_required_message(&err).is_some() {
+                    relogin_required = true;
+                }
+                failures.push(format!("{} ({}): {err}", channel.name, channel.id));
+            }
         }
     }
     if !deleted_channel_ids.is_empty() && !failures.is_empty() {
@@ -477,6 +495,12 @@ async fn sync_delete_managed_channels_for_account(
         remove_channels_from_cache(state, &deleted_channel_ids);
     }
     if !failures.is_empty() {
+        if relogin_required && deleted_channel_ids.is_empty() {
+            return Err(ApiError::bad_gateway(
+                "remote_relogin_required",
+                "sub2api login expired, please sign in again",
+            ));
+        }
         return Err(ApiError::bad_gateway(
             "remote_delete_partial_failed",
             format!(
@@ -555,6 +579,7 @@ fn map_newapi_common(account: &storage::NewApiAccount) -> RemoteAccountCommonRes
         api_url: account.api_url.clone(),
         user_id: account.user_id.clone(),
         user_token_configured: account.user_token_configured,
+        reauth_required: false,
         page_checkin_url: account.page_checkin_url.clone(),
         checkin_mode: resolve_newapi_checkin_mode(account),
         auto_checkin_enabled: account.auto_checkin_enabled,
@@ -604,6 +629,7 @@ impl From<storage::RemoteAccount> for RemoteAccountResponse {
             api_url: account.api_url,
             user_id: account.remote_user_id.unwrap_or_default(),
             user_token_configured: account.access_token_configured,
+            reauth_required: account.reauth_required,
             page_checkin_url: account.page_checkin_url,
             checkin_mode: normalize_sub2api_checkin_mode_from_storage(account.checkin_mode),
             auto_checkin_enabled: false,
@@ -813,6 +839,23 @@ fn map_update_sub2api_account_error(err: anyhow::Error) -> ApiError {
     }
 }
 
+fn map_sub2api_action_error(
+    err: anyhow::Error,
+    code: &'static str,
+    action: &'static str,
+) -> ApiError {
+    if let Some(message) = sub2api_auth::relogin_required_message(&err) {
+        return ApiError::bad_gateway("remote_relogin_required", message.to_string());
+    }
+    if let Some(request_err) = err.downcast_ref::<sub2api_client::Sub2ApiRequestError>() {
+        return ApiError::bad_gateway(
+            code,
+            format!("Failed to {action}: {}", request_err.message()),
+        );
+    }
+    ApiError::Internal(err)
+}
+
 fn count_managed_channels_by_group_name(channels: &[storage::Channel]) -> HashMap<String, usize> {
     channels.iter().fold(HashMap::new(), |mut acc, channel| {
         if let Some(group_name) = channel.managed_group_name() {
@@ -924,7 +967,10 @@ async fn create_sub2api_remote_account_impl(
     input: CreateRemoteAccountInput,
 ) -> Result<RemoteAccountResponse, ApiError> {
     let base_url = detect_provider_from_base_url(&input.base_url)?;
-    let access_token = input.bearer_token.unwrap_or_default();
+    let mut session = sub2api_auth::InMemorySub2ApiSession {
+        access_token: input.bearer_token.unwrap_or_default(),
+        refresh_token: normalize_optional_bearer_token(input.refresh_token),
+    };
     let checkin_mode = input
         .checkin_mode
         .unwrap_or(RemoteAccountCheckinMode::Disabled);
@@ -938,24 +984,32 @@ async fn create_sub2api_remote_account_impl(
         checkin_mode,
         &auto_checkin_time,
         input.low_balance_alert_threshold.unwrap_or(0.0),
-        !access_token.trim().is_empty(),
+        !session.access_token.trim().is_empty(),
     )?;
-    let overview =
-        sub2api_client::fetch_account_overview(&state.http_client, &base_url, &access_token)
-            .await
-            .map_err(|err| {
-                ApiError::bad_gateway(
-                    "remote_sync_failed",
-                    format!("Failed to validate sub2api account: {err}"),
-                )
-            })?;
+    let overview = sub2api_auth::run_with_inmemory_session(
+        &state.http_client,
+        &base_url,
+        &mut session,
+        |http_client, base_url, access_token| {
+            Box::pin(sub2api_client::fetch_account_overview(
+                http_client,
+                base_url,
+                access_token,
+            ))
+        },
+    )
+    .await
+    .map_err(|err| {
+        map_sub2api_action_error(err, "remote_sync_failed", "validate sub2api account")
+    })?;
     let account = storage::create_remote_account(
         state.db_path(),
         storage::CreateRemoteAccount {
             provider: storage::RemoteAccountProvider::Sub2Api,
             base_url,
             api_url: input.api_url,
-            access_token,
+            access_token: session.access_token,
+            refresh_token: session.refresh_token,
             page_checkin_url: input.page_checkin_url,
             checkin_mode: Some(normalize_sub2api_checkin_mode_to_storage(checkin_mode)),
             auto_checkin_time: Some(auto_checkin_time),
@@ -1012,11 +1066,18 @@ async fn update_sub2api_remote_account_impl(
         .map(detect_provider_from_base_url)
         .transpose()?
         .unwrap_or_else(|| current.base_url.clone());
-    let effective_token = input
-        .bearer_token
-        .clone()
-        .or_else(|| current.access_token.clone())
-        .unwrap_or_default();
+    let mut session = sub2api_auth::InMemorySub2ApiSession {
+        access_token: input
+            .bearer_token
+            .clone()
+            .or_else(|| current.access_token.clone())
+            .unwrap_or_default(),
+        refresh_token: if input.refresh_token.is_some() {
+            normalize_optional_bearer_token(input.refresh_token.clone())
+        } else {
+            current.refresh_token.clone()
+        },
+    };
     let effective_checkin_mode =
         input
             .checkin_mode
@@ -1039,19 +1100,23 @@ async fn update_sub2api_remote_account_impl(
         effective_checkin_mode,
         &effective_auto_checkin_time,
         effective_threshold,
-        !effective_token.trim().is_empty(),
+        !session.access_token.trim().is_empty(),
     )?;
-    let overview = sub2api_client::fetch_account_overview(
+    let overview = sub2api_auth::run_with_inmemory_session(
         &state.http_client,
         &effective_base_url,
-        &effective_token,
+        &mut session,
+        |http_client, base_url, access_token| {
+            Box::pin(sub2api_client::fetch_account_overview(
+                http_client,
+                base_url,
+                access_token,
+            ))
+        },
     )
     .await
     .map_err(|err| {
-        ApiError::bad_gateway(
-            "remote_sync_failed",
-            format!("Failed to validate sub2api account: {err}"),
-        )
+        map_sub2api_action_error(err, "remote_sync_failed", "validate sub2api account")
     })?;
     let account = storage::update_remote_account(
         state.db_path(),
@@ -1059,7 +1124,8 @@ async fn update_sub2api_remote_account_impl(
         storage::UpdateRemoteAccount {
             base_url: Some(effective_base_url),
             api_url: input.api_url,
-            access_token: Some(effective_token),
+            access_token: Some(session.access_token.clone()),
+            refresh_token: Some(session.refresh_token.clone().unwrap_or_default()),
             page_checkin_url: input.page_checkin_url,
             checkin_mode: Some(normalize_sub2api_checkin_mode_to_storage(
                 effective_checkin_mode,
@@ -1164,6 +1230,7 @@ fn apply_sub2api_overview_to_account(
     account.remote_display_name = overview.remote_display_name.clone();
     account.last_balance_amount = overview.balance;
     account.last_sync_error = None;
+    account.reauth_required = false;
     account.last_synced_at_ms = Some(synced_at_ms);
     account.updated_at_ms = synced_at_ms;
 }
@@ -1194,6 +1261,7 @@ async fn record_sub2api_sync_failure(
         account_id,
         err.to_string(),
         Some(storage::now_ms()),
+        false,
     )
     .await?;
     Ok(())
@@ -1223,30 +1291,38 @@ async fn refresh_newapi_remote_account_impl(
 
 async fn refresh_sub2api_remote_account_impl(
     state: &AppState,
-    account: storage::RemoteAccount,
+    mut account: storage::RemoteAccount,
 ) -> Result<RemoteAccountResponse, ApiError> {
     let account_id = account.id.clone();
-    let token = require_sub2api_access_token(&account)?;
-    let overview =
-        sub2api_client::fetch_account_overview(&state.http_client, &account.base_url, token)
-            .await
-            .map_err(|err| {
-                ApiError::bad_gateway(
-                    "remote_sync_failed",
-                    format!("Failed to sync sub2api account: {err}"),
-                )
-            });
+    require_sub2api_access_token(&account)?;
+    let overview = sub2api_auth::run_with_persisted_session(
+        state.db_path(),
+        &state.http_client,
+        &mut account,
+        |http_client, base_url, access_token| {
+            Box::pin(sub2api_client::fetch_account_overview(
+                http_client,
+                base_url,
+                access_token,
+            ))
+        },
+    )
+    .await;
     match overview {
         Ok(overview) => {
             let account = persist_sub2api_overview(state, account, &overview).await?;
             Ok(RemoteAccountResponse::from(account))
         }
         Err(err) => {
-            if let ApiError::BadGateway { message, .. } = &err {
-                let anyhow_err = anyhow::anyhow!(message.clone());
+            let anyhow_err = err;
+            if sub2api_auth::relogin_required_message(&anyhow_err).is_none() {
                 let _ = record_sub2api_sync_failure(state, account_id, &anyhow_err).await;
             }
-            Err(err)
+            Err(map_sub2api_action_error(
+                anyhow_err,
+                "remote_sync_failed",
+                "sync sub2api account",
+            ))
         }
     }
 }
@@ -1283,12 +1359,25 @@ async fn list_newapi_remote_account_groups_impl(
 
 async fn list_sub2api_remote_account_groups_impl(
     state: &AppState,
-    account: storage::RemoteAccount,
+    mut account: storage::RemoteAccount,
 ) -> Result<Vec<RemoteGroupResponse>, ApiError> {
-    let token = require_sub2api_access_token(&account)?;
-    let groups = sub2api_client::list_groups(&state.http_client, &account.base_url, token)
-        .await
-        .map_err(|err| ApiError::bad_gateway("remote_groups_load_failed", err.to_string()))?;
+    require_sub2api_access_token(&account)?;
+    let groups = sub2api_auth::run_with_persisted_session(
+        state.db_path(),
+        &state.http_client,
+        &mut account,
+        |http_client, base_url, access_token| {
+            Box::pin(sub2api_client::list_groups(
+                http_client,
+                base_url,
+                access_token,
+            ))
+        },
+    )
+    .await
+    .map_err(|err| {
+        map_sub2api_action_error(err, "remote_groups_load_failed", "load sub2api groups")
+    })?;
     let channels = list_managed_channels_for_account(
         state,
         storage::ManagedRemoteProvider::Sub2Api,
@@ -1315,22 +1404,30 @@ async fn list_sub2api_remote_account_groups_impl(
 
 async fn create_sub2api_remote_account_key_impl(
     state: &AppState,
-    account: storage::RemoteAccount,
+    mut account: storage::RemoteAccount,
     input: CreateRemoteKeyInput,
 ) -> Result<RemoteKeyResponse, ApiError> {
-    let token = require_sub2api_access_token(&account)?;
+    require_sub2api_access_token(&account)?;
     let name = validate_remote_key_name(&input.name)?;
-    let key = sub2api_client::create_key(
+    let request = sub2api_client::CreateSub2ApiKeyRequest {
+        name,
+        group_id: input.group_id,
+    };
+    let key = sub2api_auth::run_with_persisted_session(
+        state.db_path(),
         &state.http_client,
-        &account.base_url,
-        token,
-        &sub2api_client::CreateSub2ApiKeyRequest {
-            name,
-            group_id: input.group_id,
+        &mut account,
+        |http_client, base_url, access_token| {
+            let request = request.clone();
+            Box::pin(async move {
+                sub2api_client::create_key(http_client, base_url, access_token, &request).await
+            })
         },
     )
     .await
-    .map_err(|err| ApiError::bad_gateway("remote_key_create_failed", err.to_string()))?;
+    .map_err(|err| {
+        map_sub2api_action_error(err, "remote_key_create_failed", "create remote key")
+    })?;
     Ok(map_sub2api_key_response(key))
 }
 
@@ -1403,13 +1500,26 @@ async fn create_newapi_remote_managed_channel_impl(
 
 async fn create_sub2api_remote_managed_channel_impl(
     state: &AppState,
-    account: storage::RemoteAccount,
+    mut account: storage::RemoteAccount,
     input: PreparedCreateRemoteManagedChannelInput,
 ) -> Result<CreateRemoteManagedChannelResponse, ApiError> {
-    let token = require_sub2api_access_token(&account)?;
-    let groups = sub2api_client::list_groups(&state.http_client, &account.base_url, token)
-        .await
-        .map_err(|err| ApiError::bad_gateway("remote_groups_load_failed", err.to_string()))?;
+    require_sub2api_access_token(&account)?;
+    let groups = sub2api_auth::run_with_persisted_session(
+        state.db_path(),
+        &state.http_client,
+        &mut account,
+        |http_client, base_url, access_token| {
+            Box::pin(sub2api_client::list_groups(
+                http_client,
+                base_url,
+                access_token,
+            ))
+        },
+    )
+    .await
+    .map_err(|err| {
+        map_sub2api_action_error(err, "remote_groups_load_failed", "load sub2api groups")
+    })?;
     let selected_group = find_sub2api_group(&groups, &input)?;
     let selected_group_id = selected_group.id;
     let selected_group_name = selected_group.name.clone();
@@ -1423,18 +1533,28 @@ async fn create_sub2api_remote_managed_channel_impl(
         priority,
         enabled,
     } = input;
-    let created_key = sub2api_client::create_key(
+    let request = sub2api_client::CreateSub2ApiKeyRequest {
+        name: name.clone(),
+        group_id: Some(selected_group_id),
+    };
+    let created_key = sub2api_auth::run_with_persisted_session(
+        state.db_path(),
         &state.http_client,
-        &account.base_url,
-        token,
-        &sub2api_client::CreateSub2ApiKeyRequest {
-            name: name.clone(),
-            group_id: Some(selected_group_id),
+        &mut account,
+        |http_client, base_url, access_token| {
+            let request = request.clone();
+            Box::pin(async move {
+                sub2api_client::create_key(http_client, base_url, access_token, &request).await
+            })
         },
     )
     .await
     .map_err(|err| {
-        ApiError::bad_gateway("remote_managed_channel_create_failed", err.to_string())
+        map_sub2api_action_error(
+            err,
+            "remote_managed_channel_create_failed",
+            "create remote managed channel",
+        )
     })?;
     let create_local = storage::CreateChannel {
         name,
@@ -1458,11 +1578,18 @@ async fn create_sub2api_remote_managed_channel_impl(
     let channel = match storage::create_channel(state.db_path(), create_local).await {
         Ok(channel) => channel,
         Err(err) => {
-            let _ = sub2api_client::delete_key(
+            let _ = sub2api_auth::run_with_persisted_session(
+                state.db_path(),
                 &state.http_client,
-                &account.base_url,
-                token,
-                created_key.id,
+                &mut account,
+                |http_client, base_url, access_token| {
+                    Box::pin(sub2api_client::delete_key(
+                        http_client,
+                        base_url,
+                        access_token,
+                        created_key.id,
+                    ))
+                },
             )
             .await;
             return Err(ApiError::Internal(err));
@@ -1863,7 +1990,7 @@ mod tests {
     use crate::chat_bridge::whatsapp_web::{WhatsAppWebControl, WhatsAppWebStatus};
     use crate::update;
     use axum::body::to_bytes;
-    use axum::http::StatusCode;
+    use axum::http::{HeaderMap, StatusCode};
     use axum::response::IntoResponse;
     use axum::routing::{get, post};
     use axum::{Json as AxumJson, Router};
@@ -1980,6 +2107,261 @@ mod tests {
             let _ = axum::serve(listener, app).await;
         });
         (format!("http://127.0.0.1:{}", addr.port()), calls)
+    }
+
+    fn authorization_value(headers: &HeaderMap) -> Option<&str> {
+        headers
+            .get(axum::http::header::AUTHORIZATION)
+            .and_then(|value| value.to_str().ok())
+    }
+
+    async fn response_json(response: axum::response::Response) -> serde_json::Value {
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("read body");
+        serde_json::from_slice(&body).expect("parse json")
+    }
+
+    async fn spawn_sub2api_refresh_success_server() -> (String, Arc<AtomicUsize>, Arc<AtomicUsize>)
+    {
+        let auth_me_calls = Arc::new(AtomicUsize::new(0));
+        let refresh_calls = Arc::new(AtomicUsize::new(0));
+        let auth_me_calls_for_handler = auth_me_calls.clone();
+        let refresh_calls_for_handler = refresh_calls.clone();
+        let app = Router::new()
+            .route(
+                "/api/v1/auth/me",
+                get(move |headers: HeaderMap| {
+                    let auth_me_calls = auth_me_calls_for_handler.clone();
+                    async move {
+                        auth_me_calls.fetch_add(1, Ordering::SeqCst);
+                        match authorization_value(&headers) {
+                            Some("Bearer expired-access") => (
+                                StatusCode::UNAUTHORIZED,
+                                AxumJson(serde_json::json!({
+                                    "code": "TOKEN_EXPIRED",
+                                    "message": "Token has expired"
+                                })),
+                            )
+                                .into_response(),
+                            Some("Bearer rotated-access") => (
+                                StatusCode::OK,
+                                AxumJson(serde_json::json!({
+                                    "code": 0,
+                                    "message": "",
+                                    "data": {
+                                        "id": 42,
+                                        "email": "demo@example.com",
+                                        "username": "demo-user",
+                                        "role": "admin",
+                                        "balance": 1.25
+                                    }
+                                })),
+                            )
+                                .into_response(),
+                            Some(other) => (
+                                StatusCode::UNAUTHORIZED,
+                                AxumJson(serde_json::json!({
+                                    "code": "INVALID_TOKEN",
+                                    "message": format!("unexpected authorization header: {other}")
+                                })),
+                            )
+                                .into_response(),
+                            None => (
+                                StatusCode::UNAUTHORIZED,
+                                AxumJson(serde_json::json!({
+                                    "code": "INVALID_TOKEN",
+                                    "message": "missing authorization header"
+                                })),
+                            )
+                                .into_response(),
+                        }
+                    }
+                }),
+            )
+            .route(
+                "/api/v1/subscriptions/progress",
+                get(|headers: HeaderMap| async move {
+                    match authorization_value(&headers) {
+                        Some("Bearer rotated-access") => (
+                            StatusCode::OK,
+                            AxumJson(serde_json::json!({
+                                "code": 0,
+                                "message": "",
+                                "data": [
+                                    {
+                                        "progress": {
+                                            "daily": {
+                                                "remaining_usd": 9.5
+                                            }
+                                        }
+                                    }
+                                ]
+                            })),
+                        )
+                            .into_response(),
+                        _ => (
+                            StatusCode::UNAUTHORIZED,
+                            AxumJson(serde_json::json!({
+                                "code": "TOKEN_EXPIRED",
+                                "message": "Token has expired"
+                            })),
+                        )
+                            .into_response(),
+                    }
+                }),
+            )
+            .route(
+                "/api/v1/auth/refresh",
+                post(move |AxumJson(payload): AxumJson<serde_json::Value>| {
+                    let refresh_calls = refresh_calls_for_handler.clone();
+                    async move {
+                        refresh_calls.fetch_add(1, Ordering::SeqCst);
+                        match payload
+                            .get("refresh_token")
+                            .and_then(|value| value.as_str())
+                        {
+                            Some("good-refresh") => (
+                                StatusCode::OK,
+                                AxumJson(serde_json::json!({
+                                    "code": 0,
+                                    "message": "",
+                                    "data": {
+                                        "access_token": "rotated-access",
+                                        "refresh_token": "rotated-refresh"
+                                    }
+                                })),
+                            )
+                                .into_response(),
+                            Some(other) => (
+                                StatusCode::UNAUTHORIZED,
+                                AxumJson(serde_json::json!({
+                                    "reason": "REFRESH_TOKEN_INVALID",
+                                    "message": format!("unexpected refresh token: {other}")
+                                })),
+                            )
+                                .into_response(),
+                            None => (
+                                StatusCode::UNAUTHORIZED,
+                                AxumJson(serde_json::json!({
+                                    "reason": "REFRESH_TOKEN_INVALID",
+                                    "message": "missing refresh token"
+                                })),
+                            )
+                                .into_response(),
+                        }
+                    }
+                }),
+            );
+
+        let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+            .await
+            .expect("bind refresh success server");
+        let addr = listener.local_addr().expect("local addr");
+        tokio::spawn(async move {
+            let _ = axum::serve(listener, app).await;
+        });
+        (
+            format!("http://127.0.0.1:{}", addr.port()),
+            auth_me_calls,
+            refresh_calls,
+        )
+    }
+
+    async fn spawn_sub2api_refresh_invalid_server() -> (String, Arc<AtomicUsize>, Arc<AtomicUsize>)
+    {
+        let auth_me_calls = Arc::new(AtomicUsize::new(0));
+        let refresh_calls = Arc::new(AtomicUsize::new(0));
+        let auth_me_calls_for_handler = auth_me_calls.clone();
+        let refresh_calls_for_handler = refresh_calls.clone();
+        let app = Router::new()
+            .route(
+                "/api/v1/auth/me",
+                get(move |headers: HeaderMap| {
+                    let auth_me_calls = auth_me_calls_for_handler.clone();
+                    async move {
+                        auth_me_calls.fetch_add(1, Ordering::SeqCst);
+                        match authorization_value(&headers) {
+                            Some("Bearer expired-access") => (
+                                StatusCode::UNAUTHORIZED,
+                                AxumJson(serde_json::json!({
+                                    "code": "TOKEN_EXPIRED",
+                                    "message": "Token has expired"
+                                })),
+                            )
+                                .into_response(),
+                            Some(other) => (
+                                StatusCode::UNAUTHORIZED,
+                                AxumJson(serde_json::json!({
+                                    "code": "INVALID_TOKEN",
+                                    "message": format!("unexpected authorization header: {other}")
+                                })),
+                            )
+                                .into_response(),
+                            None => (
+                                StatusCode::UNAUTHORIZED,
+                                AxumJson(serde_json::json!({
+                                    "code": "INVALID_TOKEN",
+                                    "message": "missing authorization header"
+                                })),
+                            )
+                                .into_response(),
+                        }
+                    }
+                }),
+            )
+            .route(
+                "/api/v1/auth/refresh",
+                post(move |AxumJson(payload): AxumJson<serde_json::Value>| {
+                    let refresh_calls = refresh_calls_for_handler.clone();
+                    async move {
+                        refresh_calls.fetch_add(1, Ordering::SeqCst);
+                        match payload
+                            .get("refresh_token")
+                            .and_then(|value| value.as_str())
+                        {
+                            Some("stale-refresh") => (
+                                StatusCode::UNAUTHORIZED,
+                                AxumJson(serde_json::json!({
+                                    "code": 401,
+                                    "reason": "REFRESH_TOKEN_EXPIRED",
+                                    "message": "refresh token has expired"
+                                })),
+                            )
+                                .into_response(),
+                            Some(other) => (
+                                StatusCode::UNAUTHORIZED,
+                                AxumJson(serde_json::json!({
+                                    "reason": "REFRESH_TOKEN_INVALID",
+                                    "message": format!("unexpected refresh token: {other}")
+                                })),
+                            )
+                                .into_response(),
+                            None => (
+                                StatusCode::UNAUTHORIZED,
+                                AxumJson(serde_json::json!({
+                                    "reason": "REFRESH_TOKEN_INVALID",
+                                    "message": "missing refresh token"
+                                })),
+                            )
+                                .into_response(),
+                        }
+                    }
+                }),
+            );
+
+        let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+            .await
+            .expect("bind refresh invalid server");
+        let addr = listener.local_addr().expect("local addr");
+        tokio::spawn(async move {
+            let _ = axum::serve(listener, app).await;
+        });
+        (
+            format!("http://127.0.0.1:{}", addr.port()),
+            auth_me_calls,
+            refresh_calls,
+        )
     }
 
     async fn spawn_newapi_system_checkin_server() -> (String, Arc<AtomicUsize>) {
@@ -2101,6 +2483,7 @@ mod tests {
                 user_id: None,
                 user_token: None,
                 bearer_token: Some("Bearer secret-token".to_string()),
+                refresh_token: None,
                 page_checkin_url: None,
                 checkin_mode: Some(RemoteAccountCheckinMode::Disabled),
                 auto_checkin_time: None,
@@ -2146,6 +2529,7 @@ mod tests {
                 base_url: base_url.clone(),
                 api_url: None,
                 access_token: "Bearer secret-token".to_string(),
+                refresh_token: None,
                 page_checkin_url: None,
                 checkin_mode: Some(storage::RemoteAccountCheckinMode::Disabled),
                 auto_checkin_time: None,
@@ -2183,6 +2567,126 @@ mod tests {
         );
         assert_eq!(updated.last_balance_amount, Some(12.5));
         assert_eq!(updated.last_sync_error, None);
+
+        remove_sqlite_artifacts(&db_path);
+    }
+
+    #[tokio::test]
+    async fn refresh_sub2api_account_rotates_tokens_after_access_token_expired() {
+        let db_path = temp_db_path();
+        remove_sqlite_artifacts(&db_path);
+        storage::init_db(&db_path).expect("init db");
+        let state = build_test_state(db_path.clone()).await;
+        let (base_url, auth_me_calls, refresh_calls) = spawn_sub2api_refresh_success_server().await;
+
+        let account = storage::create_remote_account(
+            db_path.clone(),
+            storage::CreateRemoteAccount {
+                provider: storage::RemoteAccountProvider::Sub2Api,
+                base_url,
+                api_url: None,
+                access_token: "Bearer expired-access".to_string(),
+                refresh_token: Some("Bearer good-refresh".to_string()),
+                page_checkin_url: None,
+                checkin_mode: Some(storage::RemoteAccountCheckinMode::Disabled),
+                auto_checkin_time: None,
+                low_balance_alert_threshold: Some(0.0),
+                recharge_currency: Some(RechargeCurrency::Cny),
+            },
+        )
+        .await
+        .expect("seed sub2api account");
+
+        let response =
+            refresh_remote_account(State(state), axum::extract::Path(account.id.clone()))
+                .await
+                .expect("refresh should succeed")
+                .into_response();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(auth_me_calls.load(Ordering::SeqCst), 2);
+        assert_eq!(refresh_calls.load(Ordering::SeqCst), 1);
+
+        let payload = response_json(response).await;
+        assert_eq!(
+            payload["provider"],
+            serde_json::Value::String("sub2api".to_string())
+        );
+        assert_eq!(payload["reauth_required"], serde_json::Value::Bool(false));
+        assert_eq!(
+            payload["remote_username"],
+            serde_json::Value::String("demo-user".to_string())
+        );
+
+        let updated = storage::get_remote_account_with_secret(db_path.clone(), account.id)
+            .await
+            .expect("reload updated account");
+        assert_eq!(updated.access_token.as_deref(), Some("rotated-access"));
+        assert_eq!(updated.refresh_token.as_deref(), Some("rotated-refresh"));
+        assert!(!updated.reauth_required);
+        assert_eq!(updated.last_sync_error, None);
+        assert_eq!(updated.remote_user_id.as_deref(), Some("42"));
+        assert_eq!(updated.remote_username.as_deref(), Some("demo-user"));
+        assert_eq!(updated.last_balance_amount, Some(9.5));
+
+        remove_sqlite_artifacts(&db_path);
+    }
+
+    #[tokio::test]
+    async fn refresh_sub2api_account_marks_relogin_required_after_refresh_token_expired() {
+        let db_path = temp_db_path();
+        remove_sqlite_artifacts(&db_path);
+        storage::init_db(&db_path).expect("init db");
+        let state = build_test_state(db_path.clone()).await;
+        let (base_url, auth_me_calls, refresh_calls) = spawn_sub2api_refresh_invalid_server().await;
+
+        let account = storage::create_remote_account(
+            db_path.clone(),
+            storage::CreateRemoteAccount {
+                provider: storage::RemoteAccountProvider::Sub2Api,
+                base_url,
+                api_url: None,
+                access_token: "Bearer expired-access".to_string(),
+                refresh_token: Some("Bearer stale-refresh".to_string()),
+                page_checkin_url: None,
+                checkin_mode: Some(storage::RemoteAccountCheckinMode::Disabled),
+                auto_checkin_time: None,
+                low_balance_alert_threshold: Some(0.0),
+                recharge_currency: Some(RechargeCurrency::Cny),
+            },
+        )
+        .await
+        .expect("seed sub2api account");
+
+        let response =
+            match refresh_remote_account(State(state), axum::extract::Path(account.id.clone()))
+                .await
+            {
+                Ok(_) => panic!("refresh should require relogin"),
+                Err(err) => err.into_response(),
+            };
+
+        assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
+        assert_eq!(auth_me_calls.load(Ordering::SeqCst), 1);
+        assert_eq!(refresh_calls.load(Ordering::SeqCst), 1);
+
+        let payload = response_json(response).await;
+        assert_eq!(
+            payload["code"],
+            serde_json::Value::String("remote_relogin_required".to_string())
+        );
+
+        let updated = storage::get_remote_account_with_secret(db_path.clone(), account.id)
+            .await
+            .expect("reload updated account");
+        assert_eq!(updated.access_token.as_deref(), Some("expired-access"));
+        assert_eq!(updated.refresh_token.as_deref(), Some("stale-refresh"));
+        assert!(updated.reauth_required);
+        assert_eq!(
+            updated.last_sync_error.as_deref(),
+            Some("sub2api login expired, please sign in again")
+        );
+        assert!(updated.last_synced_at_ms.is_some());
 
         remove_sqlite_artifacts(&db_path);
     }
@@ -2271,6 +2775,7 @@ mod tests {
                 base_url: "http://127.0.0.1:65535".to_string(),
                 api_url: None,
                 access_token: "Bearer demo-token".to_string(),
+                refresh_token: None,
                 page_checkin_url: None,
                 checkin_mode: Some(storage::RemoteAccountCheckinMode::Disabled),
                 auto_checkin_time: None,

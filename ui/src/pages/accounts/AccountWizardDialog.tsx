@@ -85,6 +85,7 @@ export function AccountWizardDialog({
         user_id: result.provider === "newapi" ? current.user_id : "",
         user_token: result.provider === "newapi" ? current.user_token : "",
         bearer_token: result.provider === "sub2api" ? current.bearer_token : "",
+        refresh_token: result.provider === "sub2api" ? current.refresh_token : "",
       }));
       setStep(2);
     } catch (e) {
@@ -142,6 +143,7 @@ export function AccountWizardDialog({
         user_id: draft.provider === "newapi" ? draft.user_id.trim() : null,
         user_token: draft.provider === "newapi" ? draft.user_token.trim() : null,
         bearer_token: draft.provider === "sub2api" ? draft.bearer_token.trim() : null,
+        refresh_token: draft.provider === "sub2api" ? draft.refresh_token.trim() || null : null,
         page_checkin_url: draft.page_checkin_url.trim() || null,
         checkin_mode: draft.checkin_mode,
         auto_checkin_time: draft.auto_checkin_time.trim() || "00:05:00",
@@ -167,12 +169,16 @@ export function AccountWizardDialog({
     }
     setOpeningLogin(true);
     try {
-      const token = await requestSub2ApiDesktopAuth(baseUrl);
-      if (!token) {
+      const auth = await requestSub2ApiDesktopAuth(baseUrl);
+      if (!auth) {
         toast(t("accounts.toast.sub2apiAuthCancelled"));
         return;
       }
-      setDraft((current) => ({ ...current, bearer_token: token }));
+      setDraft((current) => ({
+        ...current,
+        bearer_token: auth.bearerToken,
+        refresh_token: auth.refreshToken,
+      }));
     } catch (e) {
       const error = e instanceof Error ? e.message : "";
       if (error === "sub2api_auth_unsupported") {

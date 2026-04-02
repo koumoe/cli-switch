@@ -281,6 +281,7 @@ export type RemoteAccountBase = {
   api_url: string | null;
   user_id: string;
   user_token_configured: boolean;
+  reauth_required: boolean;
   page_checkin_url: string | null;
   checkin_mode: RemoteAccountCheckinMode;
   auto_checkin_enabled: boolean;
@@ -336,6 +337,7 @@ export type CreateRemoteAccountInput = {
   user_id?: string | null;
   user_token?: string | null;
   bearer_token?: string | null;
+  refresh_token?: string | null;
   page_checkin_url?: string | null;
   checkin_mode?: RemoteAccountCheckinMode;
   auto_checkin_time?: string;
@@ -350,6 +352,7 @@ export type UpdateRemoteAccountInput = Partial<{
   user_id: string;
   user_token: string;
   bearer_token: string;
+  refresh_token: string | null;
   page_checkin_url: string | null;
   checkin_mode: RemoteAccountCheckinMode;
   auto_checkin_time: string;

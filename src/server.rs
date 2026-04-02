@@ -23,6 +23,7 @@ mod error;
 mod handlers;
 mod scheduler;
 mod state;
+mod sub2api_auth;
 mod tasks;
 mod ui;
 

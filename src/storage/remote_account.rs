@@ -90,6 +90,8 @@ pub struct RemoteAccount {
     pub api_url: Option<String>,
     #[serde(skip_serializing)]
     pub access_token: Option<String>,
+    #[serde(skip_serializing)]
+    pub refresh_token: Option<String>,
     pub access_token_configured: bool,
     pub page_checkin_url: Option<String>,
     pub checkin_mode: RemoteAccountCheckinMode,
@@ -102,6 +104,7 @@ pub struct RemoteAccount {
     pub remote_display_name: Option<String>,
     pub last_balance_amount: Option<f64>,
     pub last_sync_error: Option<String>,
+    pub reauth_required: bool,
     pub last_synced_at_ms: Option<i64>,
     pub low_balance_alert_notified: bool,
     pub last_balance_alert_at_ms: Option<i64>,
@@ -116,6 +119,7 @@ pub struct CreateRemoteAccount {
     pub base_url: String,
     pub api_url: Option<String>,
     pub access_token: String,
+    pub refresh_token: Option<String>,
     pub page_checkin_url: Option<String>,
     pub checkin_mode: Option<RemoteAccountCheckinMode>,
     pub auto_checkin_time: Option<String>,
@@ -128,6 +132,7 @@ pub struct UpdateRemoteAccount {
     pub base_url: Option<String>,
     pub api_url: Option<String>,
     pub access_token: Option<String>,
+    pub refresh_token: Option<String>,
     pub page_checkin_url: Option<String>,
     pub checkin_mode: Option<RemoteAccountCheckinMode>,
     pub auto_checkin_time: Option<String>,
@@ -189,8 +194,14 @@ fn remote_account_from_row(
     include_secret: bool,
 ) -> rusqlite::Result<RemoteAccount> {
     let access_token_raw: String = row.get(4)?;
+    let refresh_token_raw: String = row.get(5)?;
     let access_token = if include_secret {
         Some(access_token_raw.clone()).filter(|value| token_configured(value))
+    } else {
+        None
+    };
+    let refresh_token = if include_secret {
+        Some(refresh_token_raw.clone()).filter(|value| token_configured(value))
     } else {
         None
     };
@@ -200,25 +211,46 @@ fn remote_account_from_row(
         base_url: row.get(2)?,
         api_url: row.get(3)?,
         access_token,
+        refresh_token,
         access_token_configured: token_configured(&access_token_raw),
-        page_checkin_url: row.get(5)?,
-        checkin_mode: row.get(6)?,
-        auto_checkin_time: row.get(7)?,
-        low_balance_alert_threshold: row.get(8)?,
-        recharge_currency: row.get(9)?,
-        remote_user_id: row.get(10)?,
-        remote_role: row.get(11)?,
-        remote_username: row.get(12)?,
-        remote_display_name: row.get(13)?,
-        last_balance_amount: row.get(14)?,
-        last_sync_error: row.get(15)?,
-        last_synced_at_ms: row.get(16)?,
-        low_balance_alert_notified: row.get::<_, i64>(17)? != 0,
-        last_balance_alert_at_ms: row.get(18)?,
-        sort_order: row.get(19)?,
-        created_at_ms: row.get(20)?,
-        updated_at_ms: row.get(21)?,
+        page_checkin_url: row.get(6)?,
+        checkin_mode: row.get(7)?,
+        auto_checkin_time: row.get(8)?,
+        low_balance_alert_threshold: row.get(9)?,
+        recharge_currency: row.get(10)?,
+        remote_user_id: row.get(11)?,
+        remote_role: row.get(12)?,
+        remote_username: row.get(13)?,
+        remote_display_name: row.get(14)?,
+        last_balance_amount: row.get(15)?,
+        last_sync_error: row.get(16)?,
+        reauth_required: row.get::<_, i64>(17)? != 0,
+        last_synced_at_ms: row.get(18)?,
+        low_balance_alert_notified: row.get::<_, i64>(19)? != 0,
+        last_balance_alert_at_ms: row.get(20)?,
+        sort_order: row.get(21)?,
+        created_at_ms: row.get(22)?,
+        updated_at_ms: row.get(23)?,
     })
+}
+
+fn ensure_remote_account_column(
+    conn: &rusqlite::Connection,
+    column_name: &str,
+    column_ddl: &str,
+) -> anyhow::Result<()> {
+    let mut stmt = conn.prepare("PRAGMA table_info(remote_accounts)")?;
+    let columns = stmt
+        .query_map([], |row| row.get::<_, String>(1))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    if columns.iter().any(|name| name == column_name) {
+        return Ok(());
+    }
+    conn.execute(
+        &format!("ALTER TABLE remote_accounts ADD COLUMN {column_name} {column_ddl}"),
+        [],
+    )?;
+    Ok(())
 }
 
 pub fn ensure_remote_account_schema(conn: &rusqlite::Connection) -> anyhow::Result<()> {
@@ -232,6 +264,7 @@ pub fn ensure_remote_account_schema(conn: &rusqlite::Connection) -> anyhow::Resu
           user_id TEXT NOT NULL DEFAULT '',
           user_token TEXT NOT NULL DEFAULT '',
           access_token TEXT NOT NULL DEFAULT '',
+          refresh_token TEXT NOT NULL DEFAULT '',
           page_checkin_url TEXT NULL,
           checkin_mode TEXT NOT NULL DEFAULT 'disabled' CHECK(checkin_mode IN ('disabled','system_api','page_open')),
           auto_checkin_enabled INTEGER NOT NULL DEFAULT 0,
@@ -254,6 +287,7 @@ pub fn ensure_remote_account_schema(conn: &rusqlite::Connection) -> anyhow::Resu
           last_used_quota INTEGER NULL,
           last_balance_amount REAL NULL,
           last_sync_error TEXT NULL,
+          reauth_required INTEGER NOT NULL DEFAULT 0,
           last_synced_at_ms INTEGER NULL,
           low_balance_alert_notified INTEGER NOT NULL DEFAULT 0,
           last_balance_alert_at_ms INTEGER NULL,
@@ -274,6 +308,8 @@ pub fn ensure_remote_account_schema(conn: &rusqlite::Connection) -> anyhow::Resu
         ON remote_account_checkins(date, completed_at_ms);
         "#,
     )?;
+    ensure_remote_account_column(conn, "refresh_token", "TEXT NOT NULL DEFAULT ''")?;
+    ensure_remote_account_column(conn, "reauth_required", "INTEGER NOT NULL DEFAULT 0")?;
     Ok(())
 }
 
@@ -294,10 +330,10 @@ async fn list_remote_accounts_impl(
     with_conn(db_path, move |conn| {
         let mut stmt = conn.prepare(
             r#"
-            SELECT id, provider, base_url, api_url, access_token, page_checkin_url, checkin_mode,
+            SELECT id, provider, base_url, api_url, access_token, refresh_token, page_checkin_url, checkin_mode,
                    auto_checkin_time, low_balance_alert_threshold, recharge_currency, remote_user_id,
                    remote_role, remote_username, remote_display_name, last_balance_amount,
-                   last_sync_error, last_synced_at_ms, low_balance_alert_notified,
+                   last_sync_error, reauth_required, last_synced_at_ms, low_balance_alert_notified,
                    last_balance_alert_at_ms, sort_order, created_at_ms, updated_at_ms
             FROM remote_accounts
             WHERE provider = 'sub2api'
@@ -351,10 +387,10 @@ async fn get_remote_account_impl(
     with_conn(db_path, move |conn| {
         let mut stmt = conn.prepare(
             r#"
-            SELECT id, provider, base_url, api_url, access_token, page_checkin_url, checkin_mode,
+            SELECT id, provider, base_url, api_url, access_token, refresh_token, page_checkin_url, checkin_mode,
                    auto_checkin_time, low_balance_alert_threshold, recharge_currency, remote_user_id,
                    remote_role, remote_username, remote_display_name, last_balance_amount,
-                   last_sync_error, last_synced_at_ms, low_balance_alert_notified,
+                   last_sync_error, reauth_required, last_synced_at_ms, low_balance_alert_notified,
                    last_balance_alert_at_ms, sort_order, created_at_ms, updated_at_ms
             FROM remote_accounts
             WHERE provider = 'sub2api' AND id = ?1
@@ -407,6 +443,7 @@ pub async fn create_remote_account(
         let base_url = normalize_base_url(&input.base_url);
         let api_url = normalize_optional_base_url(input.api_url);
         let access_token = normalize_optional_bearer_token(Some(input.access_token));
+        let refresh_token = normalize_optional_bearer_token(input.refresh_token);
         let page_checkin_url = normalize_optional_text(input.page_checkin_url);
         let checkin_mode = input
             .checkin_mode
@@ -421,11 +458,11 @@ pub async fn create_remote_account(
         conn.execute(
             r#"
             INSERT INTO remote_accounts (
-                id, provider, base_url, api_url, access_token, page_checkin_url, checkin_mode,
+                id, provider, base_url, api_url, access_token, refresh_token, page_checkin_url, checkin_mode,
                 auto_checkin_time, low_balance_alert_threshold, recharge_currency, sort_order,
                 created_at_ms, updated_at_ms
             )
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
             "#,
             params![
                 id,
@@ -433,6 +470,7 @@ pub async fn create_remote_account(
                 base_url,
                 api_url,
                 access_token.as_deref().unwrap_or(""),
+                refresh_token.as_deref().unwrap_or(""),
                 page_checkin_url,
                 checkin_mode.as_str(),
                 auto_checkin_time,
@@ -450,6 +488,7 @@ pub async fn create_remote_account(
             base_url,
             api_url,
             access_token: access_token.clone(),
+            refresh_token: refresh_token.clone(),
             access_token_configured: access_token.is_some(),
             page_checkin_url,
             checkin_mode,
@@ -462,6 +501,7 @@ pub async fn create_remote_account(
             remote_display_name: None,
             last_balance_amount: None,
             last_sync_error: None,
+            reauth_required: false,
             last_synced_at_ms: None,
             low_balance_alert_notified: false,
             last_balance_alert_at_ms: None,
@@ -495,6 +535,9 @@ pub async fn update_remote_account(
             account.access_token = normalize_optional_bearer_token(Some(value));
             account.access_token_configured = account.access_token.is_some();
         }
+        if let Some(value) = input.refresh_token {
+            account.refresh_token = normalize_optional_bearer_token(Some(value));
+        }
         if input.page_checkin_url.is_some() {
             account.page_checkin_url = normalize_optional_text(input.page_checkin_url);
         }
@@ -516,9 +559,9 @@ pub async fn update_remote_account(
         conn.execute(
             r#"
             UPDATE remote_accounts
-            SET base_url = ?2, api_url = ?3, access_token = ?4, page_checkin_url = ?5,
-                checkin_mode = ?6, auto_checkin_time = ?7, low_balance_alert_threshold = ?8,
-                recharge_currency = ?9, updated_at_ms = ?10
+            SET base_url = ?2, api_url = ?3, access_token = ?4, refresh_token = ?5,
+                page_checkin_url = ?6, checkin_mode = ?7, auto_checkin_time = ?8,
+                low_balance_alert_threshold = ?9, recharge_currency = ?10, updated_at_ms = ?11
             WHERE id = ?1
             "#,
             params![
@@ -526,6 +569,7 @@ pub async fn update_remote_account(
                 account.base_url,
                 account.api_url,
                 account.access_token.as_deref().unwrap_or(""),
+                account.refresh_token.as_deref().unwrap_or(""),
                 account.page_checkin_url,
                 account.checkin_mode.as_str(),
                 account.auto_checkin_time,
@@ -547,10 +591,10 @@ fn get_remote_account_impl_sync(
 ) -> anyhow::Result<Option<RemoteAccount>> {
     let mut stmt = conn.prepare(
         r#"
-        SELECT id, provider, base_url, api_url, access_token, page_checkin_url, checkin_mode,
+        SELECT id, provider, base_url, api_url, access_token, refresh_token, page_checkin_url, checkin_mode,
                auto_checkin_time, low_balance_alert_threshold, recharge_currency, remote_user_id,
                remote_role, remote_username, remote_display_name, last_balance_amount,
-               last_sync_error, last_synced_at_ms, low_balance_alert_notified,
+               last_sync_error, reauth_required, last_synced_at_ms, low_balance_alert_notified,
                last_balance_alert_at_ms, sort_order, created_at_ms, updated_at_ms
         FROM remote_accounts
         WHERE provider = 'sub2api' AND id = ?1
@@ -575,8 +619,8 @@ pub async fn apply_remote_account_sync_success(
             r#"
             UPDATE remote_accounts
             SET remote_user_id = ?2, remote_role = ?3, remote_username = ?4, remote_display_name = ?5,
-                last_balance_amount = ?6, last_sync_error = ?7, last_synced_at_ms = ?8,
-                updated_at_ms = ?9
+                last_balance_amount = ?6, last_sync_error = ?7, reauth_required = 0,
+                last_synced_at_ms = ?8, updated_at_ms = ?9
             WHERE provider = 'sub2api' AND id = ?1
             "#,
             params![
@@ -604,6 +648,7 @@ pub async fn apply_remote_account_sync_failure(
     account_id: String,
     last_sync_error: String,
     last_synced_at_ms: Option<i64>,
+    reauth_required: bool,
 ) -> anyhow::Result<()> {
     with_conn(db_path, move |conn| {
         let synced_at_ms = last_synced_at_ms.unwrap_or_else(now_ms);
@@ -611,10 +656,48 @@ pub async fn apply_remote_account_sync_failure(
         let changed = conn.execute(
             r#"
             UPDATE remote_accounts
-            SET last_sync_error = ?2, last_synced_at_ms = ?3, updated_at_ms = ?4
+            SET last_sync_error = ?2, reauth_required = ?3, last_synced_at_ms = ?4, updated_at_ms = ?5
             WHERE provider = 'sub2api' AND id = ?1
             "#,
-            params![account_id, last_sync_error, synced_at_ms, updated_at_ms],
+            params![
+                account_id,
+                last_sync_error,
+                if reauth_required { 1 } else { 0 },
+                synced_at_ms,
+                updated_at_ms
+            ],
+        )?;
+        if changed == 0 {
+            return Err(StorageError::RemoteAccountNotFound { account_id }.into());
+        }
+        Ok(())
+    })
+    .await
+}
+
+pub async fn update_remote_account_auth_session(
+    db_path: PathBuf,
+    account_id: String,
+    access_token: Option<String>,
+    refresh_token: Option<String>,
+) -> anyhow::Result<()> {
+    with_conn(db_path, move |conn| {
+        let updated_at_ms = now_ms();
+        let access_token = normalize_optional_bearer_token(access_token);
+        let refresh_token = normalize_optional_bearer_token(refresh_token);
+        let changed = conn.execute(
+            r#"
+            UPDATE remote_accounts
+            SET access_token = ?2, refresh_token = ?3, last_sync_error = NULL,
+                reauth_required = 0, updated_at_ms = ?4
+            WHERE provider = 'sub2api' AND id = ?1
+            "#,
+            params![
+                account_id,
+                access_token.as_deref().unwrap_or(""),
+                refresh_token.as_deref().unwrap_or(""),
+                updated_at_ms,
+            ],
         )?;
         if changed == 0 {
             return Err(StorageError::RemoteAccountNotFound { account_id }.into());

@@ -69,6 +69,13 @@ export function AccountEditorDialog({
             <span className="text-sm text-muted-foreground">{t("accounts.editor.providerLocked")}</span>
           </div>
 
+          {account?.provider === "sub2api" && account.reauth_required ? (
+            <div className="rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+              <div className="font-medium">{t("accounts.editor.reauthRequiredTitle")}</div>
+              <div>{t("accounts.editor.reauthRequiredHint")}</div>
+            </div>
+          ) : null}
+
           <div className="space-y-2">
             <label className="text-sm font-medium">{t("accounts.editor.baseUrl")}</label>
             <Input

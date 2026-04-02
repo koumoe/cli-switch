@@ -88,6 +88,7 @@
     "remote_provider_detect_ambiguous": "Base URL 同时匹配多个账号体系，请手动确认",
     "remote_provider_mismatch": "账号体系与当前记录不匹配",
     "remote_protocol_required": "协议不能为空",
+    "remote_relogin_required": "sub2api 登录状态已失效，请重新登录",
     "remote_sync_failed": "同步远端账号信息失败",
     "route_name_required": "路由名称不能为空",
     "route_not_found": "路由不存在",

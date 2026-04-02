@@ -9,6 +9,7 @@ use crate::i18n::{UserFacingIssue, UserFacingIssuePayload, current_locale};
 use crate::proxy;
 use crate::server::AppState;
 use crate::server::error::{ApiError, map_storage_unit_no_content_err};
+use crate::server::sub2api_auth;
 use crate::storage;
 
 fn real_multiplier_is_valid(v: f64) -> bool {
@@ -336,10 +337,14 @@ pub(in crate::server) async fn delete_channel(
         super::remote::delete_remote_managed_channel_resources(&state, &channel)
             .await
             .map_err(|e| {
-                ApiError::bad_gateway(
-                    "remote_delete_failed",
-                    format!("Failed to delete remote managed resource: {e}"),
-                )
+                if let Some(message) = sub2api_auth::relogin_required_message(&e) {
+                    ApiError::bad_gateway("remote_relogin_required", message.to_string())
+                } else {
+                    ApiError::bad_gateway(
+                        "remote_delete_failed",
+                        format!("Failed to delete remote managed resource: {e}"),
+                    )
+                }
             })?;
     }
 

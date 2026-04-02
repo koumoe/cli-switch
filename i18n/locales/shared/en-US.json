@@ -86,6 +86,7 @@
     "remote_provider_detect_ambiguous": "The Base URL matches multiple account providers. Please verify it manually",
     "remote_provider_mismatch": "The provider does not match the existing account type",
     "remote_protocol_required": "Protocol is required",
+    "remote_relogin_required": "The sub2api login session expired. Sign in again.",
     "remote_sync_failed": "Failed to sync the remote account",
     "route_name_required": "Route name is required",
     "route_not_found": "Route not found",

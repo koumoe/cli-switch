@@ -15,6 +15,7 @@ use crate::{autostart, log_files, newapi, nodejs, storage, sub2api, update};
 use super::handlers::pricing::run_pricing_sync;
 use super::scheduler::{self, DailyLocalTimeTrigger, IntervalTrigger};
 use super::state::data_dir_from_db_path;
+use super::sub2api_auth;
 
 const RETRY_INTERVAL: Duration = Duration::from_secs(30);
 
@@ -757,6 +758,7 @@ async fn persist_sub2api_sync_failure(
         account_id.to_string(),
         err.to_string(),
         Some(storage::now_ms()),
+        false,
     )
     .await
 }
@@ -1002,11 +1004,11 @@ async fn run_sub2api_account_maintenance(
         Vec<storage::Channel>,
     >,
 ) {
-    let Some(token) = account
+    if account
         .access_token
         .as_deref()
-        .filter(|value| !value.trim().is_empty())
-    else {
+        .is_none_or(|value| value.trim().is_empty())
+    {
         if account.low_balance_alert_notified {
             let _ = storage::set_remote_account_balance_alert_notified(
                 db_path,
@@ -1017,12 +1019,19 @@ async fn run_sub2api_account_maintenance(
             .await;
         }
         return;
-    };
+    }
 
-    let latest_overview = match sub2api::fetch_account_overview(
+    let latest_overview = match sub2api_auth::run_with_persisted_session(
+        db_path.clone(),
         http_client,
-        &account.base_url,
-        token,
+        account,
+        |http_client, base_url, access_token| {
+            Box::pin(sub2api::fetch_account_overview(
+                http_client,
+                base_url,
+                access_token,
+            ))
+        },
     )
     .await
     {
@@ -1039,9 +1048,14 @@ async fn run_sub2api_account_maintenance(
         }
         Err(err) => {
             tracing::warn!(account_id = %account.id, err = %err, "sync sub2api overview failed");
-            if let Err(update_err) =
-                persist_sub2api_sync_failure(db_path.clone(), &account.id, &err).await
-            {
+            let persist_err = if sub2api_auth::relogin_required_message(&err).is_none() {
+                persist_sub2api_sync_failure(db_path.clone(), &account.id, &err)
+                    .await
+                    .err()
+            } else {
+                None
+            };
+            if let Some(update_err) = persist_err {
                 tracing::warn!(account_id = %account.id, err = %update_err, "persist sub2api sync failure failed");
             }
             None
@@ -1128,7 +1142,16 @@ async fn run_sub2api_account_maintenance(
         remote_group_ids,
         remote_group_ratios_by_name,
         remote_group_ratios_by_id,
-    ) = match sub2api::list_groups(http_client, &account.base_url, token).await {
+    ) = match sub2api_auth::run_with_persisted_session(
+        db_path.clone(),
+        http_client,
+        account,
+        |http_client, base_url, access_token| {
+            Box::pin(sub2api::list_groups(http_client, base_url, access_token))
+        },
+    )
+    .await
+    {
         Ok(groups) => {
             let mut remote_group_names = HashSet::new();
             let mut remote_group_ids = HashSet::new();
@@ -1157,7 +1180,16 @@ async fn run_sub2api_account_maintenance(
     let (remote_key_ids, remote_key_names) = if settings
         .remote_managed_channel_missing_prompt_enabled
     {
-        match sub2api::list_keys(http_client, &account.base_url, token).await {
+        match sub2api_auth::run_with_persisted_session(
+            db_path.clone(),
+            http_client,
+            account,
+            |http_client, base_url, access_token| {
+                Box::pin(sub2api::list_keys(http_client, base_url, access_token))
+            },
+        )
+        .await
+        {
             Ok(keys) => (
                 Some(keys.iter().map(|item| item.id).collect::<HashSet<i64>>()),
                 Some(
