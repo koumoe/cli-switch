@@ -1027,8 +1027,9 @@ impl ChatBridgeRuntime {
             .await;
 
         let maybe_session_ref = match &execution {
-            Ok(result) if result.success => generated_session_ref
-                .or_else(|| cli_adapter.extract_session_ref(&result.stdout)),
+            Ok(result) if result.success => {
+                generated_session_ref.or_else(|| cli_adapter.extract_session_ref(&result.stdout))
+            }
             _ => None,
         };
 

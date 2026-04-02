@@ -266,5 +266,4 @@ Available sessions for this project (2):
             .expect("parse empty output");
         assert!(parsed.is_empty());
     }
-
 }
