@@ -131,6 +131,10 @@
         "title": "CliSwitch Low Balance",
         "body": "{{base_url}} balance {{balance}}"
       },
+      "remoteGroupAdded": {
+        "title": "CliSwitch Remote Group Added",
+        "body": "Detected a new remote group {{group}} on {{base_url}}. Create a managed channel if needed."
+      },
       "managedChannel": {
         "title": "CliSwitch Channel Change",
         "tokenMissingBody": "Remote token for channel {{channel}} was not found in the latest list. Disable or delete the local channel.",

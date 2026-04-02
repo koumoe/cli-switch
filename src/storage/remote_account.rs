@@ -670,6 +670,20 @@ pub async fn delete_remote_account(db_path: PathBuf, account_id: String) -> anyh
             r#"DELETE FROM remote_account_checkins WHERE account_id = ?1"#,
             [&account_id],
         )?;
+        tx.execute(
+            r#"
+            DELETE FROM remote_account_group_snapshots
+            WHERE provider = 'sub2api' AND account_id = ?1
+            "#,
+            [&account_id],
+        )?;
+        tx.execute(
+            r#"
+            DELETE FROM remote_account_group_snapshot_states
+            WHERE provider = 'sub2api' AND account_id = ?1
+            "#,
+            [&account_id],
+        )?;
         tx.commit()?;
         Ok(())
     })

@@ -46,6 +46,8 @@ const KEY_NEWAPI_MANAGED_CHANNEL_MISSING_SYSTEM_NOTIFICATION_ENABLED: &str =
     "remote_managed_channel_missing_system_notification_enabled";
 const KEY_NEWAPI_MANAGED_CHANNEL_MULTIPLIER_SYSTEM_NOTIFICATION_ENABLED: &str =
     "remote_managed_channel_multiplier_system_notification_enabled";
+const KEY_REMOTE_GROUP_ADDED_SYSTEM_NOTIFICATION_ENABLED: &str =
+    "remote_group_added_system_notification_enabled";
 const KEY_NEWAPI_MANAGED_CHANNEL_MISSING_PROMPT_ENABLED: &str =
     "remote_managed_channel_missing_prompt_enabled";
 const KEY_NEWAPI_MANAGED_CHANNEL_SYNC_MULTIPLIER_ENABLED: &str =
@@ -127,6 +129,7 @@ pub struct AppSettings {
     pub remote_low_balance_system_notification_enabled: bool,
     pub remote_managed_channel_missing_system_notification_enabled: bool,
     pub remote_managed_channel_multiplier_system_notification_enabled: bool,
+    pub remote_group_added_system_notification_enabled: bool,
     pub remote_managed_channel_missing_prompt_enabled: bool,
     pub remote_managed_channel_sync_multiplier_enabled: bool,
     pub remote_managed_channel_sync_free_multiplier_enabled: bool,
@@ -172,6 +175,7 @@ impl Default for AppSettings {
             remote_low_balance_system_notification_enabled: true,
             remote_managed_channel_missing_system_notification_enabled: true,
             remote_managed_channel_multiplier_system_notification_enabled: true,
+            remote_group_added_system_notification_enabled: true,
             remote_managed_channel_missing_prompt_enabled: true,
             remote_managed_channel_sync_multiplier_enabled: true,
             remote_managed_channel_sync_free_multiplier_enabled: false,
@@ -210,6 +214,10 @@ impl AppSettings {
         self.system_notifications_enabled
             && self.remote_managed_channel_multiplier_system_notification_enabled
     }
+
+    pub fn remote_group_added_system_notification_enabled(&self) -> bool {
+        self.system_notifications_enabled && self.remote_group_added_system_notification_enabled
+    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -247,6 +255,7 @@ pub struct AppSettingsPatch {
     pub remote_low_balance_system_notification_enabled: Option<bool>,
     pub remote_managed_channel_missing_system_notification_enabled: Option<bool>,
     pub remote_managed_channel_multiplier_system_notification_enabled: Option<bool>,
+    pub remote_group_added_system_notification_enabled: Option<bool>,
     pub remote_managed_channel_missing_prompt_enabled: Option<bool>,
     pub remote_managed_channel_sync_multiplier_enabled: Option<bool>,
     pub remote_managed_channel_sync_free_multiplier_enabled: Option<bool>,
@@ -622,6 +631,14 @@ pub async fn get_app_settings(db_path: PathBuf) -> anyhow::Result<AppSettings> {
                 out.remote_managed_channel_multiplier_system_notification_enabled,
             );
         }
+        if let Some(v) = get_setting(conn, KEY_REMOTE_GROUP_ADDED_SYSTEM_NOTIFICATION_ENABLED)? {
+            out.remote_group_added_system_notification_enabled = parse_bool_setting(
+                KEY_REMOTE_GROUP_ADDED_SYSTEM_NOTIFICATION_ENABLED,
+                &v,
+                &mut has_invalid_values,
+                out.remote_group_added_system_notification_enabled,
+            );
+        }
         if let Some(v) = get_setting(conn, KEY_NEWAPI_MANAGED_CHANNEL_MISSING_PROMPT_ENABLED)? {
             out.remote_managed_channel_missing_prompt_enabled = parse_bool_setting(
                 KEY_NEWAPI_MANAGED_CHANNEL_MISSING_PROMPT_ENABLED,
@@ -888,6 +905,14 @@ pub async fn update_app_settings(
             set_setting(
                 conn,
                 KEY_NEWAPI_MANAGED_CHANNEL_MULTIPLIER_SYSTEM_NOTIFICATION_ENABLED,
+                if v { "true" } else { "false" },
+                updated_at_ms,
+            )?;
+        }
+        if let Some(v) = patch.remote_group_added_system_notification_enabled {
+            set_setting(
+                conn,
+                KEY_REMOTE_GROUP_ADDED_SYSTEM_NOTIFICATION_ENABLED,
                 if v { "true" } else { "false" },
                 updated_at_ms,
             )?;

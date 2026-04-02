@@ -241,6 +241,10 @@
       "updateOk": "{{name}} multiplier updated",
       "updateOkDescription": "Updated real multiplier from {{from}} to {{to}}",
       "actionFail": "Failed to update managed channel multiplier"
+    },
+    "remoteGroupAdded": {
+      "title": "New Remote Group Detected",
+      "description": "{{baseUrl}} added group {{group}}. You can create a managed channel from the Accounts page."
     }
   },
   "accounts": {
@@ -539,6 +543,8 @@
       "managedChannelMissingHint": "Send a system notification when a remote resource or group is missing",
       "managedChannelMultiplier": "Managed channel multiplier mismatch alerts",
       "managedChannelMultiplierHint": "Send a system notification when local and remote multipliers differ",
+      "remoteGroupAdded": "Remote group added alerts",
+      "remoteGroupAddedHint": "Send a system notification when a remote account gains a new group",
       "saved": "System notification settings saved",
       "saveFail": "Failed to save system notification settings"
     },

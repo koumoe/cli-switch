@@ -51,6 +51,7 @@ pub(in crate::server) struct UpdateSettingsInput {
     remote_low_balance_system_notification_enabled: Option<bool>,
     remote_managed_channel_missing_system_notification_enabled: Option<bool>,
     remote_managed_channel_multiplier_system_notification_enabled: Option<bool>,
+    remote_group_added_system_notification_enabled: Option<bool>,
     remote_managed_channel_missing_prompt_enabled: Option<bool>,
     remote_managed_channel_sync_multiplier_enabled: Option<bool>,
     remote_managed_channel_sync_free_multiplier_enabled: Option<bool>,
@@ -173,6 +174,12 @@ pub(in crate::server) async fn update_settings(
             "remote_managed_channel_multiplier_system_notification_enabled",
             input
                 .remote_managed_channel_multiplier_system_notification_enabled
+                .is_some(),
+        ),
+        (
+            "remote_group_added_system_notification_enabled",
+            input
+                .remote_group_added_system_notification_enabled
                 .is_some(),
         ),
         (
@@ -306,6 +313,8 @@ pub(in crate::server) async fn update_settings(
                 .remote_managed_channel_missing_system_notification_enabled,
             remote_managed_channel_multiplier_system_notification_enabled: input
                 .remote_managed_channel_multiplier_system_notification_enabled,
+            remote_group_added_system_notification_enabled: input
+                .remote_group_added_system_notification_enabled,
             remote_managed_channel_missing_prompt_enabled: input
                 .remote_managed_channel_missing_prompt_enabled,
             remote_managed_channel_sync_multiplier_enabled: input

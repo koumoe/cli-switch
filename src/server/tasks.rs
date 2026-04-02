@@ -7,8 +7,8 @@ use tokio::time::Duration;
 
 use crate::cli_tools::CLI_TOOLS;
 use crate::events::{
-    self, AppEvent, RemoteLowBalanceAlert, RemoteManagedChannelMissingPrompt,
-    RemoteManagedChannelMultiplierPrompt,
+    self, AppEvent, RemoteGroupAddedAlert, RemoteLowBalanceAlert,
+    RemoteManagedChannelMissingPrompt, RemoteManagedChannelMultiplierPrompt,
 };
 use crate::{autostart, log_files, newapi, nodejs, storage, sub2api, update};
 
@@ -57,6 +57,44 @@ fn decide_low_balance_alert_action(
         LowBalanceAlertAction::ClearNotified
     } else {
         LowBalanceAlertAction::None
+    }
+}
+
+async fn sync_remote_groups_and_publish_added_alerts(
+    db_path: PathBuf,
+    provider: storage::ManagedRemoteProvider,
+    account_id: &str,
+    account_base_url: &str,
+    groups: Vec<storage::RemoteGroupSnapshotEntry>,
+) {
+    let added_groups = match storage::sync_remote_group_snapshot(
+        db_path,
+        provider,
+        account_id.to_string(),
+        groups,
+    )
+    .await
+    {
+        Ok(added_groups) => added_groups,
+        Err(err) => {
+            tracing::warn!(
+                provider = provider.as_str(),
+                account_id,
+                err = %err,
+                "sync remote group snapshot failed"
+            );
+            return;
+        }
+    };
+
+    for group in added_groups {
+        events::publish(AppEvent::RemoteGroupAddedAlert(RemoteGroupAddedAlert {
+            account_id: account_id.to_string(),
+            account_base_url: account_base_url.to_string(),
+            provider,
+            group_id: group.group_id,
+            group_name: group.group_name,
+        }));
     }
 }
 
@@ -882,32 +920,67 @@ async fn run_newapi_account_maintenance(
         .get(&(storage::ManagedRemoteProvider::Newapi, account.id.clone()))
         .cloned()
         .unwrap_or_default();
-    if managed_channels.is_empty()
-        || (!settings.remote_managed_channel_missing_prompt_enabled
-            && !settings.remote_managed_channel_sync_multiplier_enabled)
-    {
+    let should_notify_group_added = settings.remote_group_added_system_notification_enabled();
+    let should_check_groups = should_notify_group_added
+        || (!managed_channels.is_empty()
+            && (settings.remote_managed_channel_missing_prompt_enabled
+                || settings.remote_managed_channel_sync_multiplier_enabled));
+    let should_check_tokens =
+        !managed_channels.is_empty() && settings.remote_managed_channel_missing_prompt_enabled;
+    if !should_check_groups && !should_check_tokens {
         return;
     }
 
-    let (remote_group_names, remote_groups) = match newapi::list_groups(http_client, account).await
+    let (remote_group_names, remote_groups, remote_group_snapshot_entries) = if should_check_groups
     {
-        Ok(groups) => {
-            let mut remote_group_names = HashSet::new();
-            let mut remote_groups = HashMap::new();
-            for group in groups {
-                remote_group_names.insert(group.name.clone());
-                if let Some(ratio) = group.ratio.and_then(normalize_remote_multiplier) {
-                    remote_groups.insert(group.name, ratio);
+        match newapi::list_groups(http_client, account).await {
+            Ok(groups) => {
+                let mut remote_group_names = HashSet::new();
+                let mut remote_groups = HashMap::new();
+                let mut remote_group_snapshot_entries = Vec::with_capacity(groups.len());
+                for group in groups {
+                    let group_name = group.name;
+                    remote_group_names.insert(group_name.clone());
+                    remote_group_snapshot_entries.push(storage::RemoteGroupSnapshotEntry {
+                        group_key: group_name.clone(),
+                        group_id: None,
+                        group_name: group_name.clone(),
+                    });
+                    if let Some(ratio) = group.ratio.and_then(normalize_remote_multiplier) {
+                        remote_groups.insert(group_name, ratio);
+                    }
                 }
+                (
+                    Some(remote_group_names),
+                    Some(remote_groups),
+                    Some(remote_group_snapshot_entries),
+                )
             }
-            (Some(remote_group_names), Some(remote_groups))
+            Err(err) => {
+                tracing::warn!(account_id = %account.id, err = %err, "load newapi groups failed");
+                (None, None, None)
+            }
         }
-        Err(err) => {
-            tracing::warn!(account_id = %account.id, err = %err, "load newapi groups failed");
-            (None, None)
-        }
+    } else {
+        (None, None, None)
     };
-    let remote_token_ids = if settings.remote_managed_channel_missing_prompt_enabled {
+    if should_notify_group_added
+        && let Some(remote_group_snapshot_entries) = remote_group_snapshot_entries
+    {
+        sync_remote_groups_and_publish_added_alerts(
+            db_path.clone(),
+            storage::ManagedRemoteProvider::Newapi,
+            &account.id,
+            &account.base_url,
+            remote_group_snapshot_entries,
+        )
+        .await;
+    }
+    if managed_channels.is_empty() {
+        return;
+    }
+
+    let remote_token_ids = if should_check_tokens {
         match newapi::list_tokens(http_client, account).await {
             Ok(tokens) => Some(
                 tokens
@@ -1130,10 +1203,14 @@ async fn run_sub2api_account_maintenance(
         .get(&(storage::ManagedRemoteProvider::Sub2Api, account.id.clone()))
         .cloned()
         .unwrap_or_default();
-    if managed_channels.is_empty()
-        || (!settings.remote_managed_channel_missing_prompt_enabled
-            && !settings.remote_managed_channel_sync_multiplier_enabled)
-    {
+    let should_notify_group_added = settings.remote_group_added_system_notification_enabled();
+    let should_check_groups = should_notify_group_added
+        || (!managed_channels.is_empty()
+            && (settings.remote_managed_channel_missing_prompt_enabled
+                || settings.remote_managed_channel_sync_multiplier_enabled));
+    let should_check_keys =
+        !managed_channels.is_empty() && settings.remote_managed_channel_missing_prompt_enabled;
+    if !should_check_groups && !should_check_keys {
         return;
     }
 
@@ -1142,44 +1219,73 @@ async fn run_sub2api_account_maintenance(
         remote_group_ids,
         remote_group_ratios_by_name,
         remote_group_ratios_by_id,
-    ) = match sub2api_auth::run_with_persisted_session(
-        db_path.clone(),
-        http_client,
-        account,
-        |http_client, base_url, access_token| {
-            Box::pin(sub2api::list_groups(http_client, base_url, access_token))
-        },
-    )
-    .await
-    {
-        Ok(groups) => {
-            let mut remote_group_names = HashSet::new();
-            let mut remote_group_ids = HashSet::new();
-            let mut remote_group_ratios_by_name = HashMap::new();
-            let mut remote_group_ratios_by_id = HashMap::new();
-            for group in groups {
-                remote_group_names.insert(group.name.clone());
-                remote_group_ids.insert(group.id);
-                if let Some(ratio) = group.rate_multiplier.and_then(normalize_remote_multiplier) {
-                    remote_group_ratios_by_name.insert(group.name.clone(), ratio);
-                    remote_group_ratios_by_id.insert(group.id, ratio);
+        remote_group_snapshot_entries,
+    ) = if should_check_groups {
+        match sub2api_auth::run_with_persisted_session(
+            db_path.clone(),
+            http_client,
+            account,
+            |http_client, base_url, access_token| {
+                Box::pin(sub2api::list_groups(http_client, base_url, access_token))
+            },
+        )
+        .await
+        {
+            Ok(groups) => {
+                let mut remote_group_names = HashSet::new();
+                let mut remote_group_ids = HashSet::new();
+                let mut remote_group_ratios_by_name = HashMap::new();
+                let mut remote_group_ratios_by_id = HashMap::new();
+                let mut remote_group_snapshot_entries = Vec::with_capacity(groups.len());
+                for group in groups {
+                    let group_id = group.id;
+                    let group_name = group.name;
+                    remote_group_names.insert(group_name.clone());
+                    remote_group_ids.insert(group_id);
+                    remote_group_snapshot_entries.push(storage::RemoteGroupSnapshotEntry {
+                        group_key: group_id.to_string(),
+                        group_id: Some(group_id),
+                        group_name: group_name.clone(),
+                    });
+                    if let Some(ratio) = group.rate_multiplier.and_then(normalize_remote_multiplier)
+                    {
+                        remote_group_ratios_by_name.insert(group_name.clone(), ratio);
+                        remote_group_ratios_by_id.insert(group_id, ratio);
+                    }
                 }
+                (
+                    Some(remote_group_names),
+                    Some(remote_group_ids),
+                    Some(remote_group_ratios_by_name),
+                    Some(remote_group_ratios_by_id),
+                    Some(remote_group_snapshot_entries),
+                )
             }
-            (
-                Some(remote_group_names),
-                Some(remote_group_ids),
-                Some(remote_group_ratios_by_name),
-                Some(remote_group_ratios_by_id),
-            )
+            Err(err) => {
+                tracing::warn!(account_id = %account.id, err = %err, "load sub2api groups failed");
+                (None, None, None, None, None)
+            }
         }
-        Err(err) => {
-            tracing::warn!(account_id = %account.id, err = %err, "load sub2api groups failed");
-            (None, None, None, None)
-        }
+    } else {
+        (None, None, None, None, None)
     };
-    let (remote_key_ids, remote_key_names) = if settings
-        .remote_managed_channel_missing_prompt_enabled
+    if should_notify_group_added
+        && let Some(remote_group_snapshot_entries) = remote_group_snapshot_entries
     {
+        sync_remote_groups_and_publish_added_alerts(
+            db_path.clone(),
+            storage::ManagedRemoteProvider::Sub2Api,
+            &account.id,
+            &account.base_url,
+            remote_group_snapshot_entries,
+        )
+        .await;
+    }
+    if managed_channels.is_empty() {
+        return;
+    }
+
+    let (remote_key_ids, remote_key_names) = if should_check_keys {
         match sub2api_auth::run_with_persisted_session(
             db_path.clone(),
             http_client,

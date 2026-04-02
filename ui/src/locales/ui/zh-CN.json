@@ -241,6 +241,10 @@
       "updateOk": "{{name}} 倍率已更新",
       "updateOkDescription": "已将真实倍率从 {{from}} 更新为 {{to}}",
       "actionFail": "更新托管渠道倍率失败"
+    },
+    "remoteGroupAdded": {
+      "title": "发现远端新增分组",
+      "description": "{{baseUrl}} 新增分组 {{group}}，可前往账号管理创建托管渠道。"
     }
   },
   "accounts": {
@@ -539,6 +543,8 @@
       "managedChannelMissingHint": "当远端资源或分组缺失时发送系统通知",
       "managedChannelMultiplier": "托管渠道倍率差异提醒",
       "managedChannelMultiplierHint": "当检测到本地与远端倍率不一致时发送系统通知",
+      "remoteGroupAdded": "远端新增分组提醒",
+      "remoteGroupAddedHint": "当检测到远端账号新增分组时发送系统通知",
       "saved": "系统通知设置已保存",
       "saveFail": "保存系统通知设置失败"
     },

@@ -131,6 +131,10 @@
         "title": "CliSwitch 余额告警",
         "body": "{{base_url}} 余额 {{balance}}"
       },
+      "remoteGroupAdded": {
+        "title": "CliSwitch 远端分组新增",
+        "body": "检测到账号 {{base_url}} 新增远端分组 {{group}}，可按需创建托管渠道"
+      },
       "managedChannel": {
         "title": "CliSwitch 渠道变更通知",
         "tokenMissingBody": "检测到渠道 {{channel}} 对应的远端 token 未在列表中找到，请选择禁用或删除",

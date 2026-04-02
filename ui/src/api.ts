@@ -50,6 +50,7 @@ export type AppSettings = {
   remote_low_balance_system_notification_enabled: boolean;
   remote_managed_channel_missing_system_notification_enabled: boolean;
   remote_managed_channel_multiplier_system_notification_enabled: boolean;
+  remote_group_added_system_notification_enabled: boolean;
   remote_managed_channel_missing_prompt_enabled: boolean;
   remote_managed_channel_sync_multiplier_enabled: boolean;
   remote_managed_channel_sync_free_multiplier_enabled: boolean;
@@ -414,6 +415,14 @@ export type RemoteManagedChannelMultiplierPrompt = {
   group_name: string | null;
   current_multiplier: number;
   remote_multiplier: number;
+};
+
+export type RemoteGroupAddedAlert = {
+  provider: RemoteAccountProvider;
+  account_id: string;
+  account_base_url: string;
+  group_id?: number | null;
+  group_name: string;
 };
 
 export type CreateRemoteManagedChannelInput = {

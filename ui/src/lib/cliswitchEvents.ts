@@ -1,4 +1,5 @@
 import type {
+  RemoteGroupAddedAlert,
   RemoteManagedChannelMissingPrompt,
   RemoteManagedChannelMultiplierPrompt,
   UpdateStatus,
@@ -10,4 +11,5 @@ export type CliswitchRemoteManagedChannelMissingEvent =
   CustomEvent<RemoteManagedChannelMissingPrompt>;
 export type CliswitchRemoteManagedChannelMultiplierEvent =
   CustomEvent<RemoteManagedChannelMultiplierPrompt>;
+export type CliswitchRemoteGroupAddedEvent = CustomEvent<RemoteGroupAddedAlert>;
 export type CliswitchChannelsChangedEvent = CustomEvent<{ at_ms: number }>;
