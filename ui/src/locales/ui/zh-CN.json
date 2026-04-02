@@ -383,59 +383,6 @@
       "reorderFail": "保存排序失败"
     }
   },
-  "routes": {
-    "title": "路由",
-    "subtitle": "配置请求路由规则和渠道优先级",
-    "new": "新建路由",
-    "table": {
-      "name": "名称",
-      "terminal": "终端",
-      "modelMatch": "模型匹配",
-      "status": "状态",
-      "updatedAt": "更新时间",
-      "empty": "暂无路由，点击「新建路由」添加"
-    },
-    "actions": {
-      "channels": "渠道",
-      "edit": "编辑",
-      "delete": "删除"
-    },
-    "modal": {
-      "createTitle": "新建路由",
-      "editTitle": "编辑路由",
-      "description": "配置路由规则",
-      "name": "名称",
-      "terminal": "终端",
-      "modelMatchOptional": "模型匹配（可选）",
-      "modelMatchHint": "留空则匹配该终端入口的所有模型",
-      "enabled": "启用"
-    },
-    "deleteDialog": {
-      "title": "删除路由",
-      "confirmWithName": "确定删除路由 \"{{name}}\"？此操作不可恢复。",
-      "confirm": "确定删除该路由？此操作不可恢复。"
-    },
-    "manage": {
-      "title": "渠道优先级：{{name}}",
-      "description": "拖拽或使用按钮调整渠道优先级，从上到下依次尝试",
-      "assignedTitle": "已绑定渠道",
-      "assignedEmpty": "暂无绑定渠道",
-      "availableTitle": "可添加渠道",
-      "availableEmpty": "无可添加渠道"
-    },
-    "toast": {
-      "loadFail": "加载失败",
-      "createOk": "路由创建成功",
-      "updateOk": "路由更新成功",
-      "actionFail": "操作失败",
-      "saveFail": "保存失败",
-      "prioritySaved": "渠道优先级已保存",
-      "deletedOk": "已删除 {{name}}",
-      "deleteFail": "删除失败",
-      "nameRequired": "名称不能为空",
-      "missingId": "缺少 ID"
-    }
-  },
   "monitor": {
     "title": "渠道统计",
     "range": {
@@ -504,7 +451,6 @@
     "details": {
       "id": "ID",
       "requestId": "请求 ID",
-      "routeId": "路由 ID",
       "errorKind": "错误类型",
       "errorDetail": "错误详情",
       "estimatedSpend": "预估费用"

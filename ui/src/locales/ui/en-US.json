@@ -383,59 +383,6 @@
       "reorderFail": "Failed to save order"
     }
   },
-  "routes": {
-    "title": "Routes",
-    "subtitle": "Configure routing rules and channel priority",
-    "new": "New Route",
-    "table": {
-      "name": "Name",
-      "terminal": "Terminal",
-      "modelMatch": "Model Match",
-      "status": "Status",
-      "updatedAt": "Updated At",
-      "empty": "No routes. Click 'New Route' to add one."
-    },
-    "actions": {
-      "channels": "Channels",
-      "edit": "Edit",
-      "delete": "Delete"
-    },
-    "modal": {
-      "createTitle": "New Route",
-      "editTitle": "Edit Route",
-      "description": "Configure routing rules",
-      "name": "Name",
-      "terminal": "Terminal",
-      "modelMatchOptional": "Model match (optional)",
-      "modelMatchHint": "Leave empty to match all models for this terminal",
-      "enabled": "Enabled"
-    },
-    "deleteDialog": {
-      "title": "Delete Route",
-      "confirmWithName": "Delete route \"{{name}}\"? This action cannot be undone.",
-      "confirm": "Delete this route? This action cannot be undone."
-    },
-    "manage": {
-      "title": "Channel Priority: {{name}}",
-      "description": "Reorder channels to set priority (top to bottom)",
-      "assignedTitle": "Assigned Channels",
-      "assignedEmpty": "No assigned channels",
-      "availableTitle": "Available Channels",
-      "availableEmpty": "No channels to add"
-    },
-    "toast": {
-      "loadFail": "Failed to load",
-      "createOk": "Route created",
-      "updateOk": "Route updated",
-      "actionFail": "Operation failed",
-      "saveFail": "Save failed",
-      "prioritySaved": "Channel priority saved",
-      "deletedOk": "Deleted {{name}}",
-      "deleteFail": "Delete failed",
-      "nameRequired": "Name is required",
-      "missingId": "Missing ID"
-    }
-  },
   "monitor": {
     "title": "Channel Statistics",
     "range": {
@@ -504,7 +451,6 @@
     "details": {
       "id": "ID",
       "requestId": "Request ID",
-      "routeId": "Route ID",
       "errorKind": "Error Kind",
       "errorDetail": "Error Detail",
       "estimatedSpend": "Estimated Cost"

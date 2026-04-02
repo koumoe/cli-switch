@@ -15,7 +15,6 @@ mod pricing;
 mod prompt;
 mod protocol;
 mod remote_account;
-mod route;
 mod settings;
 mod stats;
 mod update_ignore;
@@ -80,10 +79,6 @@ pub use remote_account::{
     set_remote_account_balance_alert_notified, update_remote_account,
     update_remote_account_auth_session,
 };
-pub use route::{
-    CreateRoute, Route, RouteChannel, UpdateRoute, create_route, delete_route, get_route,
-    list_route_channels, list_routes, set_route_channels, update_route,
-};
 pub use settings::{
     AppSettings, AppSettingsPatch, AutoStartLaunchMode, CloseBehavior, get_app_settings,
     update_app_settings,
@@ -106,20 +101,12 @@ fn open_conn(db_path: &Path) -> anyhow::Result<Connection> {
     Ok(conn)
 }
 
-fn ensure_schema_upgrades(conn: &Connection) -> anyhow::Result<()> {
-    channel::ensure_channel_schema(conn)?;
-    chat_bridge::ensure_chat_bridge_schema(conn)?;
-    remote_account::ensure_remote_account_schema(conn)?;
-    Ok(())
-}
-
 pub fn init_db(db_path: &Path) -> anyhow::Result<()> {
     let conn = open_conn(db_path)?;
 
     let migration = include_str!("../../migrations/001_init.sql");
     conn.execute_batch(migration)
         .with_context(|| "执行 migrations/001_init.sql 失败")?;
-    ensure_schema_upgrades(&conn)?;
 
     Ok(())
 }

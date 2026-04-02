@@ -436,36 +436,6 @@ export type ChannelTestResponse = {
   issue?: UserFacingIssuePayload | null;
 };
 
-export type Route = {
-  id: string;
-  name: string;
-  protocol: Protocol;
-  match_model: string | null;
-  enabled: boolean;
-  created_at_ms: number;
-  updated_at_ms: number;
-};
-
-export type CreateRouteInput = {
-  name: string;
-  protocol: Protocol;
-  match_model: string | null;
-  enabled: boolean;
-};
-
-export type UpdateRouteInput = Partial<{
-  name: string;
-  match_model: string | null;
-  enabled: boolean;
-}>;
-
-export type RouteChannel = {
-  route_id: string;
-  channel_id: string;
-  priority: number;
-  cooldown_until_ms: number | null;
-};
-
 export type PricingStatus = {
   count: number;
   last_sync_ms: number | null;
@@ -570,7 +540,6 @@ export type UsageEvent = {
   request_id: string | null;
   ts_ms: number;
   protocol: Protocol;
-  route_id: string | null;
   channel_id: string;
   model: string | null;
   success: boolean;
@@ -963,32 +932,6 @@ export function openInBrowser(url: string): Promise<void> {
 
 export function openDataDir(): Promise<void> {
   return http<void>("POST", "/api/system/open_data_dir");
-}
-
-export function listRoutes(): Promise<Route[]> {
-  return http<Route[]>("GET", "/api/routes");
-}
-
-export function createRoute(input: CreateRouteInput): Promise<Route> {
-  return http<Route>("POST", "/api/routes", input);
-}
-
-export function updateRoute(id: string, input: UpdateRouteInput): Promise<void> {
-  return http<void>("PUT", `/api/routes/${encodeURIComponent(id)}`, input);
-}
-
-export function deleteRoute(id: string): Promise<void> {
-  return http<void>("DELETE", `/api/routes/${encodeURIComponent(id)}`);
-}
-
-export function listRouteChannels(routeId: string): Promise<RouteChannel[]> {
-  return http<RouteChannel[]>("GET", `/api/routes/${encodeURIComponent(routeId)}/channels`);
-}
-
-export function reorderRouteChannels(routeId: string, channelIds: string[]): Promise<void> {
-  return http<void>("POST", `/api/routes/${encodeURIComponent(routeId)}/channels/reorder`, {
-    channel_ids: channelIds
-  });
 }
 
 export function pricingStatus(): Promise<PricingStatus> {

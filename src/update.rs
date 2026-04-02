@@ -296,18 +296,6 @@ fn cleanup_update_artifacts_with_keep(
     cleanup_dir(&update_downloads_dir(data_dir), keep)?;
     cleanup_dir(&update_staged_dir(data_dir), keep)?;
     cleanup_dir(&update_backups_dir(data_dir), keep)?;
-
-    // Legacy cleanup: older versions stored helper scripts/logs under updates/apply.
-    // Newer versions write logs into logs_dir and use a temporary script under updates/tmp.
-    let legacy_apply_dir = updates_dir(data_dir).join("apply");
-    match std::fs::remove_dir_all(&legacy_apply_dir) {
-        Ok(()) => {}
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-        Err(e) => {
-            return Err(e)
-                .with_context(|| format!("remove dir failed: {}", legacy_apply_dir.display()));
-        }
-    }
     Ok(())
 }
 
@@ -1432,19 +1420,6 @@ if [ -e "$BACKUP" ]; then
     fi
   fi
 fi
-
-# Clean up legacy backups / temp files left in the install dir from previous runs.
-for f in "$EXE_DIR/$EXE_NAME.bak."*; do
-  [ -e "$f" ] || continue
-  if [ "$f" = "$BACKUP" ]; then
-    continue
-  fi
-  rm -f "$f" >/dev/null 2>&1 || true
-done
-for f in "$EXE_DIR/$EXE_NAME.new."*; do
-  [ -e "$f" ] || continue
-  rm -f "$f" >/dev/null 2>&1 || true
-done
 
 if [ "$APP" != "-" ] && [ -n "$APP" ]; then
   if command -v codesign >/dev/null 2>&1; then

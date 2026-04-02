@@ -22,7 +22,6 @@ pub enum Command {
         target: String,
         enabled: bool,
     },
-    Routes,
     Start {
         tool: CliToolId,
         project_ref: String,
@@ -104,7 +103,6 @@ pub fn parse_input(text: &str, locale: AppLocale) -> anyhow::Result<ParsedInput>
         }
         "projects" => Command::Projects,
         "channels" => parse_channels_command(rest, locale)?,
-        "routes" => Command::Routes,
         "codex" => parse_start_command(CliToolId::Codex, rest, locale)?,
         "claude" => parse_start_command(CliToolId::Claude, rest, locale)?,
         "gemini" => parse_start_command(CliToolId::Gemini, rest, locale)?,
@@ -609,7 +607,7 @@ mod tests {
     fn help_text_matches_snapshot_zh_cn() {
         assert_eq!(
             help_text(AppLocale::ZhCN),
-            "可用命令：\n\n绑定\n/bind <配对码>\n\n会话\n/projects\n/codex <项目> [-a|-alias <别名>] [-yolo]\n/claude <项目> [-a|-alias <别名>] [-yolo]\n/gemini <项目> [-a|-alias <别名>] [-yolo]\n/sessions\n/switch <会话>\n/chat <会话> <消息>\n/stop <会话|all>\n\n渠道\n/channels [enable|disable <渠道>]\n/routes\n\n统计\n/usage [today|yesterday|week|month]\n/costs [today|yesterday|week|month]\n\n其他\n/status\n/help"
+            "可用命令：\n\n绑定\n/bind <配对码>\n\n会话\n/projects\n/codex <项目> [-a|-alias <别名>] [-yolo]\n/claude <项目> [-a|-alias <别名>] [-yolo]\n/gemini <项目> [-a|-alias <别名>] [-yolo]\n/sessions\n/switch <会话>\n/chat <会话> <消息>\n/stop <会话|all>\n\n渠道\n/channels [enable|disable <渠道>]\n\n统计\n/usage [today|yesterday|week|month]\n/costs [today|yesterday|week|month]\n\n其他\n/status\n/help"
         );
     }
 
@@ -617,7 +615,7 @@ mod tests {
     fn help_text_matches_snapshot_en_us() {
         assert_eq!(
             help_text(AppLocale::EnUS),
-            "Available commands:\n\nBinding\n/bind <pairing-token>\n\nSessions\n/projects\n/codex <project> [-a|-alias <alias>] [-yolo]\n/claude <project> [-a|-alias <alias>] [-yolo]\n/gemini <project> [-a|-alias <alias>] [-yolo]\n/sessions\n/switch <session>\n/chat <session> <message>\n/stop <session|all>\n\nChannels\n/channels [enable|disable <channel>]\n/routes\n\nStats\n/usage [today|yesterday|week|month]\n/costs [today|yesterday|week|month]\n\nOther\n/status\n/help"
+            "Available commands:\n\nBinding\n/bind <pairing-token>\n\nSessions\n/projects\n/codex <project> [-a|-alias <alias>] [-yolo]\n/claude <project> [-a|-alias <alias>] [-yolo]\n/gemini <project> [-a|-alias <alias>] [-yolo]\n/sessions\n/switch <session>\n/chat <session> <message>\n/stop <session|all>\n\nChannels\n/channels [enable|disable <channel>]\n\nStats\n/usage [today|yesterday|week|month]\n/costs [today|yesterday|week|month]\n\nOther\n/status\n/help"
         );
     }
 

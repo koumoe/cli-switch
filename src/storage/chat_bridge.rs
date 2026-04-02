@@ -1,6 +1,5 @@
 mod bindings;
 mod projects;
-mod schema;
 mod sessions;
 
 pub(super) use super::{StorageError, now_ms, with_conn};
@@ -12,7 +11,6 @@ pub use bindings::{
     resolve_chat_binding,
 };
 pub use projects::{list_bridge_known_projects, upsert_bridge_known_project};
-pub(in crate::storage) use schema::ensure_chat_bridge_schema;
 pub use sessions::{
     count_active_bridge_sessions_for_platform, create_bridge_session, get_bridge_session,
     get_default_bridge_session_for_platform, list_bridge_sessions_for_platform,
@@ -28,7 +26,7 @@ pub const MAX_PAIRING_TOKEN_EXPIRES_MINUTES: i64 = 24 * 60;
 pub enum ChatPlatform {
     Telegram,
     Discord,
-    #[serde(rename = "whatsapp", alias = "whats_app")]
+    #[serde(rename = "whatsapp")]
     WhatsApp,
     Weixin,
 }
@@ -203,13 +201,10 @@ mod tests {
     }
 
     #[test]
-    fn whatsapp_platform_deserializes_legacy_and_current_names() {
+    fn whatsapp_platform_deserializes_current_name() {
         let current: ChatPlatform =
             serde_json::from_str("\"whatsapp\"").expect("deserialize current platform name");
-        let legacy: ChatPlatform =
-            serde_json::from_str("\"whats_app\"").expect("deserialize legacy platform name");
 
         assert_eq!(current, ChatPlatform::WhatsApp);
-        assert_eq!(legacy, ChatPlatform::WhatsApp);
     }
 }

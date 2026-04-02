@@ -1246,7 +1246,6 @@ pub(super) fn build_usage_event(params: UsageEventParams) -> storage::CreateUsag
         request_id: params.request_id,
         ts_ms: storage::now_ms(),
         protocol: params.protocol,
-        route_id: None,
         channel_id: params.channel_id,
         model: params.model,
         success: params.success,

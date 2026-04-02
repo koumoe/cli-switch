@@ -12,29 +12,21 @@ CREATE TABLE IF NOT EXISTS channels (
   priority INTEGER NOT NULL DEFAULT 0,
   recharge_currency TEXT NOT NULL DEFAULT 'CNY' CHECK(recharge_currency IN ('CNY','USD')),
   real_multiplier REAL NOT NULL DEFAULT 1.0,
+  managed_by_remote INTEGER NOT NULL DEFAULT 0,
+  managed_remote_provider TEXT NULL CHECK(managed_remote_provider IN ('newapi','sub2api')),
+  managed_remote_account_id TEXT NULL,
+  managed_remote_resource_id TEXT NULL,
+  managed_remote_resource_name TEXT NULL,
+  managed_remote_group_name TEXT NULL,
+  managed_remote_group_id INTEGER NULL,
   enabled INTEGER NOT NULL,
   auto_disabled_until_ms INTEGER NOT NULL DEFAULT 0,
   created_at_ms INTEGER NOT NULL,
   updated_at_ms INTEGER NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS routes (
-  id TEXT PRIMARY KEY,
-  name TEXT NOT NULL,
-  protocol TEXT NOT NULL CHECK(protocol IN ('openai','anthropic','gemini')),
-  match_model TEXT NULL,
-  enabled INTEGER NOT NULL,
-  created_at_ms INTEGER NOT NULL,
-  updated_at_ms INTEGER NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS route_channels (
-  route_id TEXT NOT NULL,
-  channel_id TEXT NOT NULL,
-  priority INTEGER NOT NULL,
-  cooldown_until_ms INTEGER NULL,
-  PRIMARY KEY (route_id, channel_id)
-);
+CREATE INDEX IF NOT EXISTS idx_channels_managed_remote_account
+ON channels(managed_remote_provider, managed_remote_account_id);
 
 CREATE TABLE IF NOT EXISTS pricing_models (
   model_id TEXT PRIMARY KEY,
@@ -52,7 +44,6 @@ CREATE TABLE IF NOT EXISTS usage_events (
   request_id TEXT NULL,
   ts_ms INTEGER NOT NULL,
   protocol TEXT NOT NULL CHECK(protocol IN ('openai','anthropic','gemini')),
-  route_id TEXT NULL,
   channel_id TEXT NOT NULL,
   model TEXT NULL,
   success INTEGER NOT NULL,
@@ -155,3 +146,58 @@ CREATE TABLE IF NOT EXISTS ignored_updates (
   version TEXT PRIMARY KEY,
   ignored_at_ms INTEGER NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS pairing_tokens (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  platform TEXT NOT NULL,
+  token_hash TEXT NOT NULL UNIQUE,
+  token_hint TEXT,
+  created_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL,
+  used_at INTEGER,
+  used_by_platform TEXT,
+  used_by_sender_id TEXT
+);
+
+CREATE TABLE IF NOT EXISTS chat_bindings (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  platform TEXT NOT NULL,
+  platform_user_id TEXT NOT NULL,
+  display_name TEXT,
+  bound_at INTEGER NOT NULL,
+  is_active INTEGER NOT NULL DEFAULT 1,
+  UNIQUE(platform, platform_user_id)
+);
+
+CREATE TABLE IF NOT EXISTS bridge_known_projects (
+  path TEXT PRIMARY KEY,
+  display_name TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS bridge_sessions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  alias TEXT,
+  platform TEXT NOT NULL,
+  cli_type TEXT NOT NULL,
+  cli_session_ref TEXT,
+  project_id TEXT,
+  project_name TEXT NOT NULL,
+  working_dir TEXT NOT NULL,
+  permission_mode TEXT NOT NULL DEFAULT 'safe',
+  status TEXT NOT NULL DEFAULT 'idle',
+  is_default INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL,
+  last_active INTEGER,
+  UNIQUE(platform, alias)
+);
+
+CREATE INDEX IF NOT EXISTS idx_pairing_tokens_lookup_hint
+ON pairing_tokens(token_hint, expires_at, used_at);
+
+CREATE INDEX IF NOT EXISTS idx_chat_bindings_bound_at
+ON chat_bindings(bound_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_bridge_sessions_platform_last_active
+ON bridge_sessions(platform, status, last_active DESC);

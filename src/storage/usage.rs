@@ -15,7 +15,6 @@ pub struct UsageEvent {
     pub request_id: Option<String>,
     pub ts_ms: i64,
     pub protocol: Protocol,
-    pub route_id: Option<String>,
     pub channel_id: String,
     pub model: Option<String>,
     pub success: bool,
@@ -37,7 +36,6 @@ pub struct CreateUsageEvent {
     pub request_id: Option<Arc<str>>,
     pub ts_ms: i64,
     pub protocol: Protocol,
-    pub route_id: Option<String>,
     pub channel_id: String,
     pub model: Option<String>,
     pub success: bool,
@@ -62,7 +60,6 @@ pub async fn insert_usage_event(db_path: PathBuf, input: CreateUsageEvent) -> an
             request_id,
             ts_ms,
             protocol,
-            route_id,
             channel_id,
             model,
             success,
@@ -96,20 +93,19 @@ pub async fn insert_usage_event(db_path: PathBuf, input: CreateUsageEvent) -> an
         conn.execute(
             r#"
             INSERT INTO usage_events (
-              id, request_id, ts_ms, protocol, route_id, channel_id, model,
+              id, request_id, ts_ms, protocol, channel_id, model,
               success, http_status, error_kind, error_detail, latency_ms,
               ttft_ms, prompt_tokens, completion_tokens, total_tokens,
               cache_read_tokens, cache_write_tokens,
               estimated_cost_usd
             )
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)
             "#,
             params![
                 id,
                 request_id.as_deref(),
                 ts_ms,
                 protocol.as_str(),
-                route_id,
                 channel_id,
                 model,
                 if success { 1 } else { 0 },
@@ -368,7 +364,7 @@ pub async fn list_usage_events_recent(
     with_conn(db_path, move |conn| {
         let mut stmt = conn.prepare(
             r#"
-            SELECT id, request_id, ts_ms, protocol, route_id, channel_id, model,
+            SELECT id, request_id, ts_ms, protocol, channel_id, model,
                    success, http_status, error_kind, error_detail, latency_ms,
                    ttft_ms, prompt_tokens, completion_tokens, total_tokens,
                    cache_read_tokens, cache_write_tokens,
@@ -384,21 +380,20 @@ pub async fn list_usage_events_recent(
                 request_id: row.get(1)?,
                 ts_ms: row.get(2)?,
                 protocol: row.get(3)?,
-                route_id: row.get(4)?,
-                channel_id: row.get(5)?,
-                model: row.get(6)?,
-                success: row.get::<_, i64>(7)? != 0,
-                http_status: row.get(8)?,
-                error_kind: row.get(9)?,
-                error_detail: row.get(10)?,
-                latency_ms: row.get(11)?,
-                ttft_ms: row.get(12)?,
-                prompt_tokens: row.get(13)?,
-                completion_tokens: row.get(14)?,
-                total_tokens: row.get(15)?,
-                cache_read_tokens: row.get(16)?,
-                cache_write_tokens: row.get(17)?,
-                estimated_cost_usd: row.get(18)?,
+                channel_id: row.get(4)?,
+                model: row.get(5)?,
+                success: row.get::<_, i64>(6)? != 0,
+                http_status: row.get(7)?,
+                error_kind: row.get(8)?,
+                error_detail: row.get(9)?,
+                latency_ms: row.get(10)?,
+                ttft_ms: row.get(11)?,
+                prompt_tokens: row.get(12)?,
+                completion_tokens: row.get(13)?,
+                total_tokens: row.get(14)?,
+                cache_read_tokens: row.get(15)?,
+                cache_write_tokens: row.get(16)?,
+                estimated_cost_usd: row.get(17)?,
             })
         })?;
         rows.collect::<rusqlite::Result<Vec<_>>>()
@@ -481,7 +476,7 @@ pub async fn list_usage_events(
 
         let sql = format!(
             r#"
-            SELECT id, request_id, ts_ms, protocol, route_id, channel_id, model,
+            SELECT id, request_id, ts_ms, protocol, channel_id, model,
                    success, http_status, error_kind, error_detail, latency_ms,
                    ttft_ms, prompt_tokens, completion_tokens, total_tokens,
                    cache_read_tokens, cache_write_tokens,
@@ -500,21 +495,20 @@ pub async fn list_usage_events(
                 request_id: row.get(1)?,
                 ts_ms: row.get(2)?,
                 protocol: row.get(3)?,
-                route_id: row.get(4)?,
-                channel_id: row.get(5)?,
-                model: row.get(6)?,
-                success: row.get::<_, i64>(7)? != 0,
-                http_status: row.get(8)?,
-                error_kind: row.get(9)?,
-                error_detail: row.get(10)?,
-                latency_ms: row.get(11)?,
-                ttft_ms: row.get(12)?,
-                prompt_tokens: row.get(13)?,
-                completion_tokens: row.get(14)?,
-                total_tokens: row.get(15)?,
-                cache_read_tokens: row.get(16)?,
-                cache_write_tokens: row.get(17)?,
-                estimated_cost_usd: row.get(18)?,
+                channel_id: row.get(4)?,
+                model: row.get(5)?,
+                success: row.get::<_, i64>(6)? != 0,
+                http_status: row.get(7)?,
+                error_kind: row.get(8)?,
+                error_detail: row.get(9)?,
+                latency_ms: row.get(10)?,
+                ttft_ms: row.get(11)?,
+                prompt_tokens: row.get(12)?,
+                completion_tokens: row.get(13)?,
+                total_tokens: row.get(14)?,
+                cache_read_tokens: row.get(15)?,
+                cache_write_tokens: row.get(16)?,
+                estimated_cost_usd: row.get(17)?,
             })
         })?;
 

@@ -1212,7 +1212,7 @@ mod tests {
             format_streaming_message(
                 "[alpha(#1)|claude|demo]",
                 "OK",
-                crate::chat_bridge::MESSAGE_CHAR_LIMIT,
+                3900,
             ),
             "[alpha(#1)|claude|demo]\nOK"
         );
