@@ -15,6 +15,7 @@ mod pricing;
 mod prompt;
 mod protocol;
 mod remote_account;
+mod remote_group_snapshot;
 mod settings;
 mod stats;
 mod update_ignore;
@@ -78,6 +79,9 @@ pub use remote_account::{
     list_remote_accounts, list_remote_accounts_with_secret,
     set_remote_account_balance_alert_notified, update_remote_account,
     update_remote_account_auth_session,
+};
+pub use remote_group_snapshot::{
+    RemoteGroupSnapshotEntry, clear_remote_group_snapshot, sync_remote_group_snapshot,
 };
 pub use settings::{
     AppSettings, AppSettingsPatch, AutoStartLaunchMode, CloseBehavior, get_app_settings,

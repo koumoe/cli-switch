@@ -53,11 +53,13 @@ import {
   type ChangelogSection,
   type CliToolId,
   type CliToolsStatus,
+  type RemoteGroupAddedAlert,
   type RemoteManagedChannelMissingPrompt,
   type RemoteManagedChannelMultiplierPrompt,
 } from "./api";
 import { logger, setLogLevel } from "@/lib/logger";
 import type {
+  CliswitchRemoteGroupAddedEvent,
   CliswitchRemoteManagedChannelMissingEvent,
   CliswitchRemoteManagedChannelMultiplierEvent,
   CliswitchUpdateStatusEvent,
@@ -107,6 +109,12 @@ function managedResourceLabel(
     return locale === "zh-CN" ? "Key" : "Key";
   }
   return "Token";
+}
+
+function hasRemoteGroupAddedPayload(
+  payload: RemoteGroupAddedAlert | null | undefined,
+): payload is RemoteGroupAddedAlert {
+  return !!payload?.account_id && !!payload.group_name;
 }
 
 function managedMissingDescription(
@@ -481,6 +489,26 @@ export default function App() {
       window.removeEventListener("cliswitch-close-requested", onCloseRequested as EventListener);
     };
   }, []);
+
+  useEffect(() => {
+    const onRemoteGroupAdded = (e: Event) => {
+      const detail = (e as CliswitchRemoteGroupAddedEvent).detail;
+      if (!hasRemoteGroupAddedPayload(detail)) return;
+      toast.info(t("channels.remoteGroupAdded.title"), {
+        description: t("channels.remoteGroupAdded.description", {
+          baseUrl: detail.account_base_url,
+          group: detail.group_name,
+        }),
+      });
+    };
+    window.addEventListener("cliswitch-remote-group-added", onRemoteGroupAdded as EventListener);
+    return () => {
+      window.removeEventListener(
+        "cliswitch-remote-group-added",
+        onRemoteGroupAdded as EventListener,
+      );
+    };
+  }, [t]);
 
   useEffect(() => {
     const onManagedMissing = (e: Event) => {

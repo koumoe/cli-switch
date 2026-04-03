@@ -59,6 +59,11 @@ async fn get_app_settings_keeps_defaults_on_invalid_values() {
     );
     upsert_setting(
         &conn,
+        "remote_group_added_system_notification_enabled",
+        "maybe",
+    );
+    upsert_setting(
+        &conn,
         "remote_managed_channel_missing_prompt_enabled",
         "maybe",
     );
@@ -88,6 +93,7 @@ async fn get_app_settings_keeps_defaults_on_invalid_values() {
     assert!(settings.remote_low_balance_system_notification_enabled);
     assert!(settings.remote_managed_channel_missing_system_notification_enabled);
     assert!(settings.remote_managed_channel_multiplier_system_notification_enabled);
+    assert!(settings.remote_group_added_system_notification_enabled);
     assert!(settings.remote_managed_channel_missing_prompt_enabled);
     assert!(settings.remote_managed_channel_sync_multiplier_enabled);
     assert!(!settings.remote_managed_channel_sync_free_multiplier_enabled);
@@ -112,6 +118,7 @@ async fn default_chat_bridge_turn_timeout_is_disabled() {
     assert!(settings.remote_low_balance_system_notification_enabled);
     assert!(settings.remote_managed_channel_missing_system_notification_enabled);
     assert!(settings.remote_managed_channel_multiplier_system_notification_enabled);
+    assert!(settings.remote_group_added_system_notification_enabled);
     assert!(settings.remote_managed_channel_missing_prompt_enabled);
     assert!(settings.remote_managed_channel_sync_multiplier_enabled);
     assert!(!settings.remote_managed_channel_sync_free_multiplier_enabled);
@@ -136,6 +143,7 @@ async fn update_app_settings_persists_chat_bridge_turn_timeout_settings() {
             remote_low_balance_system_notification_enabled: Some(false),
             remote_managed_channel_missing_system_notification_enabled: Some(false),
             remote_managed_channel_multiplier_system_notification_enabled: Some(false),
+            remote_group_added_system_notification_enabled: Some(false),
             chat_bridge_turn_timeout_minutes: Some(0),
             ..Default::default()
         },
@@ -149,6 +157,7 @@ async fn update_app_settings_persists_chat_bridge_turn_timeout_settings() {
     assert!(!updated.remote_low_balance_system_notification_enabled);
     assert!(!updated.remote_managed_channel_missing_system_notification_enabled);
     assert!(!updated.remote_managed_channel_multiplier_system_notification_enabled);
+    assert!(!updated.remote_group_added_system_notification_enabled);
 
     let reread = storage::get_app_settings(db_path.clone()).await.unwrap();
     assert_eq!(reread.chat_bridge_turn_timeout_minutes, 0);
@@ -157,6 +166,7 @@ async fn update_app_settings_persists_chat_bridge_turn_timeout_settings() {
     assert!(!reread.remote_low_balance_system_notification_enabled);
     assert!(!reread.remote_managed_channel_missing_system_notification_enabled);
     assert!(!reread.remote_managed_channel_multiplier_system_notification_enabled);
+    assert!(!reread.remote_group_added_system_notification_enabled);
 
     remove_sqlite_artifacts(&db_path);
 }

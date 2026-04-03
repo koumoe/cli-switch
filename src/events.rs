@@ -49,6 +49,15 @@ pub struct RemoteManagedChannelCreated {
 }
 
 #[derive(Debug, Clone, Serialize)]
+pub struct RemoteGroupAddedAlert {
+    pub account_id: String,
+    pub account_base_url: String,
+    pub provider: storage::ManagedRemoteProvider,
+    pub group_id: Option<i64>,
+    pub group_name: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct RemoteManagedChannelMultiplierPrompt {
     pub channel_id: String,
     pub channel_name: String,
@@ -66,6 +75,7 @@ pub struct SystemNotificationSettings {
     pub remote_low_balance_enabled: bool,
     pub remote_managed_channel_missing_enabled: bool,
     pub remote_managed_channel_multiplier_enabled: bool,
+    pub remote_group_added_enabled: bool,
 }
 
 impl Default for SystemNotificationSettings {
@@ -83,6 +93,7 @@ impl SystemNotificationSettings {
                 .remote_managed_channel_missing_system_notification_enabled,
             remote_managed_channel_multiplier_enabled: settings
                 .remote_managed_channel_multiplier_system_notification_enabled,
+            remote_group_added_enabled: settings.remote_group_added_system_notification_enabled,
         }
     }
 }
@@ -95,6 +106,7 @@ pub enum AppEvent {
     NpmEnvInstallProgress(NpmEnvInstallProgress),
     SystemNotificationSettingsChanged(SystemNotificationSettings),
     RemoteLowBalanceAlert(RemoteLowBalanceAlert),
+    RemoteGroupAddedAlert(RemoteGroupAddedAlert),
     RemoteManagedChannelCreated(RemoteManagedChannelCreated),
     RemoteManagedChannelMissingPrompt(RemoteManagedChannelMissingPrompt),
     RemoteManagedChannelMultiplierPrompt(RemoteManagedChannelMultiplierPrompt),

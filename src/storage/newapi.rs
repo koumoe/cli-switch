@@ -1015,6 +1015,20 @@ pub async fn delete_newapi_account(
             params![account_id.clone()],
         )?;
         tx.execute(
+            r#"
+            DELETE FROM remote_account_group_snapshots
+            WHERE provider = 'newapi' AND account_id = ?1
+            "#,
+            params![account_id.clone()],
+        )?;
+        tx.execute(
+            r#"
+            DELETE FROM remote_account_group_snapshot_states
+            WHERE provider = 'newapi' AND account_id = ?1
+            "#,
+            params![account_id.clone()],
+        )?;
+        tx.execute(
             r#"DELETE FROM remote_accounts WHERE provider = 'newapi' AND id = ?1"#,
             params![account_id],
         )?;

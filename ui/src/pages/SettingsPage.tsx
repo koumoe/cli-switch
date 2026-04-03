@@ -2145,6 +2145,27 @@ export function SettingsPage() {
                   />
                 </div>
 
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <div className="font-medium text-sm">{t("settings.systemNotifications.remoteGroupAdded")}</div>
+                    <div className="text-xs text-muted-foreground">{t("settings.systemNotifications.remoteGroupAddedHint")}</div>
+                  </div>
+                  <Switch
+                    checked={appSettings?.remote_group_added_system_notification_enabled ?? true}
+                    onCheckedChange={(v) => {
+                      setAppSettings((prev) => (
+                        prev
+                          ? {
+                              ...prev,
+                              remote_group_added_system_notification_enabled: v,
+                            }
+                          : prev
+                      ));
+                    }}
+                    disabled={!appSettings || systemNotificationSaving}
+                  />
+                </div>
+
                 <div className="flex justify-end">
                   <Button
                     size="sm"
@@ -2159,6 +2180,8 @@ export function SettingsPage() {
                             appSettings.remote_managed_channel_missing_system_notification_enabled,
                           remote_managed_channel_multiplier_system_notification_enabled:
                             appSettings.remote_managed_channel_multiplier_system_notification_enabled,
+                          remote_group_added_system_notification_enabled:
+                            appSettings.remote_group_added_system_notification_enabled,
                         });
                         setAppSettings(next);
                         toast.success(t("settings.systemNotifications.saved"));

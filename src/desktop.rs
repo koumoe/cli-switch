@@ -85,6 +85,7 @@ struct DesktopState {
     locale: AppLocale,
     system_notifications: cliswitch::events::SystemNotificationSettings,
     ui_ready: bool,
+    pending_remote_group_added: Vec<cliswitch::events::RemoteGroupAddedAlert>,
     pending_managed_channel_missing: Vec<cliswitch::events::RemoteManagedChannelMissingPrompt>,
     pending_managed_channel_multiplier:
         Vec<cliswitch::events::RemoteManagedChannelMultiplierPrompt>,
@@ -327,6 +328,42 @@ fn low_balance_notification_title(locale: AppLocale) -> String {
     )
 }
 
+fn remote_group_added_notification_title(locale: AppLocale) -> String {
+    desktop_text(
+        locale,
+        "desktop.notifications.remoteGroupAdded.title",
+        match locale {
+            AppLocale::ZhCN => "CliSwitch 远端分组新增",
+            AppLocale::EnUS => "CliSwitch Remote Group Added",
+        },
+    )
+}
+
+fn remote_group_added_body(
+    locale: AppLocale,
+    alert: &cliswitch::events::RemoteGroupAddedAlert,
+) -> String {
+    let args = desktop_args([
+        ("base_url", alert.account_base_url.clone()),
+        ("group", alert.group_name.clone()),
+    ]);
+    desktop_text_args(
+        locale,
+        "desktop.notifications.remoteGroupAdded.body",
+        &args,
+        match locale {
+            AppLocale::ZhCN => format!(
+                "检测到账号 {} 新增远端分组 {}，可按需创建托管渠道",
+                alert.account_base_url, alert.group_name
+            ),
+            AppLocale::EnUS => format!(
+                "Detected a new remote group {} on {}. Create a managed channel if needed.",
+                alert.group_name, alert.account_base_url
+            ),
+        },
+    )
+}
+
 fn low_balance_notification_body(
     locale: AppLocale,
     alert: &cliswitch::events::RemoteLowBalanceAlert,
@@ -488,6 +525,21 @@ fn upsert_pending_multiplier_prompt(
         return;
     }
     queue.push(prompt.clone());
+}
+
+fn push_pending_remote_group_added(
+    queue: &mut Vec<cliswitch::events::RemoteGroupAddedAlert>,
+    alert: &cliswitch::events::RemoteGroupAddedAlert,
+) {
+    let exists = queue.iter().any(|item| {
+        item.provider == alert.provider
+            && item.account_id == alert.account_id
+            && item.group_id == alert.group_id
+            && item.group_name == alert.group_name
+    });
+    if !exists {
+        queue.push(alert.clone());
+    }
 }
 
 fn show_system_notification(title: &str, body: &str) -> anyhow::Result<()> {
@@ -896,6 +948,9 @@ fn handle_user_event(
                             &prompt,
                         );
                     }
+                    for alert in std::mem::take(&mut state.pending_remote_group_added) {
+                        dispatch_custom_event(webview, "cliswitch-remote-group-added", &alert);
+                    }
                 }
             }
         }
@@ -932,6 +987,17 @@ fn handle_user_event(
                     }
                 }
             }
+            if let AppEvent::RemoteGroupAddedAlert(ref alert) = ev {
+                if state.system_notifications.enabled
+                    && state.system_notifications.remote_group_added_enabled
+                {
+                    let title = remote_group_added_notification_title(state.locale);
+                    let body = remote_group_added_body(state.locale, alert);
+                    if let Err(err) = show_system_notification(&title, &body) {
+                        tracing::warn!(err = %err, account_id = %alert.account_id, group_name = %alert.group_name, "show remote group added system notification failed");
+                    }
+                }
+            }
             if let AppEvent::RemoteManagedChannelMissingPrompt(ref prompt) = ev {
                 if state.system_notifications.enabled
                     && state
@@ -962,6 +1028,12 @@ fn handle_user_event(
 
             if !state.ui_ready {
                 match ev {
+                    AppEvent::RemoteGroupAddedAlert(ref alert) => {
+                        push_pending_remote_group_added(
+                            &mut state.pending_remote_group_added,
+                            alert,
+                        );
+                    }
                     AppEvent::RemoteManagedChannelMissingPrompt(ref prompt) => {
                         upsert_pending_missing_prompt(
                             &mut state.pending_managed_channel_missing,
@@ -1002,6 +1074,9 @@ fn handle_user_event(
                 AppEvent::SystemNotificationSettingsChanged(_) => {}
                 AppEvent::RemoteLowBalanceAlert(alert) => {
                     dispatch_custom_event(webview, "cliswitch-remote-low-balance-alert", &alert);
+                }
+                AppEvent::RemoteGroupAddedAlert(alert) => {
+                    dispatch_custom_event(webview, "cliswitch-remote-group-added", &alert);
                 }
                 AppEvent::RemoteManagedChannelCreated(_) => {}
                 AppEvent::RemoteManagedChannelMissingPrompt(prompt) => {
@@ -1251,6 +1326,7 @@ pub async fn run(
             .map(cliswitch::events::SystemNotificationSettings::from_settings)
             .unwrap_or_default(),
         ui_ready: false,
+        pending_remote_group_added: Vec::new(),
         pending_managed_channel_missing: Vec::new(),
         pending_managed_channel_multiplier: Vec::new(),
     };

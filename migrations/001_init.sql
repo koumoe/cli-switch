@@ -136,6 +136,27 @@ CREATE TABLE IF NOT EXISTS remote_account_checkins (
 CREATE INDEX IF NOT EXISTS idx_remote_account_checkins_date
 ON remote_account_checkins(date, completed_at_ms);
 
+CREATE TABLE IF NOT EXISTS remote_account_group_snapshot_states (
+  provider TEXT NOT NULL CHECK(provider IN ('newapi','sub2api')),
+  account_id TEXT NOT NULL,
+  last_synced_at_ms INTEGER NOT NULL,
+  updated_at_ms INTEGER NOT NULL,
+  PRIMARY KEY (provider, account_id)
+);
+
+CREATE TABLE IF NOT EXISTS remote_account_group_snapshots (
+  provider TEXT NOT NULL CHECK(provider IN ('newapi','sub2api')),
+  account_id TEXT NOT NULL,
+  group_key TEXT NOT NULL,
+  group_id INTEGER NULL,
+  group_name TEXT NOT NULL,
+  updated_at_ms INTEGER NOT NULL,
+  PRIMARY KEY (provider, account_id, group_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_remote_account_group_snapshots_lookup
+ON remote_account_group_snapshots(provider, account_id, group_name);
+
 CREATE TABLE IF NOT EXISTS app_settings (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL,
