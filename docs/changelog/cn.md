@@ -1,3 +1,9 @@
+## [0.57.0](https://github.com/koumoe/cli-switch/compare/v0.56.7...v0.57.0) (2026-04-03)
+
+### 功能
+* 添加渠道级重试后端逻辑 ([bd088b6](https://github.com/koumoe/cli-switch/commit/bd088b63607a7ab3e188cf60b07a044cacbfaa55))
+* 添加渠道级重试界面控制 ([4a7348d](https://github.com/koumoe/cli-switch/commit/4a7348d9ef31c48d953270b9b2388b054ed55744))
+* 新增远端分组通知 ([e18e793](https://github.com/koumoe/cli-switch/commit/e18e7931272eee6723c01e95d616fb0b3a8f9de9))
 ## [0.56.7](https://github.com/koumoe/cli-switch/compare/v0.56.6...v0.56.7) (2026-04-02)
 
 ### 修复
