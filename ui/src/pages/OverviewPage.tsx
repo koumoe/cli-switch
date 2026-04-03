@@ -18,9 +18,11 @@ import { humanizeApiError } from "@/lib/error";
 import { useCurrency, formatDecimal, formatMoney, parseDecimalLike } from "@/lib/currency";
 import {
   listChannels,
+  getSettings,
   statsSummary,
   statsChannels,
   statsTrend,
+  type AppSettings,
   type Channel,
   type Protocol,
   type StatsSummary,
@@ -230,11 +232,13 @@ function ChannelDistribution({
 export function OverviewPage() {
   const { t } = useI18n();
   const { currency } = useCurrency();
+  const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
   const [channels, setChannels] = useState<Channel[]>([]);
   const [stats, setStats] = useState<StatsSummary | null>(null);
   const [channelStats, setChannelStats] = useState<ChannelStats[]>([]);
   const [trendItems, setTrendItems] = useState<TrendPoint[]>([]);
   const [loading, setLoading] = useState(true);
+  const [nowMs, setNowMs] = useState(() => Date.now());
   const [distributionView, setDistributionView] = useState<"percent" | "usage">(
     "percent",
   );
@@ -242,12 +246,16 @@ export function OverviewPage() {
   useEffect(() => {
     Promise.all([
       listChannels(),
+      getSettings().catch(() => null),
       statsSummary({ range: "month" }),
       statsChannels({ range: "month" }),
       statsTrend("month"),
     ])
-      .then(([cs, st, cst, tr]) => {
+      .then(([cs, settings, st, cst, tr]) => {
         setChannels(cs);
+        if (settings) {
+          setAppSettings(settings);
+        }
         setStats(st);
         setChannelStats(cst.items);
         setTrendItems(tr.items);
@@ -258,16 +266,28 @@ export function OverviewPage() {
       .finally(() => setLoading(false));
   }, []);
 
+  useEffect(() => {
+    const timer = window.setInterval(() => setNowMs(Date.now()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
   const enabledByProtocol = useMemo(() => {
     const by: Record<Protocol, Channel[]> = { openai: [], anthropic: [], gemini: [] };
     for (const c of channels) {
-      if (c.enabled) by[c.protocol].push(c);
+      if (!c.enabled) continue;
+      const blockedByProtection =
+        (appSettings?.auto_disable_enabled ?? false) &&
+        !c.ignore_channel_protection &&
+        (c.auto_disabled_until_ms ?? 0) > nowMs;
+      if (!blockedByProtection) {
+        by[c.protocol].push(c);
+      }
     }
     for (const p of Object.keys(by) as Protocol[]) {
       by[p].sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0) || a.name.localeCompare(b.name));
     }
     return by;
-  }, [channels]);
+  }, [appSettings?.auto_disable_enabled, channels, nowMs]);
 
   const hasAnyEnabled = useMemo(
     () =>
@@ -514,7 +534,11 @@ export function OverviewPage() {
                               <Badge variant="outline" className="text-[10px] px-1 py-0">
                                 {idx + 1}
                               </Badge>
-                              <span className="text-xs font-medium">{c.name}</span>
+                              <span className="text-xs font-medium">
+                                {appSettings?.channel_retry_enabled
+                                  ? `${c.name} (${Math.max(1, c.retry_times ?? 1)})`
+                                  : c.name}
+                              </span>
                             </div>
                             {idx < list.length - 1 && (
                               <ArrowRight className="h-3 w-3 text-muted-foreground" />

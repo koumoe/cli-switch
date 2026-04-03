@@ -30,28 +30,38 @@ struct AttemptCtx<'a> {
     db_path: &'a Path,
     settings: &'a storage::AppSettings,
     protocol: Protocol,
-    channel_id: &'a str,
+    channel: &'a Channel,
     attempt: usize,
     total: usize,
+    channel_attempt: usize,
+    channel_total: usize,
     channels_cache: Option<watch::Sender<Arc<Vec<Channel>>>>,
 }
 
 impl AttemptCtx<'_> {
-    fn fail(&self, err: &ProxyError, msg: &'static str) {
-        maybe_record_failure(
+    async fn record_failure(&self) -> bool {
+        record_failure_and_maybe_disable(
             self.db_path,
             self.settings,
-            self.channel_id,
+            self.channel,
             self.channels_cache.clone(),
-        );
+        )
+        .await
+    }
+
+    async fn fail(&self, err: &ProxyError, msg: &'static str) -> bool {
+        let auto_disabled = self.record_failure().await;
         tracing::warn!(
             protocol = self.protocol.as_str(),
-            channel_id = %self.channel_id,
+            channel_id = %self.channel.id,
             attempt = self.attempt,
             total = self.total,
+            channel_attempt = self.channel_attempt,
+            channel_total = self.channel_total,
             err = %err,
             "{msg}"
         );
+        auto_disabled
     }
 }
 
@@ -132,6 +142,10 @@ pub async fn forward_with_config(
     let channels =
         list_available_channels(all_channels.as_ref(), protocol, now_ms, settings.as_ref())?;
     let total_channels = channels.len();
+    let total_attempts = channels
+        .iter()
+        .map(|channel| channel_attempt_budget(channel, settings.as_ref(), is_count_tokens))
+        .sum::<usize>();
     let body_bytes = to_bytes(body, limits::MAX_INBOUND_BODY_BYTES)
         .await
         .map_err(|e| ProxyError::ReadBody(e.to_string()))?;
@@ -142,88 +156,174 @@ pub async fn forward_with_config(
         .map_err(|e| ProxyError::Upstream(format!("invalid method: {e}")))?;
 
     let mut last_err: Option<ProxyError> = None;
+    let mut overall_attempt = 0usize;
 
-    for (idx, channel) in channels.into_iter().enumerate() {
-        let is_last = idx + 1 >= total_channels;
-        let started = Instant::now();
+    'channel_loop: for (channel_idx, channel) in channels.into_iter().enumerate() {
+        let channel_total = channel_attempt_budget(&channel, settings.as_ref(), is_count_tokens);
 
-        let attempt_ctx = AttemptCtx {
-            db_path: db_path_ref,
-            settings: settings.as_ref(),
-            protocol,
-            channel_id: channel.id.as_str(),
-            attempt: idx + 1,
-            total: total_channels,
-            channels_cache: channels_cache.clone(),
-        };
+        for channel_attempt in 1..=channel_total {
+            overall_attempt += 1;
+            let has_more_attempts_on_channel = channel_attempt < channel_total;
+            let has_more_channels = channel_idx + 1 < total_channels;
+            let started = Instant::now();
 
-        if !is_count_tokens {
-            tracing::debug!(
-                protocol = protocol.as_str(),
-                request_id = %request_id,
-                channel_id = %channel.id,
-                attempt = idx + 1,
-                total = total_channels,
-                "proxy attempt start"
-            );
-        }
+            let attempt_ctx = AttemptCtx {
+                db_path: db_path_ref,
+                settings: settings.as_ref(),
+                protocol,
+                channel: &channel,
+                attempt: overall_attempt,
+                total: total_attempts,
+                channel_attempt,
+                channel_total,
+                channels_cache: channels_cache.clone(),
+            };
 
-        let mut url = match build_upstream_url(&channel.base_url, &parts.uri, protocol_root) {
-            Ok(v) => v,
-            Err(e) => {
-                if !is_count_tokens {
-                    attempt_ctx.fail(&e, "proxy attempt failed (build url)");
+            if !is_count_tokens {
+                tracing::debug!(
+                    protocol = protocol.as_str(),
+                    request_id = %request_id,
+                    channel_id = %channel.id,
+                    attempt = overall_attempt,
+                    total = total_attempts,
+                    channel_attempt = channel_attempt,
+                    channel_total = channel_total,
+                    "proxy attempt start"
+                );
+            }
+
+            let mut url = match build_upstream_url(&channel.base_url, &parts.uri, protocol_root) {
+                Ok(v) => v,
+                Err(e) => {
+                    let auto_disabled = if !is_count_tokens {
+                        attempt_ctx
+                            .fail(&e, "proxy attempt failed (build url)")
+                            .await
+                    } else {
+                        false
+                    };
+                    last_err = Some(e);
+                    if auto_disabled || !has_more_attempts_on_channel {
+                        if has_more_channels {
+                            continue 'channel_loop;
+                        }
+                        break 'channel_loop;
+                    }
+                    continue;
                 }
+            };
+
+            let mut out_headers = filtered_headers(&parts.headers);
+            // Prefer identity encoding to reduce decode errors on streaming responses when upstream
+            // closes the connection abruptly.
+            out_headers.insert(
+                axum::http::header::ACCEPT_ENCODING,
+                HeaderValue::from_static("identity"),
+            );
+            if let Err(e) = apply_auth(&channel, protocol, &mut url, &mut out_headers) {
+                let auto_disabled = if !is_count_tokens {
+                    attempt_ctx
+                        .fail(&e, "proxy attempt failed (apply auth)")
+                        .await
+                } else {
+                    false
+                };
                 last_err = Some(e);
-                if is_last {
-                    break;
+                if auto_disabled || !has_more_attempts_on_channel {
+                    if has_more_channels {
+                        continue 'channel_loop;
+                    }
+                    break 'channel_loop;
                 }
                 continue;
             }
-        };
 
-        let mut out_headers = filtered_headers(&parts.headers);
-        // Prefer identity encoding to reduce decode errors on streaming responses when upstream
-        // closes the connection abruptly.
-        out_headers.insert(
-            axum::http::header::ACCEPT_ENCODING,
-            HeaderValue::from_static("identity"),
-        );
-        if let Err(e) = apply_auth(&channel, protocol, &mut url, &mut out_headers) {
-            if !is_count_tokens {
-                attempt_ctx.fail(&e, "proxy attempt failed (apply auth)");
-            }
-            last_err = Some(e);
-            if is_last {
-                break;
-            }
-            continue;
-        }
+            let upstream = match client
+                .request(method.clone(), url)
+                .headers(out_headers)
+                .body(body_bytes.clone())
+                .send()
+                .await
+            {
+                Ok(r) => r,
+                Err(e) => {
+                    let auto_disabled = if !is_count_tokens {
+                        let auto_disabled = attempt_ctx.record_failure().await;
+                        tracing::warn!(
+                            protocol = protocol.as_str(),
+                            channel_id = %channel.id,
+                            attempt = overall_attempt,
+                            total = total_attempts,
+                            channel_attempt = channel_attempt,
+                            channel_total = channel_total,
+                            err = %e,
+                            "proxy attempt failed (request error)"
+                        );
+                        spawn_usage_event(
+                            build_usage_event(UsageEventParams {
+                                request_id: Some(request_id.clone()),
+                                protocol,
+                                channel_id: channel.id.clone(),
+                                model: model.clone(),
+                                success: false,
+                                http_status: None,
+                                error_kind: Some(format!(
+                                    "upstream_error:{}",
+                                    truncate(&e.to_string(), 240)
+                                )),
+                                error_detail: Some(truncate(&e.to_string(), 2000)),
+                                latency_ms: started.elapsed().as_millis() as i64,
+                                ttft_ms: None,
+                                tokens: (None, None, None, None, None),
+                            }),
+                            db_path.clone(),
+                        );
+                        auto_disabled
+                    } else {
+                        false
+                    };
 
-        let upstream = match client
-            .request(method.clone(), url)
-            .headers(out_headers)
-            .body(body_bytes.clone())
-            .send()
-            .await
-        {
-            Ok(r) => r,
-            Err(e) => {
-                if !is_count_tokens {
-                    maybe_record_failure(
-                        db_path_ref,
-                        settings.as_ref(),
-                        &channel.id,
-                        channels_cache.clone(),
-                    );
+                    let err = ProxyError::Upstream(e.to_string());
+                    last_err = Some(err);
+                    if auto_disabled || !has_more_attempts_on_channel {
+                        if has_more_channels {
+                            continue 'channel_loop;
+                        }
+                        break 'channel_loop;
+                    }
+                    continue;
+                }
+            };
+
+            let status = upstream.status();
+            if is_count_tokens && !status.is_success() && has_more_channels {
+                // Claude Code relies heavily on this endpoint; some 3P providers don't support it
+                // (404/403). Retry on next channel but don't auto-disable or emit usage events.
+                continue 'channel_loop;
+            }
+
+            let auto_disabled = if !is_count_tokens && !status.is_success() {
+                attempt_ctx.record_failure().await
+            } else {
+                false
+            };
+
+            if !is_count_tokens && !status.is_success() {
+                let retry_same_channel = has_more_attempts_on_channel && !auto_disabled;
+                let retry_next_channel = !retry_same_channel && has_more_channels;
+
+                if retry_same_channel || retry_next_channel {
                     tracing::warn!(
                         protocol = protocol.as_str(),
                         channel_id = %channel.id,
-                        attempt = idx + 1,
-                        total = total_channels,
-                        err = %e,
-                        "proxy attempt failed (request error)"
+                        attempt = overall_attempt,
+                        total = total_attempts,
+                        channel_attempt = channel_attempt,
+                        channel_total = channel_total,
+                        http_status = status.as_u16(),
+                        "proxy attempt got non-2xx, retrying"
                     );
+                    let error_detail = read_error_detail(protocol, upstream).await;
                     spawn_usage_event(
                         build_usage_event(UsageEventParams {
                             request_id: Some(request_id.clone()),
@@ -231,93 +331,45 @@ pub async fn forward_with_config(
                             channel_id: channel.id.clone(),
                             model: model.clone(),
                             success: false,
-                            http_status: None,
-                            error_kind: Some(format!(
-                                "upstream_error:{}",
-                                truncate(&e.to_string(), 240)
-                            )),
-                            error_detail: Some(truncate(&e.to_string(), 2000)),
+                            http_status: Some(status.as_u16() as i64),
+                            error_kind: Some(format!("upstream_http:{}", status.as_u16())),
+                            error_detail,
                             latency_ms: started.elapsed().as_millis() as i64,
                             ttft_ms: None,
                             tokens: (None, None, None, None, None),
                         }),
                         db_path.clone(),
                     );
-                }
 
-                let err = ProxyError::Upstream(e.to_string());
-                last_err = Some(err);
-                if is_last {
-                    break;
+                    if retry_same_channel {
+                        continue;
+                    }
+                    continue 'channel_loop;
                 }
-                continue;
             }
-        };
 
-        let status = upstream.status();
-        if is_count_tokens && !status.is_success() && !is_last {
-            // Claude Code relies heavily on this endpoint; some 3P providers don't support it
-            // (404/403). Retry on next channel but don't auto-disable or emit usage events.
-            continue;
-        }
-        if !is_count_tokens && !status.is_success() {
-            maybe_record_failure(
-                db_path_ref,
-                settings.as_ref(),
-                &channel.id,
-                channels_cache.clone(),
-            );
-        }
-        if !is_count_tokens && !status.is_success() && !is_last {
-            tracing::warn!(
-                protocol = protocol.as_str(),
-                channel_id = %channel.id,
-                attempt = idx + 1,
-                total = total_channels,
-                http_status = status.as_u16(),
-                "proxy attempt got non-2xx, retry next channel"
-            );
-            let error_detail = read_error_detail(protocol, upstream).await;
-            spawn_usage_event(
-                build_usage_event(UsageEventParams {
-                    request_id: Some(request_id.clone()),
+            if !is_count_tokens && status.is_success() {
+                spawn_clear_channel_failures(db_path.clone(), &channel, settings.as_ref());
+            }
+
+            return proxy_upstream_response(
+                upstream,
+                StreamRecordContext {
+                    db_path: db_path.clone(),
                     protocol,
                     channel_id: channel.id.clone(),
                     model: model.clone(),
-                    success: false,
-                    http_status: Some(status.as_u16() as i64),
-                    error_kind: Some(format!("upstream_http:{}", status.as_u16())),
-                    error_detail,
-                    latency_ms: started.elapsed().as_millis() as i64,
-                    ttft_ms: None,
-                    tokens: (None, None, None, None, None),
-                }),
-                db_path.clone(),
-            );
-            continue;
+                    request_id: request_id.clone(),
+                    http_status: 0,
+                    status_is_success: false,
+                    started,
+                    parse_sse: false, // 将在内部按 Content-Type 决定
+                    record_usage: !is_count_tokens,
+                    span: tracing::Span::current(),
+                },
+            )
+            .await;
         }
-
-        if !is_count_tokens && status.is_success() && settings.auto_disable_enabled {
-            spawn_clear_channel_failures(db_path.clone(), channel.id.clone());
-        }
-
-        return proxy_upstream_response(
-            upstream,
-            StreamRecordContext {
-                db_path: db_path.clone(),
-                protocol,
-                channel_id: channel.id.clone(),
-                model: model.clone(),
-                request_id: request_id.clone(),
-                http_status: 0,
-                status_is_success: false,
-                started,
-                parse_sse: false, // 将在内部按 Content-Type 决定
-                record_usage: !is_count_tokens,
-                span: tracing::Span::current(),
-            },
-        )
-        .await;
     }
 
     Err(last_err.unwrap_or_else(|| ProxyError::Upstream("all channels failed".to_string())))
@@ -381,7 +433,7 @@ fn list_available_channels(
 
     let out: Vec<Channel> = enabled
         .into_iter()
-        .filter(|c| !storage::channel_is_auto_disabled(c, now_ms))
+        .filter(|c| !channel_is_protection_blocked(c, settings, now_ms))
         .collect();
     if out.is_empty() {
         return Err(ProxyError::NoAvailableChannel(protocol));
@@ -389,56 +441,79 @@ fn list_available_channels(
     Ok(out)
 }
 
-fn maybe_record_failure(
+fn channel_attempt_budget(
+    channel: &Channel,
+    settings: &storage::AppSettings,
+    is_count_tokens: bool,
+) -> usize {
+    if is_count_tokens || !settings.channel_retry_enabled {
+        return 1;
+    }
+
+    usize::try_from(channel.retry_times)
+        .ok()
+        .filter(|attempts| *attempts >= 1)
+        .unwrap_or(1)
+}
+
+fn channel_uses_protection(channel: &Channel, settings: &storage::AppSettings) -> bool {
+    settings.auto_disable_enabled && !channel.ignore_channel_protection
+}
+
+fn channel_is_protection_blocked(
+    channel: &Channel,
+    settings: &storage::AppSettings,
+    now_ms: i64,
+) -> bool {
+    channel_uses_protection(channel, settings) && storage::channel_is_auto_disabled(channel, now_ms)
+}
+
+async fn record_failure_and_maybe_disable(
     db_path: &Path,
     settings: &storage::AppSettings,
-    channel_id: &str,
+    channel: &Channel,
     channels_cache: Option<watch::Sender<Arc<Vec<Channel>>>>,
-) {
-    if !settings.auto_disable_enabled {
-        return;
-    }
-    // Best-effort: never block proxy latency on auto-disable bookkeeping.
-    if tokio::runtime::Handle::try_current().is_err() {
-        return;
+) -> bool {
+    if !channel_uses_protection(channel, settings) {
+        return false;
     }
     let db_path = db_path.to_path_buf();
-    let channel_id = channel_id.to_string();
+    let channel_id = channel.id.to_string();
     let window_minutes = settings.auto_disable_window_minutes;
     let failure_times = settings.auto_disable_failure_times;
     let disable_minutes = settings.auto_disable_disable_minutes;
-    tokio::spawn(async move {
-        let now_ms = storage::now_ms();
-        match storage::record_channel_failure_and_maybe_disable(
-            db_path,
-            channel_id.clone(),
-            now_ms,
-            window_minutes,
-            failure_times,
-            disable_minutes,
-        )
-        .await
-        {
-            Ok(Some(until_ms)) => {
-                tracing::warn!(
-                    channel_id = channel_id,
-                    disabled_until_ms = until_ms,
-                    "channel auto disabled"
-                );
-                if let Some(channels_cache) = channels_cache.as_ref() {
-                    mark_channel_auto_disabled(channels_cache, &channel_id, until_ms, now_ms);
-                }
+    let now_ms = storage::now_ms();
+    match storage::record_channel_failure_and_maybe_disable(
+        db_path,
+        channel_id.clone(),
+        now_ms,
+        window_minutes,
+        failure_times,
+        disable_minutes,
+    )
+    .await
+    {
+        Ok(Some(until_ms)) => {
+            tracing::warn!(
+                channel_id = channel_id,
+                disabled_until_ms = until_ms,
+                "channel auto disabled"
+            );
+            if let Some(channels_cache) = channels_cache.as_ref() {
+                mark_channel_auto_disabled(channels_cache, &channel_id, until_ms, now_ms);
             }
-            Ok(None) => {}
-            Err(e) => {
-                tracing::warn!(
-                    channel_id = channel_id,
-                    err = %e,
-                    "record channel failure failed"
-                );
-            }
+            true
         }
-    });
+        Ok(None) => false,
+        Err(e) => {
+            tracing::warn!(
+                channel_id = channel_id,
+                err = %e,
+                "record channel failure failed"
+            );
+            false
+        }
+    }
 }
 
 fn mark_channel_auto_disabled(
@@ -458,11 +533,19 @@ fn mark_channel_auto_disabled(
     });
 }
 
-fn spawn_clear_channel_failures(db_path: std::path::PathBuf, channel_id: String) {
+fn spawn_clear_channel_failures(
+    db_path: std::path::PathBuf,
+    channel: &Channel,
+    settings: &storage::AppSettings,
+) {
+    if !channel_uses_protection(channel, settings) {
+        return;
+    }
     // Best-effort: don't block proxy latency; skip if runtime is shutting down.
     if tokio::runtime::Handle::try_current().is_err() {
         return;
     }
+    let channel_id = channel.id.clone();
     tokio::spawn(async move {
         if let Err(e) = storage::clear_channel_failures(db_path, channel_id.clone()).await {
             tracing::debug!(channel_id = channel_id, err = %e, "clear channel failures failed");

@@ -44,6 +44,7 @@
     "channel_ids_mismatch": "channel_ids must cover all channels",
     "channel_name_required": "Channel name is required",
     "channel_base_url_required": "base_url is required",
+    "channel_retry_times_invalid": "retry_times must be >= 1",
     "channel_real_multiplier_invalid": "Invalid multiplier value",
     "channel_base_url_invalid": "Invalid base_url",
     "channel_auth_apply_failed": "Invalid channel auth config",

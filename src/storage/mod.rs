@@ -111,6 +111,7 @@ pub fn init_db(db_path: &Path) -> anyhow::Result<()> {
     let migration = include_str!("../../migrations/001_init.sql");
     conn.execute_batch(migration)
         .with_context(|| "执行 migrations/001_init.sql 失败")?;
+    channel::ensure_channel_schema(&conn)?;
 
     Ok(())
 }

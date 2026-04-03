@@ -32,6 +32,7 @@ export type AppSettings = {
   auto_disable_window_minutes: number;
   auto_disable_failure_times: number;
   auto_disable_disable_minutes: number;
+  channel_retry_enabled: boolean;
   anthropic_count_tokens_mock_enabled: boolean;
   log_level: LogLevel;
   log_retention_days: number;
@@ -225,6 +226,8 @@ export type Channel = {
   auth_ref: string;
   checkin_url: string | null;
   priority: number;
+  retry_times: number;
+  ignore_channel_protection: boolean;
   recharge_currency: "USD" | "CNY";
   real_multiplier: number;
   enabled: boolean;
@@ -248,6 +251,8 @@ export type CreateChannelInput = {
   auth_ref: string;
   checkin_url: string;
   priority: number;
+  retry_times: number;
+  ignore_channel_protection: boolean;
   recharge_currency: "USD" | "CNY";
   real_multiplier: number;
   enabled: boolean;
@@ -260,6 +265,8 @@ export type UpdateChannelInput = Partial<{
   auth_ref: string;
   checkin_url: string;
   priority: number;
+  retry_times: number;
+  ignore_channel_protection: boolean;
   recharge_currency: "USD" | "CNY";
   real_multiplier: number;
   enabled: boolean;

@@ -188,6 +188,12 @@ pub(in crate::server) async fn create_channel(
             "real_multiplier must be a finite number >= 0, with at most 2 decimal places",
         ));
     }
+    if input.retry_times < 1 {
+        return Err(ApiError::bad_request(
+            "channel_retry_times_invalid",
+            "retry_times must be >= 1",
+        ));
+    }
 
     let channel = storage::create_channel(state.db_path(), input).await?;
     let channel2 = channel.clone();
@@ -209,6 +215,14 @@ pub(in crate::server) async fn update_channel(
         return Err(ApiError::bad_request(
             "channel_real_multiplier_invalid",
             "real_multiplier must be a finite number >= 0, with at most 2 decimal places",
+        ));
+    }
+    if let Some(v) = input.retry_times
+        && v < 1
+    {
+        return Err(ApiError::bad_request(
+            "channel_retry_times_invalid",
+            "retry_times must be >= 1",
         ));
     }
     let patch = input.clone();
@@ -238,6 +252,15 @@ pub(in crate::server) async fn update_channel(
             }
             if let Some(v) = patch.priority {
                 channel.priority = v;
+            }
+            if let Some(v) = patch.retry_times {
+                channel.retry_times = v.max(1);
+            }
+            if let Some(v) = patch.ignore_channel_protection {
+                channel.ignore_channel_protection = v;
+                if v {
+                    channel.auto_disabled_until_ms = 0;
+                }
             }
             if let Some(v) = patch.recharge_currency {
                 channel.recharge_currency = v;

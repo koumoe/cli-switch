@@ -172,6 +172,8 @@
       "name": "名称",
       "terminal": "终端",
       "priority": "优先级（数值越大越优先）",
+      "retryTimes": "重试次数",
+      "retryTimesHint": "仅在设置中开启“渠道级重试”后生效，最小为 1",
       "rechargeCurrency": "充值货币",
       "rechargeCurrencyOptions": {
         "cny": "人民币（CNY）",
@@ -182,7 +184,9 @@
       "realMultiplierTooManyDecimals": "最多只能输入 2 位小数",
       "baseUrl": "Base URL",
       "apiKey": "API Key / Token",
-      "enabled": "启用"
+      "enabled": "启用",
+      "ignoreChannelProtection": "不受渠道保护管理",
+      "ignoreChannelProtectionHint": "开启后该渠道不会被渠道保护自动封禁，适合需要长期保活的低价渠道"
     },
     "deleteDialog": {
       "title": "删除渠道",
@@ -204,6 +208,7 @@
       "testFail": "测试失败",
       "nameRequired": "名称不能为空",
       "baseUrlRequired": "Base URL 不能为空",
+      "retryTimesInvalid": "重试次数必须是 >= 1 的整数",
       "realMultiplierInvalid": "真实倍率必须是 >= 0 的数字，且最多 2 位小数",
       "testReachableOkTitle": "{{name}} 连通正常",
       "testReachableOkDesc": "状态: {{status}}, 延迟: {{latency}}ms",
@@ -530,6 +535,14 @@
       "invalid": "渠道保护参数不合法",
       "saved": "设置已保存",
       "saveFail": "保存失败"
+    },
+    "channelRetry": {
+      "title": "渠道级重试",
+      "subtitle": "开启后可为每个渠道单独设置重试次数",
+      "enable": "启用渠道级重试",
+      "enableHint": "关闭后隐藏渠道重试次数，并恢复每个渠道只尝试 1 次的逻辑",
+      "saved": "渠道级重试设置已保存",
+      "saveFail": "保存渠道级重试设置失败"
     },
     "systemNotifications": {
       "title": "系统通知",
