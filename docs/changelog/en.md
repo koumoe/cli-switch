@@ -1,3 +1,8 @@
+## [0.57.1](https://github.com/koumoe/cli-switch/compare/v0.57.0...v0.57.1) (2026-04-03)
+
+### Bug Fixes
+
+* reset stale sub2api auth state before relogin (#190) ([#190](https://github.com/koumoe/cli-switch/issues/190)) ([7b2d884](https://github.com/koumoe/cli-switch/commit/7b2d884da5cc9868eddf666ef431258f0865daba))
 ## [0.57.0](https://github.com/koumoe/cli-switch/compare/v0.56.7...v0.57.0) (2026-04-03)
 
 ### Features
