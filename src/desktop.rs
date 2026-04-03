@@ -110,6 +110,7 @@ const SUB2API_AUTH_INIT_SCRIPT: &str = r#"
 (() => {
   const AUTH_KEY = "auth_token";
   const REFRESH_KEY = "refresh_token";
+  const EXTRA_CLEAR_KEYS = ["auth_user", "token_expires_at"];
   let lastSignature = "";
 
   const readAuth = () => {
@@ -123,6 +124,23 @@ const SUB2API_AUTH_INIT_SCRIPT: &str = r#"
     } catch (_) {
       return { token: "", refresh_token: "" };
     }
+  };
+
+  const clearAuthState = () => {
+    try {
+      const storage = window.localStorage;
+      if (storage) {
+        storage.removeItem(AUTH_KEY);
+        storage.removeItem(REFRESH_KEY);
+        for (const key of EXTRA_CLEAR_KEYS) {
+          storage.removeItem(key);
+        }
+      }
+    } catch (_) {}
+
+    try {
+      window.sessionStorage?.removeItem("auth_expired");
+    } catch (_) {}
   };
 
   const emit = () => {
@@ -143,19 +161,21 @@ const SUB2API_AUTH_INIT_SCRIPT: &str = r#"
   const scheduleEmit = () => window.setTimeout(emit, 0);
 
   try {
-    const originalSetItem = window.localStorage?.setItem?.bind(window.localStorage);
-    if (originalSetItem) {
-      window.localStorage.setItem = function(key, value) {
-        originalSetItem(key, value);
-        if (key === AUTH_KEY || key === REFRESH_KEY) scheduleEmit();
+    const originalSetItem = window.Storage?.prototype?.setItem;
+    if (typeof originalSetItem === "function") {
+      window.Storage.prototype.setItem = function(key, value) {
+        originalSetItem.call(this, key, value);
+        if (this === window.localStorage && (key === AUTH_KEY || key === REFRESH_KEY)) {
+          scheduleEmit();
+        }
       };
     }
   } catch (_) {}
 
+  clearAuthState();
   window.addEventListener("load", emit);
   window.addEventListener("storage", emit);
   window.setInterval(emit, 1000);
-  emit();
 })();
 "#;
 
@@ -237,6 +257,13 @@ fn create_sub2api_auth_window(
                     if token.is_empty() || refresh_token.is_empty() {
                         return;
                     }
+                    tracing::info!(
+                        request_id = %request_id_for_auth,
+                        window_id = ?window_id,
+                        token_len = token.len(),
+                        refresh_token_len = refresh_token.len(),
+                        "captured sub2api auth tokens from webview"
+                    );
                     let _ = proxy_for_auth.send_event(UserEvent::Sub2ApiAuthToken {
                         request_id: request_id_for_auth.clone(),
                         window_id,
@@ -248,6 +275,13 @@ fn create_sub2api_auth_window(
         })
         .build(&window)
         .context("创建 sub2api 登录 WebView 失败")?;
+
+    tracing::info!(
+        request_id = %request_id,
+        base_url = %base_url,
+        window_id = ?window_id,
+        "opened sub2api auth window with cleared local auth state"
+    );
 
     Ok(Sub2ApiAuthWindow {
         request_id,
@@ -739,6 +773,11 @@ fn handle_close_requested(
 
     if *window_id != main_window_id {
         if let Some(auth_window) = auth_windows.remove(window_id) {
+            tracing::info!(
+                request_id = %auth_window.request_id,
+                window_id = ?window_id,
+                "sub2api auth window closed before new tokens were captured"
+            );
             dispatch_sub2api_auth_result(webview, auth_window.request_id, None, None, true, None);
             return true;
         }
@@ -906,6 +945,12 @@ fn handle_user_event(
                     if already_open {
                         return;
                     }
+
+                    tracing::info!(
+                        request_id = %request_id,
+                        base_url = %base_url,
+                        "received sub2api desktop auth request"
+                    );
 
                     match create_sub2api_auth_window(
                         event_loop,
