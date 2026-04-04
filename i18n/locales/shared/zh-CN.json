@@ -20,7 +20,6 @@
     "settings_log_retention_days_out_of_range": "日志保留天数必须在 1~3650 之间",
     "settings_chat_bridge_turn_timeout_minutes_out_of_range": "消息互联 CLI 执行超时必须 >= 0 分钟",
     "settings_autostart_set_failed": "设置开机自启动失败",
-    "settings_autostart_args_update_failed": "更新开机自启动参数失败",
     "stats_missing_start_ms": "自定义统计范围必须提供 start_ms",
     "stats_invalid_ms_range": "end_ms 不能小于 start_ms",
     "stats_range_invalid": "统计范围参数无效",
