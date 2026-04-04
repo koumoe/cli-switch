@@ -62,8 +62,6 @@ pub(in crate::server) async fn update_settings(
     State(state): State<AppState>,
     Json(input): Json<UpdateSettingsInput>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let autostart_enabled_updated = input.auto_start_enabled.is_some();
-    let autostart_mode_updated = input.auto_start_launch_mode.is_some();
     let prev_notification_settings =
         SystemNotificationSettings::from_settings(state.settings_snapshot().as_ref());
 
@@ -331,27 +329,6 @@ pub(in crate::server) async fn update_settings(
         },
     )
     .await?;
-
-    if autostart_mode_updated && settings.auto_start_enabled && !autostart_enabled_updated {
-        let res = tokio::task::spawn_blocking(move || autostart::set_enabled(true)).await;
-        match res {
-            Ok(Ok(())) => {}
-            Ok(Err(e)) => {
-                tracing::warn!(err = %e, "rewrite autostart args failed");
-                return Err(ApiError::bad_request(
-                    "settings_autostart_args_update_failed",
-                    format!("Failed to update auto-start args: {e}"),
-                ));
-            }
-            Err(e) => {
-                tracing::warn!(err = %e, "rewrite autostart args failed");
-                return Err(ApiError::bad_request(
-                    "settings_autostart_args_update_failed",
-                    format!("Failed to update auto-start args: {e}"),
-                ));
-            }
-        }
-    }
 
     if input.log_level.is_some() {
         let _ = logging::set_level(settings.log_level);
