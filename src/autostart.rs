@@ -76,6 +76,7 @@ pub fn is_enabled() -> anyhow::Result<bool> {
     registration_matches_current_config(&exe)
 }
 
+#[cfg(any(target_os = "macos", test))]
 fn program_arguments(exe: &str) -> Vec<String> {
     let mut args = Vec::with_capacity(1 + AUTO_START_ARGS.len());
     args.push(exe.to_string());
