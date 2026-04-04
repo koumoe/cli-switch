@@ -1,3 +1,4 @@
+## [0.57.2](https://github.com/koumoe/cli-switch/compare/v0.57.1...v0.57.2) (2026-04-04)
 ## [0.57.1](https://github.com/koumoe/cli-switch/compare/v0.57.0...v0.57.1) (2026-04-03)
 
 ### Bug Fixes
