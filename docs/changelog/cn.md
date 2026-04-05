@@ -1,3 +1,7 @@
+## [0.57.3](https://github.com/koumoe/cli-switch/compare/v0.57.2...v0.57.3) (2026-04-05)
+
+### 修复
+* 避免重复重写自启动配置 (#192) ([#192](https://github.com/koumoe/cli-switch/issues/192)) ([0eaf996](https://github.com/koumoe/cli-switch/commit/0eaf996b95d028f9bc36504ebcb6a1efb64bb733))
 ## [0.57.2](https://github.com/koumoe/cli-switch/compare/v0.57.1...v0.57.2) (2026-04-04)
 ## [0.57.1](https://github.com/koumoe/cli-switch/compare/v0.57.0...v0.57.1) (2026-04-03)
 
