@@ -4,13 +4,17 @@ use anyhow::Context as _;
 use std::fs;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use std::path::PathBuf;
+#[cfg(any(target_os = "macos", test))]
+use std::sync::OnceLock;
 
+#[cfg(any(target_os = "macos", test))]
+use regex::Regex;
 #[cfg(target_os = "windows")]
 use std::io::ErrorKind;
 #[cfg(target_os = "windows")]
 use winreg::RegKey;
 #[cfg(target_os = "windows")]
-use winreg::enums::{HKEY_CURRENT_USER, KEY_READ};
+use winreg::enums::{HKEY_CURRENT_USER, KEY_READ, KEY_SET_VALUE};
 
 pub const AUTO_START_APP_NAME: &str = "CliSwitch";
 const AUTO_START_ARGS: &[&str] = &["--autostart"];
@@ -54,6 +58,8 @@ pub fn set_enabled(enabled: bool) -> anyhow::Result<()> {
             return Ok(());
         }
         launcher.enable().map_err(|e| anyhow::anyhow!("{e}"))?;
+        #[cfg(target_os = "windows")]
+        set_windows_run_value(&exe)?;
         tracing::info!("autostart enabled");
     } else {
         if !registration_exists()? {
@@ -100,8 +106,16 @@ fn registration_matches_current_config(exe: &str) -> anyhow::Result<bool> {
         }
     };
 
-    let expected = render_macos_launch_agent_plist(AUTO_START_APP_NAME, &program_arguments(exe));
-    Ok(actual == expected)
+    let Some(actual) = parse_macos_launch_agent_plist(&actual) else {
+        return Ok(false);
+    };
+
+    Ok(actual
+        == MacosLaunchAgent {
+            label: AUTO_START_APP_NAME.to_string(),
+            program_arguments: program_arguments(exe),
+            run_at_load: true,
+        })
 }
 
 #[cfg(target_os = "macos")]
@@ -128,8 +142,11 @@ fn registration_matches_current_config(exe: &str) -> anyhow::Result<bool> {
         }
     };
 
-    let expected = render_linux_desktop_entry(AUTO_START_APP_NAME, exe, AUTO_START_ARGS);
-    Ok(actual == expected)
+    let Some(actual) = parse_linux_desktop_entry(&actual) else {
+        return Ok(false);
+    };
+
+    Ok(actual == expected_linux_desktop_entry(AUTO_START_APP_NAME, exe, AUTO_START_ARGS))
 }
 
 #[cfg(target_os = "linux")]
@@ -174,6 +191,19 @@ fn registration_matches_current_config(exe: &str) -> anyhow::Result<bool> {
 }
 
 #[cfg(target_os = "windows")]
+fn set_windows_run_value(exe: &str) -> anyhow::Result<()> {
+    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+    hkcu.open_subkey_with_flags(WINDOWS_RUN_REGKEY, KEY_SET_VALUE)
+        .context("读取 Windows 自启动注册表失败")?
+        .set_value(
+            AUTO_START_APP_NAME,
+            &render_windows_run_value(exe, AUTO_START_ARGS),
+        )
+        .context("写入 Windows 自启动命令失败")?;
+    Ok(())
+}
+
+#[cfg(target_os = "windows")]
 fn windows_startup_approved_enabled(hkcu: &RegKey) -> anyhow::Result<Option<bool>> {
     let reg = match hkcu.open_subkey_with_flags(WINDOWS_STARTUP_APPROVED_REGKEY, KEY_READ) {
         Ok(reg) => reg,
@@ -211,12 +241,100 @@ fn home_dir() -> anyhow::Result<PathBuf> {
         .ok_or_else(|| anyhow::anyhow!("无法读取 HOME 目录"))
 }
 
+#[cfg(any(target_os = "linux", target_os = "windows", test))]
+fn render_command_with_args(exe: &str, args: &[&str]) -> String {
+    if args.is_empty() {
+        exe.to_string()
+    } else {
+        format!("{exe} {}", args.join(" "))
+    }
+}
+
 #[cfg(any(target_os = "windows", test))]
 fn render_windows_run_value(exe: &str, args: &[&str]) -> String {
-    format!("{} {}", exe, args.join(" "))
+    let exe = if exe.contains([' ', '\t']) {
+        format!("\"{exe}\"")
+    } else {
+        exe.to_string()
+    };
+    render_command_with_args(&exe, args)
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
+fn parse_bool_flag(value: &str) -> Option<bool> {
+    match value.trim() {
+        value if value.eq_ignore_ascii_case("true") => Some(true),
+        value if value.eq_ignore_ascii_case("false") => Some(false),
+        _ => None,
+    }
 }
 
 #[cfg(any(target_os = "linux", test))]
+#[derive(Debug, PartialEq, Eq)]
+struct LinuxDesktopEntry {
+    entry_type: String,
+    name: String,
+    exec: String,
+    startup_notify: bool,
+    terminal: bool,
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn expected_linux_desktop_entry(app_name: &str, exe: &str, args: &[&str]) -> LinuxDesktopEntry {
+    LinuxDesktopEntry {
+        entry_type: "Application".to_string(),
+        name: app_name.to_string(),
+        exec: render_command_with_args(exe, args),
+        startup_notify: false,
+        terminal: false,
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn parse_linux_desktop_entry(contents: &str) -> Option<LinuxDesktopEntry> {
+    let mut in_desktop_entry = false;
+    let mut entry_type = None;
+    let mut name = None;
+    let mut exec = None;
+    let mut startup_notify = None;
+    let mut terminal = None;
+
+    for line in contents.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+
+        if line.starts_with('[') && line.ends_with(']') {
+            in_desktop_entry = line == "[Desktop Entry]";
+            continue;
+        }
+
+        if !in_desktop_entry {
+            continue;
+        }
+
+        let (key, value) = line.split_once('=')?;
+        match key.trim() {
+            "Type" => entry_type = Some(value.trim().to_string()),
+            "Name" => name = Some(value.trim().to_string()),
+            "Exec" => exec = Some(value.trim().to_string()),
+            "StartupNotify" => startup_notify = parse_bool_flag(value),
+            "Terminal" => terminal = parse_bool_flag(value),
+            _ => {}
+        }
+    }
+
+    Some(LinuxDesktopEntry {
+        entry_type: entry_type?,
+        name: name?,
+        exec: exec?,
+        startup_notify: startup_notify?,
+        terminal: terminal?,
+    })
+}
+
+#[cfg(test)]
 fn render_linux_desktop_entry(app_name: &str, exe: &str, args: &[&str]) -> String {
     format!(
         "[Desktop Entry]\n\
@@ -235,6 +353,65 @@ fn render_linux_desktop_entry(app_name: &str, exe: &str, args: &[&str]) -> Strin
 }
 
 #[cfg(any(target_os = "macos", test))]
+#[derive(Debug, PartialEq, Eq)]
+struct MacosLaunchAgent {
+    label: String,
+    program_arguments: Vec<String>,
+    run_at_load: bool,
+}
+
+#[cfg(any(target_os = "macos", test))]
+fn parse_macos_launch_agent_plist(contents: &str) -> Option<MacosLaunchAgent> {
+    static LABEL_RE: OnceLock<Regex> = OnceLock::new();
+    static PROGRAM_ARGUMENTS_RE: OnceLock<Regex> = OnceLock::new();
+    static STRING_RE: OnceLock<Regex> = OnceLock::new();
+    static RUN_AT_LOAD_RE: OnceLock<Regex> = OnceLock::new();
+
+    let label = LABEL_RE
+        .get_or_init(|| {
+            Regex::new(r"(?s)<key>\s*Label\s*</key>\s*<string>\s*(.*?)\s*</string>")
+                .expect("label regex should compile")
+        })
+        .captures(contents)?
+        .get(1)?
+        .as_str()
+        .trim()
+        .to_string();
+
+    let program_arguments_section = PROGRAM_ARGUMENTS_RE
+        .get_or_init(|| {
+            Regex::new(r"(?s)<key>\s*ProgramArguments\s*</key>\s*<array>(.*?)</array>")
+                .expect("program arguments regex should compile")
+        })
+        .captures(contents)?
+        .get(1)?
+        .as_str();
+
+    let program_arguments = STRING_RE
+        .get_or_init(|| {
+            Regex::new(r"(?s)<string>\s*(.*?)\s*</string>").expect("string regex should compile")
+        })
+        .captures_iter(program_arguments_section)
+        .map(|captures| captures[1].trim().to_string())
+        .collect::<Vec<_>>();
+
+    let run_at_load = RUN_AT_LOAD_RE
+        .get_or_init(|| {
+            Regex::new(r"(?s)<key>\s*RunAtLoad\s*</key>\s*<(true|false)\s*/>")
+                .expect("run at load regex should compile")
+        })
+        .captures(contents)
+        .and_then(|captures| captures.get(1))
+        .and_then(|value| parse_bool_flag(value.as_str()))?;
+
+    Some(MacosLaunchAgent {
+        label,
+        program_arguments,
+        run_at_load,
+    })
+}
+
+#[cfg(test)]
 fn render_macos_launch_agent_plist(app_name: &str, args: &[String]) -> String {
     let section = args
         .iter()
@@ -263,17 +440,18 @@ fn render_macos_launch_agent_plist(app_name: &str, args: &[String]) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        AUTO_START_APP_NAME, AUTO_START_ARGS, program_arguments, render_linux_desktop_entry,
-        render_macos_launch_agent_plist, render_windows_run_value,
+        AUTO_START_APP_NAME, AUTO_START_ARGS, MacosLaunchAgent, expected_linux_desktop_entry,
+        parse_linux_desktop_entry, parse_macos_launch_agent_plist, program_arguments,
+        render_linux_desktop_entry, render_macos_launch_agent_plist, render_windows_run_value,
     };
 
     #[test]
-    fn renders_windows_run_value_like_auto_launch() {
+    fn renders_windows_run_value_with_quoted_executable_when_needed() {
         let exe = r"C:\Program Files\CliSwitch\cliswitch.exe";
         let rendered = render_windows_run_value(exe, AUTO_START_ARGS);
         assert_eq!(
             rendered,
-            r"C:\Program Files\CliSwitch\cliswitch.exe --autostart"
+            r#""C:\Program Files\CliSwitch\cliswitch.exe" --autostart"#
         );
     }
 
@@ -291,6 +469,28 @@ mod tests {
             Exec=/usr/bin/cliswitch --autostart\n\
             StartupNotify=false\n\
             Terminal=false"
+        );
+    }
+
+    #[test]
+    fn parses_linux_desktop_entry_without_relying_on_comment_text() {
+        let parsed = parse_linux_desktop_entry(
+            "[Desktop Entry]\n\
+            Type=Application\n\
+            Name=CliSwitch\n\
+            Comment=CliSwitch startup script\n\
+            Exec=/usr/bin/cliswitch --autostart\n\
+            StartupNotify=false\n\
+            Terminal=false",
+        );
+
+        assert_eq!(
+            parsed,
+            Some(expected_linux_desktop_entry(
+                AUTO_START_APP_NAME,
+                "/usr/bin/cliswitch",
+                AUTO_START_ARGS,
+            ))
         );
     }
 
@@ -314,6 +514,37 @@ mod tests {
                 <true/>\n  \
             </dict>\n\
             </plist>"
+        );
+    }
+
+    #[test]
+    fn parses_macos_launch_agent_plist_without_relying_on_whitespace() {
+        let parsed = parse_macos_launch_agent_plist(
+            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
+            <plist version=\"1.0\">\n\
+                <dict>\n\
+                    <key>ProgramArguments</key>\n\
+                    <array>\n\
+                        <string>/Applications/CliSwitch.app/Contents/MacOS/cliswitch</string>\n\
+                        <string>--autostart</string>\n\
+                    </array>\n\
+                    <key>RunAtLoad</key>\n\
+                    <true/>\n\
+                    <key>Label</key>\n\
+                    <string>CliSwitch</string>\n\
+                </dict>\n\
+            </plist>",
+        );
+
+        assert_eq!(
+            parsed,
+            Some(MacosLaunchAgent {
+                label: AUTO_START_APP_NAME.to_string(),
+                program_arguments: program_arguments(
+                    "/Applications/CliSwitch.app/Contents/MacOS/cliswitch",
+                ),
+                run_at_load: true,
+            })
         );
     }
 }
