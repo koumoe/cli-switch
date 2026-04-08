@@ -38,6 +38,18 @@ fn build_http_client() -> anyhow::Result<reqwest::Client> {
         .map_err(Into::into)
 }
 
+fn build_proxy_http_client() -> anyhow::Result<reqwest::Client> {
+    // Keep the proxy path transparent:
+    // - do not inject a default User-Agent
+    // - do not auto-negotiate compression when the inbound request omitted it
+    reqwest::Client::builder()
+        .no_gzip()
+        .no_brotli()
+        .no_deflate()
+        .build()
+        .map_err(Into::into)
+}
+
 fn request_endpoint_template(method: &Method, path: &str) -> Option<&'static str> {
     match (method.as_str(), path) {
         ("GET", "/api/health") => Some("/api/health"),
@@ -474,6 +486,7 @@ pub async fn serve_with_listener(
     let addr = listener.local_addr()?;
     let (settings_notify, settings_rx) = watch::channel(0u64);
     let http_client = build_http_client()?;
+    let proxy_http_client = build_proxy_http_client()?;
     let db_path = Arc::new(db_path);
 
     let settings0 = storage::get_app_settings((*db_path).clone()).await?;
@@ -494,6 +507,7 @@ pub async fn serve_with_listener(
         listen_addr: addr,
         db_path: db_path.clone(),
         http_client: http_client.clone(),
+        proxy_http_client,
         settings_notify,
         settings_cache,
         settings_cache_rx,
@@ -681,10 +695,10 @@ fn open_path(path: &std::path::Path) -> std::io::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::build_http_client;
+    use super::{build_http_client, build_proxy_http_client};
     use axum::Router;
     use axum::extract::State;
-    use axum::http::{HeaderMap, StatusCode, header::USER_AGENT};
+    use axum::http::{HeaderMap, StatusCode, header::ACCEPT_ENCODING, header::USER_AGENT};
     use axum::routing::get;
 
     #[tokio::test]
@@ -726,5 +740,39 @@ mod tests {
 
         assert_eq!(response.status(), StatusCode::OK);
         assert_eq!(response.text().await.expect("read body"), expected);
+    }
+
+    #[tokio::test]
+    async fn build_proxy_http_client_does_not_inject_user_agent_or_accept_encoding() {
+        async fn handler(headers: HeaderMap) -> String {
+            let user_agent = headers
+                .get(USER_AGENT)
+                .and_then(|value| value.to_str().ok())
+                .unwrap_or("-");
+            let accept_encoding = headers
+                .get(ACCEPT_ENCODING)
+                .and_then(|value| value.to_str().ok())
+                .unwrap_or("-");
+            format!("ua={user_agent};ae={accept_encoding}")
+        }
+
+        let app = Router::new().route("/", get(handler));
+        let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+            .await
+            .expect("bind test server");
+        let addr = listener.local_addr().expect("read local addr");
+        tokio::spawn(async move {
+            let _ = axum::serve(listener, app).await;
+        });
+
+        let response = build_proxy_http_client()
+            .expect("build proxy client")
+            .get(format!("http://127.0.0.1:{}/", addr.port()))
+            .send()
+            .await
+            .expect("send request");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.text().await.expect("read body"), "ua=-;ae=-");
     }
 }
