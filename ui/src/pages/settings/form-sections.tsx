@@ -1,18 +1,13 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import { Bell, Bot, Database, DollarSign, Info, Monitor, Power, RefreshCw, ScrollText, Shield } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
 import { updateSettings } from "@/api";
 import {
   Badge,
   Button,
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
   Form,
   FormControl,
   FormDescription as UiFormDescription,
@@ -52,6 +47,7 @@ import {
 } from "@/lib/schemas/settings";
 import { postIpc } from "@/lib/ipc";
 import type { AppSettings, PricingStatus } from "@/types/api";
+import { SettingsFieldText, SettingsFooter, SettingsRow, SettingsSection } from "./settings-layout";
 
 type SettingsSectionProps = {
   settings: AppSettings | null;
@@ -148,11 +144,6 @@ type PricingDataSettingsCardProps = SettingsSectionProps & {
 };
 
 type LoggingSettingsCardProps = SettingsSectionProps & {
-  dataDir: string | null;
-  logsSizeText: string;
-  logsSizeLoading: boolean;
-  onRefreshLogsSize: () => void | Promise<void>;
-  children?: ReactNode;
 };
 
 type ServiceInfoSettingsCardProps = SettingsSectionProps & {
@@ -369,89 +360,130 @@ export function ChannelProtectionSettingsCard({ settings, onSaved }: SettingsSec
   );
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Shield className="h-4 w-4" />
-          {t("settings.channelProtection.title")}
-        </CardTitle>
-        <CardDescription>{t("settings.channelProtection.subtitle")}</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <Form {...form}>
-          <form onSubmit={submit} className="space-y-4">
-            <FormField
-              control={form.control}
-              name="auto_disable_enabled"
-              render={({ field }) => (
-                <FormItem className="flex flex-row items-center justify-between gap-4 space-y-0">
-                  <div>
-                    <FormLabel className="font-medium text-sm">{t("settings.channelProtection.enable")}</FormLabel>
-                    <UiFormDescription>{t("settings.channelProtection.enableHint")}</UiFormDescription>
-                  </div>
+    <Form {...form}>
+      <form onSubmit={submit}>
+        <SettingsSection title={t("settings.channelProtection.title")} first>
+          <FormField
+            control={form.control}
+            name="auto_disable_enabled"
+            render={({ field }) => (
+              <FormItem className="space-y-0">
+                <SettingsRow>
+                  <SettingsFieldText
+                    label={
+                      <FormLabel className="text-[12.5px] font-semibold">
+                        {t("settings.channelProtection.enable")}
+                      </FormLabel>
+                    }
+                    hint={
+                      <UiFormDescription className="mt-0.5 text-[10.5px] leading-snug text-slate-500 dark:text-slate-400">
+                        {t("settings.channelProtection.enableHint")}
+                      </UiFormDescription>
+                    }
+                  />
                   <FormControl>
                     <Switch checked={field.value} onCheckedChange={field.onChange} disabled={!settings} />
                   </FormControl>
-                </FormItem>
-              )}
-            />
+                </SettingsRow>
+              </FormItem>
+            )}
+          />
 
-            <div className="grid grid-cols-3 gap-3">
-              <FormField
-                control={form.control}
-                name="auto_disable_window_minutes"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{t("settings.channelProtection.windowMinutes")}</FormLabel>
+          <FormField
+            control={form.control}
+            name="auto_disable_window_minutes"
+            render={({ field }) => (
+              <FormItem className="space-y-0">
+                <SettingsRow className="items-start">
+                  <SettingsFieldText
+                    label={
+                      <FormLabel className="text-[12.5px] font-semibold">
+                        {t("settings.channelProtection.windowMinutes")}
+                      </FormLabel>
+                    }
+                    hint={
+                      <UiFormDescription className="mt-0.5 text-[10.5px] leading-snug text-slate-500 dark:text-slate-400">
+                        {t("settings.channelProtection.windowMinutesHint")}
+                      </UiFormDescription>
+                    }
+                  />
+                  <div className="w-[110px] shrink-0">
                     <FormControl>
-                      <Input {...field} type="number" min="1" className="h-8" disabled={!settings || !enabled} />
+                      <Input {...field} type="number" min="1" disabled={!settings || !enabled} />
                     </FormControl>
-                    <UiFormDescription>{t("settings.channelProtection.windowMinutesHint")}</UiFormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+                    <FormMessage className="mt-1 text-[10.5px]" />
+                  </div>
+                </SettingsRow>
+              </FormItem>
+            )}
+          />
 
-              <FormField
-                control={form.control}
-                name="auto_disable_failure_times"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{t("settings.channelProtection.failureTimes")}</FormLabel>
+          <FormField
+            control={form.control}
+            name="auto_disable_failure_times"
+            render={({ field }) => (
+              <FormItem className="space-y-0">
+                <SettingsRow className="items-start">
+                  <SettingsFieldText
+                    label={
+                      <FormLabel className="text-[12.5px] font-semibold">
+                        {t("settings.channelProtection.failureTimes")}
+                      </FormLabel>
+                    }
+                    hint={
+                      <UiFormDescription className="mt-0.5 text-[10.5px] leading-snug text-slate-500 dark:text-slate-400">
+                        {t("settings.channelProtection.failureTimesHint")}
+                      </UiFormDescription>
+                    }
+                  />
+                  <div className="w-[110px] shrink-0">
                     <FormControl>
-                      <Input {...field} type="number" min="1" className="h-8" disabled={!settings || !enabled} />
+                      <Input {...field} type="number" min="1" disabled={!settings || !enabled} />
                     </FormControl>
-                    <UiFormDescription>{t("settings.channelProtection.failureTimesHint")}</UiFormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+                    <FormMessage className="mt-1 text-[10.5px]" />
+                  </div>
+                </SettingsRow>
+              </FormItem>
+            )}
+          />
 
-              <FormField
-                control={form.control}
-                name="auto_disable_disable_minutes"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{t("settings.channelProtection.pauseMinutes")}</FormLabel>
+          <FormField
+            control={form.control}
+            name="auto_disable_disable_minutes"
+            render={({ field }) => (
+              <FormItem className="space-y-0">
+                <SettingsRow className="items-start">
+                  <SettingsFieldText
+                    label={
+                      <FormLabel className="text-[12.5px] font-semibold">
+                        {t("settings.channelProtection.pauseMinutes")}
+                      </FormLabel>
+                    }
+                    hint={
+                      <UiFormDescription className="mt-0.5 text-[10.5px] leading-snug text-slate-500 dark:text-slate-400">
+                        {t("settings.channelProtection.pauseMinutesHint")}
+                      </UiFormDescription>
+                    }
+                  />
+                  <div className="w-[110px] shrink-0">
                     <FormControl>
-                      <Input {...field} type="number" min="1" className="h-8" disabled={!settings || !enabled} />
+                      <Input {...field} type="number" min="1" disabled={!settings || !enabled} />
                     </FormControl>
-                    <UiFormDescription>{t("settings.channelProtection.pauseMinutesHint")}</UiFormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
+                    <FormMessage className="mt-1 text-[10.5px]" />
+                  </div>
+                </SettingsRow>
+              </FormItem>
+            )}
+          />
 
-            <div className="flex justify-end">
-              <Button size="sm" type="submit" disabled={!settings || saving}>
-                {t("common.save")}
-              </Button>
-            </div>
-          </form>
-        </Form>
-      </CardContent>
-    </Card>
+          <SettingsFooter>
+            <Button size="sm" type="submit" disabled={!settings || saving}>
+              {t("common.save")}
+            </Button>
+          </SettingsFooter>
+        </SettingsSection>
+      </form>
+    </Form>
   );
 }
 
@@ -486,42 +518,43 @@ export function ChannelRetrySettingsCard({ settings, onSaved }: SettingsSectionP
   });
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <RefreshCw className="h-4 w-4" />
-          {t("settings.channelRetry.title")}
-        </CardTitle>
-        <CardDescription>{t("settings.channelRetry.subtitle")}</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <Form {...form}>
-          <form onSubmit={submit} className="space-y-4">
-            <FormField
-              control={form.control}
-              name="channel_retry_enabled"
-              render={({ field }) => (
-                <FormItem className="flex flex-row items-center justify-between gap-4 space-y-0">
-                  <div>
-                    <FormLabel className="font-medium text-sm">{t("settings.channelRetry.enable")}</FormLabel>
-                    <UiFormDescription>{t("settings.channelRetry.enableHint")}</UiFormDescription>
-                  </div>
+    <Form {...form}>
+      <form onSubmit={submit}>
+        <SettingsSection title={t("settings.channelRetry.title")}>
+          <FormField
+            control={form.control}
+            name="channel_retry_enabled"
+            render={({ field }) => (
+              <FormItem className="space-y-0">
+                <SettingsRow>
+                  <SettingsFieldText
+                    label={
+                      <FormLabel className="text-[12.5px] font-semibold">
+                        {t("settings.channelRetry.enable")}
+                      </FormLabel>
+                    }
+                    hint={
+                      <UiFormDescription className="mt-0.5 text-[10.5px] leading-snug text-slate-500 dark:text-slate-400">
+                        {t("settings.channelRetry.enableHint")}
+                      </UiFormDescription>
+                    }
+                  />
                   <FormControl>
                     <Switch checked={field.value} onCheckedChange={field.onChange} disabled={!settings} />
                   </FormControl>
-                </FormItem>
-              )}
-            />
+                </SettingsRow>
+              </FormItem>
+            )}
+          />
 
-            <div className="flex justify-end">
-              <Button size="sm" type="submit" disabled={!settings || saving}>
-                {t("common.save")}
-              </Button>
-            </div>
-          </form>
-        </Form>
-      </CardContent>
-    </Card>
+          <SettingsFooter>
+            <Button size="sm" type="submit" disabled={!settings || saving}>
+              {t("common.save")}
+            </Button>
+          </SettingsFooter>
+        </SettingsSection>
+      </form>
+    </Form>
   );
 }
 
@@ -562,76 +595,97 @@ export function NewApiManagedSettingsCard({ settings, onSaved }: SettingsSection
   });
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Bot className="h-4 w-4" />
-          {t("settings.newApiManaged.title")}
-        </CardTitle>
-        <CardDescription>{t("settings.newApiManaged.subtitle")}</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <Form {...form}>
-          <form onSubmit={submit} className="space-y-4">
-            <FormField
-              control={form.control}
-              name="remote_managed_channel_missing_prompt_enabled"
-              render={({ field }) => (
-                <FormItem className="flex flex-row items-center justify-between gap-4 space-y-0">
-                  <div>
-                    <FormLabel className="font-medium text-sm">{t("settings.newApiManaged.missingPrompt")}</FormLabel>
-                    <UiFormDescription>{t("settings.newApiManaged.missingPromptHint")}</UiFormDescription>
-                  </div>
+    <Form {...form}>
+      <form onSubmit={submit}>
+        <SettingsSection title={t("settings.newApiManaged.title")}>
+          <FormField
+            control={form.control}
+            name="remote_managed_channel_missing_prompt_enabled"
+            render={({ field }) => (
+              <FormItem className="space-y-0">
+                <SettingsRow>
+                  <SettingsFieldText
+                    label={
+                      <FormLabel className="text-[12.5px] font-semibold">
+                        {t("settings.newApiManaged.missingPrompt")}
+                      </FormLabel>
+                    }
+                    hint={
+                      <UiFormDescription className="mt-0.5 text-[10.5px] leading-snug text-slate-500 dark:text-slate-400">
+                        {t("settings.newApiManaged.missingPromptHint")}
+                      </UiFormDescription>
+                    }
+                  />
                   <FormControl>
                     <Switch checked={field.value} onCheckedChange={field.onChange} disabled={!settings} />
                   </FormControl>
-                </FormItem>
-              )}
-            />
+                </SettingsRow>
+              </FormItem>
+            )}
+          />
 
-            <FormField
-              control={form.control}
-              name="remote_managed_channel_sync_multiplier_enabled"
-              render={({ field }) => (
-                <FormItem className="flex flex-row items-center justify-between gap-4 space-y-0">
-                  <div>
-                    <FormLabel className="font-medium text-sm">{t("settings.newApiManaged.syncMultiplier")}</FormLabel>
-                    <UiFormDescription>{t("settings.newApiManaged.syncMultiplierHint")}</UiFormDescription>
-                  </div>
+          <FormField
+            control={form.control}
+            name="remote_managed_channel_sync_multiplier_enabled"
+            render={({ field }) => (
+              <FormItem className="space-y-0">
+                <SettingsRow>
+                  <SettingsFieldText
+                    label={
+                      <FormLabel className="text-[12.5px] font-semibold">
+                        {t("settings.newApiManaged.syncMultiplier")}
+                      </FormLabel>
+                    }
+                    hint={
+                      <UiFormDescription className="mt-0.5 text-[10.5px] leading-snug text-slate-500 dark:text-slate-400">
+                        {t("settings.newApiManaged.syncMultiplierHint")}
+                      </UiFormDescription>
+                    }
+                  />
                   <FormControl>
                     <Switch checked={field.value} onCheckedChange={field.onChange} disabled={!settings} />
                   </FormControl>
-                </FormItem>
-              )}
-            />
+                </SettingsRow>
+              </FormItem>
+            )}
+          />
 
-            {syncMultiplierEnabled ? (
-              <FormField
-                control={form.control}
-                name="remote_managed_channel_sync_free_multiplier_enabled"
-                render={({ field }) => (
-                  <FormItem className="flex flex-row items-center justify-between gap-4 space-y-0">
-                    <div>
-                      <FormLabel className="font-medium text-sm">{t("settings.newApiManaged.ignoreFreeMultiplier")}</FormLabel>
-                      <UiFormDescription>{t("settings.newApiManaged.ignoreFreeMultiplierHint")}</UiFormDescription>
-                    </div>
+          {syncMultiplierEnabled ? (
+            <FormField
+              control={form.control}
+              name="remote_managed_channel_sync_free_multiplier_enabled"
+              render={({ field }) => (
+                <FormItem className="space-y-0">
+                  <SettingsRow>
+                    <SettingsFieldText
+                      label={
+                        <FormLabel className="text-[12.5px] font-semibold">
+                          {t("settings.newApiManaged.ignoreFreeMultiplier")}
+                        </FormLabel>
+                      }
+                      hint={
+                        <UiFormDescription className="mt-0.5 text-[10.5px] leading-snug text-slate-500 dark:text-slate-400">
+                          {t("settings.newApiManaged.ignoreFreeMultiplierHint")}
+                        </UiFormDescription>
+                      }
+                    />
                     <FormControl>
                       <Switch checked={field.value} onCheckedChange={field.onChange} disabled={!settings} />
                     </FormControl>
-                  </FormItem>
-                )}
-              />
-            ) : null}
+                  </SettingsRow>
+                </FormItem>
+              )}
+            />
+          ) : null}
 
-            <div className="flex justify-end">
-              <Button size="sm" type="submit" disabled={!settings || saving}>
-                {t("common.save")}
-              </Button>
-            </div>
-          </form>
-        </Form>
-      </CardContent>
-    </Card>
+          <SettingsFooter>
+            <Button size="sm" type="submit" disabled={!settings || saving}>
+              {t("common.save")}
+            </Button>
+          </SettingsFooter>
+        </SettingsSection>
+      </form>
+    </Form>
   );
 }
 
@@ -666,42 +720,43 @@ export function SystemNotificationsSettingsCard({ settings, onSaved }: SettingsS
   });
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Bell className="h-4 w-4" />
-          {t("settings.systemNotifications.title")}
-        </CardTitle>
-        <CardDescription>{t("settings.systemNotifications.subtitle")}</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <Form {...form}>
-          <form onSubmit={submit} className="space-y-4">
-            <FormField
-              control={form.control}
-              name="system_notifications_enabled"
-              render={({ field }) => (
-                <FormItem className="flex flex-row items-center justify-between gap-4 space-y-0">
-                  <div>
-                    <FormLabel className="font-medium text-sm">{t("settings.systemNotifications.enable")}</FormLabel>
-                    <UiFormDescription>{t("settings.systemNotifications.enableHint")}</UiFormDescription>
-                  </div>
+    <Form {...form}>
+      <form onSubmit={submit}>
+        <SettingsSection title={t("settings.systemNotifications.title")} first>
+          <FormField
+            control={form.control}
+            name="system_notifications_enabled"
+            render={({ field }) => (
+              <FormItem className="space-y-0">
+                <SettingsRow>
+                  <SettingsFieldText
+                    label={
+                      <FormLabel className="text-[12.5px] font-semibold">
+                        {t("settings.systemNotifications.enable")}
+                      </FormLabel>
+                    }
+                    hint={
+                      <UiFormDescription className="mt-0.5 text-[10.5px] leading-snug text-slate-500 dark:text-slate-400">
+                        {t("settings.systemNotifications.enableHint")}
+                      </UiFormDescription>
+                    }
+                  />
                   <FormControl>
                     <Switch checked={field.value} onCheckedChange={field.onChange} disabled={!settings || saving} />
                   </FormControl>
-                </FormItem>
-              )}
-            />
+                </SettingsRow>
+              </FormItem>
+            )}
+          />
 
-            <div className="flex justify-end">
-              <Button size="sm" type="submit" disabled={!settings || saving}>
-                {t("common.save")}
-              </Button>
-            </div>
-          </form>
-        </Form>
-      </CardContent>
-    </Card>
+          <SettingsFooter>
+            <Button size="sm" type="submit" disabled={!settings || saving}>
+              {t("common.save")}
+            </Button>
+          </SettingsFooter>
+        </SettingsSection>
+      </form>
+    </Form>
   );
 }
 
@@ -743,90 +798,121 @@ export function RemoteSystemNotificationsSettingsCard({ settings, onSaved }: Set
   });
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Bot className="h-4 w-4" />
-          {t("settings.newApiManaged.title")}
-        </CardTitle>
-        <CardDescription>{t("settings.systemNotifications.newApiSubtitle")}</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <Form {...form}>
-          <form onSubmit={submit} className="space-y-4">
-            <FormField
-              control={form.control}
-              name="remote_low_balance_system_notification_enabled"
-              render={({ field }) => (
-                <FormItem className="flex flex-row items-center justify-between gap-4 space-y-0">
-                  <div>
-                    <FormLabel className="font-medium text-sm">{t("settings.systemNotifications.lowBalance")}</FormLabel>
-                    <UiFormDescription>{t("settings.systemNotifications.lowBalanceHint")}</UiFormDescription>
-                  </div>
+    <Form {...form}>
+      <form onSubmit={submit}>
+        <SettingsSection title={t("settings.newApiManaged.title")}>
+          <FormField
+            control={form.control}
+            name="remote_low_balance_system_notification_enabled"
+            render={({ field }) => (
+              <FormItem className="space-y-0">
+                <SettingsRow>
+                  <SettingsFieldText
+                    label={
+                      <FormLabel className="text-[12.5px] font-semibold">
+                        {t("settings.systemNotifications.lowBalance")}
+                      </FormLabel>
+                    }
+                    hint={
+                      <UiFormDescription className="mt-0.5 text-[10.5px] leading-snug text-slate-500 dark:text-slate-400">
+                        {t("settings.systemNotifications.lowBalanceHint")}
+                      </UiFormDescription>
+                    }
+                  />
                   <FormControl>
                     <Switch checked={field.value} onCheckedChange={field.onChange} disabled={!settings || saving} />
                   </FormControl>
-                </FormItem>
-              )}
-            />
+                </SettingsRow>
+              </FormItem>
+            )}
+          />
 
-            <FormField
-              control={form.control}
-              name="remote_managed_channel_missing_system_notification_enabled"
-              render={({ field }) => (
-                <FormItem className="flex flex-row items-center justify-between gap-4 space-y-0">
-                  <div>
-                    <FormLabel className="font-medium text-sm">{t("settings.systemNotifications.managedChannelMissing")}</FormLabel>
-                    <UiFormDescription>{t("settings.systemNotifications.managedChannelMissingHint")}</UiFormDescription>
-                  </div>
+          <FormField
+            control={form.control}
+            name="remote_managed_channel_missing_system_notification_enabled"
+            render={({ field }) => (
+              <FormItem className="space-y-0">
+                <SettingsRow>
+                  <SettingsFieldText
+                    label={
+                      <FormLabel className="text-[12.5px] font-semibold">
+                        {t("settings.systemNotifications.managedChannelMissing")}
+                      </FormLabel>
+                    }
+                    hint={
+                      <UiFormDescription className="mt-0.5 text-[10.5px] leading-snug text-slate-500 dark:text-slate-400">
+                        {t("settings.systemNotifications.managedChannelMissingHint")}
+                      </UiFormDescription>
+                    }
+                  />
                   <FormControl>
                     <Switch checked={field.value} onCheckedChange={field.onChange} disabled={!settings || saving} />
                   </FormControl>
-                </FormItem>
-              )}
-            />
+                </SettingsRow>
+              </FormItem>
+            )}
+          />
 
-            <FormField
-              control={form.control}
-              name="remote_managed_channel_multiplier_system_notification_enabled"
-              render={({ field }) => (
-                <FormItem className="flex flex-row items-center justify-between gap-4 space-y-0">
-                  <div>
-                    <FormLabel className="font-medium text-sm">{t("settings.systemNotifications.managedChannelMultiplier")}</FormLabel>
-                    <UiFormDescription>{t("settings.systemNotifications.managedChannelMultiplierHint")}</UiFormDescription>
-                  </div>
+          <FormField
+            control={form.control}
+            name="remote_managed_channel_multiplier_system_notification_enabled"
+            render={({ field }) => (
+              <FormItem className="space-y-0">
+                <SettingsRow>
+                  <SettingsFieldText
+                    label={
+                      <FormLabel className="text-[12.5px] font-semibold">
+                        {t("settings.systemNotifications.managedChannelMultiplier")}
+                      </FormLabel>
+                    }
+                    hint={
+                      <UiFormDescription className="mt-0.5 text-[10.5px] leading-snug text-slate-500 dark:text-slate-400">
+                        {t("settings.systemNotifications.managedChannelMultiplierHint")}
+                      </UiFormDescription>
+                    }
+                  />
                   <FormControl>
                     <Switch checked={field.value} onCheckedChange={field.onChange} disabled={!settings || saving} />
                   </FormControl>
-                </FormItem>
-              )}
-            />
+                </SettingsRow>
+              </FormItem>
+            )}
+          />
 
-            <FormField
-              control={form.control}
-              name="remote_group_added_system_notification_enabled"
-              render={({ field }) => (
-                <FormItem className="flex flex-row items-center justify-between gap-4 space-y-0">
-                  <div>
-                    <FormLabel className="font-medium text-sm">{t("settings.systemNotifications.remoteGroupAdded")}</FormLabel>
-                    <UiFormDescription>{t("settings.systemNotifications.remoteGroupAddedHint")}</UiFormDescription>
-                  </div>
+          <FormField
+            control={form.control}
+            name="remote_group_added_system_notification_enabled"
+            render={({ field }) => (
+              <FormItem className="space-y-0">
+                <SettingsRow>
+                  <SettingsFieldText
+                    label={
+                      <FormLabel className="text-[12.5px] font-semibold">
+                        {t("settings.systemNotifications.remoteGroupAdded")}
+                      </FormLabel>
+                    }
+                    hint={
+                      <UiFormDescription className="mt-0.5 text-[10.5px] leading-snug text-slate-500 dark:text-slate-400">
+                        {t("settings.systemNotifications.remoteGroupAddedHint")}
+                      </UiFormDescription>
+                    }
+                  />
                   <FormControl>
                     <Switch checked={field.value} onCheckedChange={field.onChange} disabled={!settings || saving} />
                   </FormControl>
-                </FormItem>
-              )}
-            />
+                </SettingsRow>
+              </FormItem>
+            )}
+          />
 
-            <div className="flex justify-end">
-              <Button size="sm" type="submit" disabled={!settings || saving}>
-                {t("common.save")}
-              </Button>
-            </div>
-          </form>
-        </Form>
-      </CardContent>
-    </Card>
+          <SettingsFooter>
+            <Button size="sm" type="submit" disabled={!settings || saving}>
+              {t("common.save")}
+            </Button>
+          </SettingsFooter>
+        </SettingsSection>
+      </form>
+    </Form>
   );
 }
 
@@ -874,85 +960,104 @@ export function PricingDataSettingsCard({
   );
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <DollarSign className="h-4 w-4" />
-          {t("settings.pricingData.title")}
-        </CardTitle>
-        <CardDescription>{t("settings.pricingData.subtitle")}</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <Form {...form}>
-          <form onSubmit={submit} className="space-y-4">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <div className="font-medium text-sm">{t("settings.pricingData.status")}</div>
-                <div className="text-xs text-muted-foreground">
+    <Form {...form}>
+      <form onSubmit={submit}>
+        <SettingsSection title={t("settings.pricingData.title")}>
+          <SettingsRow>
+            <SettingsFieldText
+              label={t("settings.pricingData.status")}
+              hint={
+                <>
                   {t("settings.pricingData.count", { count: pricing?.count ?? 0 })}
                   {" · "}
                   {t("settings.pricingData.lastSync", {
                     time: pricing?.last_sync_ms ? new Date(pricing.last_sync_ms).toLocaleString() : "-",
                   })}
-                </div>
-              </div>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() => void onSync()}
-                disabled={syncing}
-                className="gap-2"
-              >
-                <RefreshCw className={`h-4 w-4 ${syncing ? "animate-spin" : ""}`} />
-                {t("settings.pricingData.sync")}
-              </Button>
-            </div>
+                </>
+              }
+            />
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => void onSync()}
+              disabled={syncing}
+              className="gap-1.5"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${syncing ? "animate-spin" : ""}`} />
+              {t("settings.pricingData.sync")}
+            </Button>
+          </SettingsRow>
 
-            <FormField
-              control={form.control}
-              name="pricing_auto_update_enabled"
-              render={({ field }) => (
-                <FormItem className="flex flex-row items-center justify-between gap-4 space-y-0">
-                  <div>
-                    <FormLabel className="font-medium text-sm">{t("settings.pricingData.autoUpdate")}</FormLabel>
-                    <UiFormDescription>{t("settings.pricingData.autoUpdateHint")}</UiFormDescription>
-                  </div>
+          <FormField
+            control={form.control}
+            name="pricing_auto_update_enabled"
+            render={({ field }) => (
+              <FormItem className="space-y-0">
+                <SettingsRow>
+                  <SettingsFieldText
+                    label={
+                      <FormLabel className="text-[12.5px] font-semibold">
+                        {t("settings.pricingData.autoUpdate")}
+                      </FormLabel>
+                    }
+                    hint={
+                      <UiFormDescription className="mt-0.5 text-[10.5px] leading-snug text-slate-500 dark:text-slate-400">
+                        {t("settings.pricingData.autoUpdateHint")}
+                      </UiFormDescription>
+                    }
+                  />
                   <FormControl>
                     <Switch checked={field.value} onCheckedChange={field.onChange} disabled={!settings || saving} />
                   </FormControl>
-                </FormItem>
-              )}
-            />
+                </SettingsRow>
+              </FormItem>
+            )}
+          />
 
-            <FormField
-              control={form.control}
-              name="pricing_auto_update_interval_hours"
-              render={({ field }) => (
-                <FormItem className="flex items-center justify-between gap-4">
-                  <div>
-                    <FormLabel className="font-medium text-sm">{t("settings.pricingData.intervalHours")}</FormLabel>
-                    <UiFormDescription>{t("settings.pricingData.intervalHoursHint")}</UiFormDescription>
-                  </div>
-                  <div className="w-[140px]">
+          <FormField
+            control={form.control}
+            name="pricing_auto_update_interval_hours"
+            render={({ field }) => (
+              <FormItem className="space-y-0">
+                <SettingsRow className="items-start">
+                  <SettingsFieldText
+                    label={
+                      <FormLabel className="text-[12.5px] font-semibold">
+                        {t("settings.pricingData.intervalHours")}
+                      </FormLabel>
+                    }
+                    hint={
+                      <UiFormDescription className="mt-0.5 text-[10.5px] leading-snug text-slate-500 dark:text-slate-400">
+                        {t("settings.pricingData.intervalHoursHint")}
+                      </UiFormDescription>
+                    }
+                  />
+                  <div className="w-[140px] shrink-0">
                     <FormControl>
-                      <Input {...field} type="number" min="1" max="8760" className="h-8" disabled={!settings || saving || !enabled} />
+                      <Input
+                        {...field}
+                        type="number"
+                        min="1"
+                        max="8760"
+                        disabled={!settings || saving || !enabled}
+                      />
                     </FormControl>
+                    <FormMessage className="mt-1 text-[10.5px]" />
                   </div>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+                </SettingsRow>
+              </FormItem>
+            )}
+          />
 
-            <div className="flex justify-end">
-              <Button size="sm" type="submit" disabled={!settings || saving}>
-                {t("common.save")}
-              </Button>
-            </div>
-          </form>
-        </Form>
-      </CardContent>
-    </Card>
+          <SettingsFooter>
+            <Button size="sm" type="submit" disabled={!settings || saving}>
+              {t("common.save")}
+            </Button>
+          </SettingsFooter>
+        </SettingsSection>
+      </form>
+    </Form>
   );
 }
 
@@ -985,27 +1090,28 @@ export function WindowCloseSettingsCard({ settings, onSaved }: SettingsSectionPr
   });
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Monitor className="h-4 w-4" />
-          {t("settings.windowClose.title")}
-        </CardTitle>
-        <CardDescription>{t("settings.windowClose.subtitle")}</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <Form {...form}>
-          <form onSubmit={submit} className="space-y-4">
-            <FormField
-              control={form.control}
-              name="close_behavior"
-              render={({ field }) => (
-                <FormItem className="flex items-center justify-between gap-4">
-                  <div>
-                    <FormLabel className="font-medium text-sm">{t("settings.windowClose.behavior")}</FormLabel>
-                    <UiFormDescription>{t("settings.windowClose.behaviorHint")}</UiFormDescription>
-                  </div>
-                  <div className="w-[220px]">
+    <Form {...form}>
+      <form onSubmit={submit}>
+        <SettingsSection title={t("settings.windowClose.title")}>
+          <FormField
+            control={form.control}
+            name="close_behavior"
+            render={({ field }) => (
+              <FormItem className="space-y-0">
+                <SettingsRow className="items-start">
+                  <SettingsFieldText
+                    label={
+                      <FormLabel className="text-[12.5px] font-semibold">
+                        {t("settings.windowClose.behavior")}
+                      </FormLabel>
+                    }
+                    hint={
+                      <UiFormDescription className="mt-0.5 text-[10.5px] leading-snug text-slate-500 dark:text-slate-400">
+                        {t("settings.windowClose.behaviorHint")}
+                      </UiFormDescription>
+                    }
+                  />
+                  <div className="w-[220px] shrink-0">
                     <Select value={field.value} onValueChange={field.onChange}>
                       <FormControl>
                         <SelectTrigger>
@@ -1018,21 +1124,21 @@ export function WindowCloseSettingsCard({ settings, onSaved }: SettingsSectionPr
                         <SelectItem value="quit">{t("settings.windowClose.quit")}</SelectItem>
                       </SelectContent>
                     </Select>
+                    <FormMessage className="mt-1 text-[10.5px]" />
                   </div>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+                </SettingsRow>
+              </FormItem>
+            )}
+          />
 
-            <div className="flex justify-end">
-              <Button size="sm" type="submit" disabled={!settings || saving}>
-                {t("common.save")}
-              </Button>
-            </div>
-          </form>
-        </Form>
-      </CardContent>
-    </Card>
+          <SettingsFooter>
+            <Button size="sm" type="submit" disabled={!settings || saving}>
+              {t("common.save")}
+            </Button>
+          </SettingsFooter>
+        </SettingsSection>
+      </form>
+    </Form>
   );
 }
 
@@ -1068,43 +1174,54 @@ export function StartupSettingsCard({ settings, onSaved }: SettingsSectionProps)
   });
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Power className="h-4 w-4" />
-          {t("settings.startup.title")}
-        </CardTitle>
-        <CardDescription>{t("settings.startup.subtitle")}</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <Form {...form}>
-          <form onSubmit={submit} className="space-y-4">
-            <FormField
-              control={form.control}
-              name="auto_start_enabled"
-              render={({ field }) => (
-                <FormItem className="flex flex-row items-center justify-between gap-4 space-y-0">
-                  <div>
-                    <FormLabel className="font-medium text-sm">{t("settings.startup.enable")}</FormLabel>
-                    <UiFormDescription>{t("settings.startup.enableHint")}</UiFormDescription>
-                  </div>
+    <Form {...form}>
+      <form onSubmit={submit}>
+        <SettingsSection title={t("settings.startup.title")}>
+          <FormField
+            control={form.control}
+            name="auto_start_enabled"
+            render={({ field }) => (
+              <FormItem className="space-y-0">
+                <SettingsRow>
+                  <SettingsFieldText
+                    label={
+                      <FormLabel className="text-[12.5px] font-semibold">
+                        {t("settings.startup.enable")}
+                      </FormLabel>
+                    }
+                    hint={
+                      <UiFormDescription className="mt-0.5 text-[10.5px] leading-snug text-slate-500 dark:text-slate-400">
+                        {t("settings.startup.enableHint")}
+                      </UiFormDescription>
+                    }
+                  />
                   <FormControl>
                     <Switch checked={field.value} onCheckedChange={field.onChange} disabled={!settings || saving} />
                   </FormControl>
-                </FormItem>
-              )}
-            />
+                </SettingsRow>
+              </FormItem>
+            )}
+          />
 
-            <FormField
-              control={form.control}
-              name="auto_start_launch_mode"
-              render={({ field }) => (
-                <FormItem className="flex items-center justify-between gap-4">
-                  <div>
-                    <FormLabel className="font-medium text-sm">{t("settings.startup.launchMode")}</FormLabel>
-                    <UiFormDescription>{t("settings.startup.launchModeHint")}</UiFormDescription>
-                  </div>
-                  <div className="w-[220px]">
+          <FormField
+            control={form.control}
+            name="auto_start_launch_mode"
+            render={({ field }) => (
+              <FormItem className="space-y-0">
+                <SettingsRow className="items-start">
+                  <SettingsFieldText
+                    label={
+                      <FormLabel className="text-[12.5px] font-semibold">
+                        {t("settings.startup.launchMode")}
+                      </FormLabel>
+                    }
+                    hint={
+                      <UiFormDescription className="mt-0.5 text-[10.5px] leading-snug text-slate-500 dark:text-slate-400">
+                        {t("settings.startup.launchModeHint")}
+                      </UiFormDescription>
+                    }
+                  />
+                  <div className="w-[220px] shrink-0">
                     <Select value={field.value} onValueChange={field.onChange}>
                       <FormControl>
                         <SelectTrigger>
@@ -1116,32 +1233,27 @@ export function StartupSettingsCard({ settings, onSaved }: SettingsSectionProps)
                         <SelectItem value="minimize_to_tray">{t("settings.startup.launchMinimize")}</SelectItem>
                       </SelectContent>
                     </Select>
+                    <FormMessage className="mt-1 text-[10.5px]" />
                   </div>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+                </SettingsRow>
+              </FormItem>
+            )}
+          />
 
-            <div className="flex justify-end">
-              <Button size="sm" type="submit" disabled={!settings || saving}>
-                {t("common.save")}
-              </Button>
-            </div>
-          </form>
-        </Form>
-      </CardContent>
-    </Card>
+          <SettingsFooter>
+            <Button size="sm" type="submit" disabled={!settings || saving}>
+              {t("common.save")}
+            </Button>
+          </SettingsFooter>
+        </SettingsSection>
+      </form>
+    </Form>
   );
 }
 
 export function LoggingSettingsCard({
   settings,
-  dataDir,
-  logsSizeText,
-  logsSizeLoading,
-  onRefreshLogsSize,
   onSaved,
-  children,
 }: LoggingSettingsCardProps) {
   const { t } = useI18n();
   const [saving, setSaving] = useState(false);
@@ -1180,27 +1292,28 @@ export function LoggingSettingsCard({
   );
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <ScrollText className="h-4 w-4" />
-          {t("settings.logging.title")}
-        </CardTitle>
-        <CardDescription>{t("settings.logging.subtitle")}</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <Form {...form}>
-          <form onSubmit={submit} className="space-y-4">
-            <FormField
-              control={form.control}
-              name="log_level"
-              render={({ field }) => (
-                <FormItem className="flex items-center justify-between gap-4">
-                  <div>
-                    <FormLabel className="font-medium text-sm">{t("settings.logging.level")}</FormLabel>
-                    <UiFormDescription>{t("settings.logging.levelHint")}</UiFormDescription>
-                  </div>
-                  <div className="w-[180px]">
+    <Form {...form}>
+      <form onSubmit={submit}>
+        <SettingsSection title={t("settings.logging.title")}>
+          <FormField
+            control={form.control}
+            name="log_level"
+            render={({ field }) => (
+              <FormItem className="space-y-0">
+                <SettingsRow className="items-start">
+                  <SettingsFieldText
+                    label={
+                      <FormLabel className="text-[12.5px] font-semibold">
+                        {t("settings.logging.level")}
+                      </FormLabel>
+                    }
+                    hint={
+                      <UiFormDescription className="mt-0.5 text-[10.5px] leading-snug text-slate-500 dark:text-slate-400">
+                        {t("settings.logging.levelHint")}
+                      </UiFormDescription>
+                    }
+                  />
+                  <div className="w-[180px] shrink-0">
                     <Select value={field.value} onValueChange={field.onChange}>
                       <FormControl>
                         <SelectTrigger>
@@ -1215,57 +1328,50 @@ export function LoggingSettingsCard({
                         <SelectItem value="error">{t("settings.logging.levelError")}</SelectItem>
                       </SelectContent>
                     </Select>
+                    <FormMessage className="mt-1 text-[10.5px]" />
                   </div>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+                </SettingsRow>
+              </FormItem>
+            )}
+          />
 
-            <FormField
-              control={form.control}
-              name="log_retention_days"
-              render={({ field }) => (
-                <FormItem className="flex items-center justify-between gap-4">
-                  <div>
-                    <FormLabel className="font-medium text-sm">{t("settings.logging.retentionDays")}</FormLabel>
-                    <UiFormDescription>{t("settings.logging.retentionHint")}</UiFormDescription>
-                  </div>
-                  <div className="w-[120px]">
+          <FormField
+            control={form.control}
+            name="log_retention_days"
+            render={({ field }) => (
+              <FormItem className="space-y-0">
+                <SettingsRow className="items-start">
+                  <SettingsFieldText
+                    label={
+                      <FormLabel className="text-[12.5px] font-semibold">
+                        {t("settings.logging.retentionDays")}
+                      </FormLabel>
+                    }
+                    hint={
+                      <UiFormDescription className="mt-0.5 text-[10.5px] leading-snug text-slate-500 dark:text-slate-400">
+                        {t("settings.logging.retentionHint")}
+                      </UiFormDescription>
+                    }
+                  />
+                  <div className="w-[120px] shrink-0">
                     <FormControl>
-                      <Input {...field} type="number" min="1" max="3650" className="font-mono text-sm" />
+                      <Input {...field} type="number" min="1" max="3650" className="font-mono" />
                     </FormControl>
+                    <FormMessage className="mt-1 text-[10.5px]" />
                   </div>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+                </SettingsRow>
+              </FormItem>
+            )}
+          />
 
-            <div className="space-y-2">
-              <label className="text-sm font-medium">{t("settings.logging.dir")}</label>
-              <Input value={dataDir ?? "-"} disabled className="font-mono text-sm" />
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium">{t("settings.maintenance.logsSize")}</label>
-              <div className="flex gap-2">
-                <Input value={logsSizeText} disabled className="font-mono text-sm" />
-                <Button type="button" variant="outline" onClick={() => void onRefreshLogsSize()} disabled={logsSizeLoading}>
-                  {t("common.refresh")}
-                </Button>
-              </div>
-            </div>
-
-            <div className="flex justify-end">
-              <Button size="sm" type="submit" disabled={!settings || saving}>
-                {t("common.save")}
-              </Button>
-            </div>
-
-          </form>
-        </Form>
-        {children}
-      </CardContent>
-    </Card>
+          <SettingsFooter>
+            <Button size="sm" type="submit" disabled={!settings || saving}>
+              {t("common.save")}
+            </Button>
+          </SettingsFooter>
+        </SettingsSection>
+      </form>
+    </Form>
   );
 }
 
@@ -1309,55 +1415,59 @@ export function ServiceInfoSettingsCard({
   });
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Database className="h-4 w-4" />
-          {t("settings.serviceInfo.title")}
-        </CardTitle>
-        <CardDescription>{t("settings.serviceInfo.subtitle")}</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <Form {...form}>
-          <form onSubmit={submit} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">{t("settings.serviceInfo.host")}</label>
-                <Input value={apiHost} disabled />
-                <p className="text-xs text-muted-foreground">{t("settings.serviceInfo.hostHint")}</p>
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">{t("settings.serviceInfo.port")}</label>
-                <Input value={apiPort} disabled />
-                <p className="text-xs text-muted-foreground">{t("settings.serviceInfo.portHint")}</p>
-              </div>
-            </div>
+    <Form {...form}>
+      <form onSubmit={submit}>
+        <SettingsSection title={t("settings.serviceInfo.title")} first>
+          <SettingsRow>
+            <SettingsFieldText
+              label={t("settings.serviceInfo.host")}
+              hint={t("settings.serviceInfo.hostHint")}
+            />
+            <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400">{apiHost}</span>
+          </SettingsRow>
 
-            <FormField
-              control={form.control}
-              name="server_lan_accessible"
-              render={({ field }) => (
-                <FormItem className="flex flex-row items-center justify-between gap-4 space-y-0">
-                  <div>
-                    <FormLabel className="font-medium text-sm">{t("settings.serviceInfo.lanAccessible")}</FormLabel>
-                    <UiFormDescription>{t("settings.serviceInfo.lanAccessibleHint")}</UiFormDescription>
-                  </div>
+          <SettingsRow>
+            <SettingsFieldText
+              label={t("settings.serviceInfo.port")}
+              hint={t("settings.serviceInfo.portHint")}
+            />
+            <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400">{apiPort}</span>
+          </SettingsRow>
+
+          <FormField
+            control={form.control}
+            name="server_lan_accessible"
+            render={({ field }) => (
+              <FormItem className="space-y-0">
+                <SettingsRow>
+                  <SettingsFieldText
+                    label={
+                      <FormLabel className="text-[12.5px] font-semibold">
+                        {t("settings.serviceInfo.lanAccessible")}
+                      </FormLabel>
+                    }
+                    hint={
+                      <UiFormDescription className="mt-0.5 text-[10.5px] leading-snug text-slate-500 dark:text-slate-400">
+                        {t("settings.serviceInfo.lanAccessibleHint")}
+                      </UiFormDescription>
+                    }
+                  />
                   <FormControl>
                     <Switch checked={field.value} onCheckedChange={field.onChange} disabled={!settings || saving} />
                   </FormControl>
-                </FormItem>
-              )}
-            />
+                </SettingsRow>
+              </FormItem>
+            )}
+          />
 
-            <div className="flex justify-end">
-              <Button size="sm" type="submit" disabled={!settings || saving}>
-                {t("common.save")}
-              </Button>
-            </div>
-          </form>
-        </Form>
-      </CardContent>
-    </Card>
+          <SettingsFooter>
+            <Button size="sm" type="submit" disabled={!settings || saving}>
+              {t("common.save")}
+            </Button>
+          </SettingsFooter>
+        </SettingsSection>
+      </form>
+    </Form>
   );
 }
 
@@ -1392,42 +1502,43 @@ export function CompatibilitySettingsCard({ settings, onSaved }: SettingsSection
   });
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Info className="h-4 w-4" />
-          {t("settings.compatibility.title")}
-        </CardTitle>
-        <CardDescription>{t("settings.compatibility.subtitle")}</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <Form {...form}>
-          <form onSubmit={submit} className="space-y-4">
-            <FormField
-              control={form.control}
-              name="anthropic_count_tokens_mock_enabled"
-              render={({ field }) => (
-                <FormItem className="flex flex-row items-center justify-between gap-4 space-y-0">
-                  <div>
-                    <FormLabel className="font-medium text-sm">{t("settings.compatibility.mockCountTokens")}</FormLabel>
-                    <UiFormDescription>{t("settings.compatibility.mockCountTokensHint")}</UiFormDescription>
-                  </div>
+    <Form {...form}>
+      <form onSubmit={submit}>
+        <SettingsSection title={t("settings.compatibility.title")}>
+          <FormField
+            control={form.control}
+            name="anthropic_count_tokens_mock_enabled"
+            render={({ field }) => (
+              <FormItem className="space-y-0">
+                <SettingsRow>
+                  <SettingsFieldText
+                    label={
+                      <FormLabel className="text-[12.5px] font-semibold">
+                        {t("settings.compatibility.mockCountTokens")}
+                      </FormLabel>
+                    }
+                    hint={
+                      <UiFormDescription className="mt-0.5 text-[10.5px] leading-snug text-slate-500 dark:text-slate-400">
+                        {t("settings.compatibility.mockCountTokensHint")}
+                      </UiFormDescription>
+                    }
+                  />
                   <FormControl>
                     <Switch checked={field.value} onCheckedChange={field.onChange} disabled={!settings || saving} />
                   </FormControl>
-                </FormItem>
-              )}
-            />
+                </SettingsRow>
+              </FormItem>
+            )}
+          />
 
-            <div className="flex justify-end">
-              <Button size="sm" type="submit" disabled={!settings || saving}>
-                {t("common.save")}
-              </Button>
-            </div>
-          </form>
-        </Form>
-      </CardContent>
-    </Card>
+          <SettingsFooter>
+            <Button size="sm" type="submit" disabled={!settings || saving}>
+              {t("common.save")}
+            </Button>
+          </SettingsFooter>
+        </SettingsSection>
+      </form>
+    </Form>
   );
 }
 
@@ -1462,57 +1573,72 @@ export function AppUpdateSettingsCard({
   });
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <RefreshCw className="h-4 w-4" />
-          {t("settings.update.title")}
-        </CardTitle>
-        <CardDescription>{t("settings.update.subtitle")}</CardDescription>
-      </CardHeader>
-      <CardContent>
-        {dialog}
-        <Form {...form}>
-          <form onSubmit={submit} className="space-y-4">
+    <>
+      {dialog}
+      <Form {...form}>
+        <form onSubmit={submit}>
+          <SettingsSection title={t("settings.update.title")}>
             <FormField
               control={form.control}
               name="app_auto_update_enabled"
               render={({ field }) => (
-                <FormItem className="flex flex-row items-center justify-between gap-4 space-y-0">
-                  <div>
-                    <FormLabel className="font-medium text-sm">{t("settings.update.autoEnable")}</FormLabel>
-                    <UiFormDescription>{t("settings.update.autoEnableHint")}</UiFormDescription>
-                  </div>
-                  <FormControl>
-                    <Switch checked={field.value} onCheckedChange={field.onChange} disabled={!settings || saving} />
-                  </FormControl>
+                <FormItem className="space-y-0">
+                  <SettingsRow>
+                    <SettingsFieldText
+                      label={
+                        <FormLabel className="text-[12.5px] font-semibold">
+                          {t("settings.update.autoEnable")}
+                        </FormLabel>
+                      }
+                      hint={
+                        <UiFormDescription className="mt-0.5 text-[10.5px] leading-snug text-slate-500 dark:text-slate-400">
+                          {t("settings.update.autoEnableHint")}
+                        </UiFormDescription>
+                      }
+                    />
+                    <FormControl>
+                      <Switch checked={field.value} onCheckedChange={field.onChange} disabled={!settings || saving} />
+                    </FormControl>
+                  </SettingsRow>
                 </FormItem>
               )}
             />
 
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <div className="font-medium text-sm">{t("settings.update.status")}</div>
-                <div className="text-xs text-muted-foreground space-y-0.5">
-                  <div>{updateStatusText}</div>
-                  {updateServerVersion ? (
-                    <div>{t("settings.update.serverVersion", { version: updateServerVersion })}</div>
-                  ) : null}
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button type="button" size="sm" variant="outline" onClick={() => void onCheck()} disabled={updateChecking}>
-                  {t("settings.update.check")}
-                </Button>
-                <Button size="sm" type="submit" disabled={!settings || saving}>
-                  {t("common.save")}
-                </Button>
-              </div>
-            </div>
-          </form>
-        </Form>
-      </CardContent>
-    </Card>
+            <SettingsRow>
+              <SettingsFieldText
+                label={t("settings.update.status")}
+                hint={
+                  <>
+                    {updateStatusText}
+                    {updateServerVersion ? (
+                      <>
+                        <br />
+                        {t("settings.update.serverVersion", { version: updateServerVersion })}
+                      </>
+                    ) : null}
+                  </>
+                }
+              />
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => void onCheck()}
+                disabled={updateChecking}
+              >
+                {t("settings.update.check")}
+              </Button>
+            </SettingsRow>
+
+            <SettingsFooter>
+              <Button size="sm" type="submit" disabled={!settings || saving}>
+                {t("common.save")}
+              </Button>
+            </SettingsFooter>
+          </SettingsSection>
+        </form>
+      </Form>
+    </>
   );
 }
 
@@ -1554,77 +1680,98 @@ export function ChatBridgeBaseSettingsCard({ settings, onSaved }: ChatBridgeBase
   );
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Bot className="h-4 w-4" />
-          {t("settings.chatBridge.configTitle")}
-        </CardTitle>
-        <CardDescription>{t("settings.chatBridge.configHint")}</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <Form {...form}>
-          <form onSubmit={submit} className="space-y-4">
-            <FormField
-              control={form.control}
-              name="chat_bridge_enabled"
-              render={({ field }) => (
-                <FormItem className="flex flex-row items-center justify-between gap-4 space-y-0">
-                  <div>
-                    <FormLabel className="font-medium text-sm">{t("settings.chatBridge.enable")}</FormLabel>
-                    <UiFormDescription>{t("settings.chatBridge.enableHint")}</UiFormDescription>
-                  </div>
+    <Form {...form}>
+      <form onSubmit={submit}>
+        <SettingsSection title={t("settings.chatBridge.configTitle")} first>
+          <FormField
+            control={form.control}
+            name="chat_bridge_enabled"
+            render={({ field }) => (
+              <FormItem className="space-y-0">
+                <SettingsRow>
+                  <SettingsFieldText
+                    label={
+                      <FormLabel className="text-[12.5px] font-semibold">
+                        {t("settings.chatBridge.enable")}
+                      </FormLabel>
+                    }
+                    hint={
+                      <UiFormDescription className="mt-0.5 text-[10.5px] leading-snug text-slate-500 dark:text-slate-400">
+                        {t("settings.chatBridge.enableHint")}
+                      </UiFormDescription>
+                    }
+                  />
                   <FormControl>
                     <Switch checked={field.value} onCheckedChange={field.onChange} disabled={!settings || saving} />
                   </FormControl>
-                </FormItem>
-              )}
-            />
+                </SettingsRow>
+              </FormItem>
+            )}
+          />
 
-            <FormField
-              control={form.control}
-              name="chat_bridge_allow_new_projects"
-              render={({ field }) => (
-                <FormItem className="flex flex-row items-center justify-between gap-4 space-y-0">
-                  <div>
-                    <FormLabel className="font-medium text-sm">{t("settings.chatBridge.allowNewProjects")}</FormLabel>
-                    <UiFormDescription>{t("settings.chatBridge.allowNewProjectsHint")}</UiFormDescription>
-                  </div>
+          <FormField
+            control={form.control}
+            name="chat_bridge_allow_new_projects"
+            render={({ field }) => (
+              <FormItem className="space-y-0">
+                <SettingsRow>
+                  <SettingsFieldText
+                    label={
+                      <FormLabel className="text-[12.5px] font-semibold">
+                        {t("settings.chatBridge.allowNewProjects")}
+                      </FormLabel>
+                    }
+                    hint={
+                      <UiFormDescription className="mt-0.5 text-[10.5px] leading-snug text-slate-500 dark:text-slate-400">
+                        {t("settings.chatBridge.allowNewProjectsHint")}
+                      </UiFormDescription>
+                    }
+                  />
                   <FormControl>
                     <Switch checked={field.value} onCheckedChange={field.onChange} disabled={!settings || saving} />
                   </FormControl>
-                </FormItem>
-              )}
-            />
+                </SettingsRow>
+              </FormItem>
+            )}
+          />
 
-            <FormField
-              control={form.control}
-              name="chat_bridge_turn_timeout_minutes"
-              render={({ field }) => (
-                <FormItem className="flex items-center justify-between gap-4">
-                  <div>
-                    <FormLabel className="font-medium text-sm">{t("settings.chatBridge.turnTimeoutMinutes")}</FormLabel>
-                    <UiFormDescription>{t("settings.chatBridge.turnTimeoutMinutesHint")}</UiFormDescription>
-                  </div>
-                  <div className="w-[140px]">
+          <FormField
+            control={form.control}
+            name="chat_bridge_turn_timeout_minutes"
+            render={({ field }) => (
+              <FormItem className="space-y-0">
+                <SettingsRow className="items-start">
+                  <SettingsFieldText
+                    label={
+                      <FormLabel className="text-[12.5px] font-semibold">
+                        {t("settings.chatBridge.turnTimeoutMinutes")}
+                      </FormLabel>
+                    }
+                    hint={
+                      <UiFormDescription className="mt-0.5 text-[10.5px] leading-snug text-slate-500 dark:text-slate-400">
+                        {t("settings.chatBridge.turnTimeoutMinutesHint")}
+                      </UiFormDescription>
+                    }
+                  />
+                  <div className="w-[140px] shrink-0">
                     <FormControl>
-                      <Input {...field} type="number" min="0" className="h-8" disabled={!settings || saving} />
+                      <Input {...field} type="number" min="0" disabled={!settings || saving} />
                     </FormControl>
+                    <FormMessage className="mt-1 text-[10.5px]" />
                   </div>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+                </SettingsRow>
+              </FormItem>
+            )}
+          />
 
-            <div className="flex justify-end">
-              <Button size="sm" type="submit" disabled={!settings || saving}>
-                {t("common.save")}
-              </Button>
-            </div>
-          </form>
-        </Form>
-      </CardContent>
-    </Card>
+          <SettingsFooter>
+            <Button size="sm" type="submit" disabled={!settings || saving}>
+              {t("common.save")}
+            </Button>
+          </SettingsFooter>
+        </SettingsSection>
+      </form>
+    </Form>
   );
 }
 
@@ -1671,77 +1818,97 @@ export function ChatBridgeTelegramSettingsCard({
   });
 
   return (
-    <div className="rounded-lg border p-4 space-y-4">
-      <Form {...form}>
-        <form onSubmit={submit} className="space-y-4">
-          <FormField
-            control={form.control}
-            name="chat_bridge_telegram_enabled"
-            render={({ field }) => (
-              <FormItem className="flex flex-row items-center justify-between gap-4 space-y-0">
-                <div>
-                  <FormLabel className="font-medium text-sm">{t("settings.chatBridge.telegramEnable")}</FormLabel>
-                  <UiFormDescription>{t("settings.chatBridge.telegramEnableHint")}</UiFormDescription>
-                </div>
+    <Form {...form}>
+      <form onSubmit={submit}>
+        <FormField
+          control={form.control}
+          name="chat_bridge_telegram_enabled"
+          render={({ field }) => (
+            <FormItem className="space-y-0">
+              <SettingsRow>
+                <SettingsFieldText
+                  label={
+                    <FormLabel className="text-[12.5px] font-semibold">
+                      {t("settings.chatBridge.telegramEnable")}
+                    </FormLabel>
+                  }
+                  hint={
+                    <UiFormDescription className="mt-0.5 text-[10.5px] leading-snug text-slate-500 dark:text-slate-400">
+                      {t("settings.chatBridge.telegramEnableHint")}
+                    </UiFormDescription>
+                  }
+                />
                 <FormControl>
                   <Switch checked={field.value} onCheckedChange={field.onChange} disabled={!settings || saving} />
                 </FormControl>
-              </FormItem>
-            )}
+              </SettingsRow>
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="chat_bridge_telegram_bot_token"
+          render={({ field }) => (
+            <FormItem className="space-y-0">
+              <SettingsRow className="items-start">
+                <SettingsFieldText
+                  label={
+                    <FormLabel className="text-[12.5px] font-semibold">
+                      {t("settings.chatBridge.telegramToken")}
+                    </FormLabel>
+                  }
+                  hint={
+                    <UiFormDescription className="mt-0.5 text-[10.5px] leading-snug text-slate-500 dark:text-slate-400">
+                      {tokenConfigured
+                        ? t("settings.chatBridge.telegramTokenHintConfigured")
+                        : t("settings.chatBridge.telegramTokenHint")}
+                    </UiFormDescription>
+                  }
+                />
+                <div className="w-[220px] shrink-0">
+                  <FormControl>
+                    <Input
+                      {...field}
+                      type="password"
+                      autoComplete="new-password"
+                      placeholder={
+                        tokenConfigured
+                          ? t("settings.chatBridge.telegramTokenPlaceholderConfigured")
+                          : t("settings.chatBridge.telegramTokenPlaceholder")
+                      }
+                      disabled={!settings || saving}
+                    />
+                  </FormControl>
+                  <FormMessage className="mt-1 text-[10.5px]" />
+                </div>
+              </SettingsRow>
+            </FormItem>
+          )}
+        />
+
+        <SettingsRow>
+          <SettingsFieldText
+            label={t("settings.chatBridge.bindings.title")}
+            hint={t("settings.chatBridge.bindings.summary", { count: bindingCount })}
           />
-
-          <FormField
-            control={form.control}
-            name="chat_bridge_telegram_bot_token"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>{t("settings.chatBridge.telegramToken")}</FormLabel>
-                <FormControl>
-                  <Input
-                    {...field}
-                    type="password"
-                    autoComplete="new-password"
-                    placeholder={tokenConfigured
-                      ? t("settings.chatBridge.telegramTokenPlaceholderConfigured")
-                      : t("settings.chatBridge.telegramTokenPlaceholder")}
-                    disabled={!settings || saving}
-                  />
-                </FormControl>
-                <UiFormDescription>
-                  {tokenConfigured
-                    ? t("settings.chatBridge.telegramTokenHintConfigured")
-                    : t("settings.chatBridge.telegramTokenHint")}
-                </UiFormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <div className="flex items-center justify-between gap-4 rounded-lg border bg-muted/30 px-3 py-3">
-            <div className="space-y-1">
-              <div className="font-medium text-sm">{t("settings.chatBridge.bindings.title")}</div>
-              <div className="text-xs text-muted-foreground">
-                {t("settings.chatBridge.bindings.summary", { count: bindingCount })}
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button type="button" size="sm" variant="outline" onClick={onOpenPairing}>
-                {t("settings.chatBridge.actions.pairing")}
-              </Button>
-              <Button type="button" size="sm" variant="outline" onClick={onOpenBindings}>
-                {t("settings.chatBridge.actions.bindings")}
-              </Button>
-            </div>
-          </div>
-
-          <div className="flex justify-end">
-            <Button size="sm" type="submit" disabled={!settings || saving}>
-              {t("common.save")}
+          <div className="flex items-center gap-2">
+            <Button type="button" size="sm" variant="outline" onClick={onOpenPairing}>
+              {t("settings.chatBridge.actions.pairing")}
+            </Button>
+            <Button type="button" size="sm" variant="outline" onClick={onOpenBindings}>
+              {t("settings.chatBridge.actions.bindings")}
             </Button>
           </div>
-        </form>
-      </Form>
-    </div>
+        </SettingsRow>
+
+        <SettingsFooter>
+          <Button size="sm" type="submit" disabled={!settings || saving}>
+            {t("common.save")}
+          </Button>
+        </SettingsFooter>
+      </form>
+    </Form>
   );
 }
 
@@ -1788,77 +1955,97 @@ export function ChatBridgeDiscordSettingsCard({
   });
 
   return (
-    <div className="rounded-lg border p-4 space-y-4">
-      <Form {...form}>
-        <form onSubmit={submit} className="space-y-4">
-          <FormField
-            control={form.control}
-            name="chat_bridge_discord_enabled"
-            render={({ field }) => (
-              <FormItem className="flex flex-row items-center justify-between gap-4 space-y-0">
-                <div>
-                  <FormLabel className="font-medium text-sm">{t("settings.chatBridge.discordEnable")}</FormLabel>
-                  <UiFormDescription>{t("settings.chatBridge.discordEnableHint")}</UiFormDescription>
-                </div>
+    <Form {...form}>
+      <form onSubmit={submit}>
+        <FormField
+          control={form.control}
+          name="chat_bridge_discord_enabled"
+          render={({ field }) => (
+            <FormItem className="space-y-0">
+              <SettingsRow>
+                <SettingsFieldText
+                  label={
+                    <FormLabel className="text-[12.5px] font-semibold">
+                      {t("settings.chatBridge.discordEnable")}
+                    </FormLabel>
+                  }
+                  hint={
+                    <UiFormDescription className="mt-0.5 text-[10.5px] leading-snug text-slate-500 dark:text-slate-400">
+                      {t("settings.chatBridge.discordEnableHint")}
+                    </UiFormDescription>
+                  }
+                />
                 <FormControl>
                   <Switch checked={field.value} onCheckedChange={field.onChange} disabled={!settings || saving} />
                 </FormControl>
-              </FormItem>
-            )}
+              </SettingsRow>
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="chat_bridge_discord_bot_token"
+          render={({ field }) => (
+            <FormItem className="space-y-0">
+              <SettingsRow className="items-start">
+                <SettingsFieldText
+                  label={
+                    <FormLabel className="text-[12.5px] font-semibold">
+                      {t("settings.chatBridge.discordToken")}
+                    </FormLabel>
+                  }
+                  hint={
+                    <UiFormDescription className="mt-0.5 text-[10.5px] leading-snug text-slate-500 dark:text-slate-400">
+                      {tokenConfigured
+                        ? t("settings.chatBridge.discordTokenHintConfigured")
+                        : t("settings.chatBridge.discordTokenHint")}
+                    </UiFormDescription>
+                  }
+                />
+                <div className="w-[220px] shrink-0">
+                  <FormControl>
+                    <Input
+                      {...field}
+                      type="password"
+                      autoComplete="new-password"
+                      placeholder={
+                        tokenConfigured
+                          ? t("settings.chatBridge.discordTokenPlaceholderConfigured")
+                          : t("settings.chatBridge.discordTokenPlaceholder")
+                      }
+                      disabled={!settings || saving}
+                    />
+                  </FormControl>
+                  <FormMessage className="mt-1 text-[10.5px]" />
+                </div>
+              </SettingsRow>
+            </FormItem>
+          )}
+        />
+
+        <SettingsRow>
+          <SettingsFieldText
+            label={t("settings.chatBridge.bindings.title")}
+            hint={t("settings.chatBridge.bindings.summary", { count: bindingCount })}
           />
-
-          <FormField
-            control={form.control}
-            name="chat_bridge_discord_bot_token"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>{t("settings.chatBridge.discordToken")}</FormLabel>
-                <FormControl>
-                  <Input
-                    {...field}
-                    type="password"
-                    autoComplete="new-password"
-                    placeholder={tokenConfigured
-                      ? t("settings.chatBridge.discordTokenPlaceholderConfigured")
-                      : t("settings.chatBridge.discordTokenPlaceholder")}
-                    disabled={!settings || saving}
-                  />
-                </FormControl>
-                <UiFormDescription>
-                  {tokenConfigured
-                    ? t("settings.chatBridge.discordTokenHintConfigured")
-                    : t("settings.chatBridge.discordTokenHint")}
-                </UiFormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <div className="flex items-center justify-between gap-4 rounded-lg border bg-muted/30 px-3 py-3">
-            <div className="space-y-1">
-              <div className="font-medium text-sm">{t("settings.chatBridge.bindings.title")}</div>
-              <div className="text-xs text-muted-foreground">
-                {t("settings.chatBridge.bindings.summary", { count: bindingCount })}
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button type="button" size="sm" variant="outline" onClick={onOpenPairing}>
-                {t("settings.chatBridge.actions.pairing")}
-              </Button>
-              <Button type="button" size="sm" variant="outline" onClick={onOpenBindings}>
-                {t("settings.chatBridge.actions.bindings")}
-              </Button>
-            </div>
-          </div>
-
-          <div className="flex justify-end">
-            <Button size="sm" type="submit" disabled={!settings || saving}>
-              {t("common.save")}
+          <div className="flex items-center gap-2">
+            <Button type="button" size="sm" variant="outline" onClick={onOpenPairing}>
+              {t("settings.chatBridge.actions.pairing")}
+            </Button>
+            <Button type="button" size="sm" variant="outline" onClick={onOpenBindings}>
+              {t("settings.chatBridge.actions.bindings")}
             </Button>
           </div>
-        </form>
-      </Form>
-    </div>
+        </SettingsRow>
+
+        <SettingsFooter>
+          <Button size="sm" type="submit" disabled={!settings || saving}>
+            {t("common.save")}
+          </Button>
+        </SettingsFooter>
+      </form>
+    </Form>
   );
 }
 
@@ -1903,64 +2090,71 @@ export function ChatBridgeWhatsAppSettingsCard({
   });
 
   return (
-    <div className="rounded-lg border p-4 space-y-4">
-      <Form {...form}>
-        <form onSubmit={submit} className="space-y-4">
-          <FormField
-            control={form.control}
-            name="chat_bridge_whatsapp_enabled"
-            render={({ field }) => (
-              <FormItem className="flex flex-row items-center justify-between gap-4 space-y-0">
-                <div>
-                  <FormLabel className="font-medium text-sm">{t("settings.chatBridge.whatsappEnable")}</FormLabel>
-                  <UiFormDescription>{t("settings.chatBridge.whatsappEnableHint")}</UiFormDescription>
-                </div>
+    <Form {...form}>
+      <form onSubmit={submit}>
+        <FormField
+          control={form.control}
+          name="chat_bridge_whatsapp_enabled"
+          render={({ field }) => (
+            <FormItem className="space-y-0">
+              <SettingsRow>
+                <SettingsFieldText
+                  label={
+                    <FormLabel className="text-[12.5px] font-semibold">
+                      {t("settings.chatBridge.whatsappEnable")}
+                    </FormLabel>
+                  }
+                  hint={
+                    <UiFormDescription className="mt-0.5 text-[10.5px] leading-snug text-slate-500 dark:text-slate-400">
+                      {t("settings.chatBridge.whatsappEnableHint")}
+                    </UiFormDescription>
+                  }
+                />
                 <FormControl>
                   <Switch checked={field.value} onCheckedChange={field.onChange} disabled={!settings || saving} />
                 </FormControl>
-              </FormItem>
-            )}
+              </SettingsRow>
+            </FormItem>
+          )}
+        />
+
+        <SettingsRow>
+          <SettingsFieldText
+            label={t("settings.chatBridge.whatsapp.qrTitle")}
+            hint={t("settings.chatBridge.whatsapp.runtimeHint")}
           />
-
-          <div className="rounded-lg border bg-muted/20 px-4 py-3 space-y-3">
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex items-center gap-2">
-                <div className="font-medium text-sm">{t("settings.chatBridge.whatsapp.qrTitle")}</div>
-                <Badge variant={statusTone} className="w-fit">
-                  {statusLabel}
-                </Badge>
-              </div>
-              <Button type="button" size="sm" onClick={onOpenLoginDialog} disabled={actionBusy}>
-                {t("settings.chatBridge.whatsapp.dialogAction")}
-              </Button>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between gap-4 rounded-lg border bg-muted/30 px-3 py-3">
-            <div className="space-y-1">
-              <div className="font-medium text-sm">{t("settings.chatBridge.bindings.title")}</div>
-              <div className="text-xs text-muted-foreground">
-                {t("settings.chatBridge.bindings.summary", { count: bindingCount })}
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button type="button" size="sm" variant="outline" onClick={onOpenPairing}>
-                {t("settings.chatBridge.actions.pairing")}
-              </Button>
-              <Button type="button" size="sm" variant="outline" onClick={onOpenBindings}>
-                {t("settings.chatBridge.actions.bindings")}
-              </Button>
-            </div>
-          </div>
-
-          <div className="flex justify-end">
-            <Button size="sm" type="submit" disabled={!settings || saving}>
-              {t("common.save")}
+          <div className="flex items-center gap-2">
+            <Badge variant={statusTone} className="w-fit">
+              {statusLabel}
+            </Badge>
+            <Button type="button" size="sm" onClick={onOpenLoginDialog} disabled={actionBusy}>
+              {t("settings.chatBridge.whatsapp.dialogAction")}
             </Button>
           </div>
-        </form>
-      </Form>
-    </div>
+        </SettingsRow>
+
+        <SettingsRow>
+          <SettingsFieldText
+            label={t("settings.chatBridge.bindings.title")}
+            hint={t("settings.chatBridge.bindings.summary", { count: bindingCount })}
+          />
+          <div className="flex items-center gap-2">
+            <Button type="button" size="sm" variant="outline" onClick={onOpenPairing}>
+              {t("settings.chatBridge.actions.pairing")}
+            </Button>
+            <Button type="button" size="sm" variant="outline" onClick={onOpenBindings}>
+              {t("settings.chatBridge.actions.bindings")}
+            </Button>
+          </div>
+        </SettingsRow>
+
+        <SettingsFooter>
+          <Button size="sm" type="submit" disabled={!settings || saving}>
+            {t("common.save")}
+          </Button>
+        </SettingsFooter>
+      </form>
+    </Form>
   );
 }
 
@@ -2005,63 +2199,70 @@ export function ChatBridgeWeixinSettingsCard({
   });
 
   return (
-    <div className="rounded-lg border p-4 space-y-4">
-      <Form {...form}>
-        <form onSubmit={submit} className="space-y-4">
-          <FormField
-            control={form.control}
-            name="chat_bridge_weixin_enabled"
-            render={({ field }) => (
-              <FormItem className="flex flex-row items-center justify-between gap-4 space-y-0">
-                <div>
-                  <FormLabel className="font-medium text-sm">{t("settings.chatBridge.weixinEnable")}</FormLabel>
-                  <UiFormDescription>{t("settings.chatBridge.weixinEnableHint")}</UiFormDescription>
-                </div>
+    <Form {...form}>
+      <form onSubmit={submit}>
+        <FormField
+          control={form.control}
+          name="chat_bridge_weixin_enabled"
+          render={({ field }) => (
+            <FormItem className="space-y-0">
+              <SettingsRow>
+                <SettingsFieldText
+                  label={
+                    <FormLabel className="text-[12.5px] font-semibold">
+                      {t("settings.chatBridge.weixinEnable")}
+                    </FormLabel>
+                  }
+                  hint={
+                    <UiFormDescription className="mt-0.5 text-[10.5px] leading-snug text-slate-500 dark:text-slate-400">
+                      {t("settings.chatBridge.weixinEnableHint")}
+                    </UiFormDescription>
+                  }
+                />
                 <FormControl>
                   <Switch checked={field.value} onCheckedChange={field.onChange} disabled={!settings || saving} />
                 </FormControl>
-              </FormItem>
-            )}
+              </SettingsRow>
+            </FormItem>
+          )}
+        />
+
+        <SettingsRow>
+          <SettingsFieldText
+            label={t("settings.chatBridge.weixin.qrTitle")}
+            hint={t("settings.chatBridge.weixin.runtimeHint")}
           />
-
-          <div className="rounded-lg border bg-muted/20 px-4 py-3 space-y-3">
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex items-center gap-2">
-                <div className="font-medium text-sm">{t("settings.chatBridge.weixin.qrTitle")}</div>
-                <Badge variant={statusTone} className="w-fit">
-                  {statusLabel}
-                </Badge>
-              </div>
-              <Button type="button" size="sm" onClick={onOpenLoginDialog} disabled={actionBusy}>
-                {t("settings.chatBridge.weixin.dialogAction")}
-              </Button>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between gap-4 rounded-lg border bg-muted/30 px-3 py-3">
-            <div className="space-y-1">
-              <div className="font-medium text-sm">{t("settings.chatBridge.bindings.title")}</div>
-              <div className="text-xs text-muted-foreground">
-                {t("settings.chatBridge.bindings.summary", { count: bindingCount })}
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button type="button" size="sm" variant="outline" onClick={onOpenPairing}>
-                {t("settings.chatBridge.actions.pairing")}
-              </Button>
-              <Button type="button" size="sm" variant="outline" onClick={onOpenBindings}>
-                {t("settings.chatBridge.actions.bindings")}
-              </Button>
-            </div>
-          </div>
-
-          <div className="flex justify-end">
-            <Button size="sm" type="submit" disabled={!settings || saving}>
-              {t("common.save")}
+          <div className="flex items-center gap-2">
+            <Badge variant={statusTone} className="w-fit">
+              {statusLabel}
+            </Badge>
+            <Button type="button" size="sm" onClick={onOpenLoginDialog} disabled={actionBusy}>
+              {t("settings.chatBridge.weixin.dialogAction")}
             </Button>
           </div>
-        </form>
-      </Form>
-    </div>
+        </SettingsRow>
+
+        <SettingsRow>
+          <SettingsFieldText
+            label={t("settings.chatBridge.bindings.title")}
+            hint={t("settings.chatBridge.bindings.summary", { count: bindingCount })}
+          />
+          <div className="flex items-center gap-2">
+            <Button type="button" size="sm" variant="outline" onClick={onOpenPairing}>
+              {t("settings.chatBridge.actions.pairing")}
+            </Button>
+            <Button type="button" size="sm" variant="outline" onClick={onOpenBindings}>
+              {t("settings.chatBridge.actions.bindings")}
+            </Button>
+          </div>
+        </SettingsRow>
+
+        <SettingsFooter>
+          <Button size="sm" type="submit" disabled={!settings || saving}>
+            {t("common.save")}
+          </Button>
+        </SettingsFooter>
+      </form>
+    </Form>
   );
 }

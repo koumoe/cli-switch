@@ -1,7 +1,5 @@
-import { Badge } from "@/components/ui";
+import { ProtocolBadge } from "@/components/composed/protocol-badge";
 import type { Protocol } from "@/types/api";
-
-import { protocolBadgeClassName } from "../../lib";
 
 export type TrendChartDay = {
   key: string;
@@ -63,7 +61,7 @@ export function TrendChart({ days, series, protocolLabel }: TrendChartProps) {
                   y1={y}
                   x2={width - padRight}
                   y2={y}
-                  stroke="hsl(var(--border))"
+                  stroke="#e2e8f0"
                   strokeWidth="1"
                 />
                 <text
@@ -72,7 +70,7 @@ export function TrendChart({ days, series, protocolLabel }: TrendChartProps) {
                   textAnchor="end"
                   dominantBaseline="middle"
                   fontSize="10"
-                  fill="hsl(var(--muted-foreground))"
+                  fill="#94a3b8"
                 >
                   {value}
                 </text>
@@ -91,7 +89,7 @@ export function TrendChart({ days, series, protocolLabel }: TrendChartProps) {
                 y={height - 8}
                 textAnchor="middle"
                 fontSize="10"
-                fill="hsl(var(--muted-foreground))"
+                fill="#94a3b8"
               >
                 {day.label}
               </text>
@@ -119,24 +117,23 @@ export function TrendChart({ days, series, protocolLabel }: TrendChartProps) {
       </div>
 
       {series.length > 0 ? (
-        <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-muted-foreground">
-          {series.map((item) => (
-            <div key={item.channel_id} className="flex min-w-0 items-center gap-1.5">
-              {item.protocol ? (
-                <Badge
-                  variant="outline"
-                  className={`px-1 py-0 text-[10px] ${protocolBadgeClassName(item.protocol)}`}
-                >
-                  {protocolLabel(item.protocol)}
-                </Badge>
-              ) : null}
-              <span
-                className="inline-block h-2 w-2 shrink-0 rounded-sm"
-                style={{ background: item.color }}
-              />
-              <span className="max-w-[160px] truncate">{item.name}</span>
-            </div>
-          ))}
+        <div className="mt-1 max-h-[60px] shrink-0 overflow-y-auto border-t border-slate-200 pt-1.5 dark:border-slate-800">
+          <div className="flex flex-wrap gap-x-2.5 gap-y-1 text-[10px] text-slate-500 dark:text-slate-400">
+            {series.map((item) => (
+              <div key={item.channel_id} className="flex min-w-0 items-center gap-1.5">
+                {item.protocol ? (
+                  <ProtocolBadge protocol={item.protocol} className="rounded px-1 py-px text-[8px]">
+                    {protocolLabel(item.protocol)}
+                  </ProtocolBadge>
+                ) : null}
+                <span
+                  className="inline-block h-2 w-2 shrink-0 rounded-sm"
+                  style={{ background: item.color }}
+                />
+                <span className="max-w-[160px] truncate">{item.name}</span>
+              </div>
+            ))}
+          </div>
         </div>
       ) : null}
     </div>

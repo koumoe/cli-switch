@@ -21,33 +21,33 @@ export function protocolLabel(t: Translator, protocol: Protocol): string {
 export function protocolColor(protocol: Protocol): string {
   switch (protocol) {
     case "openai":
-      return "hsl(var(--codex))";
+      return "#0d9488";
     case "anthropic":
-      return "hsl(var(--claude))";
+      return "#ea580c";
     case "gemini":
-      return "hsl(var(--gemini))";
+      return "#2563eb";
   }
 }
 
 export function protocolBadgeClassName(protocol: Protocol): string {
   switch (protocol) {
     case "openai":
-      return "border-codex/20 bg-codex/10 text-codex";
+      return "border-transparent bg-teal-50 text-teal-600 dark:bg-teal-950 dark:text-teal-400";
     case "anthropic":
-      return "border-claude/20 bg-claude/10 text-claude";
+      return "border-transparent bg-orange-50 text-orange-600 dark:bg-orange-950 dark:text-orange-400";
     case "gemini":
-      return "border-gemini/20 bg-gemini/10 text-gemini";
+      return "border-transparent bg-blue-50 text-blue-600 dark:bg-blue-950 dark:text-blue-400";
   }
 }
 
 export function protocolProgressClassName(protocol: Protocol): string {
   switch (protocol) {
     case "openai":
-      return "bg-[linear-gradient(90deg,hsl(var(--codex)),hsl(var(--primary)))]";
+      return "bg-teal-500";
     case "anthropic":
-      return "bg-[linear-gradient(90deg,hsl(var(--claude)),hsl(var(--warning)))]";
+      return "bg-orange-500";
     case "gemini":
-      return "bg-[linear-gradient(90deg,hsl(var(--gemini)),hsl(var(--primary)))]";
+      return "bg-blue-600 dark:bg-blue-500";
   }
 }
 

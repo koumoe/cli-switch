@@ -516,11 +516,13 @@
   "settings": {
     "title": "Settings",
     "tabs": {
+      "general": "General",
       "appearance": "Appearance",
       "channel": "Channel",
       "notifications": "Notifications",
       "application": "App",
       "chatBridge": "Messaging",
+      "cli": "CLI",
       "update": "CLI",
       "data": "Data",
       "system": "System"
@@ -746,6 +748,7 @@
     "maintenance": {
       "databaseTitle": "Database",
       "databaseSubtitle": "View size and clear request records",
+      "cleanupTitle": "Cleanup",
       "logsSize": "Log size",
       "logsSizeFail": "Failed to get log size",
       "clearRecords": "Clear records",

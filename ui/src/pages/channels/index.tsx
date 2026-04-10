@@ -49,6 +49,7 @@ import {
   SortableDataTableHandle,
 } from "@/components/composed/sortable-data-table";
 import { PageHeader } from "@/components/PageHeader";
+import { PageBody } from "@/components/layout/page-body";
 import { useI18n } from "@/hooks/use-i18n";
 import { useCurrency } from "@/hooks/use-currency";
 import { useWindowEvent } from "@/hooks/use-window-event";
@@ -582,7 +583,7 @@ export function ChannelsPage() {
     ];
 
     return (
-      <Card>
+      <Card className="flex min-h-0 flex-col">
         <CardContent className="p-0">
           <SortableDataTable
             columns={columns}
@@ -596,9 +597,9 @@ export function ChannelsPage() {
             onReorderCommit={(next) => persistOrder(protocol, next)}
             emptyState={t("channels.table.empty")}
             renderDragOverlay={(channel) => (
-              <div className="min-w-[260px] max-w-[360px] rounded-lg border bg-background px-3 py-2 shadow-xl">
+              <div className="min-w-[260px] max-w-[360px] rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-xl dark:border-slate-800 dark:bg-slate-900">
                 <div className="text-sm font-semibold">{channel.name}</div>
-                <div className="mt-1 truncate text-xs text-muted-foreground">
+                <div className="mt-1 truncate text-xs text-slate-500 dark:text-slate-400">
                   {t("channels.table.priority")}: {channel.priority} · {channel.base_url}
                 </div>
               </div>
@@ -687,7 +688,7 @@ export function ChannelsPage() {
   );
 
   return (
-    <div className="space-y-4 pb-4">
+    <div className="flex h-full min-h-0 flex-col">
       <PageHeader
         title={t("channels.title")}
         actions={
@@ -698,34 +699,36 @@ export function ChannelsPage() {
               onClick={() => setAutoSortOpen(true)}
               disabled={autoSortCurrent.length <= 1}
             >
-              <ArrowDownUp className="h-4 w-4 mr-2" />
+              <ArrowDownUp className="h-3.5 w-3.5" />
               {t("channels.autoSort.button")}
             </Button>
             <Button size="sm" onClick={openCreate}>
-              <Plus className="h-4 w-4 mr-2" />
+              <Plus className="h-3.5 w-3.5" />
               {t("channels.new")}
             </Button>
           </>
         }
       />
+      <div className="flex-1 overflow-y-auto">
+        <PageBody className="space-y-3">
+          <Tabs
+            value={activeProtocol}
+            onValueChange={(v) => {
+              setActiveProtocol(v as Protocol);
+            }}
+          >
+            <TabsList>
+              <TabsTrigger value="openai">{t("channels.tabs.codex")}</TabsTrigger>
+              <TabsTrigger value="anthropic">{t("channels.tabs.claude")}</TabsTrigger>
+              <TabsTrigger value="gemini">{t("channels.tabs.gemini")}</TabsTrigger>
+            </TabsList>
 
-      {/* 渠道表格 */}
-      <Tabs
-        value={activeProtocol}
-        onValueChange={(v) => {
-          setActiveProtocol(v as Protocol);
-        }}
-      >
-        <TabsList>
-          <TabsTrigger value="openai">{t("channels.tabs.codex")}</TabsTrigger>
-          <TabsTrigger value="anthropic">{t("channels.tabs.claude")}</TabsTrigger>
-          <TabsTrigger value="gemini">{t("channels.tabs.gemini")}</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="openai">{renderTable("openai")}</TabsContent>
-        <TabsContent value="anthropic">{renderTable("anthropic")}</TabsContent>
-        <TabsContent value="gemini">{renderTable("gemini")}</TabsContent>
-      </Tabs>
+            <TabsContent value="openai">{renderTable("openai")}</TabsContent>
+            <TabsContent value="anthropic">{renderTable("anthropic")}</TabsContent>
+            <TabsContent value="gemini">{renderTable("gemini")}</TabsContent>
+          </Tabs>
+        </PageBody>
+      </div>
 
       {/* 新建/编辑弹窗 */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>

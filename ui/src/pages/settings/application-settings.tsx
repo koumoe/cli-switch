@@ -14,7 +14,7 @@ export function ApplicationSettings({
   onSaved,
 }: ApplicationSettingsProps) {
   return (
-    <div className="space-y-4">
+    <div className="pb-4">
       <WindowCloseSettingsCard settings={settings} onSaved={onSaved} />
       <StartupSettingsCard settings={settings} onSaved={onSaved} />
     </div>

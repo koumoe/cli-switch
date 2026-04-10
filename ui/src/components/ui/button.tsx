@@ -5,23 +5,29 @@ import { Slot } from "@radix-ui/react-slot"
 import { cn } from "@/lib/utils"
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors outline-none select-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 aria-invalid:ring-destructive/20 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  "inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border text-xs font-semibold transition-colors outline-none select-none disabled:pointer-events-none disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-blue-200 dark:focus-visible:ring-blue-900/60 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-3.5",
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground shadow hover:bg-primary/90",
-        outline: "border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground",
-        secondary: "bg-secondary text-secondary-foreground shadow-sm hover:bg-secondary/80",
-        ghost: "hover:bg-accent hover:text-accent-foreground",
-        destructive: "bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90",
-        link: "text-primary underline-offset-4 hover:underline",
-        success: "bg-success text-success-foreground shadow-sm hover:bg-success/90",
+        default:
+          "border-blue-600 bg-blue-600 text-white hover:opacity-90 dark:border-blue-500 dark:bg-blue-500",
+        outline:
+          "border-slate-200 bg-white text-slate-900 hover:border-blue-600 hover:text-blue-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-blue-400 dark:hover:text-blue-400",
+        secondary:
+          "border-slate-200 bg-slate-100 text-slate-700 hover:border-blue-600 hover:text-blue-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:border-blue-400 dark:hover:text-blue-400",
+        ghost:
+          "border-transparent bg-transparent text-slate-500 hover:bg-blue-50 hover:text-blue-600 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-blue-400",
+        destructive:
+          "border-red-500 bg-red-500 text-white hover:opacity-90",
+        link: "border-transparent p-0 text-blue-600 hover:underline dark:text-blue-400",
+        success:
+          "border-emerald-500 bg-emerald-500 text-white hover:opacity-90",
       },
       size: {
-        default: "h-9 px-4 py-2",
-        sm: "h-8 rounded-md px-3 text-xs",
-        lg: "h-10 rounded-md px-8",
-        icon: "h-9 w-9",
+        default: "px-3 py-1.5",
+        sm: "rounded-md px-2 py-1 text-[11px]",
+        lg: "px-3.5 py-2",
+        icon: "h-7 w-7 rounded-md p-0",
       },
     },
     defaultVariants: {

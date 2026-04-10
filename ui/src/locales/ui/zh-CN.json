@@ -516,11 +516,13 @@
   "settings": {
     "title": "设置",
     "tabs": {
+      "general": "通用",
       "appearance": "界面",
       "channel": "渠道",
       "notifications": "系统通知",
       "application": "应用",
       "chatBridge": "消息互联",
+      "cli": "CLI",
       "update": "CLI",
       "data": "数据",
       "system": "系统"
@@ -746,6 +748,7 @@
     "maintenance": {
       "databaseTitle": "数据库",
       "databaseSubtitle": "查看大小并清理请求记录",
+      "cleanupTitle": "清理",
       "logsSize": "日志大小",
       "logsSizeFail": "获取日志大小失败",
       "clearRecords": "清理记录",

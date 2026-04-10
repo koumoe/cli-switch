@@ -41,7 +41,7 @@
   background-image: linear-gradient(
     110deg,
     hsl(var(--muted) / 0.9) 0%,
-    hsl(var(--surface-elevated) / 0.96) 34%,
+    hsl(var(--muted) / 0.4) 34%,
     hsl(var(--muted) / 0.72) 68%,
     hsl(var(--muted) / 0.9) 100%
   );
@@ -67,38 +67,6 @@
 
 @utility anim-d4 {
   animation-delay: 240ms;
-}
-
-@utility surface-panel {
-  background-image: linear-gradient(
-    180deg,
-    hsl(var(--surface) / 0.96),
-    hsl(var(--secondary) / 0.82)
-  );
-  box-shadow:
-    0 18px 40px hsl(var(--foreground) / 0.06),
-    inset 0 1px 0 hsl(var(--background) / 0.85);
-  backdrop-filter: blur(18px);
-}
-
-@utility surface-panel-subtle {
-  background-image: linear-gradient(
-    180deg,
-    hsl(var(--surface-elevated) / 0.86),
-    hsl(var(--background) / 0.78)
-  );
-  box-shadow:
-    0 12px 30px hsl(var(--foreground) / 0.05),
-    inset 0 1px 0 hsl(var(--background) / 0.8);
-  backdrop-filter: blur(16px);
-}
-
-@utility app-canvas {
-  background-color: hsl(var(--background));
-  background-image:
-    radial-gradient(circle at top, hsl(var(--primary) / 0.08), transparent 34%),
-    radial-gradient(circle at bottom right, hsl(var(--codex) / 0.07), transparent 28%),
-    linear-gradient(180deg, hsl(var(--background)), hsl(var(--secondary) / 0.62));
 }
 
 @media (prefers-reduced-motion: reduce) {

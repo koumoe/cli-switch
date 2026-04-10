@@ -31,10 +31,17 @@ export function PaginationBar({
   onPageSizeChange,
 }: PaginationBarProps) {
   const { t } = useI18n();
+  const pages: number[] = [];
+  const start = Math.max(1, page - 1);
+  const end = Math.min(totalPages, start + 2);
+
+  for (let current = Math.max(1, end - 2); current <= end; current += 1) {
+    pages.push(current);
+  }
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 border-t bg-background px-4 py-3 rounded-b-lg">
-      <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-3 py-2 dark:border-slate-800">
+      <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
         <span>{t("common.pagination.total", { total: formatNumber(total) })}</span>
         <span>{t("common.pagination.page", { page, totalPages })}</span>
         <Select
@@ -47,7 +54,7 @@ export function PaginationBar({
           }}
           disabled={disabled}
         >
-          <SelectTrigger className="h-8 w-[100px]">
+          <SelectTrigger className="h-7 w-[92px] rounded-md px-2 text-[11px]">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -61,22 +68,36 @@ export function PaginationBar({
         <span>{t("common.pagination.perPage")}</span>
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1">
         <Button
-          size="sm"
           variant="outline"
+          size="icon"
           onClick={() => onPageChange(Math.max(1, page - 1))}
           disabled={disabled || page <= 1}
+          aria-label={t("common.pagination.prev")}
         >
-          {t("common.pagination.prev")}
+          <span className="text-xs">‹</span>
         </Button>
+        {pages.map((item) => (
+          <Button
+            key={item}
+            variant={item === page ? "default" : "outline"}
+            size="icon"
+            onClick={() => onPageChange(item)}
+            disabled={disabled}
+            aria-current={item === page ? "page" : undefined}
+          >
+            <span className="text-[11px]">{item}</span>
+          </Button>
+        ))}
         <Button
-          size="sm"
           variant="outline"
+          size="icon"
           onClick={() => onPageChange(Math.min(totalPages, page + 1))}
           disabled={disabled || page >= totalPages}
+          aria-label={t("common.pagination.next")}
         >
-          {t("common.pagination.next")}
+          <span className="text-xs">›</span>
         </Button>
       </div>
     </div>

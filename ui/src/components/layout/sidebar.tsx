@@ -3,8 +3,6 @@ import {
   Activity,
   FileText,
   LayoutGrid,
-  PanelLeftClose,
-  PanelLeftOpen,
   Radio,
   ScrollText,
   Settings,
@@ -13,13 +11,8 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui";
-import { useI18n } from "@/hooks/use-i18n";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/hooks/use-i18n";
 import type { Health } from "@/types/api";
 
 export type SidebarRoute =
@@ -57,33 +50,20 @@ function hrefFor(route: SidebarRoute): SidebarPath {
   return `/${route}`;
 }
 
-function SidebarVersion({
-  collapsed,
-  version,
-}: {
-  collapsed: boolean;
-  version?: string | null;
-}) {
-  const label = `v${version ?? "-"}`;
-
-  if (collapsed) {
-    return (
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <div className="flex justify-center px-1 pb-1.5 text-[10px] text-sidebar-foreground/50">
-            v
-          </div>
-        </TooltipTrigger>
-        <TooltipContent side="right" sideOffset={8}>
-          {label}
-        </TooltipContent>
-      </Tooltip>
-    );
-  }
-
+function SidebarBrand() {
   return (
-    <div className="px-2 pb-1.5 text-[10px] text-sidebar-foreground/50">
-      {label}
+    <Link aria-label="CliSwitch" className="mb-3.5 inline-flex no-underline" to="/">
+      <div className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-gradient-to-br from-blue-500 to-blue-700 shadow-lg shadow-blue-500/20">
+        <Zap className="h-4 w-4 text-white" />
+      </div>
+    </Link>
+  );
+}
+
+function SidebarVersion({ version }: { version?: string | null }) {
+  return (
+    <div className="text-[8px] font-medium text-slate-500/60 dark:text-slate-400/60">
+      v{version ?? "-"}
     </div>
   );
 }
@@ -93,57 +73,48 @@ export function SidebarItem({
   label,
   route,
   active,
-  collapsed,
 }: {
   icon: LucideIcon;
   label: string;
   route: SidebarRoute;
   active: boolean;
-  collapsed: boolean;
 }) {
-  const link = (
+  return (
     <Link
       aria-current={active ? "page" : undefined}
       className={cn(
-        "group flex select-none items-center rounded-md transition-colors",
-        collapsed ? "justify-center p-2" : "gap-2 px-2.5 py-1.5",
+        "group relative flex w-[58px] select-none flex-col items-center gap-[3px] rounded-[10px] pt-1.5 pb-1 text-center no-underline transition-colors",
         active
-          ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
-          : "text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground",
+          ? "bg-blue-50 before:absolute before:-left-[9px] before:top-1/2 before:h-[18px] before:w-[3px] before:-translate-y-1/2 before:rounded-r-[3px] before:bg-blue-600 before:content-[''] dark:bg-blue-950/50 dark:before:bg-blue-500"
+          : "hover:bg-blue-50 dark:hover:bg-slate-800",
       )}
       to={hrefFor(route)}
     >
       <Icon
         className={cn(
-          "h-4 w-4 flex-shrink-0",
+          "h-[17px] w-[17px] shrink-0",
           active
-            ? "text-sidebar-accent-foreground"
-            : "text-muted-foreground group-hover:text-sidebar-foreground",
+            ? "text-blue-600 dark:text-blue-400"
+            : "text-slate-500 group-hover:text-blue-600 dark:text-slate-400 dark:group-hover:text-blue-400",
         )}
       />
-      {!collapsed ? <span className="text-[13px]">{label}</span> : null}
+      <span
+        className={cn(
+          "text-[9.5px] leading-none",
+          active
+            ? "font-bold text-blue-600 dark:text-blue-400"
+            : "font-medium text-slate-500 group-hover:text-blue-600 dark:text-slate-400 dark:group-hover:text-blue-400",
+        )}
+      >
+        {label}
+      </span>
     </Link>
   );
-
-  if (collapsed) {
-    return (
-      <Tooltip>
-        <TooltipTrigger asChild>{link}</TooltipTrigger>
-        <TooltipContent side="right" sideOffset={8}>
-          {label}
-        </TooltipContent>
-      </Tooltip>
-    );
-  }
-
-  return link;
 }
 
 export function SidebarStatus({
-  collapsed,
   health,
 }: {
-  collapsed: boolean;
   health: Pick<Health, "status">;
 }) {
   const { t } = useI18n();
@@ -158,73 +129,44 @@ export function SidebarStatus({
         ? t("status.offline")
         : health.status;
 
-  const dot = (
-    <span
-      className={cn(
-        "h-1.5 w-1.5 flex-shrink-0 rounded-full",
-        (isOk || isChecking) && "animate-pulse-dot",
-        isOk ? "bg-success" : isChecking ? "bg-muted-foreground" : "bg-destructive",
-      )}
-    />
-  );
-
-  if (collapsed) {
-    return (
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <div className="flex items-center justify-center p-1.5">{dot}</div>
-        </TooltipTrigger>
-        <TooltipContent side="right" sideOffset={8}>
-          {label}
-        </TooltipContent>
-      </Tooltip>
-    );
-  }
-
   return (
-    <div className="flex items-center gap-1.5 text-xs text-fg-muted">
-      {dot}
-      {label}
+    <div className="flex flex-col items-center gap-[3px]">
+      <span
+        className={cn(
+          "h-1.5 w-1.5 shrink-0 rounded-full",
+          (isOk || isChecking) && "animate-pulse-dot",
+          isOk
+            ? "bg-emerald-500"
+            : isChecking
+              ? "bg-slate-400 dark:bg-slate-500"
+              : "bg-red-500",
+        )}
+      />
+      <span className="text-center text-[8px] font-medium text-slate-500 dark:text-slate-400">
+        {label}
+      </span>
     </div>
   );
 }
 
 export function Sidebar({
   activeRoute,
-  collapsed,
   health,
-  onToggle,
 }: {
   activeRoute: SidebarRoute;
-  collapsed: boolean;
   health: Health;
-  onToggle: () => void;
 }) {
   const { t } = useI18n();
 
   return (
-    <aside
-      className={cn(
-        "surface-panel-subtle flex flex-shrink-0 flex-col border-r border-sidebar-border/80 bg-sidebar/92 transition-[width,background-color] duration-200 supports-[backdrop-filter]:bg-sidebar/72",
-        collapsed ? "w-12" : "w-44",
-      )}
-    >
-      <div
-        className={cn(
-          "flex h-11 items-center border-b border-sidebar-border",
-          collapsed ? "justify-center" : "justify-center gap-1.5",
-        )}
-      >
-        <Zap className="h-4 w-4 flex-shrink-0 text-foreground" />
-        {!collapsed ? <span className="text-sm font-semibold">CliSwitch</span> : null}
-      </div>
+    <aside className="flex w-[76px] shrink-0 flex-col items-center gap-0.5 border-r border-slate-200 bg-white pt-3 pb-2 dark:border-slate-800 dark:bg-slate-900">
+      <SidebarBrand />
 
-      <nav className={cn("flex-1 space-y-0.5 py-2", collapsed ? "px-1" : "px-1.5")}>
+      <nav className="flex flex-1 flex-col items-center gap-0.5">
         {NAV_ITEMS.map((item) => (
           <SidebarItem
             key={item.route}
             active={activeRoute === item.route}
-            collapsed={collapsed}
             icon={item.icon}
             label={t(item.labelKey)}
             route={item.route}
@@ -232,35 +174,9 @@ export function Sidebar({
         ))}
       </nav>
 
-      <div className="border-t border-sidebar-border pt-2">
-        <div
-          className={cn(
-            "flex items-center",
-            collapsed ? "flex-col gap-1 px-1" : "justify-between px-2",
-          )}
-        >
-          <SidebarStatus collapsed={collapsed} health={health} />
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                aria-label={collapsed ? t("sidebar.expand") : t("sidebar.collapse")}
-                className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
-                onClick={onToggle}
-                type="button"
-              >
-                {collapsed ? (
-                  <PanelLeftOpen className="h-4 w-4" />
-                ) : (
-                  <PanelLeftClose className="h-4 w-4" />
-                )}
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="right" sideOffset={8}>
-              {collapsed ? t("sidebar.expand") : t("sidebar.collapse")}
-            </TooltipContent>
-          </Tooltip>
-        </div>
-        <SidebarVersion collapsed={collapsed} version={health.version} />
+      <div className="flex w-12 flex-col items-center gap-1.5 border-t border-slate-200 pt-3 dark:border-slate-800">
+        <SidebarStatus health={health} />
+        <SidebarVersion version={health.version} />
       </div>
     </aside>
   );

@@ -1,9 +1,8 @@
 import { ArrowRight } from "lucide-react";
 
 import { Badge } from "@/components/ui";
+import { ProtocolBadge } from "@/components/composed/protocol-badge";
 import type { AppSettings, Channel, Protocol } from "@/types/api";
-
-import { protocolBadgeClassName } from "../../lib";
 
 type ActiveChannelChainProps = {
   enabledByProtocol: Record<Protocol, Channel[]>;
@@ -24,29 +23,27 @@ export function ActiveChannelChain({
           const list = enabledByProtocol[protocol];
           return (
             <div key={protocol} className="space-y-2">
-              <div className="flex items-center gap-2">
-                <Badge
-                  variant="outline"
-                  className={`px-2 py-0.5 text-[10px] ${protocolBadgeClassName(protocol)}`}
-                >
+              <div className="mb-2">
+                <ProtocolBadge protocol={protocol}>
                   {protocolLabel(protocol)}
-                </Badge>
+                </ProtocolBadge>
               </div>
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="flex flex-wrap items-center gap-1.5">
                 {list.map((channel, index) => (
                   <div key={channel.id} className="contents">
-                    <div className="flex items-center gap-1.5 rounded border bg-card px-2 py-1">
-                      <Badge variant="outline" className="px-1 py-0 text-[10px]">
+                    <div className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11.5px] font-medium dark:border-slate-800 dark:bg-slate-900">
+                      <Badge className="flex h-[18px] w-[18px] items-center justify-center rounded bg-slate-100 px-0 text-[9px] font-extrabold text-slate-500 dark:bg-slate-800 dark:text-slate-400">
                         {index + 1}
                       </Badge>
-                      <span className="text-xs font-medium">
-                        {settings?.channel_retry_enabled
-                          ? `${channel.name} (${Math.max(1, channel.retry_times ?? 1)})`
-                          : channel.name}
-                      </span>
+                      <span>{channel.name}</span>
+                      {settings?.channel_retry_enabled ? (
+                        <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                          ({Math.max(1, channel.retry_times ?? 1)})
+                        </span>
+                      ) : null}
                     </div>
                     {index < list.length - 1 ? (
-                      <ArrowRight className="h-3 w-3 text-muted-foreground" />
+                      <ArrowRight className="h-3 w-3 text-slate-400/50 dark:text-slate-500/60" />
                     ) : null}
                   </div>
                 ))}

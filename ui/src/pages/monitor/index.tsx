@@ -7,13 +7,14 @@ import {
   Button,
   Card,
   CardContent,
-  CardDescription,
-  CardHeader,
   Badge,
 } from "@/components/ui";
 import { DataTable } from "@/components/composed/data-table";
 import { DateRangePicker } from "@/components/composed/date-range-picker";
+import { MetricCard } from "@/components/composed/metric-card";
+import { ProtocolBadge } from "@/components/composed/protocol-badge";
 import { PageHeader } from "@/components/PageHeader";
+import { PageBody } from "@/components/layout/page-body";
 import { useCurrency } from "@/hooks/use-currency";
 import { useI18n } from "@/hooks/use-i18n";
 import { dateRangeToMs } from "@/lib/date-utils";
@@ -132,12 +133,9 @@ export function MonitorPage() {
         accessorFn: (row) => row.protocol,
         enableSorting: true,
         cell: ({ row }) => (
-          <Badge
-            variant="outline"
-            className={protocolBadgeClassName(row.original.protocol)}
-          >
+          <ProtocolBadge protocol={row.original.protocol}>
             {protocolLabel(t, row.original.protocol)}
-          </Badge>
+          </ProtocolBadge>
         ),
         meta: {
           headerClassName: colClass.terminal,
@@ -157,7 +155,7 @@ export function MonitorPage() {
         accessorKey: "success",
         header: t("monitor.channelStats.headers.success"),
         enableSorting: true,
-        cell: ({ row }) => <span className="text-success">{row.original.success}</span>,
+        cell: ({ row }) => <span className="text-emerald-600 dark:text-emerald-400">{row.original.success}</span>,
         meta: {
           headerClassName: colClass.success,
           skeletonClassName: "w-10 mx-auto",
@@ -167,7 +165,7 @@ export function MonitorPage() {
         accessorKey: "failed",
         header: t("monitor.channelStats.headers.failed"),
         enableSorting: true,
-        cell: ({ row }) => <span className="text-destructive">{row.original.failed}</span>,
+        cell: ({ row }) => <span className="text-red-500 dark:text-red-400">{row.original.failed}</span>,
         meta: {
           headerClassName: colClass.failed,
           skeletonClassName: "w-10 mx-auto",
@@ -179,7 +177,7 @@ export function MonitorPage() {
         accessorFn: (row) => parseDecimalLike(row.estimated_cost_usd) ?? -1,
         enableSorting: true,
         cell: ({ row }) => (
-          <span className="font-mono text-muted-foreground">
+          <span className="font-mono text-slate-500 dark:text-slate-400">
             {row.original.estimated_cost_usd ? `$${row.original.estimated_cost_usd}` : "-"}
           </span>
         ),
@@ -204,11 +202,11 @@ export function MonitorPage() {
           const est = parseDecimalLike(row.original.estimated_cost_usd);
           const channel = channelsById.get(row.original.channel_id);
           const real = Number(channel?.real_multiplier ?? 1);
-          if (!est || est <= 0) return <span className="font-mono text-muted-foreground">-</span>;
+          if (!est || est <= 0) return <span className="font-mono text-slate-500 dark:text-slate-400">-</span>;
           if (!Number.isFinite(real) || real < 0) {
-            return <span className="font-mono text-muted-foreground">-</span>;
+            return <span className="font-mono text-slate-500 dark:text-slate-400">-</span>;
           }
-          return <span className="font-mono text-muted-foreground">{formatMoney(est * real, currency)}</span>;
+          return <span className="font-mono text-slate-500 dark:text-slate-400">{formatMoney(est * real, currency)}</span>;
         },
         meta: {
           headerClassName: colClass.actualSpend,
@@ -220,7 +218,7 @@ export function MonitorPage() {
         header: t("monitor.channelStats.headers.avgLatency"),
         enableSorting: true,
         cell: ({ row }) => (
-          <span className="text-muted-foreground">
+          <span className="text-slate-500 dark:text-slate-400">
             {row.original.avg_latency_ms ? `${Math.round(row.original.avg_latency_ms)}ms` : "-"}
           </span>
         ),
@@ -234,7 +232,7 @@ export function MonitorPage() {
   );
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-4 overflow-hidden">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden">
       <PageHeader
         title={t("monitor.title")}
         actions={
@@ -243,7 +241,7 @@ export function MonitorPage() {
               value={dateRange}
               onChange={setDateRange}
               placeholder={t("monitor.range.selectRange")}
-              className="h-8 w-[260px]"
+              className="h-7 w-[260px]"
               disabled={loading}
               locale={locale}
             />
@@ -253,90 +251,71 @@ export function MonitorPage() {
               onClick={refresh}
               disabled={loading || !dateRange?.from}
             >
-              <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
+              <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
               {t("common.refresh")}
             </Button>
           </>
         }
       />
+      <div className="flex-1 overflow-y-auto">
+        <PageBody className="space-y-3">
+          <div className="grid gap-3 md:grid-cols-5">
+            <MetricCard
+              label={t("monitor.cards.totalRequests")}
+              value={stats?.requests ?? "-"}
+              barColor="bg-blue-600"
+              className="animate-fade-up"
+            />
+            <MetricCard
+              label={t("monitor.cards.successRate")}
+              value={`${successRate}%`}
+              barColor="bg-teal-500"
+              className="animate-fade-up [animation-delay:60ms]"
+            />
+            <MetricCard
+              label={t("monitor.cards.failed")}
+              value={stats?.failed ?? "-"}
+              barColor="bg-red-500"
+              className="animate-fade-up [animation-delay:120ms]"
+            />
+            <MetricCard
+              label={t("monitor.cards.estimatedCost")}
+              value={`$${stats?.estimated_cost_usd ?? "-"}`}
+              barColor="bg-amber-500"
+              className="animate-fade-up [animation-delay:180ms]"
+            />
+            <MetricCard
+              label={t("monitor.cards.actualSpend")}
+              value={formatMoney(totalActualSpend, currency)}
+              barColor="bg-emerald-500"
+              className="animate-fade-up [animation-delay:240ms]"
+            />
+          </div>
 
-      {/* 统计卡片 */}
-      <div className="grid gap-3 md:grid-cols-5">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>{t("monitor.cards.totalRequests")}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="text-xl font-semibold">{stats?.requests ?? "-"}</div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>{t("monitor.cards.successRate")}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="text-xl font-semibold">{successRate}%</div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>{t("monitor.cards.failed")}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="text-xl font-semibold text-destructive">
-              {stats?.failed ?? "-"}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>{t("monitor.cards.estimatedCost")}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="text-xl font-semibold">
-              ${stats?.estimated_cost_usd ?? "-"}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>{t("monitor.cards.actualSpend")}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="text-xl font-semibold">
-              {formatMoney(totalActualSpend, currency)}
-            </div>
-          </CardContent>
-        </Card>
+          <Card className="flex min-h-0 flex-col">
+            <CardContent className="flex min-h-0 flex-col p-0">
+              <DataTable
+                columns={columns}
+                data={channelStats}
+                loading={loading}
+                getRowId={(row) => row.channel_id}
+                containerClassName="h-full overflow-y-auto"
+                emptyState={t("monitor.channelStats.empty")}
+                pagination={{
+                  page,
+                  pageSize,
+                  disabled: loading,
+                  onPageChange: setPage,
+                  onPageSizeChange: (next) => {
+                    setPageSize(next);
+                    setPage(1);
+                  },
+                }}
+              />
+            </CardContent>
+          </Card>
+        </PageBody>
       </div>
-
-      {/* 渠道统计 */}
-      <Card className="flex flex-1 min-h-0 flex-col">
-        <CardContent className="flex flex-1 min-h-0 flex-col p-0">
-          <DataTable
-            columns={columns}
-            data={channelStats}
-            loading={loading}
-            getRowId={(row) => row.channel_id}
-            containerClassName="h-full overflow-y-auto"
-            emptyState={t("monitor.channelStats.empty")}
-            pagination={{
-              page,
-              pageSize,
-              disabled: loading,
-              onPageChange: setPage,
-              onPageSizeChange: (next) => {
-                setPageSize(next);
-                setPage(1);
-              },
-            }}
-          />
-        </CardContent>
-      </Card>
     </div>
   );
 }

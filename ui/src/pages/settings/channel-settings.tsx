@@ -4,7 +4,6 @@ import {
   NewApiManagedSettingsCard,
   PricingDataSettingsCard,
 } from "@/pages/settings/form-sections";
-import { useI18n } from "@/hooks/use-i18n";
 import type { AppSettings, PricingStatus } from "@/types/api";
 
 type ChannelSettingsProps = {
@@ -22,10 +21,8 @@ export function ChannelSettings({
   onSaved,
   onSync,
 }: ChannelSettingsProps) {
-  const { t } = useI18n();
-
   return (
-    <div className="space-y-4">
+    <div className="pb-4">
       <ChannelProtectionSettingsCard settings={settings} onSaved={onSaved} />
       <ChannelRetrySettingsCard settings={settings} onSaved={onSaved} />
       <NewApiManagedSettingsCard settings={settings} onSaved={onSaved} />

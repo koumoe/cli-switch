@@ -17,6 +17,7 @@ import {
   completeRemoteAccountCheckinToday,
 } from "@/api";
 import { PageHeader } from "@/components/PageHeader";
+import { PageBody } from "@/components/layout/page-body";
 import { Button } from "@/components/ui";
 import { useCurrency } from "@/hooks/use-currency";
 import { humanizeApiError, isApiRequestError } from "@/lib/error";
@@ -432,42 +433,44 @@ export function AccountsPage() {
   }
 
   return (
-    <div className="space-y-4 pb-4">
+    <div className="flex h-full min-h-0 flex-col">
       <PageHeader
         title={t("accounts.title")}
         actions={
           <>
-            <Button variant="outline" size="sm" onClick={() => void refreshAll()} disabled={loading}>
-              <RefreshCw className="h-4 w-4 mr-2" />
-              {t("common.refresh")}
+            <Button variant="outline" size="icon" onClick={() => void refreshAll()} disabled={loading}>
+              <RefreshCw className="h-3.5 w-3.5" />
             </Button>
             <Button size="sm" onClick={openCreate}>
-              <Plus className="h-4 w-4 mr-2" />
+              <Plus className="h-3.5 w-3.5" />
               {t("accounts.new")}
             </Button>
           </>
         }
       />
-
-      <AccountsTable
-        accounts={accounts}
-        loading={loading}
-        reordering={reordering}
-        today={today}
-        checkinsDate={checkinsDate}
-        checkinDoneMap={checkinDoneMap}
-        refreshing={refreshing}
-        systemChecking={systemChecking}
-        pageOpening={pageOpening}
-        setAccounts={setAccounts}
-        persistOrder={persistOrder}
-        onRefreshAccount={onRefreshAccount}
-        onSystemCheckin={onSystemCheckin}
-        onOpenManualCheckinPrompt={openManualCheckinPrompt}
-        onOpenCreateManagedChannelDialog={openCreateManagedChannelDialog}
-        onOpenEdit={openEdit}
-        onOpenDeleteDialog={openDeleteDialog}
-      />
+      <div className="flex-1 overflow-y-auto">
+        <PageBody className="flex h-full min-h-0 flex-col gap-3">
+          <AccountsTable
+            accounts={accounts}
+            loading={loading}
+            reordering={reordering}
+            today={today}
+            checkinsDate={checkinsDate}
+            checkinDoneMap={checkinDoneMap}
+            refreshing={refreshing}
+            systemChecking={systemChecking}
+            pageOpening={pageOpening}
+            setAccounts={setAccounts}
+            persistOrder={persistOrder}
+            onRefreshAccount={onRefreshAccount}
+            onSystemCheckin={onSystemCheckin}
+            onOpenManualCheckinPrompt={openManualCheckinPrompt}
+            onOpenCreateManagedChannelDialog={openCreateManagedChannelDialog}
+            onOpenEdit={openEdit}
+            onOpenDeleteDialog={openDeleteDialog}
+          />
+        </PageBody>
+      </div>
 
       <AccountWizardDialog
         open={wizardOpen}

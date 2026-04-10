@@ -13,6 +13,7 @@ import {
 } from "@/components/ui";
 import { DataTable } from "@/components/composed/data-table";
 import { PageHeader } from "@/components/PageHeader";
+import { PageBody } from "@/components/layout/page-body";
 import { deletePromptProject } from "@/api";
 import { useI18n } from "@/hooks/use-i18n";
 import { humanizeApiError } from "@/lib/error";
@@ -242,31 +243,34 @@ export function PromptsPage() {
                 {t("prompts.editor.edit")}
               </Button>
             </div>
-          ) : (
-            <div className="flex items-center justify-center gap-1">
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 min-w-20 text-xs"
-                onClick={() => handleEditDocument("project", row.original.project.id)}
-                title={t("prompts.editor.edit")}
-              >
-                {t("prompts.editor.edit")}
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 min-w-20 border-destructive/40 text-xs text-destructive hover:border-destructive hover:bg-destructive/10 hover:text-destructive"
-                onClick={() => {
-                  setProjectDeleteTarget(row.original.project);
-                  setProjectDeleteOpen(true);
-                }}
-                title={t("prompts.actions.deleteProject")}
-              >
-                {t("prompts.actions.deleteProject")}
-              </Button>
-            </div>
-          ),
+          ) : (() => {
+            const project = row.original.project;
+            return (
+              <div className="flex items-center justify-center gap-1">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 min-w-20 text-xs"
+                  onClick={() => handleEditDocument("project", project.id)}
+                  title={t("prompts.editor.edit")}
+                >
+                  {t("prompts.editor.edit")}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 min-w-20 border-destructive/40 text-xs text-destructive hover:border-destructive hover:bg-destructive/10 hover:text-destructive"
+                  onClick={() => {
+                    setProjectDeleteTarget(project);
+                    setProjectDeleteOpen(true);
+                  }}
+                  title={t("prompts.actions.deleteProject")}
+                >
+                  {t("prompts.actions.deleteProject")}
+                </Button>
+              </div>
+            );
+          })(),
         meta: {
           headerClassName: "w-52",
           cellClassName: "text-center",
@@ -280,49 +284,52 @@ export function PromptsPage() {
   return (
     <div className="flex h-full min-h-0 flex-col gap-4 overflow-hidden">
       <PageHeader title={t("prompts.title")} />
+      <div className="flex-1 overflow-y-auto">
+        <PageBody className="flex h-full min-h-0 flex-col gap-3">
+          <Tabs
+            value={state.activeTool}
+            onValueChange={state.handleToolChange}
+            className="flex flex-1 min-h-0 flex-col"
+          >
+            <TabsList className="self-start">
+              {PROMPT_TOOL_IDS.map((tool) => (
+                <TabsTrigger key={tool} value={tool}>
+                  {t(`prompts.tabs.${tool}`)}
+                </TabsTrigger>
+              ))}
+            </TabsList>
 
-      <Tabs
-        value={state.activeTool}
-        onValueChange={state.handleToolChange}
-        className="flex flex-1 min-h-0 flex-col"
-      >
-        <TabsList className="self-start">
-          {PROMPT_TOOL_IDS.map((tool) => (
-            <TabsTrigger key={tool} value={tool}>
-              {t(`prompts.tabs.${tool}`)}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-
-        <div className="mt-2 flex flex-1 min-h-0 flex-col">
-          <Card className="flex flex-1 min-h-0 flex-col">
-            <CardContent className="flex flex-1 min-h-0 flex-col p-0">
-              {!state.projectsLoading && state.projects.length === 0 ? (
-                <div className="border-b px-4 py-3 text-sm text-muted-foreground">
-                  {t("prompts.projects.empty", { tool: toolLabel })}
-                </div>
-              ) : null}
-              <DataTable
-                columns={columns}
-                data={tableRows}
-                loading={state.projectsLoading}
-                getRowId={(row) => row.id}
-                containerClassName="h-full overflow-y-auto"
-                pagination={{
-                  page,
-                  pageSize,
-                  disabled: state.projectsLoading,
-                  onPageChange: setPage,
-                  onPageSizeChange: (next) => {
-                    setPageSize(next);
-                    setPage(1);
-                  },
-                }}
-              />
-            </CardContent>
-          </Card>
-        </div>
-      </Tabs>
+            <div className="flex flex-1 min-h-0 flex-col">
+              <Card className="flex flex-1 min-h-0 flex-col">
+                <CardContent className="flex flex-1 min-h-0 flex-col p-0">
+                  {!state.projectsLoading && state.projects.length === 0 ? (
+                    <div className="border-b border-slate-200 px-4 py-3 text-sm text-slate-500 dark:border-slate-800 dark:text-slate-400">
+                      {t("prompts.projects.empty", { tool: toolLabel })}
+                    </div>
+                  ) : null}
+                  <DataTable
+                    columns={columns}
+                    data={tableRows}
+                    loading={state.projectsLoading}
+                    getRowId={(row) => row.id}
+                    containerClassName="h-full overflow-y-auto"
+                    pagination={{
+                      page,
+                      pageSize,
+                      disabled: state.projectsLoading,
+                      onPageChange: setPage,
+                      onPageSizeChange: (next) => {
+                        setPageSize(next);
+                        setPage(1);
+                      },
+                    }}
+                  />
+                </CardContent>
+              </Card>
+            </div>
+          </Tabs>
+        </PageBody>
+      </div>
 
       {/* Markdown editor dialog */}
       {editorDialogOpen && (

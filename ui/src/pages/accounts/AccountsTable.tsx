@@ -245,7 +245,7 @@ export function AccountsTable({
   );
 
   return (
-    <Card>
+    <Card className="flex flex-1 min-h-0 flex-col">
       <CardContent className="p-0">
         <SortableDataTable
           columns={columns}
@@ -257,9 +257,9 @@ export function AccountsTable({
           onReorderCommit={persistOrder}
           emptyState={t("accounts.table.empty")}
           renderDragOverlay={(item) => (
-            <div className="min-w-[280px] max-w-[380px] rounded-lg border bg-background px-3 py-2 shadow-xl">
+            <div className="min-w-[280px] max-w-[380px] rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-xl dark:border-slate-800 dark:bg-slate-900">
               <div className="text-center text-sm font-semibold">{item.base_url}</div>
-              <div className="mt-1 text-center text-xs text-muted-foreground">
+              <div className="mt-1 text-center text-xs text-slate-500 dark:text-slate-400">
                 {t(`accounts.providers.${item.provider}`)}
               </div>
             </div>

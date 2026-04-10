@@ -1,9 +1,9 @@
-import { Badge, Progress } from "@/components/ui";
+import { Progress } from "@/components/ui";
+import { ProtocolBadge } from "@/components/composed/protocol-badge";
 import type { ChannelStats, Protocol } from "@/types/api";
 
 import {
   formatNumber,
-  protocolBadgeClassName,
   protocolProgressClassName,
 } from "../../lib";
 
@@ -26,30 +26,23 @@ export function ChannelDistribution({
   const sorted = [...stats].sort((left, right) => right.success - left.success);
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       {sorted.map((item) => {
         const percent = Math.round((item.success / total) * 100);
         return (
           <div key={item.channel_id} className="space-y-1">
-            <div className="flex items-center justify-between text-xs">
-              <div className="min-w-0 flex items-center gap-2 font-medium">
-                <Badge
-                  variant="outline"
-                  className={`px-1 py-0 text-[10px] ${protocolBadgeClassName(item.protocol)}`}
-                >
+            <div className="mb-1 flex items-center justify-between text-[11px]">
+              <div className="min-w-0 flex items-center gap-1.5">
+                <ProtocolBadge protocol={item.protocol} className="px-1.5 py-px text-[9px]">
                   {protocolLabel(item.protocol)}
-                </Badge>
-                <span className="truncate">{item.name}</span>
+                </ProtocolBadge>
+                <span className="truncate font-semibold">{item.name}</span>
               </div>
-              <span className="ml-2 text-muted-foreground">
+              <span className="ml-2 shrink-0 text-[10px] font-semibold text-slate-500 dark:text-slate-400">
                 {view === "percent" ? `${formatNumber(percent)}%` : formatNumber(item.success)}
               </span>
             </div>
-            <Progress
-              value={percent}
-              className="h-2"
-              indicatorClassName={protocolProgressClassName(item.protocol)}
-            />
+            <Progress value={percent} indicatorClassName={protocolProgressClassName(item.protocol)} />
           </div>
         );
       })}

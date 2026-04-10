@@ -10,7 +10,7 @@ const Table = React.forwardRef<HTMLTableElement, TableProps>(
     <div className={cn("relative w-full overflow-auto", containerClassName)}>
     <table
       ref={ref}
-      className={cn("w-full caption-bottom text-sm", className)}
+      className={cn("w-full border-collapse caption-bottom text-xs", className)}
       {...props}
     />
     </div>
@@ -22,7 +22,7 @@ const TableHeader = React.forwardRef<
   HTMLTableSectionElement,
   React.HTMLAttributes<HTMLTableSectionElement>
 >(({ className, ...props }, ref) => (
-  <thead ref={ref} className={cn("[&_tr]:border-b", className)} {...props} />
+  <thead ref={ref} className={cn(className)} {...props} />
 ))
 TableHeader.displayName = "TableHeader"
 
@@ -32,7 +32,7 @@ const TableBody = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <tbody
     ref={ref}
-    className={cn("[&_tr:last-child]:border-0", className)}
+    className={cn(className)}
     {...props}
   />
 ))
@@ -45,7 +45,7 @@ const TableFooter = React.forwardRef<
   <tfoot
     ref={ref}
     className={cn(
-      "border-t bg-muted/50 font-medium [&>tr]:last:border-b-0",
+      "border-t border-slate-200 bg-slate-50 font-medium dark:border-slate-800 dark:bg-slate-900/50 [&>tr]:last:border-b-0",
       className
     )}
     {...props}
@@ -60,7 +60,7 @@ const TableRow = React.forwardRef<
   <tr
     ref={ref}
     className={cn(
-      "border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted",
+      "border-b border-slate-100 transition-colors hover:bg-blue-50/40 data-[state=selected]:bg-blue-50/40 dark:border-slate-800 dark:hover:bg-slate-800/40 dark:data-[state=selected]:bg-slate-800/40",
       className
     )}
     {...props}
@@ -75,7 +75,7 @@ const TableHead = React.forwardRef<
   <th
     ref={ref}
     className={cn(
-      "h-10 px-3 text-center align-middle font-medium text-fg-muted [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
+      "border-b border-slate-200 px-3 py-2 text-center align-middle text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:border-slate-800 dark:text-slate-400 [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
       className
     )}
     {...props}
@@ -90,7 +90,7 @@ const TableCell = React.forwardRef<
   <td
     ref={ref}
     className={cn(
-      "p-3 text-center align-middle [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
+      "border-b border-slate-100 px-3 py-2 text-center align-middle text-xs dark:border-slate-800 [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
       className
     )}
     {...props}
@@ -104,7 +104,7 @@ const TableCaption = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <caption
     ref={ref}
-    className={cn("mt-4 text-sm text-fg-muted", className)}
+    className={cn("mt-4 text-sm text-slate-500 dark:text-slate-400", className)}
     {...props}
   />
 ))

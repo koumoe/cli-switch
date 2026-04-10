@@ -1,13 +1,7 @@
-import { Cpu, Info } from "lucide-react";
 import type { ReactNode } from "react";
 
 import {
   Badge,
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
 } from "@/components/ui";
 import { useI18n } from "@/hooks/use-i18n";
 import {
@@ -49,7 +43,7 @@ export function SystemSettings({
   const { t } = useI18n();
 
   return (
-    <div className="space-y-4">
+    <div className="pb-4">
       <ServiceInfoSettingsCard
         settings={settings}
         apiHost={apiHost}
@@ -69,50 +63,30 @@ export function SystemSettings({
         onCheck={onCheck}
         onAutoUpdateChange={onAutoUpdateChange}
       />
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Info className="h-4 w-4" />
-            {t("settings.about.title")}
-          </CardTitle>
-          <CardDescription>{t("settings.about.subtitle")}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-3">
-            <div className="flex items-center justify-between border-b py-2">
-              <span className="text-sm text-muted-foreground">{t("settings.about.appName")}</span>
-              <span className="text-sm font-medium">CliSwitch</span>
-            </div>
-            <div className="flex items-center justify-between border-b py-2">
-              <span className="text-sm text-muted-foreground">{t("settings.about.version")}</span>
-              <span className="text-sm font-mono">
-                {health?.version ? `v${health.version}` : "-"}
-              </span>
-            </div>
-            <div className="flex items-center justify-between border-b py-2">
-              <span className="text-sm text-muted-foreground">
-                {t("settings.about.backendStatus")}
-              </span>
-              <Badge variant={health?.status === "ok" ? "success" : "destructive"}>
-                {backendStatusLabel}
-              </Badge>
-            </div>
-            <div className="flex items-center justify-between py-2">
-              <span className="text-sm text-muted-foreground">
-                {t("settings.about.description")}
-              </span>
-              <span className="max-w-[300px] text-right text-sm">
-                {t("settings.about.descText")}
-              </span>
-            </div>
-          </div>
-
-          <div className="mt-6 rounded-lg bg-muted/50 p-4">
-            <p className="text-sm text-muted-foreground">{t("settings.about.intro")}</p>
-          </div>
-        </CardContent>
-      </Card>
+      <div className="border-t border-slate-100 px-5 pb-1 pt-2.5 text-[10px] font-bold uppercase tracking-[0.06em] text-slate-400 dark:border-slate-800/40 dark:text-slate-500">
+        {t("settings.about.title")}
+      </div>
+      <div className="flex min-h-[50px] items-center justify-between gap-4 border-t border-slate-100 px-5 py-3 transition-colors hover:bg-blue-50/25 dark:border-slate-800/40 dark:hover:bg-slate-800/25">
+        <span className="text-[12.5px] font-semibold">{t("settings.about.appName")}</span>
+        <span className="text-xs font-medium">CliSwitch</span>
+      </div>
+      <div className="flex min-h-[50px] items-center justify-between gap-4 border-t border-slate-100 px-5 py-3 transition-colors hover:bg-blue-50/25 dark:border-slate-800/40 dark:hover:bg-slate-800/25">
+        <span className="text-[12.5px] font-semibold">{t("settings.about.version")}</span>
+        <span className="text-xs font-mono">{health?.version ? `v${health.version}` : "-"}</span>
+      </div>
+      <div className="flex min-h-[50px] items-center justify-between gap-4 border-t border-slate-100 px-5 py-3 transition-colors hover:bg-blue-50/25 dark:border-slate-800/40 dark:hover:bg-slate-800/25">
+        <span className="text-[12.5px] font-semibold">{t("settings.about.backendStatus")}</span>
+        <Badge variant={health?.status === "ok" ? "success" : "destructive"}>{backendStatusLabel}</Badge>
+      </div>
+      <div className="flex min-h-[50px] items-center justify-between gap-4 border-t border-slate-100 px-5 py-3 transition-colors hover:bg-blue-50/25 dark:border-slate-800/40 dark:hover:bg-slate-800/25">
+        <span className="text-[12.5px] font-semibold">{t("settings.about.description")}</span>
+        <span className="max-w-[320px] text-right text-[10.5px] text-slate-500 dark:text-slate-400">
+          {t("settings.about.descText")}
+        </span>
+      </div>
+      <div className="border-t border-slate-100 px-5 py-3 dark:border-slate-800/40">
+        <p className="text-[10.5px] text-slate-500 dark:text-slate-400">{t("settings.about.intro")}</p>
+      </div>
     </div>
   );
 }

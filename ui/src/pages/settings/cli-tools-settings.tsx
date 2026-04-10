@@ -1,12 +1,7 @@
-import { Power, RefreshCw } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 
 import {
   Button,
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
   Switch,
 } from "@/components/ui";
 import { useI18n } from "@/hooks/use-i18n";
@@ -49,146 +44,122 @@ export function CliToolsSettings({
   const { t } = useI18n();
 
   return (
-    <div className="space-y-4">
-      <Card>
-        <CardHeader>
-          <div className="flex items-start justify-between gap-3">
-            <div className="space-y-1">
-              <CardTitle className="flex items-center gap-2">
-                <Power className="h-4 w-4" />
-                {t("settings.cliProxyConfig.title")}
-              </CardTitle>
-              <CardDescription>{t("settings.cliProxyConfig.subtitle")}</CardDescription>
+    <div className="pb-4">
+      <div className="flex items-center justify-between gap-3 border-t border-slate-100 px-5 pb-1 pt-2.5 dark:border-slate-800/40">
+        <div className="text-[10px] font-bold uppercase tracking-[0.06em] text-slate-400 dark:text-slate-500">
+          {t("settings.cliProxyConfig.title")}
+        </div>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => void onRefreshCliToolsProxyConfigStatus()}
+          disabled={cliToolsProxyConfigLoading}
+          className="h-7 gap-1.5 rounded-md px-2 text-[11px]"
+        >
+          <RefreshCw className={`h-3.5 w-3.5 ${cliToolsProxyConfigLoading ? "animate-spin" : ""}`} />
+          {t("settings.cliProxyConfig.refresh")}
+        </Button>
+      </div>
+      {!cliToolsProxyConfig ? (
+        <div className="border-t border-slate-100 px-5 py-3 text-[11px] text-slate-500 dark:border-slate-800/40 dark:text-slate-400">
+          {cliToolsProxyConfigLoading ? t("common.loading") : "-"}
+        </div>
+      ) : null}
+      {(cliToolsProxyConfig?.tools ?? []).map((tool) => {
+        const busy = cliProxyConfigBusy[tool.id];
+        return (
+          <div
+            key={tool.id}
+            className="flex min-h-[50px] items-center justify-between gap-4 border-t border-slate-100 px-5 py-3 transition-colors hover:bg-blue-50/25 dark:border-slate-800/40 dark:hover:bg-slate-800/25"
+          >
+            <div className="min-w-0 flex-1">
+              <div className="text-[12.5px] font-semibold">{tool.name}</div>
+              <div className="mt-0.5 text-[10.5px] text-slate-500 dark:text-slate-400">
+                {tool.ok ? t("settings.cliProxyConfig.ok") : t("settings.cliProxyConfig.needsFix")}
+              </div>
             </div>
             <Button
               size="sm"
-              variant="outline"
-              onClick={() => void onRefreshCliToolsProxyConfigStatus()}
-              disabled={cliToolsProxyConfigLoading}
-              className="gap-2"
+              disabled={tool.ok || busy}
+              onClick={() => void onApplyCliProxyConfig(tool.id)}
+              className="h-7 rounded-md px-2 text-[11px]"
             >
-              <RefreshCw className={`h-4 w-4 ${cliToolsProxyConfigLoading ? "animate-spin" : ""}`} />
-              {t("settings.cliProxyConfig.refresh")}
+              {t("settings.cliProxyConfig.apply")}
             </Button>
           </div>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {!cliToolsProxyConfig ? (
-            <div className="text-sm text-muted-foreground">
-              {cliToolsProxyConfigLoading ? t("common.loading") : "-"}
+        );
+      })}
+
+      <div className="flex items-center justify-between gap-3 border-t border-slate-100 px-5 pb-1 pt-2.5 dark:border-slate-800/40">
+        <div className="text-[10px] font-bold uppercase tracking-[0.06em] text-slate-400 dark:text-slate-500">
+          {t("settings.cliTools.title")}
+        </div>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => void onRefreshCliToolsStatus()}
+          disabled={cliToolsLoading}
+          className="h-7 gap-1.5 rounded-md px-2 text-[11px]"
+        >
+          <RefreshCw className={`h-3.5 w-3.5 ${cliToolsLoading ? "animate-spin" : ""}`} />
+          {t("settings.cliTools.refresh")}
+        </Button>
+      </div>
+      {!cliToolsStatus ? (
+        <div className="border-t border-slate-100 px-5 py-3 text-[11px] text-slate-500 dark:border-slate-800/40 dark:text-slate-400">
+          {cliToolsLoading ? t("common.loading") : "-"}
+        </div>
+      ) : null}
+      {(cliToolsStatus?.tools ?? []).map((tool) => {
+        const installed = tool.installed;
+        const version = tool.version ?? "-";
+        const busy = cliToolBusy[tool.id];
+        const autoEnabled =
+          tool.id === "gemini"
+            ? (appSettings?.gemini_cli_auto_update_enabled ?? false)
+            : tool.id === "claude"
+              ? (appSettings?.claude_code_auto_update_enabled ?? false)
+              : (appSettings?.codex_auto_update_enabled ?? false);
+
+        return (
+          <div
+            key={tool.id}
+            className="flex min-h-[50px] items-center justify-between gap-4 border-t border-slate-100 px-5 py-3 transition-colors hover:bg-blue-50/25 dark:border-slate-800/40 dark:hover:bg-slate-800/25"
+          >
+            <div className="min-w-0 flex-1">
+              <div className="text-[12.5px] font-semibold">{tool.name}</div>
+              <div className="mt-0.5 text-[10.5px] text-slate-500 dark:text-slate-400">
+                {installed
+                  ? t("settings.cliTools.installedWithVersion", { version })
+                  : t("settings.cliTools.notInstalled")}
+              </div>
             </div>
-          ) : null}
-
-          {(cliToolsProxyConfig?.tools ?? []).map((tool) => {
-            const busy = cliProxyConfigBusy[tool.id];
-
-            return (
-              <div
-                key={tool.id}
-                className="flex items-center justify-between gap-3 rounded-lg border bg-background px-3 py-2"
+            <div className="flex shrink-0 items-center gap-3">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={busy}
+                onClick={() => void onInstallCliTool(tool.id)}
+                className="h-7 rounded-md px-2 text-[11px]"
               >
-                <div className="min-w-0">
-                  <div className="truncate text-sm font-medium">
-                    {tool.name}{" "}
-                    <span className={tool.ok ? "text-success" : "text-warning"}>
-                      ({tool.ok
-                        ? t("settings.cliProxyConfig.ok")
-                        : t("settings.cliProxyConfig.needsFix")})
-                    </span>
-                  </div>
+                {installed ? t("settings.cliTools.update") : t("settings.cliTools.install")}
+              </Button>
+              <div className="flex items-center gap-2">
+                <div className="text-[10.5px] text-slate-500 dark:text-slate-400">
+                  {t("settings.cliTools.autoEnable")}
                 </div>
-
-                <Button
-                  size="sm"
-                  disabled={tool.ok || busy}
-                  onClick={() => void onApplyCliProxyConfig(tool.id)}
-                >
-                  {t("settings.cliProxyConfig.apply")}
-                </Button>
+                <Switch
+                  checked={autoEnabled}
+                  onCheckedChange={(value) => {
+                    void onCliToolAutoUpdateChange(tool.id, value);
+                  }}
+                  disabled={!appSettings}
+                />
               </div>
-            );
-          })}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <div className="flex items-start justify-between gap-3">
-            <div className="space-y-1">
-              <CardTitle className="flex items-center gap-2">
-                <RefreshCw className="h-4 w-4" />
-                {t("settings.cliTools.title")}
-              </CardTitle>
-              <CardDescription>{t("settings.cliTools.subtitle")}</CardDescription>
             </div>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => void onRefreshCliToolsStatus()}
-              disabled={cliToolsLoading}
-              className="gap-2"
-            >
-              <RefreshCw className={`h-4 w-4 ${cliToolsLoading ? "animate-spin" : ""}`} />
-              {t("settings.cliTools.refresh")}
-            </Button>
           </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {!cliToolsStatus ? (
-            <div className="text-sm text-muted-foreground">
-              {cliToolsLoading ? t("common.loading") : "-"}
-            </div>
-          ) : null}
-
-          {(cliToolsStatus?.tools ?? []).map((tool) => {
-            const installed = tool.installed;
-            const version = tool.version ?? "-";
-            const busy = cliToolBusy[tool.id];
-            const autoEnabled =
-              tool.id === "gemini"
-                ? (appSettings?.gemini_cli_auto_update_enabled ?? false)
-                : tool.id === "claude"
-                  ? (appSettings?.claude_code_auto_update_enabled ?? false)
-                  : (appSettings?.codex_auto_update_enabled ?? false);
-
-            return (
-              <div key={tool.id} className="flex items-center justify-between gap-4">
-                <div className="min-w-0">
-                  <div className="truncate text-sm font-medium">{tool.name}</div>
-                  <div className="text-xs text-muted-foreground">
-                    {installed
-                      ? t("settings.cliTools.installedWithVersion", { version })
-                      : t("settings.cliTools.notInstalled")}
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={busy}
-                    onClick={() => void onInstallCliTool(tool.id)}
-                  >
-                    {installed ? t("settings.cliTools.update") : t("settings.cliTools.install")}
-                  </Button>
-
-                  <div className="flex items-center gap-2">
-                    <div className="text-xs text-muted-foreground">
-                      {t("settings.cliTools.autoEnable")}
-                    </div>
-                    <Switch
-                      checked={autoEnabled}
-                      onCheckedChange={(value) => {
-                        void onCliToolAutoUpdateChange(tool.id, value);
-                      }}
-                      disabled={!appSettings}
-                    />
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </CardContent>
-      </Card>
+        );
+      })}
     </div>
   );
 }

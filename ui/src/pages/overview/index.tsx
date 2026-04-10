@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { TrendingUp, Zap, DollarSign, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
+
 import {
   Card,
   CardContent,
@@ -11,19 +11,27 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui";
-import { StatCard } from "@/components/composed/stat-card";
+import { MetricCard } from "@/components/composed/metric-card";
 import {
   TrendChart,
   type TrendChartDay,
   type TrendChartSeries,
 } from "@/components/composed/trend-chart";
 import { PageHeader } from "@/components/PageHeader";
+import { PageBody } from "@/components/layout/page-body";
+import { getSettings, listChannels, statsChannels, statsSummary, statsTrend } from "@/api";
 import { useCurrency } from "@/hooks/use-currency";
 import { useI18n } from "@/hooks/use-i18n";
 import { humanizeApiError } from "@/lib/error";
 import { formatDecimal, formatMoney, parseDecimalLike } from "@/providers/currency-provider";
-import { getSettings, listChannels, statsChannels, statsSummary, statsTrend } from "@/api";
-import type { AppSettings, Channel, ChannelStats, Protocol, StatsSummary, TrendPoint } from "@/types/api";
+import type {
+  AppSettings,
+  Channel,
+  ChannelStats,
+  Protocol,
+  StatsSummary,
+  TrendPoint,
+} from "@/types/api";
 import {
   formatNumber,
   protocolColor,
@@ -85,7 +93,9 @@ export function OverviewPage() {
         setTrendItems(tr.items);
       })
       .catch((e) => {
-        toast.error(t("overview.toast.loadFail"), { description: humanizeApiError(e, t) });
+        toast.error(t("overview.toast.loadFail"), {
+          description: humanizeApiError(e, t),
+        });
       })
       .finally(() => setLoading(false));
   }, []);
@@ -153,11 +163,11 @@ export function OverviewPage() {
       protocolColor("openai"),
       protocolColor("anthropic"),
       protocolColor("gemini"),
-      "hsl(var(--chart-4))",
-      "hsl(var(--chart-5))",
-      "hsl(var(--success))",
-      "hsl(var(--warning))",
-      "hsl(var(--destructive))",
+      "#8b5cf6",
+      "#ef4444",
+      "#10b981",
+      "#f59e0b",
+      "#ec4899",
     ];
 
     const startMs = stats?.start_ms ?? Date.now();
@@ -198,143 +208,137 @@ export function OverviewPage() {
   const protocolLabelText = (protocol: Protocol) => protocolLabel(t, protocol);
 
   return (
-    <div className="space-y-4 pb-4">
+    <div className="flex h-full min-h-0 flex-col">
       <PageHeader title={t("overview.title")} />
+      <div className="flex-1 overflow-y-auto">
+        <PageBody className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-4">
+            <MetricCard
+              label={t("overview.cards.todayRequests")}
+              value={stats?.requests ?? "-"}
+              barColor="bg-blue-600"
+              loading={loading}
+              className="animate-fade-up"
+            />
+            <MetricCard
+              label={t("overview.cards.totalTokens")}
+              value={formatNumber(stats?.total_tokens)}
+              barColor="bg-teal-500"
+              loading={loading}
+              className="animate-fade-up [animation-delay:60ms]"
+            />
+            <MetricCard
+              label={t("overview.cards.estimatedCost")}
+              value={estimatedOfficialCost === null ? "-" : `$${formatDecimal(estimatedOfficialCost)}`}
+              barColor="bg-amber-500"
+              loading={loading}
+              className="animate-fade-up [animation-delay:120ms]"
+            />
+            <MetricCard
+              label={t("overview.cards.actualSpend")}
+              value={formatMoney(actualSpend, currency)}
+              barColor="bg-emerald-500"
+              loading={loading}
+              className="animate-fade-up [animation-delay:180ms]"
+            />
+          </div>
 
-      {/* 核心指标卡片 */}
-      <div className="grid gap-3 md:grid-cols-4">
-        <StatCard
-          icon={Zap}
-          label={t("overview.cards.todayRequests")}
-          value={stats?.requests ?? "-"}
-          loading={loading}
-          className="animate-fade-up"
-        />
-        <StatCard
-          icon={TrendingUp}
-          label={t("overview.cards.totalTokens")}
-          value={formatNumber(stats?.total_tokens)}
-          loading={loading}
-          className="animate-fade-up anim-d1"
-        />
-        <StatCard
-          icon={DollarSign}
-          label={t("overview.cards.estimatedCost")}
-          value={estimatedOfficialCost === null ? "-" : `$${formatDecimal(estimatedOfficialCost)}`}
-          loading={loading}
-          className="animate-fade-up anim-d2"
-        />
-        <StatCard
-          icon={ArrowRight}
-          label={t("overview.cards.actualSpend")}
-          value={formatMoney(actualSpend, currency)}
-          loading={loading}
-          className="animate-fade-up anim-d3"
-        />
-      </div>
+          <div className="grid gap-4 md:h-[360px] md:grid-cols-4">
+            <Card className="animate-fade-up flex flex-col md:col-span-3">
+              <CardHeader className="px-4 pt-3.5 pb-2.5">
+                <CardTitle>{t("overview.trend.title")}</CardTitle>
+              </CardHeader>
+              <CardContent className="flex min-h-0 flex-1 flex-col px-4 pb-2.5">
+                {loading ? (
+                  <div className="space-y-3">
+                    <Skeleton className="h-6 w-28" />
+                    <Skeleton className="h-[220px] w-full" />
+                  </div>
+                ) : monthTrend.series.length === 0 ? (
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    {t("overview.trend.empty")}
+                  </p>
+                ) : (
+                  <TrendChart
+                    days={monthTrend.days}
+                    series={monthTrend.series}
+                    protocolLabel={protocolLabelText}
+                  />
+                )}
+              </CardContent>
+            </Card>
 
-      {/* 趋势图 + 渠道分布 */}
-      <div className="grid gap-3 md:grid-cols-4">
-        {/* 本月请求趋势 */}
-        <Card className="animate-fade-up anim-d2 flex flex-col md:col-span-3">
-          <CardHeader className="py-3 px-3">
-            <CardTitle className="text-sm">{t("overview.trend.title")}</CardTitle>
-          </CardHeader>
-          <CardContent className="px-3 pb-3 flex-1 flex flex-col">
-            {loading ? (
-              <div className="space-y-3">
-                <Skeleton className="h-6 w-28" />
-                <Skeleton className="h-[220px] w-full" />
-              </div>
-            ) : monthTrend.series.length === 0 ? (
-              <p className="text-muted-foreground text-xs">
-                {t("overview.trend.empty")}
-              </p>
-            ) : (
-              <TrendChart
-                days={monthTrend.days}
-                series={monthTrend.series}
-                protocolLabel={protocolLabelText}
-              />
-            )}
-          </CardContent>
-        </Card>
+            <Card className="animate-fade-up flex flex-col overflow-hidden [animation-delay:60ms]">
+              <CardHeader className="px-4 pt-3.5 pb-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <CardTitle>{t("overview.distribution.title")}</CardTitle>
+                  <Tabs
+                    value={distributionView}
+                    onValueChange={(value) =>
+                      setDistributionView(value === "usage" ? "usage" : "percent")
+                    }
+                  >
+                    <TabsList>
+                      <TabsTrigger value="percent">
+                        {t("overview.distribution.view.percent")}
+                      </TabsTrigger>
+                      <TabsTrigger value="usage">
+                        {t("overview.distribution.view.usage")}
+                      </TabsTrigger>
+                    </TabsList>
+                  </Tabs>
+                </div>
+              </CardHeader>
+              <CardContent className="flex min-h-0 flex-1 flex-col px-4 pb-2.5">
+                {loading ? (
+                  <div className="space-y-3">
+                    <Skeleton className="h-5 w-full" />
+                    <Skeleton className="h-5 w-full" />
+                    <Skeleton className="h-5 w-4/5" />
+                  </div>
+                ) : channelStatsUsed.length === 0 ? (
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    {t("overview.distribution.empty")}
+                  </p>
+                ) : (
+                  <div className="min-h-0 flex-1 overflow-y-auto">
+                    <ChannelDistribution
+                      stats={channelStatsUsed}
+                      protocolLabel={protocolLabelText}
+                      view={distributionView}
+                    />
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
 
-        {/* 渠道使用分布 */}
-        <div className="relative md:col-span-1">
-          <Card className="animate-fade-up anim-d3 md:absolute md:inset-0 flex flex-col overflow-hidden">
-            <CardHeader className="py-3 px-3">
-              <div className="flex items-center justify-between gap-2">
-                <CardTitle className="text-sm">
-                  {t("overview.distribution.title")}
-                </CardTitle>
-                <Tabs
-                  value={distributionView}
-                  onValueChange={(v) =>
-                    setDistributionView(v === "usage" ? "usage" : "percent")
-                  }
-                >
-                  <TabsList className="h-7 p-0.5">
-                    <TabsTrigger value="percent" className="px-2 py-0.5 text-xs">
-                      {t("overview.distribution.view.percent")}
-                    </TabsTrigger>
-                    <TabsTrigger value="usage" className="px-2 py-0.5 text-xs">
-                      {t("overview.distribution.view.usage")}
-                    </TabsTrigger>
-                  </TabsList>
-                </Tabs>
-              </div>
+          <Card className="animate-fade-up px-4 py-3.5 [animation-delay:120ms]">
+            <CardHeader className="mb-2.5 p-0">
+              <CardTitle>{t("overview.activeChannels.title")}</CardTitle>
             </CardHeader>
-            <CardContent className="px-3 pb-3 flex-1 min-h-0 flex flex-col">
+            <CardContent className="p-0">
               {loading ? (
                 <div className="space-y-3">
-                  <Skeleton className="h-5 w-full" />
-                  <Skeleton className="h-5 w-full" />
-                  <Skeleton className="h-5 w-4/5" />
+                  <Skeleton className="h-8 w-48" />
+                  <Skeleton className="h-8 w-60" />
+                  <Skeleton className="h-8 w-40" />
                 </div>
-              ) : channelStatsUsed.length === 0 ? (
-                <p className="text-muted-foreground text-xs">
-                  {t("overview.distribution.empty")}
+              ) : !hasAnyEnabled ? (
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  {t("overview.activeChannels.empty")}
                 </p>
               ) : (
-                <div className="flex-1 min-h-0 overflow-y-auto pr-1">
-                  <ChannelDistribution
-                    stats={channelStatsUsed}
-                    protocolLabel={protocolLabelText}
-                    view={distributionView}
-                  />
-                </div>
+                <ActiveChannelChain
+                  enabledByProtocol={enabledByProtocol}
+                  settings={appSettings}
+                  protocolLabel={protocolLabelText}
+                />
               )}
             </CardContent>
           </Card>
-        </div>
+        </PageBody>
       </div>
-
-      {/* 活跃渠道链 */}
-      <Card className="animate-fade-up anim-d4">
-        <CardHeader className="py-3 px-3">
-          <CardTitle className="text-sm">{t("overview.activeChannels.title")}</CardTitle>
-        </CardHeader>
-        <CardContent className="px-3 pb-3">
-          {loading ? (
-            <div className="space-y-3">
-              <Skeleton className="h-8 w-48" />
-              <Skeleton className="h-8 w-60" />
-              <Skeleton className="h-8 w-40" />
-            </div>
-          ) : !hasAnyEnabled ? (
-            <p className="text-muted-foreground text-xs">
-              {t("overview.activeChannels.empty")}
-            </p>
-          ) : (
-            <ActiveChannelChain
-              enabledByProtocol={enabledByProtocol}
-              settings={appSettings}
-              protocolLabel={protocolLabelText}
-            />
-          )}
-        </CardContent>
-      </Card>
     </div>
   );
 }

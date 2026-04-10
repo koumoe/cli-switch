@@ -1,16 +1,11 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate, useParams } from "@tanstack/react-router";
-import { Sun, Moon, Monitor, FolderOpen, Info, Database, Languages, DollarSign, RefreshCw, Power, Palette, Settings2, Cpu, Trash2, Shield, Bell, Bot } from "lucide-react";
+import { Sun, Moon, Monitor, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import type { DateRange } from "react-day-picker";
 import {
   Button,
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
   Badge,
   Dialog,
   DialogContent,
@@ -32,6 +27,7 @@ import {
 } from "@/components/ui";
 import { DateRangePicker } from "@/components/composed/date-range-picker";
 import { PageHeader } from "@/components/PageHeader";
+import { PageBody } from "@/components/layout/page-body";
 import { useCurrency } from "@/hooks/use-currency";
 import { useI18n } from "@/hooks/use-i18n";
 import { useTheme, type Theme } from "@/hooks/use-theme";
@@ -43,23 +39,11 @@ import type { Locale } from "@/types/locale";
 import { setLogLevel } from "@/lib/logger";
 import { UpdatePromptDialog } from "@/components/UpdatePromptDialog";
 import {
-  AppUpdateSettingsCard,
   ChatBridgeBaseSettingsCard,
   ChatBridgeDiscordSettingsCard,
   ChatBridgeTelegramSettingsCard,
   ChatBridgeWeixinSettingsCard,
   ChatBridgeWhatsAppSettingsCard,
-  ChannelProtectionSettingsCard,
-  ChannelRetrySettingsCard,
-  CompatibilitySettingsCard,
-  LoggingSettingsCard,
-  NewApiManagedSettingsCard,
-  PricingDataSettingsCard,
-  RemoteSystemNotificationsSettingsCard,
-  ServiceInfoSettingsCard,
-  StartupSettingsCard,
-  SystemNotificationsSettingsCard,
-  WindowCloseSettingsCard,
 } from "@/pages/settings/form-sections";
 import { formatBytes, formatDateTime, formatNumber } from "../../lib";
 import {
@@ -148,20 +132,36 @@ function normalizeQrImageSrc(src: string | null | undefined): string | null {
 
 type ChatBridgeQrPlatform = "whatsapp" | "weixin";
 const SETTINGS_TABS = [
-  "appearance",
+  "general",
   "channel",
   "notifications",
-  "application",
-  "update",
+  "cli",
   "data",
   "chatBridge",
   "system",
 ] as const;
 type SettingsTab = (typeof SETTINGS_TABS)[number];
-const DEFAULT_SETTINGS_TAB: SettingsTab = "appearance";
+const DEFAULT_SETTINGS_TAB: SettingsTab = "general";
+
+const SETTINGS_TAB_ALIASES: Record<string, SettingsTab> = {
+  appearance: "general",
+  application: "general",
+  update: "cli",
+  general: "general",
+  channel: "channel",
+  notifications: "notifications",
+  cli: "cli",
+  data: "data",
+  chatBridge: "chatBridge",
+  system: "system",
+};
 
 function isSettingsTab(value: string | undefined): value is SettingsTab {
   return SETTINGS_TABS.includes(value as SettingsTab);
+}
+
+function normalizeSettingsTab(value: string | undefined): SettingsTab {
+  return SETTINGS_TAB_ALIASES[value ?? ""] ?? DEFAULT_SETTINGS_TAB;
 }
 
 export function SettingsPage() {
@@ -220,7 +220,6 @@ export function SettingsPage() {
   const [chatBridgeWeixinStatusLoading, setChatBridgeWeixinStatusLoading] = useState(false);
   const [chatBridgeWeixinActionBusy, setChatBridgeWeixinActionBusy] = useState(false);
 
-  // 数据库相关 state
   const [dbSize, setDbSize] = useState<DbSize | null>(null);
   const [dbSizeLoading, setDbSizeLoading] = useState(false);
   const [recordsType, setRecordsType] = useState<Exclude<RecordsClearMode, "date_range">>("all");
@@ -229,7 +228,6 @@ export function SettingsPage() {
   const [recordsPromptOpen, setRecordsPromptOpen] = useState(false);
   const [recordsClearing, setRecordsClearing] = useState(false);
 
-  // 日志清理相关 state
   const [logsSize, setLogsSize] = useState<LogsSize | null>(null);
   const [logsSizeLoading, setLogsSizeLoading] = useState(false);
   const [logsScope, setLogsScope] = useState<"all" | "date_range">("all");
@@ -610,7 +608,20 @@ export function SettingsPage() {
   const logsDateStr = logsDateRange?.from
     ? `${format(logsDateRange.from, "yyyy-MM-dd")}${logsDateRange.to ? ` ~ ${format(logsDateRange.to, "yyyy-MM-dd")}` : ""}`
     : "-";
-  const activeSettingsTab = isSettingsTab(routeTab) ? routeTab : DEFAULT_SETTINGS_TAB;
+  const activeSettingsTab = normalizeSettingsTab(routeTab);
+
+  useEffect(() => {
+    if (!routeTab) return;
+    const normalized = normalizeSettingsTab(routeTab);
+    if (normalized === routeTab) return;
+    void navigate({
+      to: "/settings/{-$tab}",
+      params: {
+        tab: normalized === DEFAULT_SETTINGS_TAB ? undefined : normalized,
+      },
+      replace: true,
+    });
+  }, [navigate, routeTab]);
 
   function reopenUpdateReadyPrompt(status: UpdateStatus) {
     const version = status.pending_version;
@@ -806,72 +817,98 @@ export function SettingsPage() {
     <>
       <ChatBridgeBaseSettingsCard settings={appSettings} onSaved={setAppSettings} />
 
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("settings.chatBridge.platformConfigTitle")}</CardTitle>
-          <CardDescription>{t("settings.chatBridge.platformConfigHint")}</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <Tabs value={chatBridgePlatformTab} onValueChange={(value) => setChatBridgePlatformTab(value as ChatPlatform)} className="w-full">
-            <TabsList className="w-full justify-start">
-              <TabsTrigger value="weixin">{t("settings.chatBridge.platform.weixin")}</TabsTrigger>
-              <TabsTrigger value="telegram">{t("settings.chatBridge.platform.telegram")}</TabsTrigger>
-              <TabsTrigger value="whatsapp">{t("settings.chatBridge.platform.whatsapp")}</TabsTrigger>
-              <TabsTrigger value="discord">{t("settings.chatBridge.platform.discord")}</TabsTrigger>
-            </TabsList>
+      <div className="border-t border-slate-100 px-5 pb-1 pt-2.5 dark:border-slate-800/40">
+        <div className="text-[10px] font-bold uppercase tracking-[0.06em] text-slate-400 dark:text-slate-500">
+          {t("settings.chatBridge.platformConfigTitle")}
+        </div>
+        <div className="mt-0.5 text-[10.5px] text-slate-500 dark:text-slate-400">
+          {t("settings.chatBridge.platformConfigHint")}
+        </div>
+      </div>
+      <div className="border-t border-slate-100 px-5 py-3 dark:border-slate-800/40">
+        <Tabs
+          value={chatBridgePlatformTab}
+          onValueChange={(value) => setChatBridgePlatformTab(value as ChatPlatform)}
+          className="w-full"
+        >
+          <TabsList className="w-full justify-start rounded-none border-b border-slate-100 bg-transparent p-0 dark:border-slate-800/40 dark:bg-transparent">
+            <TabsTrigger
+              value="weixin"
+              className="flex-1 rounded-none border-b-2 border-transparent px-0 py-2 text-[11.5px] text-slate-500 data-[state=active]:border-blue-600 data-[state=active]:bg-transparent data-[state=active]:text-blue-600 data-[state=active]:shadow-none dark:text-slate-400 dark:data-[state=active]:border-blue-500 dark:data-[state=active]:bg-transparent dark:data-[state=active]:text-blue-400"
+            >
+              {t("settings.chatBridge.platform.weixin")}
+            </TabsTrigger>
+            <TabsTrigger
+              value="telegram"
+              className="flex-1 rounded-none border-b-2 border-transparent px-0 py-2 text-[11.5px] text-slate-500 data-[state=active]:border-blue-600 data-[state=active]:bg-transparent data-[state=active]:text-blue-600 data-[state=active]:shadow-none dark:text-slate-400 dark:data-[state=active]:border-blue-500 dark:data-[state=active]:bg-transparent dark:data-[state=active]:text-blue-400"
+            >
+              {t("settings.chatBridge.platform.telegram")}
+            </TabsTrigger>
+            <TabsTrigger
+              value="whatsapp"
+              className="flex-1 rounded-none border-b-2 border-transparent px-0 py-2 text-[11.5px] text-slate-500 data-[state=active]:border-blue-600 data-[state=active]:bg-transparent data-[state=active]:text-blue-600 data-[state=active]:shadow-none dark:text-slate-400 dark:data-[state=active]:border-blue-500 dark:data-[state=active]:bg-transparent dark:data-[state=active]:text-blue-400"
+            >
+              {t("settings.chatBridge.platform.whatsapp")}
+            </TabsTrigger>
+            <TabsTrigger
+              value="discord"
+              className="flex-1 rounded-none border-b-2 border-transparent px-0 py-2 text-[11.5px] text-slate-500 data-[state=active]:border-blue-600 data-[state=active]:bg-transparent data-[state=active]:text-blue-600 data-[state=active]:shadow-none dark:text-slate-400 dark:data-[state=active]:border-blue-500 dark:data-[state=active]:bg-transparent dark:data-[state=active]:text-blue-400"
+            >
+              {t("settings.chatBridge.platform.discord")}
+            </TabsTrigger>
+          </TabsList>
 
-            <TabsContent value="telegram" className="mt-4">
-              <ChatBridgeTelegramSettingsCard
-                settings={appSettings}
-                bindingCount={chatBridgeBindingsByPlatform.telegram.length}
-                tokenConfigured={appSettings?.chat_bridge_telegram_bot_token_configured ?? false}
-                onOpenPairing={() => openChatBridgePairing("telegram")}
-                onOpenBindings={() => openChatBridgeBindings("telegram")}
-                onSaved={setAppSettings}
-              />
-            </TabsContent>
+          <TabsContent value="telegram" className="mt-0">
+            <ChatBridgeTelegramSettingsCard
+              settings={appSettings}
+              bindingCount={chatBridgeBindingsByPlatform.telegram.length}
+              tokenConfigured={appSettings?.chat_bridge_telegram_bot_token_configured ?? false}
+              onOpenPairing={() => openChatBridgePairing("telegram")}
+              onOpenBindings={() => openChatBridgeBindings("telegram")}
+              onSaved={setAppSettings}
+            />
+          </TabsContent>
 
-            <TabsContent value="discord" className="mt-4">
-              <ChatBridgeDiscordSettingsCard
-                settings={appSettings}
-                bindingCount={chatBridgeBindingsByPlatform.discord.length}
-                tokenConfigured={appSettings?.chat_bridge_discord_bot_token_configured ?? false}
-                onOpenPairing={() => openChatBridgePairing("discord")}
-                onOpenBindings={() => openChatBridgeBindings("discord")}
-                onSaved={setAppSettings}
-              />
-            </TabsContent>
+          <TabsContent value="discord" className="mt-0">
+            <ChatBridgeDiscordSettingsCard
+              settings={appSettings}
+              bindingCount={chatBridgeBindingsByPlatform.discord.length}
+              tokenConfigured={appSettings?.chat_bridge_discord_bot_token_configured ?? false}
+              onOpenPairing={() => openChatBridgePairing("discord")}
+              onOpenBindings={() => openChatBridgeBindings("discord")}
+              onSaved={setAppSettings}
+            />
+          </TabsContent>
 
-            <TabsContent value="whatsapp" className="mt-4">
-              <ChatBridgeWhatsAppSettingsCard
-                settings={appSettings}
-                bindingCount={chatBridgeBindingsByPlatform.whatsapp.length}
-                statusTone={whatsappStatusTone}
-                statusLabel={whatsappStatusLabel}
-                actionBusy={chatBridgeWhatsAppActionBusy}
-                onOpenLoginDialog={() => openChatBridgeLoginDialog("whatsapp")}
-                onOpenPairing={() => openChatBridgePairing("whatsapp")}
-                onOpenBindings={() => openChatBridgeBindings("whatsapp")}
-                onSaved={setAppSettings}
-              />
-            </TabsContent>
+          <TabsContent value="whatsapp" className="mt-0">
+            <ChatBridgeWhatsAppSettingsCard
+              settings={appSettings}
+              bindingCount={chatBridgeBindingsByPlatform.whatsapp.length}
+              statusTone={whatsappStatusTone}
+              statusLabel={whatsappStatusLabel}
+              actionBusy={chatBridgeWhatsAppActionBusy}
+              onOpenLoginDialog={() => openChatBridgeLoginDialog("whatsapp")}
+              onOpenPairing={() => openChatBridgePairing("whatsapp")}
+              onOpenBindings={() => openChatBridgeBindings("whatsapp")}
+              onSaved={setAppSettings}
+            />
+          </TabsContent>
 
-            <TabsContent value="weixin" className="mt-4">
-              <ChatBridgeWeixinSettingsCard
-                settings={appSettings}
-                bindingCount={chatBridgeBindingsByPlatform.weixin.length}
-                statusTone={weixinStatusTone}
-                statusLabel={weixinStatusLabel}
-                actionBusy={chatBridgeWeixinActionBusy}
-                onOpenLoginDialog={() => openChatBridgeLoginDialog("weixin")}
-                onOpenPairing={() => openChatBridgePairing("weixin")}
-                onOpenBindings={() => openChatBridgeBindings("weixin")}
-                onSaved={setAppSettings}
-              />
-            </TabsContent>
-          </Tabs>
-        </CardContent>
-      </Card>
+          <TabsContent value="weixin" className="mt-0">
+            <ChatBridgeWeixinSettingsCard
+              settings={appSettings}
+              bindingCount={chatBridgeBindingsByPlatform.weixin.length}
+              statusTone={weixinStatusTone}
+              statusLabel={weixinStatusLabel}
+              actionBusy={chatBridgeWeixinActionBusy}
+              onOpenLoginDialog={() => openChatBridgeLoginDialog("weixin")}
+              onOpenPairing={() => openChatBridgePairing("weixin")}
+              onOpenBindings={() => openChatBridgeBindings("weixin")}
+              onSaved={setAppSettings}
+            />
+          </TabsContent>
+        </Tabs>
+      </div>
 
       <Dialog
         open={!!chatBridgeLoginDialogPlatform}
@@ -1183,85 +1220,60 @@ export function SettingsPage() {
   );
 
   return (
-    <div className="space-y-4 pb-4">
+    <div className="flex h-full min-h-0 flex-col">
       <PageHeader title={t("settings.title")} />
-
-      {/* 标签页 */}
-      <Tabs
-        value={activeSettingsTab}
-        onValueChange={(nextValue) => {
-          if (!isSettingsTab(nextValue)) return;
-          void navigate({
-            to: "/settings/{-$tab}",
-            params: {
-              tab: nextValue === DEFAULT_SETTINGS_TAB ? undefined : nextValue,
-            },
-            replace: true,
-          });
-        }}
-        className="w-full"
-      >
-        <TabsList className="w-full justify-start">
-          <TabsTrigger value="appearance" className="gap-1.5">
-            <Palette className="h-3.5 w-3.5" />
-            {t("settings.tabs.appearance")}
-          </TabsTrigger>
-          <TabsTrigger value="channel" className="gap-1.5">
-            <Shield className="h-3.5 w-3.5" />
-            {t("settings.tabs.channel")}
-          </TabsTrigger>
-          <TabsTrigger value="notifications" className="gap-1.5">
-            <Bell className="h-3.5 w-3.5" />
-            {t("settings.tabs.notifications")}
-          </TabsTrigger>
-          <TabsTrigger value="application" className="gap-1.5">
-            <Settings2 className="h-3.5 w-3.5" />
-            {t("settings.tabs.application")}
-          </TabsTrigger>
-          <TabsTrigger value="update" className="gap-1.5">
-            <RefreshCw className="h-3.5 w-3.5" />
-            {t("settings.tabs.update")}
-          </TabsTrigger>
-          <TabsTrigger value="data" className="gap-1.5">
-            <Database className="h-3.5 w-3.5" />
-            {t("settings.tabs.data")}
-          </TabsTrigger>
-          <TabsTrigger value="chatBridge" className="gap-1.5">
-            <Bot className="h-3.5 w-3.5" />
-            {t("settings.tabs.chatBridge")}
-          </TabsTrigger>
-          <TabsTrigger value="system" className="gap-1.5">
-            <Cpu className="h-3.5 w-3.5" />
-            {t("settings.tabs.system")}
-          </TabsTrigger>
-        </TabsList>
-
-        {/* 界面标签页 */}
-        <TabsContent value="appearance" className="mt-2 space-y-4">
-          <AppearanceSettings
-            theme={theme}
-            themeOptions={themeOptions}
-            onThemeChange={setTheme}
-            locale={locale}
-            locales={locales}
-            onLocaleChange={async (value) => {
-              try {
-                const next = await updateSettings({ ui_locale: value });
-                setAppSettings(next);
-                setLocale(next.ui_locale);
-              } catch (e) {
-                toast.error(t("settings.language.saveFail"), {
-                  description: humanizeApiError(e, t),
-                });
-              }
+      <div className="flex-1 overflow-hidden">
+        <PageBody className="flex h-full min-h-0 flex-col gap-3 pt-3">
+          <Tabs
+            value={activeSettingsTab}
+            onValueChange={(nextValue) => {
+              if (!isSettingsTab(nextValue)) return;
+              void navigate({
+                to: "/settings/{-$tab}",
+                params: {
+                  tab: nextValue === DEFAULT_SETTINGS_TAB ? undefined : nextValue,
+                },
+                replace: true,
+              });
             }}
-            currencyMode={currencyMode}
-            onCurrencyModeChange={setCurrencyMode}
-          />
-        </TabsContent>
+            className="flex h-full min-h-0 flex-col gap-3"
+          >
+            <TabsList className="shrink-0 self-start">
+              <TabsTrigger value="general">{t("settings.tabs.general")}</TabsTrigger>
+              <TabsTrigger value="channel">{t("settings.tabs.channel")}</TabsTrigger>
+              <TabsTrigger value="notifications">{t("settings.tabs.notifications")}</TabsTrigger>
+              <TabsTrigger value="cli">{t("settings.tabs.cli")}</TabsTrigger>
+              <TabsTrigger value="data">{t("settings.tabs.data")}</TabsTrigger>
+              <TabsTrigger value="chatBridge">{t("settings.tabs.chatBridge")}</TabsTrigger>
+              <TabsTrigger value="system">{t("settings.tabs.system")}</TabsTrigger>
+            </TabsList>
 
-        {/* 渠道标签页 */}
-        <TabsContent value="channel" className="mt-2 space-y-4">
+            <div className="flex-1 min-h-0 overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+              <TabsContent value="general" className="mt-0 h-full min-h-0 overflow-y-auto">
+                <AppearanceSettings
+                  theme={theme}
+                  themeOptions={themeOptions}
+                  onThemeChange={setTheme}
+                  locale={locale}
+                  locales={locales}
+                  onLocaleChange={async (value) => {
+                    try {
+                      const next = await updateSettings({ ui_locale: value });
+                      setAppSettings(next);
+                      setLocale(next.ui_locale);
+                    } catch (e) {
+                      toast.error(t("settings.language.saveFail"), {
+                        description: humanizeApiError(e, t),
+                      });
+                    }
+                  }}
+                  currencyMode={currencyMode}
+                  onCurrencyModeChange={setCurrencyMode}
+                />
+                <ApplicationSettings settings={appSettings} onSaved={setAppSettings} />
+              </TabsContent>
+
+              <TabsContent value="channel" className="mt-0 h-full min-h-0 overflow-y-auto">
           <ChannelSettings
             settings={appSettings}
             pricing={pricing}
@@ -1281,113 +1293,105 @@ export function SettingsPage() {
               }
             }}
           />
-        </TabsContent>
+              </TabsContent>
 
-        {/* 系统通知标签页 */}
-        <TabsContent value="notifications" className="mt-2 space-y-4">
-          <NotificationSettings settings={appSettings} onSaved={setAppSettings} />
-        </TabsContent>
+              <TabsContent value="notifications" className="mt-0 h-full min-h-0 overflow-y-auto">
+                <NotificationSettings settings={appSettings} onSaved={setAppSettings} />
+              </TabsContent>
 
-        {/* 应用标签页 */}
-        <TabsContent value="application" className="mt-2 space-y-4">
-          <ApplicationSettings settings={appSettings} onSaved={setAppSettings} />
-        </TabsContent>
+              <TabsContent value="cli" className="mt-0 h-full min-h-0 overflow-y-auto">
+                <CliToolsSettings
+                  cliToolsProxyConfig={cliToolsProxyConfig}
+                  cliToolsProxyConfigLoading={cliToolsProxyConfigLoading}
+                  cliProxyConfigBusy={cliProxyConfigBusy}
+                  cliToolsStatus={cliToolsStatus}
+                  cliToolsLoading={cliToolsLoading}
+                  cliToolBusy={cliToolBusy}
+                  appSettings={appSettings}
+                  onRefreshCliToolsProxyConfigStatus={refreshCliToolsProxyConfigStatus}
+                  onApplyCliProxyConfig={async (toolId) => {
+                    setCliProxyConfigBusy((prev) => ({ ...prev, [toolId]: true }));
+                    try {
+                      const res = await applyCliToolsProxyConfig({ tools: [toolId] });
+                      setCliToolsProxyConfig(res.status);
+                      const applied = res.applied.find((item) => item.id === toolId);
+                      if (applied?.ok) {
+                        toast.success(t("settings.cliProxyConfig.applied"));
+                      } else {
+                        toast.error(t("settings.cliProxyConfig.applyFail"), {
+                          description: humanizeIssue(applied?.issue, t),
+                        });
+                      }
+                    } catch (e) {
+                      toast.error(t("settings.cliProxyConfig.applyFail"), {
+                        description: humanizeApiError(e, t),
+                      });
+                    } finally {
+                      setCliProxyConfigBusy((prev) => ({ ...prev, [toolId]: false }));
+                      void refreshCliToolsProxyConfigStatus();
+                    }
+                  }}
+                  onRefreshCliToolsStatus={refreshCliToolsStatus}
+                  onInstallCliTool={async (toolId) => {
+                    const tool = cliToolsStatus?.tools.find((item) => item.id === toolId);
+                    if (!tool) return;
+                    setCliToolBusy((prev) => ({ ...prev, [toolId]: true }));
+                    try {
+                      await installCliToolWithToast({
+                        tool,
+                        t,
+                        onToolUpdated: (nextTool) =>
+                          setCliToolsStatus((prev) =>
+                            prev
+                              ? {
+                                  ...prev,
+                                  tools: prev.tools.map((item) =>
+                                    item.id === nextTool.id ? nextTool : item,
+                                  ),
+                                }
+                              : prev,
+                          ),
+                      });
+                    } finally {
+                      setCliToolBusy((prev) => ({ ...prev, [toolId]: false }));
+                    }
+                  }}
+                  onCliToolAutoUpdateChange={async (toolId, enabled) => {
+                    if (!appSettings) return;
+                    const previous =
+                      toolId === "gemini"
+                        ? appSettings.gemini_cli_auto_update_enabled ?? false
+                        : toolId === "claude"
+                          ? appSettings.claude_code_auto_update_enabled ?? false
+                          : appSettings.codex_auto_update_enabled ?? false;
+                    const patch =
+                      toolId === "gemini"
+                        ? { gemini_cli_auto_update_enabled: enabled }
+                        : toolId === "claude"
+                          ? { claude_code_auto_update_enabled: enabled }
+                          : { codex_auto_update_enabled: enabled };
+                    setAppSettings({ ...appSettings, ...patch } as AppSettings);
+                    try {
+                      const next = await updateSettings(patch);
+                      setAppSettings(next);
+                      toast.success(t("settings.cliTools.saved"));
+                    } catch (e) {
+                      const rollback =
+                        toolId === "gemini"
+                          ? { gemini_cli_auto_update_enabled: previous }
+                          : toolId === "claude"
+                            ? { claude_code_auto_update_enabled: previous }
+                            : { codex_auto_update_enabled: previous };
+                      setAppSettings({ ...appSettings, ...rollback } as AppSettings);
+                      toast.error(t("settings.cliTools.saveFail"), {
+                        description: humanizeApiError(e, t),
+                      });
+                    }
+                  }}
+                />
+              </TabsContent>
 
-        {/* CLI 标签页 */}
-        <TabsContent value="update" className="mt-2 space-y-4">
-          <CliToolsSettings
-            cliToolsProxyConfig={cliToolsProxyConfig}
-            cliToolsProxyConfigLoading={cliToolsProxyConfigLoading}
-            cliProxyConfigBusy={cliProxyConfigBusy}
-            cliToolsStatus={cliToolsStatus}
-            cliToolsLoading={cliToolsLoading}
-            cliToolBusy={cliToolBusy}
-            appSettings={appSettings}
-            onRefreshCliToolsProxyConfigStatus={refreshCliToolsProxyConfigStatus}
-            onApplyCliProxyConfig={async (toolId) => {
-              setCliProxyConfigBusy((prev) => ({ ...prev, [toolId]: true }));
-              try {
-                const res = await applyCliToolsProxyConfig({ tools: [toolId] });
-                setCliToolsProxyConfig(res.status);
-                const applied = res.applied.find((item) => item.id === toolId);
-                if (applied?.ok) {
-                  toast.success(t("settings.cliProxyConfig.applied"));
-                } else {
-                  toast.error(t("settings.cliProxyConfig.applyFail"), {
-                    description: humanizeIssue(applied?.issue, t),
-                  });
-                }
-              } catch (e) {
-                toast.error(t("settings.cliProxyConfig.applyFail"), {
-                  description: humanizeApiError(e, t),
-                });
-              } finally {
-                setCliProxyConfigBusy((prev) => ({ ...prev, [toolId]: false }));
-                void refreshCliToolsProxyConfigStatus();
-              }
-            }}
-            onRefreshCliToolsStatus={refreshCliToolsStatus}
-            onInstallCliTool={async (toolId) => {
-              const tool = cliToolsStatus?.tools.find((item) => item.id === toolId);
-              if (!tool) return;
-              setCliToolBusy((prev) => ({ ...prev, [toolId]: true }));
-              try {
-                await installCliToolWithToast({
-                  tool,
-                  t,
-                  onToolUpdated: (nextTool) =>
-                    setCliToolsStatus((prev) =>
-                      prev
-                        ? {
-                            ...prev,
-                            tools: prev.tools.map((item) =>
-                              item.id === nextTool.id ? nextTool : item,
-                            ),
-                          }
-                        : prev,
-                    ),
-                });
-              } finally {
-                setCliToolBusy((prev) => ({ ...prev, [toolId]: false }));
-              }
-            }}
-            onCliToolAutoUpdateChange={async (toolId, enabled) => {
-              if (!appSettings) return;
-              const previous =
-                toolId === "gemini"
-                  ? appSettings.gemini_cli_auto_update_enabled ?? false
-                  : toolId === "claude"
-                    ? appSettings.claude_code_auto_update_enabled ?? false
-                    : appSettings.codex_auto_update_enabled ?? false;
-              const patch =
-                toolId === "gemini"
-                  ? { gemini_cli_auto_update_enabled: enabled }
-                  : toolId === "claude"
-                    ? { claude_code_auto_update_enabled: enabled }
-                    : { codex_auto_update_enabled: enabled };
-              setAppSettings({ ...appSettings, ...patch } as AppSettings);
-              try {
-                const next = await updateSettings(patch);
-                setAppSettings(next);
-                toast.success(t("settings.cliTools.saved"));
-              } catch (e) {
-                const rollback =
-                  toolId === "gemini"
-                    ? { gemini_cli_auto_update_enabled: previous }
-                    : toolId === "claude"
-                      ? { claude_code_auto_update_enabled: previous }
-                      : { codex_auto_update_enabled: previous };
-                setAppSettings({ ...appSettings, ...rollback } as AppSettings);
-                toast.error(t("settings.cliTools.saveFail"), {
-                  description: humanizeApiError(e, t),
-                });
-              }
-            }}
-          />
-        </TabsContent>
-
-        {/* 数据标签页 */}
-        <TabsContent value="data" className="mt-2 space-y-4">
+              <TabsContent value="data" className="mt-0 h-full min-h-0 overflow-y-auto">
           <DataSettings
             settings={appSettings}
             onSaved={setAppSettings}
@@ -1520,15 +1524,14 @@ export function SettingsPage() {
             }}
             logsDateStr={logsDateStr}
           />
-        </TabsContent>
+              </TabsContent>
 
-        <TabsContent value="chatBridge" className="mt-2 space-y-4">
-          {chatBridgeTab}
-        </TabsContent>
+              <TabsContent value="chatBridge" className="mt-0 h-full min-h-0 overflow-y-auto">
+                {chatBridgeTab}
+              </TabsContent>
 
-        {/* 系统标签页 */}
-        <TabsContent value="system" className="mt-2 space-y-4">
-          <SystemSettings
+              <TabsContent value="system" className="mt-0 h-full min-h-0 overflow-y-auto">
+                <SystemSettings
             settings={appSettings}
             health={health}
             backendStatusLabel={backendStatusLabel}
@@ -1649,9 +1652,12 @@ export function SettingsPage() {
                 toast.error(t("settings.update.saveFail"), { description: humanizeApiError(e, t) });
               }
             }}
-          />
-        </TabsContent>
-      </Tabs>
+                />
+              </TabsContent>
+            </div>
+          </Tabs>
+        </PageBody>
+      </div>
     </div>
   );
 }

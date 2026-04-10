@@ -14,7 +14,7 @@ export function NotificationSettings({
   onSaved,
 }: NotificationSettingsProps) {
   return (
-    <div className="space-y-4">
+    <div className="pb-4">
       <SystemNotificationsSettingsCard settings={settings} onSaved={onSaved} />
       {settings?.system_notifications_enabled ? (
         <RemoteSystemNotificationsSettingsCard settings={settings} onSaved={onSaved} />

@@ -138,7 +138,7 @@ export function DataTable<TData>({
         >
           <TableHeader
             className={cn(
-              stickyHeader && "sticky top-0 z-10 bg-background",
+              stickyHeader && "sticky top-0 z-10 bg-white dark:bg-slate-900",
               headerClassName
             )}
           >
@@ -154,7 +154,7 @@ export function DataTable<TData>({
                       {header.isPlaceholder ? null : canSort ? (
                         <button
                           type="button"
-                          className="inline-flex items-center gap-1.5 transition-colors hover:text-foreground"
+                          className="inline-flex items-center gap-1 transition-colors hover:text-slate-900 dark:hover:text-slate-100"
                           onClick={header.column.getToggleSortingHandler()}
                         >
                           {flexRender(header.column.columnDef.header, header.getContext())}
@@ -200,7 +200,10 @@ export function DataTable<TData>({
                     })}
                   </TableRow>
                   {renderExpandedRow && isRowExpanded?.(row) ? (
-                    <TableRow data-expanded-for={row.id} className="bg-muted/15 hover:bg-muted/15">
+                    <TableRow
+                      data-expanded-for={row.id}
+                      className="bg-blue-50/20 hover:bg-blue-50/20 dark:bg-slate-800/20 dark:hover:bg-slate-800/20"
+                    >
                       <TableCell
                         colSpan={Math.max(leafColumns.length, 1)}
                         className={cn("p-4 text-left", expandedRowCellClassName)}
@@ -215,7 +218,7 @@ export function DataTable<TData>({
               <TableRow>
                 <TableCell
                   colSpan={Math.max(leafColumns.length, 1)}
-                  className="py-8 text-center text-muted-foreground"
+                  className="py-8 text-center text-slate-500 dark:text-slate-400"
                 >
                   {emptyState}
                 </TableCell>

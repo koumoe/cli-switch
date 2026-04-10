@@ -95,8 +95,8 @@ function SortableRow<TData>({ row, disabled, rowClassName }: SortableRowProps<TD
   return (
     <SortableHandleContext.Provider
       value={{
-        attributes,
-        listeners,
+        attributes: attributes as unknown as Record<string, unknown>,
+        listeners: (listeners ?? {}) as Record<string, ((event: Event) => void) | undefined>,
         setActivatorNodeRef,
         disabled,
       }}
@@ -142,7 +142,7 @@ export function SortableDataTableHandle({
       type="button"
       ref={context.setActivatorNodeRef}
       className={cn(
-        "text-muted-foreground hover:text-foreground cursor-grab active:cursor-grabbing disabled:cursor-not-allowed disabled:opacity-50",
+        "cursor-grab text-slate-400 hover:text-slate-900 active:cursor-grabbing disabled:cursor-not-allowed disabled:opacity-50 dark:text-slate-500 dark:hover:text-slate-100",
         className
       )}
       title={title}
@@ -235,7 +235,7 @@ export function SortableDataTable<TData>({
             containerClassName={cn("overflow-auto", containerClassName)}
             className={tableClassName}
           >
-            <TableHeader>
+            <TableHeader className="sticky top-0 z-10 bg-white dark:bg-slate-900">
               {table.getHeaderGroups().map((headerGroup) => (
                 <TableRow key={headerGroup.id}>
                   {headerGroup.headers.map((header) => {
@@ -272,7 +272,7 @@ export function SortableDataTable<TData>({
                 <TableRow>
                   <TableCell
                     colSpan={Math.max(leafColumns.length, 1)}
-                    className="py-8 text-center text-muted-foreground"
+                    className="py-8 text-center text-slate-500 dark:text-slate-400"
                   >
                     {emptyState}
                   </TableCell>
