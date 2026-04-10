@@ -44,6 +44,13 @@ import { formatDuration, formatNumber, protocolLabel } from "../../lib";
 
 const LOG_PROTOCOL_OPTIONS = ["all", "openai", "anthropic", "gemini"] as const;
 const LOG_STATUS_OPTIONS = ["all", "success", "failed"] as const;
+const logsTableHeaderClassName =
+  "border-b border-border/70 px-3 py-2 text-center text-[10px] font-semibold uppercase tracking-wider text-muted-foreground whitespace-nowrap";
+const logsTableCellClassName =
+  "border-b border-border/60 px-3 py-2 text-center whitespace-nowrap align-middle";
+const logsTableStateCellClassName =
+  "border-b border-border/60 px-3 py-10 text-center text-xs text-muted-foreground";
+const logsTableSubtextClassName = "font-mono text-[10px] text-muted-foreground";
 
 function formatLogDateParts(ms: number | null | undefined) {
   if (ms === null || ms === undefined) {
@@ -84,7 +91,7 @@ function DetailRow({
 }) {
   return (
     <>
-      <div className="py-1.5 text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+      <div className="py-1.5 text-[11px] font-semibold text-muted-foreground">
         {label}
       </div>
       <div className="py-1.5 text-[11px] font-mono break-all">
@@ -316,7 +323,7 @@ export function LogsPage() {
                         void setSearch({ start: event.target.value });
                       }}
                     />
-                    <span className="text-[11px] text-slate-500 dark:text-slate-400">~</span>
+                    <span className="text-[11px] text-muted-foreground">~</span>
                     <Input
                       className="h-7 w-[132px] px-2 py-1 text-[11px]"
                       type="date"
@@ -480,7 +487,7 @@ export function LogsPage() {
                       ].map((header) => (
                         <th
                           key={header || "actions"}
-                          className="border-b border-slate-200 px-3 py-2 text-center text-[10px] font-semibold uppercase tracking-wider text-slate-500 whitespace-nowrap dark:border-slate-800 dark:text-slate-400"
+                          className={logsTableHeaderClassName}
                         >
                           {header}
                         </th>
@@ -491,7 +498,7 @@ export function LogsPage() {
                     {loading ? (
                       <tr>
                         <td
-                          className="border-b border-slate-100 px-3 py-10 text-center text-xs text-slate-500 dark:border-slate-800/60 dark:text-slate-400"
+                          className={logsTableStateCellClassName}
                           colSpan={9}
                         >
                           <div className="flex items-center justify-center gap-2">
@@ -503,7 +510,7 @@ export function LogsPage() {
                     ) : events.length === 0 ? (
                       <tr>
                         <td
-                          className="border-b border-slate-100 px-3 py-10 text-center text-xs text-slate-500 dark:border-slate-800/60 dark:text-slate-400"
+                          className={logsTableStateCellClassName}
                           colSpan={9}
                         >
                           {t("logs.empty")}
@@ -519,64 +526,64 @@ export function LogsPage() {
                         return (
                           <tr
                             key={event.id}
-                            className="hover:bg-blue-50/40 dark:hover:bg-slate-800/40"
+                            className="hover:bg-secondary/35"
                           >
-                            <td className="border-b border-slate-100 px-3 py-2 text-center whitespace-nowrap align-middle dark:border-slate-800/60">
+                            <td className={logsTableCellClassName}>
                               <div className="font-mono">{date}</div>
-                              <div className="font-mono text-[10px] text-slate-500 dark:text-slate-400">
+                              <div className={logsTableSubtextClassName}>
                                 {time}
                               </div>
                             </td>
-                            <td className="border-b border-slate-100 px-3 py-2 text-center whitespace-nowrap align-middle dark:border-slate-800/60">
+                            <td className={logsTableCellClassName}>
                               <ProtocolBadge protocol={event.protocol}>
                                 {protocolLabel(t, event.protocol)}
                               </ProtocolBadge>
                             </td>
-                            <td className="border-b border-slate-100 px-3 py-2 text-center text-xs font-semibold whitespace-nowrap align-middle dark:border-slate-800/60">
+                            <td className={cn(logsTableCellClassName, "text-xs font-semibold")}>
                               <span className="inline-block max-w-full truncate align-middle">
                                 {channelNames.get(event.channel_id) ?? "-"}
                               </span>
                             </td>
-                            <td className="border-b border-slate-100 px-3 py-2 text-center text-xs font-medium whitespace-nowrap align-middle dark:border-slate-800/60">
+                            <td className={cn(logsTableCellClassName, "text-xs font-medium")}>
                               <span className="inline-block max-w-full truncate align-middle">
                                 {event.model ?? "-"}
                               </span>
                             </td>
-                            <td className="border-b border-slate-100 px-3 py-2 text-center whitespace-nowrap align-middle dark:border-slate-800/60">
+                            <td className={logsTableCellClassName}>
                               <div className="font-mono">{formatDuration(event.latency_ms)}</div>
-                              <div className="font-mono text-[10px] text-slate-500 dark:text-slate-400">
+                              <div className={logsTableSubtextClassName}>
                                 TTFT {formatDuration(event.ttft_ms)}
                               </div>
                             </td>
-                            <td className="border-b border-slate-100 px-3 py-2 text-center whitespace-nowrap align-middle dark:border-slate-800/60">
+                            <td className={logsTableCellClassName}>
                               <div className="font-mono">
                                 {formatNumber(event.prompt_tokens)} / {formatNumber(event.completion_tokens)}
                               </div>
-                              <div className="font-mono text-[10px] text-slate-500 dark:text-slate-400">
+                              <div className={logsTableSubtextClassName}>
                                 {hasCache
                                   ? `W:${formatNumber(cacheWrite)} R:${formatNumber(cacheRead)}`
                                   : "—"}
                               </div>
                             </td>
-                            <td className="border-b border-slate-100 px-3 py-2 text-center whitespace-nowrap align-middle dark:border-slate-800/60">
+                            <td className={logsTableCellClassName}>
                               <div className="font-mono">
                                 {formatOfficialCost(event.estimated_cost_usd)}
                               </div>
-                              <div className="font-mono text-[10px] text-slate-500 dark:text-slate-400">
+                              <div className={logsTableSubtextClassName}>
                                 {getEstimatedSpend(event)}
                               </div>
                             </td>
-                            <td className="border-b border-slate-100 px-3 py-2 text-center whitespace-nowrap align-middle dark:border-slate-800/60">
+                            <td className={logsTableCellClassName}>
                               {event.success ? (
                                 <Badge variant="success">OK</Badge>
                               ) : (
                                 <Badge variant="destructive">Fail</Badge>
                               )}
                             </td>
-                            <td className="border-b border-slate-100 px-3 py-2 text-center whitespace-nowrap align-middle dark:border-slate-800/60">
+                            <td className={logsTableCellClassName}>
                               <Button
                                 aria-label={t("common.details")}
-                                className="h-6 w-6 rounded-md px-0 py-0 text-slate-600 hover:bg-blue-50 hover:text-blue-600 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-blue-400"
+                                className="h-6 w-6 rounded-sm px-0 py-0"
                                 size="icon"
                                 variant="ghost"
                                 onClick={() => {
@@ -594,9 +601,9 @@ export function LogsPage() {
                 </table>
               </div>
 
-              <div className="flex shrink-0 items-center justify-between border-t border-slate-200 px-3 py-2 dark:border-slate-800">
+              <div className="flex shrink-0 items-center justify-between border-t border-border/70 px-3 py-2">
                 <div className="flex items-center gap-3">
-                  <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                  <span className="text-[11px] text-muted-foreground">
                     {rangeInfo}
                   </span>
                   <Select
@@ -623,59 +630,53 @@ export function LogsPage() {
                 </div>
 
                 <div className="flex items-center gap-1">
-                  <button
+                  <Button
                     aria-label={t("common.pagination.prev")}
-                    className={cn(
-                      "inline-flex h-7 w-7 items-center justify-center rounded-md border text-xs",
-                      page <= 1 || loading
-                        ? "pointer-events-none border-slate-200 bg-white text-slate-300 opacity-30 dark:border-slate-700 dark:bg-slate-900"
-                        : "border-slate-200 bg-white text-slate-500 hover:border-blue-600 hover:text-blue-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400",
-                    )}
                     disabled={page <= 1 || loading}
+                    className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                    size="icon"
                     type="button"
+                    variant="outline"
                     onClick={() => {
                       void setSearch({ page: Math.max(1, page - 1) });
                     }}
                   >
                     <ChevronLeft className="h-3.5 w-3.5" />
-                  </button>
+                  </Button>
 
                   {visiblePages.map((value) => (
-                    <button
+                    <Button
                       key={value}
                       aria-current={value === page ? "page" : undefined}
                       className={cn(
-                        "inline-flex h-7 w-7 items-center justify-center rounded-md border text-xs",
-                        value === page
-                          ? "border-blue-600 bg-blue-600 text-white dark:border-blue-500 dark:bg-blue-500"
-                          : "border-slate-200 bg-white text-slate-500 hover:border-blue-600 hover:text-blue-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400",
+                        "h-7 w-7",
+                        value !== page && "text-muted-foreground hover:text-foreground",
                       )}
                       disabled={loading}
+                      size="icon"
                       type="button"
+                      variant={value === page ? "default" : "outline"}
                       onClick={() => {
                         void setSearch({ page: value });
                       }}
                     >
                       {value}
-                    </button>
+                    </Button>
                   ))}
 
-                  <button
+                  <Button
                     aria-label={t("common.pagination.next")}
-                    className={cn(
-                      "inline-flex h-7 w-7 items-center justify-center rounded-md border text-xs",
-                      page >= totalPages || loading
-                        ? "pointer-events-none border-slate-200 bg-white text-slate-300 opacity-30 dark:border-slate-700 dark:bg-slate-900"
-                        : "border-slate-200 bg-white text-slate-500 hover:border-blue-600 hover:text-blue-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400",
-                    )}
                     disabled={page >= totalPages || loading}
+                    className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                    size="icon"
                     type="button"
+                    variant="outline"
                     onClick={() => {
                       void setSearch({ page: Math.min(totalPages, page + 1) });
                     }}
                   >
                     <ChevronRight className="h-3.5 w-3.5" />
-                  </button>
+                  </Button>
                 </div>
               </div>
             </Card>
@@ -760,7 +761,7 @@ export function LogsPage() {
                 </DetailRow>
                 <DetailRow label={t("logs.details.errorDetail")}>
                   {detailEvent.error_detail ? (
-                    <pre className="m-0 whitespace-pre-wrap text-[10px] leading-relaxed text-red-500">
+                    <pre className="m-0 whitespace-pre-wrap text-[10px] leading-relaxed text-destructive">
                       {humanizeErrorText(detailEvent.error_detail)}
                     </pre>
                   ) : (

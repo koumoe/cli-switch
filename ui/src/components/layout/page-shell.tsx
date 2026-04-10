@@ -54,7 +54,7 @@ export function PageShell({
   }, []);
 
   return (
-    <div className="flex h-full overflow-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+    <div className="flex h-full overflow-hidden bg-background text-foreground">
       <Sidebar activeRoute={activeRoute} health={health} />
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">

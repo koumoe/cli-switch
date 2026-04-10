@@ -59,7 +59,9 @@ type DataTableProps<TData> = {
   expandedRowCellClassName?: string;
 };
 
-function getColumnMeta<TData>(column: ColumnDef<TData, unknown>): DataTableColumnMeta {
+function getColumnMeta<TData>(
+  column: ColumnDef<TData, unknown>,
+): DataTableColumnMeta {
   return (column.meta ?? {}) as DataTableColumnMeta;
 }
 
@@ -109,11 +111,15 @@ export function DataTable<TData>({
   const manualPagination = pagination?.manual ?? false;
   const total = pagination
     ? manualPagination
-      ? pagination.total ?? data.length
+      ? (pagination.total ?? data.length)
       : rows.length
     : rows.length;
-  const totalPages = pagination ? Math.max(1, Math.ceil(total / pagination.pageSize)) : 1;
-  const currentPage = pagination ? Math.min(Math.max(1, pagination.page), totalPages) : 1;
+  const totalPages = pagination
+    ? Math.max(1, Math.ceil(total / pagination.pageSize))
+    : 1;
+  const currentPage = pagination
+    ? Math.min(Math.max(1, pagination.page), totalPages)
+    : 1;
 
   const visibleRows = React.useMemo(() => {
     if (!pagination) {
@@ -127,7 +133,10 @@ export function DataTable<TData>({
   }, [currentPage, manualPagination, pagination, rows]);
 
   const showLoadingRows = loading && data.length === 0;
-  const skeletonRowCount = Math.min(loadingRowCount ?? pagination?.pageSize ?? 5, 6);
+  const skeletonRowCount = Math.min(
+    loadingRowCount ?? pagination?.pageSize ?? 5,
+    6,
+  );
 
   return (
     <div className={cn("flex min-h-0 flex-1 flex-col", className)}>
@@ -138,8 +147,8 @@ export function DataTable<TData>({
         >
           <TableHeader
             className={cn(
-              stickyHeader && "sticky top-0 z-10 bg-white dark:bg-slate-900",
-              headerClassName
+              stickyHeader && "sticky top-0 z-10 bg-card",
+              headerClassName,
             )}
           >
             {table.getHeaderGroups().map((headerGroup) => (
@@ -154,14 +163,20 @@ export function DataTable<TData>({
                       {header.isPlaceholder ? null : canSort ? (
                         <button
                           type="button"
-                          className="inline-flex items-center gap-1 transition-colors hover:text-slate-900 dark:hover:text-slate-100"
+                          className="inline-flex items-center gap-1 transition-colors hover:text-foreground"
                           onClick={header.column.getToggleSortingHandler()}
                         >
-                          {flexRender(header.column.columnDef.header, header.getContext())}
+                          {flexRender(
+                            header.column.columnDef.header,
+                            header.getContext(),
+                          )}
                           <SortIcon sorting={sorted} />
                         </button>
                       ) : (
-                        flexRender(header.column.columnDef.header, header.getContext())
+                        flexRender(
+                          header.column.columnDef.header,
+                          header.getContext(),
+                        )
                       )}
                     </TableHead>
                   );
@@ -180,7 +195,9 @@ export function DataTable<TData>({
                         key={`${column.id}-${rowIndex}`}
                         className={meta.cellClassName}
                       >
-                        <Skeleton className={cn("h-4 w-full", meta.skeletonClassName)} />
+                        <Skeleton
+                          className={cn("h-4 w-full", meta.skeletonClassName)}
+                        />
                       </TableCell>
                     );
                   })}
@@ -189,12 +206,18 @@ export function DataTable<TData>({
             ) : visibleRows.length > 0 ? (
               visibleRows.map((row) => (
                 <React.Fragment key={row.id}>
-                  <TableRow className={rowClassName?.(row)} data-row-id={row.id}>
+                  <TableRow
+                    className={rowClassName?.(row)}
+                    data-row-id={row.id}
+                  >
                     {row.getVisibleCells().map((cell) => {
                       const meta = getColumnMeta(cell.column.columnDef);
                       return (
                         <TableCell key={cell.id} className={meta.cellClassName}>
-                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                          {flexRender(
+                            cell.column.columnDef.cell,
+                            cell.getContext(),
+                          )}
                         </TableCell>
                       );
                     })}
@@ -202,11 +225,14 @@ export function DataTable<TData>({
                   {renderExpandedRow && isRowExpanded?.(row) ? (
                     <TableRow
                       data-expanded-for={row.id}
-                      className="bg-blue-50/20 hover:bg-blue-50/20 dark:bg-slate-800/20 dark:hover:bg-slate-800/20"
+                      className="bg-secondary/35 hover:bg-secondary/35"
                     >
                       <TableCell
                         colSpan={Math.max(leafColumns.length, 1)}
-                        className={cn("p-4 text-left", expandedRowCellClassName)}
+                        className={cn(
+                          "p-4 text-left",
+                          expandedRowCellClassName,
+                        )}
                       >
                         {renderExpandedRow(row)}
                       </TableCell>
@@ -218,7 +244,7 @@ export function DataTable<TData>({
               <TableRow>
                 <TableCell
                   colSpan={Math.max(leafColumns.length, 1)}
-                  className="py-8 text-center text-slate-500 dark:text-slate-400"
+                  className="py-8 text-center text-muted-foreground"
                 >
                   {emptyState}
                 </TableCell>

@@ -3,12 +3,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { GripVertical, Link2, Pencil, RefreshCw, Trash2 } from "lucide-react";
 
 import type { RemoteAccount } from "@/types/api";
-import {
-  Badge,
-  Button,
-  Card,
-  CardContent,
-} from "@/components/ui";
+import { Badge, Button, Card, CardContent } from "@/components/ui";
 import {
   SortableDataTable,
   SortableDataTableHandle,
@@ -36,7 +31,9 @@ type AccountsTableProps = {
   onRefreshAccount: (item: RemoteAccount) => void | Promise<void>;
   onSystemCheckin: (item: RemoteAccount) => void | Promise<void>;
   onOpenManualCheckinPrompt: (item: RemoteAccount) => void | Promise<void>;
-  onOpenCreateManagedChannelDialog: (item: RemoteAccount) => void | Promise<void>;
+  onOpenCreateManagedChannelDialog: (
+    item: RemoteAccount,
+  ) => void | Promise<void>;
   onOpenEdit: (item: RemoteAccount) => void;
   onOpenDeleteDialog: (item: RemoteAccount) => void;
 };
@@ -88,7 +85,8 @@ export function AccountsTable({
             <div className="truncate font-medium" title={row.original.base_url}>
               {row.original.base_url}
             </div>
-            {row.original.provider === "sub2api" && row.original.reauth_required ? (
+            {row.original.provider === "sub2api" &&
+            row.original.reauth_required ? (
               <div className="mt-1 text-xs text-destructive">
                 {t("accounts.table.reauthRequired")}
               </div>
@@ -106,7 +104,11 @@ export function AccountsTable({
         header: t("accounts.table.provider"),
         cell: ({ row }) => (
           <div className="flex items-center justify-center">
-            <Badge variant={row.original.provider === "newapi" ? "secondary" : "outline"}>
+            <Badge
+              variant={
+                row.original.provider === "newapi" ? "secondary" : "outline"
+              }
+            >
               {t(`accounts.providers.${row.original.provider}`)}
             </Badge>
           </div>
@@ -120,7 +122,9 @@ export function AccountsTable({
         id: "balance",
         header: t("accounts.table.balance"),
         cell: ({ row }) => (
-          <div className="font-mono">{formatAmount(row.original, row.original.last_balance_amount)}</div>
+          <div className="font-mono">
+            {formatAmount(row.original, row.original.last_balance_amount)}
+          </div>
         ),
         meta: {
           skeletonClassName: "w-18 ml-auto",
@@ -133,13 +137,24 @@ export function AccountsTable({
           const item = row.original;
           const logicalCheckinMode = resolveCheckinMode(item);
           const done = !!checkinDoneMap[item.id] && checkinsDate === today;
-          const checkinBadge = logicalCheckinMode === "disabled"
-            ? { text: t("accounts.checkin.none"), variant: "secondary" as const }
-            : done
-              ? { text: t("accounts.checkin.done"), variant: "success" as const }
-              : { text: t("accounts.checkin.todo"), variant: "destructive" as const };
+          const checkinBadge =
+            logicalCheckinMode === "disabled"
+              ? {
+                  text: t("accounts.checkin.none"),
+                  variant: "secondary" as const,
+                }
+              : done
+                ? {
+                    text: t("accounts.checkin.done"),
+                    variant: "success" as const,
+                  }
+                : {
+                    text: t("accounts.checkin.todo"),
+                    variant: "destructive" as const,
+                  };
           const canTriggerCheckin = logicalCheckinMode !== "disabled" && !done;
-          const checkinBusy = !!systemChecking[item.id] || !!pageOpening[item.id];
+          const checkinBusy =
+            !!systemChecking[item.id] || !!pageOpening[item.id];
 
           return canTriggerCheckin ? (
             <button
@@ -241,11 +256,11 @@ export function AccountsTable({
       systemChecking,
       t,
       today,
-    ]
+    ],
   );
 
   return (
-    <Card className="flex flex-1 min-h-0 flex-col">
+    <Card className="animate-fade-up flex min-h-0 flex-1 flex-col overflow-hidden">
       <CardContent className="p-0">
         <SortableDataTable
           columns={columns}
@@ -257,9 +272,11 @@ export function AccountsTable({
           onReorderCommit={persistOrder}
           emptyState={t("accounts.table.empty")}
           renderDragOverlay={(item) => (
-            <div className="min-w-[280px] max-w-[380px] rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-xl dark:border-slate-800 dark:bg-slate-900">
-              <div className="text-center text-sm font-semibold">{item.base_url}</div>
-              <div className="mt-1 text-center text-xs text-slate-500 dark:text-slate-400">
+            <div className="min-w-[280px] max-w-[380px] rounded-md border border-border bg-card px-3 py-2 shadow-xl">
+              <div className="text-center text-sm font-semibold">
+                {item.base_url}
+              </div>
+              <div className="mt-1 text-center text-xs text-muted-foreground">
                 {t(`accounts.providers.${item.provider}`)}
               </div>
             </div>

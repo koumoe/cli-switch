@@ -1,4 +1,11 @@
-import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { toast } from "sonner";
 
@@ -23,7 +30,9 @@ import { PROMPT_TOOL_IDS } from "./shared";
 import { usePromptsPageState } from "./usePromptsPageState";
 
 const PromptEditorDialog = React.lazy(() =>
-  import("./PromptEditorDialog").then((m) => ({ default: m.PromptEditorDialog }))
+  import("./PromptEditorDialog").then((m) => ({
+    default: m.PromptEditorDialog,
+  })),
 );
 
 export function PromptsPage() {
@@ -35,7 +44,9 @@ export function PromptsPage() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [projectDeleteOpen, setProjectDeleteOpen] = useState(false);
-  const [projectDeleteTarget, setProjectDeleteTarget] = useState<(typeof state.projects)[number] | null>(null);
+  const [projectDeleteTarget, setProjectDeleteTarget] = useState<
+    (typeof state.projects)[number] | null
+  >(null);
   const [projectDeleting, setProjectDeleting] = useState(false);
   const shouldAutoStartEdit = useRef(false);
   type PromptTableRow =
@@ -51,12 +62,12 @@ export function PromptsPage() {
         project,
       })),
     ],
-    [state.activeTool, state.projects]
+    [state.activeTool, state.projects],
   );
 
   const totalPages = useMemo(
     () => Math.max(1, Math.ceil(tableRows.length / pageSize)),
-    [pageSize, tableRows.length]
+    [pageSize, tableRows.length],
   );
 
   // Auto-start edit after document loads when switching scope via edit button
@@ -108,7 +119,13 @@ export function PromptsPage() {
       }
       setEditorDialogOpen(true);
     },
-    [state.selection, state.editorOpen, state.handleSelectGlobal, state.handleSelectProject, state.handleStartEdit]
+    [
+      state.selection,
+      state.editorOpen,
+      state.handleSelectGlobal,
+      state.handleSelectProject,
+      state.handleStartEdit,
+    ],
   );
 
   const handleEditorDialogClose = useCallback(() => {
@@ -129,8 +146,13 @@ export function PromptsPage() {
     if (!projectDeleteTarget) return;
 
     const isCurrentSelection =
-      state.selection.scope === "project" && state.selection.projectId === projectDeleteTarget.id;
-    if (isCurrentSelection && state.dirty && !window.confirm(t("prompts.editor.unsavedConfirm"))) {
+      state.selection.scope === "project" &&
+      state.selection.projectId === projectDeleteTarget.id;
+    if (
+      isCurrentSelection &&
+      state.dirty &&
+      !window.confirm(t("prompts.editor.unsavedConfirm"))
+    ) {
       return;
     }
 
@@ -142,7 +164,9 @@ export function PromptsPage() {
         state.resetToGlobalSelection();
       }
       await state.refreshProjects();
-      toast.success(t("prompts.toast.projectDeleted", { name: projectDeleteTarget.name }));
+      toast.success(
+        t("prompts.toast.projectDeleted", { name: projectDeleteTarget.name }),
+      );
       setProjectDeleteOpen(false);
       setProjectDeleteTarget(null);
     } catch (e) {
@@ -168,7 +192,7 @@ export function PromptsPage() {
   const editorTitle =
     state.selection.scope === "global"
       ? t("prompts.global.title")
-      : state.selectedProject?.name ?? t("prompts.editor.noSelection");
+      : (state.selectedProject?.name ?? t("prompts.editor.noSelection"));
   const editorScopeLabel =
     state.selection.scope === "global"
       ? t("prompts.editor.globalBadge")
@@ -197,7 +221,9 @@ export function PromptsPage() {
           row.kind === "global" ? t("prompts.global.title") : row.project.name,
         cell: ({ row }) => (
           <span className="font-medium">
-            {row.original.kind === "global" ? t("prompts.global.title") : row.original.project.name}
+            {row.original.kind === "global"
+              ? t("prompts.global.title")
+              : row.original.project.name}
           </span>
         ),
         meta: {
@@ -243,34 +269,36 @@ export function PromptsPage() {
                 {t("prompts.editor.edit")}
               </Button>
             </div>
-          ) : (() => {
-            const project = row.original.project;
-            return (
-              <div className="flex items-center justify-center gap-1">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8 min-w-20 text-xs"
-                  onClick={() => handleEditDocument("project", project.id)}
-                  title={t("prompts.editor.edit")}
-                >
-                  {t("prompts.editor.edit")}
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8 min-w-20 border-destructive/40 text-xs text-destructive hover:border-destructive hover:bg-destructive/10 hover:text-destructive"
-                  onClick={() => {
-                    setProjectDeleteTarget(project);
-                    setProjectDeleteOpen(true);
-                  }}
-                  title={t("prompts.actions.deleteProject")}
-                >
-                  {t("prompts.actions.deleteProject")}
-                </Button>
-              </div>
-            );
-          })(),
+          ) : (
+            (() => {
+              const project = row.original.project;
+              return (
+                <div className="flex items-center justify-center gap-1">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 min-w-20 text-xs"
+                    onClick={() => handleEditDocument("project", project.id)}
+                    title={t("prompts.editor.edit")}
+                  >
+                    {t("prompts.editor.edit")}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 min-w-20 border-destructive/40 text-xs text-destructive hover:border-destructive hover:bg-destructive/10 hover:text-destructive"
+                    onClick={() => {
+                      setProjectDeleteTarget(project);
+                      setProjectDeleteOpen(true);
+                    }}
+                    title={t("prompts.actions.deleteProject")}
+                  >
+                    {t("prompts.actions.deleteProject")}
+                  </Button>
+                </div>
+              );
+            })()
+          ),
         meta: {
           headerClassName: "w-52",
           cellClassName: "text-center",
@@ -278,20 +306,20 @@ export function PromptsPage() {
         },
       },
     ],
-    [handleEditDocument, t]
+    [handleEditDocument, t],
   );
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-4 overflow-hidden">
+    <div className="flex h-full min-h-0 flex-col">
       <PageHeader title={t("prompts.title")} />
       <div className="flex-1 overflow-y-auto">
         <PageBody className="flex h-full min-h-0 flex-col gap-3">
           <Tabs
             value={state.activeTool}
             onValueChange={state.handleToolChange}
-            className="flex flex-1 min-h-0 flex-col"
+            className="flex flex-1 min-h-0 flex-col gap-3"
           >
-            <TabsList className="self-start">
+            <TabsList className="animate-fade-up self-start">
               {PROMPT_TOOL_IDS.map((tool) => (
                 <TabsTrigger key={tool} value={tool}>
                   {t(`prompts.tabs.${tool}`)}
@@ -300,10 +328,10 @@ export function PromptsPage() {
             </TabsList>
 
             <div className="flex flex-1 min-h-0 flex-col">
-              <Card className="flex flex-1 min-h-0 flex-col">
+              <Card className="animate-fade-up anim-d1 flex min-h-0 flex-1 flex-col overflow-hidden">
                 <CardContent className="flex flex-1 min-h-0 flex-col p-0">
                   {!state.projectsLoading && state.projects.length === 0 ? (
-                    <div className="border-b border-slate-200 px-4 py-3 text-sm text-slate-500 dark:border-slate-800 dark:text-slate-400">
+                    <div className="border-b border-border px-4 py-3 text-sm text-muted-foreground">
                       {t("prompts.projects.empty", { tool: toolLabel })}
                     </div>
                   ) : null}
@@ -380,7 +408,8 @@ export function PromptsPage() {
           name:
             state.selection.scope === "global"
               ? t("prompts.global.title")
-              : state.selectedProject?.name ?? t("prompts.editor.noSelection"),
+              : (state.selectedProject?.name ??
+                t("prompts.editor.noSelection")),
         })}
         confirmLabel={t("prompts.actions.deleteDocument")}
         busy={state.documentDeleting}

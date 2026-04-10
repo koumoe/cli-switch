@@ -196,6 +196,9 @@ type ChatBridgeWeixinSettingsCardProps = SettingsSectionProps & {
   onOpenBindings: () => void;
 };
 
+const settingsDescriptionClassName =
+  "mt-0.5 text-[10.5px] leading-snug text-muted-foreground";
+
 function channelProtectionDefaults(settings: AppSettings | null): ChannelProtectionFormValues {
   return {
     auto_disable_enabled: settings?.auto_disable_enabled ?? false,
@@ -376,7 +379,7 @@ export function ChannelProtectionSettingsCard({ settings, onSaved }: SettingsSec
                       </FormLabel>
                     }
                     hint={
-                      <UiFormDescription className="mt-0.5 text-[10.5px] leading-snug text-slate-500 dark:text-slate-400">
+                      <UiFormDescription className={settingsDescriptionClassName}>
                         {t("settings.channelProtection.enableHint")}
                       </UiFormDescription>
                     }
@@ -402,7 +405,7 @@ export function ChannelProtectionSettingsCard({ settings, onSaved }: SettingsSec
                       </FormLabel>
                     }
                     hint={
-                      <UiFormDescription className="mt-0.5 text-[10.5px] leading-snug text-slate-500 dark:text-slate-400">
+                      <UiFormDescription className={settingsDescriptionClassName}>
                         {t("settings.channelProtection.windowMinutesHint")}
                       </UiFormDescription>
                     }
@@ -431,7 +434,7 @@ export function ChannelProtectionSettingsCard({ settings, onSaved }: SettingsSec
                       </FormLabel>
                     }
                     hint={
-                      <UiFormDescription className="mt-0.5 text-[10.5px] leading-snug text-slate-500 dark:text-slate-400">
+                      <UiFormDescription className={settingsDescriptionClassName}>
                         {t("settings.channelProtection.failureTimesHint")}
                       </UiFormDescription>
                     }
@@ -460,7 +463,7 @@ export function ChannelProtectionSettingsCard({ settings, onSaved }: SettingsSec
                       </FormLabel>
                     }
                     hint={
-                      <UiFormDescription className="mt-0.5 text-[10.5px] leading-snug text-slate-500 dark:text-slate-400">
+                      <UiFormDescription className={settingsDescriptionClassName}>
                         {t("settings.channelProtection.pauseMinutesHint")}
                       </UiFormDescription>
                     }
@@ -534,7 +537,7 @@ export function ChannelRetrySettingsCard({ settings, onSaved }: SettingsSectionP
                       </FormLabel>
                     }
                     hint={
-                      <UiFormDescription className="mt-0.5 text-[10.5px] leading-snug text-slate-500 dark:text-slate-400">
+                      <UiFormDescription className={settingsDescriptionClassName}>
                         {t("settings.channelRetry.enableHint")}
                       </UiFormDescription>
                     }
@@ -611,7 +614,7 @@ export function NewApiManagedSettingsCard({ settings, onSaved }: SettingsSection
                       </FormLabel>
                     }
                     hint={
-                      <UiFormDescription className="mt-0.5 text-[10.5px] leading-snug text-slate-500 dark:text-slate-400">
+                      <UiFormDescription className={settingsDescriptionClassName}>
                         {t("settings.newApiManaged.missingPromptHint")}
                       </UiFormDescription>
                     }
@@ -637,7 +640,7 @@ export function NewApiManagedSettingsCard({ settings, onSaved }: SettingsSection
                       </FormLabel>
                     }
                     hint={
-                      <UiFormDescription className="mt-0.5 text-[10.5px] leading-snug text-slate-500 dark:text-slate-400">
+                      <UiFormDescription className={settingsDescriptionClassName}>
                         {t("settings.newApiManaged.syncMultiplierHint")}
                       </UiFormDescription>
                     }
@@ -664,7 +667,7 @@ export function NewApiManagedSettingsCard({ settings, onSaved }: SettingsSection
                         </FormLabel>
                       }
                       hint={
-                        <UiFormDescription className="mt-0.5 text-[10.5px] leading-snug text-slate-500 dark:text-slate-400">
+                        <UiFormDescription className={settingsDescriptionClassName}>
                           {t("settings.newApiManaged.ignoreFreeMultiplierHint")}
                         </UiFormDescription>
                       }
@@ -736,7 +739,7 @@ export function SystemNotificationsSettingsCard({ settings, onSaved }: SettingsS
                       </FormLabel>
                     }
                     hint={
-                      <UiFormDescription className="mt-0.5 text-[10.5px] leading-snug text-slate-500 dark:text-slate-400">
+                      <UiFormDescription className={settingsDescriptionClassName}>
                         {t("settings.systemNotifications.enableHint")}
                       </UiFormDescription>
                     }
@@ -814,7 +817,7 @@ export function RemoteSystemNotificationsSettingsCard({ settings, onSaved }: Set
                       </FormLabel>
                     }
                     hint={
-                      <UiFormDescription className="mt-0.5 text-[10.5px] leading-snug text-slate-500 dark:text-slate-400">
+                      <UiFormDescription className={settingsDescriptionClassName}>
                         {t("settings.systemNotifications.lowBalanceHint")}
                       </UiFormDescription>
                     }
@@ -840,7 +843,7 @@ export function RemoteSystemNotificationsSettingsCard({ settings, onSaved }: Set
                       </FormLabel>
                     }
                     hint={
-                      <UiFormDescription className="mt-0.5 text-[10.5px] leading-snug text-slate-500 dark:text-slate-400">
+                      <UiFormDescription className={settingsDescriptionClassName}>
                         {t("settings.systemNotifications.managedChannelMissingHint")}
                       </UiFormDescription>
                     }
@@ -866,7 +869,7 @@ export function RemoteSystemNotificationsSettingsCard({ settings, onSaved }: Set
                       </FormLabel>
                     }
                     hint={
-                      <UiFormDescription className="mt-0.5 text-[10.5px] leading-snug text-slate-500 dark:text-slate-400">
+                      <UiFormDescription className={settingsDescriptionClassName}>
                         {t("settings.systemNotifications.managedChannelMultiplierHint")}
                       </UiFormDescription>
                     }
@@ -892,7 +895,7 @@ export function RemoteSystemNotificationsSettingsCard({ settings, onSaved }: Set
                       </FormLabel>
                     }
                     hint={
-                      <UiFormDescription className="mt-0.5 text-[10.5px] leading-snug text-slate-500 dark:text-slate-400">
+                      <UiFormDescription className={settingsDescriptionClassName}>
                         {t("settings.systemNotifications.remoteGroupAddedHint")}
                       </UiFormDescription>
                     }
@@ -1002,7 +1005,7 @@ export function PricingDataSettingsCard({
                       </FormLabel>
                     }
                     hint={
-                      <UiFormDescription className="mt-0.5 text-[10.5px] leading-snug text-slate-500 dark:text-slate-400">
+                      <UiFormDescription className={settingsDescriptionClassName}>
                         {t("settings.pricingData.autoUpdateHint")}
                       </UiFormDescription>
                     }
@@ -1028,7 +1031,7 @@ export function PricingDataSettingsCard({
                       </FormLabel>
                     }
                     hint={
-                      <UiFormDescription className="mt-0.5 text-[10.5px] leading-snug text-slate-500 dark:text-slate-400">
+                      <UiFormDescription className={settingsDescriptionClassName}>
                         {t("settings.pricingData.intervalHoursHint")}
                       </UiFormDescription>
                     }
@@ -1106,7 +1109,7 @@ export function WindowCloseSettingsCard({ settings, onSaved }: SettingsSectionPr
                       </FormLabel>
                     }
                     hint={
-                      <UiFormDescription className="mt-0.5 text-[10.5px] leading-snug text-slate-500 dark:text-slate-400">
+                      <UiFormDescription className={settingsDescriptionClassName}>
                         {t("settings.windowClose.behaviorHint")}
                       </UiFormDescription>
                     }
@@ -1190,7 +1193,7 @@ export function StartupSettingsCard({ settings, onSaved }: SettingsSectionProps)
                       </FormLabel>
                     }
                     hint={
-                      <UiFormDescription className="mt-0.5 text-[10.5px] leading-snug text-slate-500 dark:text-slate-400">
+                      <UiFormDescription className={settingsDescriptionClassName}>
                         {t("settings.startup.enableHint")}
                       </UiFormDescription>
                     }
@@ -1216,7 +1219,7 @@ export function StartupSettingsCard({ settings, onSaved }: SettingsSectionProps)
                       </FormLabel>
                     }
                     hint={
-                      <UiFormDescription className="mt-0.5 text-[10.5px] leading-snug text-slate-500 dark:text-slate-400">
+                      <UiFormDescription className={settingsDescriptionClassName}>
                         {t("settings.startup.launchModeHint")}
                       </UiFormDescription>
                     }
@@ -1308,7 +1311,7 @@ export function LoggingSettingsCard({
                       </FormLabel>
                     }
                     hint={
-                      <UiFormDescription className="mt-0.5 text-[10.5px] leading-snug text-slate-500 dark:text-slate-400">
+                      <UiFormDescription className={settingsDescriptionClassName}>
                         {t("settings.logging.levelHint")}
                       </UiFormDescription>
                     }
@@ -1348,7 +1351,7 @@ export function LoggingSettingsCard({
                       </FormLabel>
                     }
                     hint={
-                      <UiFormDescription className="mt-0.5 text-[10.5px] leading-snug text-slate-500 dark:text-slate-400">
+                      <UiFormDescription className={settingsDescriptionClassName}>
                         {t("settings.logging.retentionHint")}
                       </UiFormDescription>
                     }
@@ -1423,7 +1426,7 @@ export function ServiceInfoSettingsCard({
               label={t("settings.serviceInfo.host")}
               hint={t("settings.serviceInfo.hostHint")}
             />
-            <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400">{apiHost}</span>
+            <span className="text-[11px] font-mono text-muted-foreground">{apiHost}</span>
           </SettingsRow>
 
           <SettingsRow>
@@ -1431,7 +1434,7 @@ export function ServiceInfoSettingsCard({
               label={t("settings.serviceInfo.port")}
               hint={t("settings.serviceInfo.portHint")}
             />
-            <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400">{apiPort}</span>
+            <span className="text-[11px] font-mono text-muted-foreground">{apiPort}</span>
           </SettingsRow>
 
           <FormField
@@ -1447,7 +1450,7 @@ export function ServiceInfoSettingsCard({
                       </FormLabel>
                     }
                     hint={
-                      <UiFormDescription className="mt-0.5 text-[10.5px] leading-snug text-slate-500 dark:text-slate-400">
+                      <UiFormDescription className={settingsDescriptionClassName}>
                         {t("settings.serviceInfo.lanAccessibleHint")}
                       </UiFormDescription>
                     }
@@ -1518,7 +1521,7 @@ export function CompatibilitySettingsCard({ settings, onSaved }: SettingsSection
                       </FormLabel>
                     }
                     hint={
-                      <UiFormDescription className="mt-0.5 text-[10.5px] leading-snug text-slate-500 dark:text-slate-400">
+                      <UiFormDescription className={settingsDescriptionClassName}>
                         {t("settings.compatibility.mockCountTokensHint")}
                       </UiFormDescription>
                     }
@@ -1591,7 +1594,7 @@ export function AppUpdateSettingsCard({
                         </FormLabel>
                       }
                       hint={
-                        <UiFormDescription className="mt-0.5 text-[10.5px] leading-snug text-slate-500 dark:text-slate-400">
+                        <UiFormDescription className={settingsDescriptionClassName}>
                           {t("settings.update.autoEnableHint")}
                         </UiFormDescription>
                       }
@@ -1696,7 +1699,7 @@ export function ChatBridgeBaseSettingsCard({ settings, onSaved }: ChatBridgeBase
                       </FormLabel>
                     }
                     hint={
-                      <UiFormDescription className="mt-0.5 text-[10.5px] leading-snug text-slate-500 dark:text-slate-400">
+                      <UiFormDescription className={settingsDescriptionClassName}>
                         {t("settings.chatBridge.enableHint")}
                       </UiFormDescription>
                     }
@@ -1722,7 +1725,7 @@ export function ChatBridgeBaseSettingsCard({ settings, onSaved }: ChatBridgeBase
                       </FormLabel>
                     }
                     hint={
-                      <UiFormDescription className="mt-0.5 text-[10.5px] leading-snug text-slate-500 dark:text-slate-400">
+                      <UiFormDescription className={settingsDescriptionClassName}>
                         {t("settings.chatBridge.allowNewProjectsHint")}
                       </UiFormDescription>
                     }
@@ -1748,7 +1751,7 @@ export function ChatBridgeBaseSettingsCard({ settings, onSaved }: ChatBridgeBase
                       </FormLabel>
                     }
                     hint={
-                      <UiFormDescription className="mt-0.5 text-[10.5px] leading-snug text-slate-500 dark:text-slate-400">
+                      <UiFormDescription className={settingsDescriptionClassName}>
                         {t("settings.chatBridge.turnTimeoutMinutesHint")}
                       </UiFormDescription>
                     }
@@ -1833,7 +1836,7 @@ export function ChatBridgeTelegramSettingsCard({
                     </FormLabel>
                   }
                   hint={
-                    <UiFormDescription className="mt-0.5 text-[10.5px] leading-snug text-slate-500 dark:text-slate-400">
+                    <UiFormDescription className={settingsDescriptionClassName}>
                       {t("settings.chatBridge.telegramEnableHint")}
                     </UiFormDescription>
                   }
@@ -1859,7 +1862,7 @@ export function ChatBridgeTelegramSettingsCard({
                     </FormLabel>
                   }
                   hint={
-                    <UiFormDescription className="mt-0.5 text-[10.5px] leading-snug text-slate-500 dark:text-slate-400">
+                    <UiFormDescription className={settingsDescriptionClassName}>
                       {tokenConfigured
                         ? t("settings.chatBridge.telegramTokenHintConfigured")
                         : t("settings.chatBridge.telegramTokenHint")}
@@ -1970,7 +1973,7 @@ export function ChatBridgeDiscordSettingsCard({
                     </FormLabel>
                   }
                   hint={
-                    <UiFormDescription className="mt-0.5 text-[10.5px] leading-snug text-slate-500 dark:text-slate-400">
+                    <UiFormDescription className={settingsDescriptionClassName}>
                       {t("settings.chatBridge.discordEnableHint")}
                     </UiFormDescription>
                   }
@@ -1996,7 +1999,7 @@ export function ChatBridgeDiscordSettingsCard({
                     </FormLabel>
                   }
                   hint={
-                    <UiFormDescription className="mt-0.5 text-[10.5px] leading-snug text-slate-500 dark:text-slate-400">
+                    <UiFormDescription className={settingsDescriptionClassName}>
                       {tokenConfigured
                         ? t("settings.chatBridge.discordTokenHintConfigured")
                         : t("settings.chatBridge.discordTokenHint")}
@@ -2105,7 +2108,7 @@ export function ChatBridgeWhatsAppSettingsCard({
                     </FormLabel>
                   }
                   hint={
-                    <UiFormDescription className="mt-0.5 text-[10.5px] leading-snug text-slate-500 dark:text-slate-400">
+                    <UiFormDescription className={settingsDescriptionClassName}>
                       {t("settings.chatBridge.whatsappEnableHint")}
                     </UiFormDescription>
                   }
@@ -2214,7 +2217,7 @@ export function ChatBridgeWeixinSettingsCard({
                     </FormLabel>
                   }
                   hint={
-                    <UiFormDescription className="mt-0.5 text-[10.5px] leading-snug text-slate-500 dark:text-slate-400">
+                    <UiFormDescription className={settingsDescriptionClassName}>
                       {t("settings.chatBridge.weixinEnableHint")}
                     </UiFormDescription>
                   }

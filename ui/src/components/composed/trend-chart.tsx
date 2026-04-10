@@ -1,4 +1,3 @@
-import { ProtocolBadge } from "@/components/composed/protocol-badge";
 import type { Protocol } from "@/types/api";
 
 export type TrendChartDay = {
@@ -29,6 +28,8 @@ export function TrendChart({ days, series, protocolLabel }: TrendChartProps) {
   const padBottom = 24;
   const plotW = width - padLeft - padRight;
   const plotH = height - padTop - padBottom;
+  const gridColor = "oklch(var(--border))";
+  const labelColor = "oklch(var(--muted-foreground))";
 
   const maxCount = Math.max(1, ...series.flatMap((s) => s.values));
   const yTicks = [0, Math.round(maxCount / 2), maxCount].filter(
@@ -61,7 +62,7 @@ export function TrendChart({ days, series, protocolLabel }: TrendChartProps) {
                   y1={y}
                   x2={width - padRight}
                   y2={y}
-                  stroke="#e2e8f0"
+                  stroke={gridColor}
                   strokeWidth="1"
                 />
                 <text
@@ -70,7 +71,7 @@ export function TrendChart({ days, series, protocolLabel }: TrendChartProps) {
                   textAnchor="end"
                   dominantBaseline="middle"
                   fontSize="10"
-                  fill="#94a3b8"
+                  fill={labelColor}
                 >
                   {value}
                 </text>
@@ -89,7 +90,7 @@ export function TrendChart({ days, series, protocolLabel }: TrendChartProps) {
                 y={height - 8}
                 textAnchor="middle"
                 fontSize="10"
-                fill="#94a3b8"
+                fill={labelColor}
               >
                 {day.label}
               </text>
@@ -98,7 +99,10 @@ export function TrendChart({ days, series, protocolLabel }: TrendChartProps) {
 
           {series.map((item) => {
             const path = item.values
-              .map((value, index) => `${index === 0 ? "M" : "L"} ${xFor(index)} ${yFor(value)}`)
+              .map(
+                (value, index) =>
+                  `${index === 0 ? "M" : "L"} ${xFor(index)} ${yFor(value)}`,
+              )
               .join(" ");
             return (
               <g key={item.channel_id}>
@@ -117,20 +121,25 @@ export function TrendChart({ days, series, protocolLabel }: TrendChartProps) {
       </div>
 
       {series.length > 0 ? (
-        <div className="mt-1 max-h-[60px] shrink-0 overflow-y-auto border-t border-slate-200 pt-1.5 dark:border-slate-800">
-          <div className="flex flex-wrap gap-x-2.5 gap-y-1 text-[10px] text-slate-500 dark:text-slate-400">
+        <div className="mt-1 max-h-[60px] shrink-0 overflow-y-auto border-t border-border pt-1.5">
+          <div className="flex flex-wrap gap-x-3 gap-y-1.5 text-[10px] text-muted-foreground">
             {series.map((item) => (
-              <div key={item.channel_id} className="flex min-w-0 items-center gap-1.5">
-                {item.protocol ? (
-                  <ProtocolBadge protocol={item.protocol} className="rounded px-1 py-px text-[8px]">
-                    {protocolLabel(item.protocol)}
-                  </ProtocolBadge>
-                ) : null}
+              <div
+                key={item.channel_id}
+                className="flex min-w-0 items-center gap-1.5"
+              >
                 <span
-                  className="inline-block h-2 w-2 shrink-0 rounded-sm"
+                  className="inline-block h-2 w-2 shrink-0 rounded-full"
                   style={{ background: item.color }}
                 />
-                <span className="max-w-[160px] truncate">{item.name}</span>
+                <span className="max-w-[140px] truncate font-medium text-foreground">
+                  {item.name}
+                </span>
+                {item.protocol ? (
+                  <span className="truncate text-muted-foreground">
+                    {protocolLabel(item.protocol)}
+                  </span>
+                ) : null}
               </div>
             ))}
           </div>

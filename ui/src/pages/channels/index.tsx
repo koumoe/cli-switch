@@ -66,7 +66,12 @@ import {
   reorderChannels,
   getSettings,
 } from "@/api";
-import type { AppSettings, Channel, CreateChannelInput, Protocol } from "@/types/api";
+import type {
+  AppSettings,
+  Channel,
+  CreateChannelInput,
+  Protocol,
+} from "@/types/api";
 import { protocolLabel } from "../../lib";
 
 type ChannelDraft = CreateChannelInput;
@@ -125,7 +130,9 @@ function formatFixed2(n: number): string {
   return n.toFixed(2);
 }
 
-function getRealMultiplierDisplay(raw: unknown):
+function getRealMultiplierDisplay(
+  raw: unknown,
+):
   | { kind: "invalid" }
   | { kind: "free" }
   | { kind: "value"; value: number; text: string } {
@@ -147,7 +154,9 @@ function multiplierStyle(real: number): React.CSSProperties {
   const hueDestructive = 0;
   const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
   const hue =
-    r <= 1 ? lerp(hueSuccess, hueWarning, r) : lerp(hueWarning, hueDestructive, r - 1);
+    r <= 1
+      ? lerp(hueSuccess, hueWarning, r)
+      : lerp(hueWarning, hueDestructive, r - 1);
   const sat = r <= 1 ? lerp(76, 92, r) : lerp(92, 84, r - 1);
   const light = r <= 1 ? lerp(36, 50, r) : lerp(50, 60, r - 1);
 
@@ -206,14 +215,20 @@ export function ChannelsPage() {
         listChannels(),
         getSettings().catch(() => null),
       ]);
-      const by: Record<Protocol, Channel[]> = { openai: [], anthropic: [], gemini: [] };
+      const by: Record<Protocol, Channel[]> = {
+        openai: [],
+        anthropic: [],
+        gemini: [],
+      };
       for (const c of cs) by[c.protocol].push(c);
       setChannelsByProtocol(by);
       if (settings) {
         setAppSettings(settings);
       }
     } catch (e) {
-      toast.error(t("channels.toast.loadFail"), { description: humanizeApiError(e, t) });
+      toast.error(t("channels.toast.loadFail"), {
+        description: humanizeApiError(e, t),
+      });
     } finally {
       setLoading(false);
     }
@@ -240,7 +255,10 @@ export function ChannelsPage() {
 
   const autoSortCurrent = channelsByProtocol[activeProtocol] ?? [];
   const autoSortSuggested = useMemo(() => {
-    const list = autoSortCurrent.map((c, originalIndex) => ({ c, originalIndex }));
+    const list = autoSortCurrent.map((c, originalIndex) => ({
+      c,
+      originalIndex,
+    }));
     list.sort((a, b) => {
       const fa = effectiveCostFactor(a.c);
       const fb = effectiveCostFactor(b.c);
@@ -261,12 +279,17 @@ export function ChannelsPage() {
   async function applyAutoSort() {
     setAutoSortApplying(true);
     try {
-      await reorderChannels(activeProtocol, autoSortSuggested.map((c) => c.id));
+      await reorderChannels(
+        activeProtocol,
+        autoSortSuggested.map((c) => c.id),
+      );
       toast.success(t("channels.toast.reorderOk"));
       setAutoSortOpen(false);
       await refresh();
     } catch (e) {
-      toast.error(t("channels.toast.reorderFail"), { description: humanizeApiError(e, t) });
+      toast.error(t("channels.toast.reorderFail"), {
+        description: humanizeApiError(e, t),
+      });
     } finally {
       setAutoSortApplying(false);
     }
@@ -327,7 +350,9 @@ export function ChannelsPage() {
       setModalOpen(false);
       await refresh();
     } catch (e) {
-      toast.error(t("channels.toast.actionFail"), { description: humanizeApiError(e, t) });
+      toast.error(t("channels.toast.actionFail"), {
+        description: humanizeApiError(e, t),
+      });
     } finally {
       setSubmitting(false);
     }
@@ -336,7 +361,8 @@ export function ChannelsPage() {
   async function toggleEnabled(c: Channel) {
     try {
       const nowMs = Date.now();
-      const isAutoDisabled = c.enabled && (c.auto_disabled_until_ms ?? 0) > nowMs;
+      const isAutoDisabled =
+        c.enabled && (c.auto_disabled_until_ms ?? 0) > nowMs;
       if (c.enabled && !isAutoDisabled) {
         await disableChannel(c.id);
         toast.success(t("channels.toast.disabledOk", { name: c.name }));
@@ -346,7 +372,9 @@ export function ChannelsPage() {
       }
       await refresh();
     } catch (e) {
-      toast.error(t("channels.toast.actionFail"), { description: humanizeApiError(e, t) });
+      toast.error(t("channels.toast.actionFail"), {
+        description: humanizeApiError(e, t),
+      });
     }
   }
 
@@ -360,13 +388,17 @@ export function ChannelsPage() {
     if (!deleteTarget) return;
     setDeleting(true);
     try {
-      await deleteChannel(deleteTarget.id, { sync_remote_delete: deleteSyncRemote });
+      await deleteChannel(deleteTarget.id, {
+        sync_remote_delete: deleteSyncRemote,
+      });
       toast.success(t("channels.toast.deletedOk", { name: deleteTarget.name }));
       setDeleteOpen(false);
       setDeleteTarget(null);
       await refresh();
     } catch (e) {
-      toast.error(t("channels.toast.deleteFail"), { description: humanizeApiError(e, t) });
+      toast.error(t("channels.toast.deleteFail"), {
+        description: humanizeApiError(e, t),
+      });
     } finally {
       setDeleting(false);
     }
@@ -377,26 +409,38 @@ export function ChannelsPage() {
     try {
       const r = await testChannel(c.id);
       if (r.reachable && r.ok) {
-        toast.success(t("channels.toast.testReachableOkTitle", { name: c.name }), {
-          description: t("channels.toast.testReachableOkDesc", {
-            status: r.status ?? "-",
-            latency: r.latency_ms,
-          }),
-        });
+        toast.success(
+          t("channels.toast.testReachableOkTitle", { name: c.name }),
+          {
+            description: t("channels.toast.testReachableOkDesc", {
+              status: r.status ?? "-",
+              latency: r.latency_ms,
+            }),
+          },
+        );
       } else if (r.reachable) {
-        toast.warning(t("channels.toast.testReachableBadTitle", { name: c.name }), {
-          description: t("channels.toast.testReachableOkDesc", {
-            status: r.status ?? "-",
-            latency: r.latency_ms,
-          }),
-        });
+        toast.warning(
+          t("channels.toast.testReachableBadTitle", { name: c.name }),
+          {
+            description: t("channels.toast.testReachableOkDesc", {
+              status: r.status ?? "-",
+              latency: r.latency_ms,
+            }),
+          },
+        );
       } else {
-        toast.error(t("channels.toast.testUnreachableTitle", { name: c.name }), {
-          description: humanizeIssue(r.issue, t) ?? t("channels.toast.testTimeout"),
-        });
+        toast.error(
+          t("channels.toast.testUnreachableTitle", { name: c.name }),
+          {
+            description:
+              humanizeIssue(r.issue, t) ?? t("channels.toast.testTimeout"),
+          },
+        );
       }
     } catch (e) {
-      toast.error(t("channels.toast.testFail"), { description: humanizeApiError(e, t) });
+      toast.error(t("channels.toast.testFail"), {
+        description: humanizeApiError(e, t),
+      });
     } finally {
       setTesting((m) => ({ ...m, [c.id]: false }));
     }
@@ -405,11 +449,16 @@ export function ChannelsPage() {
   async function persistOrder(protocol: Protocol, next: Channel[]) {
     setReordering(true);
     try {
-      await reorderChannels(protocol, next.map((c) => c.id));
+      await reorderChannels(
+        protocol,
+        next.map((c) => c.id),
+      );
       toast.success(t("channels.toast.reorderOk"));
       await refresh();
     } catch (e) {
-      toast.error(t("channels.toast.reorderFail"), { description: humanizeApiError(e, t) });
+      toast.error(t("channels.toast.reorderFail"), {
+        description: humanizeApiError(e, t),
+      });
       await refresh();
     } finally {
       setReordering(false);
@@ -439,7 +488,9 @@ export function ChannelsPage() {
       {
         accessorKey: "name",
         header: t("channels.table.name"),
-        cell: ({ row }) => <div className="font-medium text-left">{row.original.name}</div>,
+        cell: ({ row }) => (
+          <div className="font-medium text-left">{row.original.name}</div>
+        ),
         meta: {
           headerClassName: "w-44 text-left",
           cellClassName: "text-left",
@@ -449,7 +500,9 @@ export function ChannelsPage() {
       {
         accessorKey: "priority",
         header: t("channels.table.priority"),
-        cell: ({ row }) => <span className="font-mono text-sm">{row.original.priority}</span>,
+        cell: ({ row }) => (
+          <span className="font-mono text-sm">{row.original.priority}</span>
+        ),
         meta: {
           headerClassName: "w-20",
           skeletonClassName: "w-8 mx-auto",
@@ -459,7 +512,9 @@ export function ChannelsPage() {
         id: "real_multiplier",
         header: t("channels.table.realMultiplier"),
         cell: ({ row }) => {
-          const realMultiplierDisplay = getRealMultiplierDisplay(row.original.real_multiplier);
+          const realMultiplierDisplay = getRealMultiplierDisplay(
+            row.original.real_multiplier,
+          );
 
           if (realMultiplierDisplay.kind === "invalid") {
             return <Badge variant="secondary">—</Badge>;
@@ -502,12 +557,14 @@ export function ChannelsPage() {
           const effectiveEnabled = channel.enabled && !isAutoDisabled;
           const autoDisabledMinutes = Math.max(
             1,
-            Math.ceil(((channel.auto_disabled_until_ms ?? 0) - nowMs) / 60000)
+            Math.ceil(((channel.auto_disabled_until_ms ?? 0) - nowMs) / 60000),
           );
 
           return isAutoDisabled ? (
             <Badge variant="warning">
-              {t("channels.status.autoDisabled", { minutes: autoDisabledMinutes })}
+              {t("channels.status.autoDisabled", {
+                minutes: autoDisabledMinutes,
+              })}
             </Badge>
           ) : (
             <Badge variant={effectiveEnabled ? "success" : "secondary"}>
@@ -583,7 +640,7 @@ export function ChannelsPage() {
     ];
 
     return (
-      <Card className="flex min-h-0 flex-col">
+      <Card className="animate-fade-up anim-d1 flex min-h-0 flex-col overflow-hidden">
         <CardContent className="p-0">
           <SortableDataTable
             columns={columns}
@@ -592,15 +649,19 @@ export function ChannelsPage() {
             disabled={reordering}
             getRowId={(row) => row.id}
             onReorder={(next) => {
-              setChannelsByProtocol((current) => ({ ...current, [protocol]: next }));
+              setChannelsByProtocol((current) => ({
+                ...current,
+                [protocol]: next,
+              }));
             }}
             onReorderCommit={(next) => persistOrder(protocol, next)}
             emptyState={t("channels.table.empty")}
             renderDragOverlay={(channel) => (
-              <div className="min-w-[260px] max-w-[360px] rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-xl dark:border-slate-800 dark:bg-slate-900">
+              <div className="min-w-[260px] max-w-[360px] rounded-md border border-border bg-card px-3 py-2 shadow-xl">
                 <div className="text-sm font-semibold">{channel.name}</div>
-                <div className="mt-1 truncate text-xs text-slate-500 dark:text-slate-400">
-                  {t("channels.table.priority")}: {channel.priority} · {channel.base_url}
+                <div className="mt-1 truncate text-xs text-muted-foreground">
+                  {t("channels.table.priority")}: {channel.priority} ·{" "}
+                  {channel.base_url}
                 </div>
               </div>
             )}
@@ -619,7 +680,7 @@ export function ChannelsPage() {
         oldIndex: autoSortCurrent.findIndex((item) => item.id === channel.id),
         factor: effectiveCostFactor(channel),
       })),
-    [autoSortCurrent, autoSortSuggested]
+    [autoSortCurrent, autoSortSuggested],
   );
   const autoSortPreviewColumns = useMemo<
     Array<ColumnDef<(typeof autoSortPreviewRows)[number]>>
@@ -675,7 +736,9 @@ export function ChannelsPage() {
         header: t("channels.autoSort.headers.factor"),
         cell: ({ row }) => (
           <span className="font-mono text-xs text-muted-foreground">
-            {Number.isFinite(row.original.factor) ? formatFixed2(row.original.factor) : "-"}
+            {Number.isFinite(row.original.factor)
+              ? formatFixed2(row.original.factor)
+              : "-"}
           </span>
         ),
         meta: {
@@ -684,7 +747,7 @@ export function ChannelsPage() {
         },
       },
     ],
-    [t]
+    [t],
   );
 
   return (
@@ -717,14 +780,22 @@ export function ChannelsPage() {
               setActiveProtocol(v as Protocol);
             }}
           >
-            <TabsList>
-              <TabsTrigger value="openai">{t("channels.tabs.codex")}</TabsTrigger>
-              <TabsTrigger value="anthropic">{t("channels.tabs.claude")}</TabsTrigger>
-              <TabsTrigger value="gemini">{t("channels.tabs.gemini")}</TabsTrigger>
+            <TabsList className="animate-fade-up">
+              <TabsTrigger value="openai">
+                {t("channels.tabs.codex")}
+              </TabsTrigger>
+              <TabsTrigger value="anthropic">
+                {t("channels.tabs.claude")}
+              </TabsTrigger>
+              <TabsTrigger value="gemini">
+                {t("channels.tabs.gemini")}
+              </TabsTrigger>
             </TabsList>
 
             <TabsContent value="openai">{renderTable("openai")}</TabsContent>
-            <TabsContent value="anthropic">{renderTable("anthropic")}</TabsContent>
+            <TabsContent value="anthropic">
+              {renderTable("anthropic")}
+            </TabsContent>
             <TabsContent value="gemini">{renderTable("gemini")}</TabsContent>
           </Tabs>
         </PageBody>
@@ -735,7 +806,9 @@ export function ChannelsPage() {
         <DialogContent className="sm:max-w-[500px] max-h-[85vh] overflow-hidden flex flex-col">
           <DialogHeader className="shrink-0">
             <DialogTitle>
-              {modalMode === "create" ? t("channels.modal.createTitle") : t("channels.modal.editTitle")}
+              {modalMode === "create"
+                ? t("channels.modal.createTitle")
+                : t("channels.modal.editTitle")}
             </DialogTitle>
             <DialogDescription>
               {t("channels.modal.description")}
@@ -743,11 +816,16 @@ export function ChannelsPage() {
           </DialogHeader>
 
           <Form {...channelForm}>
-            <form onSubmit={submit} className="flex flex-1 min-h-0 flex-col overflow-hidden">
+            <form
+              onSubmit={submit}
+              className="flex flex-1 min-h-0 flex-col overflow-hidden"
+            >
               <FormField
                 control={channelForm.control}
                 name="checkin_url"
-                render={({ field }) => <input type="hidden" value={field.value} readOnly />}
+                render={({ field }) => (
+                  <input type="hidden" value={field.value} readOnly />
+                )}
               />
 
               <div className="flex-1 min-h-0 space-y-4 overflow-y-auto py-4 pr-1">
@@ -776,7 +854,9 @@ export function ChannelsPage() {
                           value={field.value}
                           onValueChange={(value) => {
                             const nextProtocol = value as Protocol;
-                            const currentBaseUrl = channelForm.getValues("base_url").trim();
+                            const currentBaseUrl = channelForm
+                              .getValues("base_url")
+                              .trim();
                             const prevDefault = defaultBaseUrl(field.value);
                             const nextDefault = defaultBaseUrl(nextProtocol);
                             const shouldUpdateBase =
@@ -798,9 +878,15 @@ export function ChannelsPage() {
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            <SelectItem value="anthropic">{t("channels.tabs.claude")}</SelectItem>
-                            <SelectItem value="openai">{t("channels.tabs.codex")}</SelectItem>
-                            <SelectItem value="gemini">{t("channels.tabs.gemini")}</SelectItem>
+                            <SelectItem value="anthropic">
+                              {t("channels.tabs.claude")}
+                            </SelectItem>
+                            <SelectItem value="openai">
+                              {t("channels.tabs.codex")}
+                            </SelectItem>
+                            <SelectItem value="gemini">
+                              {t("channels.tabs.gemini")}
+                            </SelectItem>
                           </SelectContent>
                         </Select>
                         <FormMessage />
@@ -831,9 +917,16 @@ export function ChannelsPage() {
                       <FormItem>
                         <FormLabel>{t("channels.modal.retryTimes")}</FormLabel>
                         <FormControl>
-                          <Input {...field} type="number" min="1" placeholder="1" />
+                          <Input
+                            {...field}
+                            type="number"
+                            min="1"
+                            placeholder="1"
+                          />
                         </FormControl>
-                        <FormDescription>{t("channels.modal.retryTimesHint")}</FormDescription>
+                        <FormDescription>
+                          {t("channels.modal.retryTimesHint")}
+                        </FormDescription>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -842,7 +935,9 @@ export function ChannelsPage() {
                   <FormField
                     control={channelForm.control}
                     name="retry_times"
-                    render={({ field }) => <input type="hidden" value={field.value} readOnly />}
+                    render={({ field }) => (
+                      <input type="hidden" value={field.value} readOnly />
+                    )}
                   />
                 )}
 
@@ -851,16 +946,25 @@ export function ChannelsPage() {
                   name="recharge_currency"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>{t("channels.modal.rechargeCurrency")}</FormLabel>
-                      <Select value={field.value} onValueChange={field.onChange}>
+                      <FormLabel>
+                        {t("channels.modal.rechargeCurrency")}
+                      </FormLabel>
+                      <Select
+                        value={field.value}
+                        onValueChange={field.onChange}
+                      >
                         <FormControl>
                           <SelectTrigger>
                             <SelectValue />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="CNY">{t("channels.modal.rechargeCurrencyOptions.cny")}</SelectItem>
-                          <SelectItem value="USD">{t("channels.modal.rechargeCurrencyOptions.usd")}</SelectItem>
+                          <SelectItem value="CNY">
+                            {t("channels.modal.rechargeCurrencyOptions.cny")}
+                          </SelectItem>
+                          <SelectItem value="USD">
+                            {t("channels.modal.rechargeCurrencyOptions.usd")}
+                          </SelectItem>
                         </SelectContent>
                       </Select>
                       <FormMessage />
@@ -873,7 +977,9 @@ export function ChannelsPage() {
                   name="real_multiplier"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>{t("channels.modal.realMultiplier")}</FormLabel>
+                      <FormLabel>
+                        {t("channels.modal.realMultiplier")}
+                      </FormLabel>
                       <FormControl>
                         <Input
                           {...field}
@@ -886,14 +992,20 @@ export function ChannelsPage() {
                             if (!raw || !/^\d+(\.\d{0,2})?$/.test(raw)) return;
                             const number = Number(raw);
                             if (!Number.isFinite(number) || number < 0) return;
-                            channelForm.setValue("real_multiplier", formatFixed2(number), {
-                              shouldDirty: true,
-                              shouldValidate: true,
-                            });
+                            channelForm.setValue(
+                              "real_multiplier",
+                              formatFixed2(number),
+                              {
+                                shouldDirty: true,
+                                shouldValidate: true,
+                              },
+                            );
                           }}
                         />
                       </FormControl>
-                      <FormDescription>{t("channels.modal.realMultiplierHint")}</FormDescription>
+                      <FormDescription>
+                        {t("channels.modal.realMultiplierHint")}
+                      </FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -906,7 +1018,10 @@ export function ChannelsPage() {
                     <FormItem>
                       <FormLabel>{t("channels.modal.baseUrl")}</FormLabel>
                       <FormControl>
-                        <Input {...field} placeholder="https://api.openai.com" />
+                        <Input
+                          {...field}
+                          placeholder="https://api.openai.com"
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -920,7 +1035,11 @@ export function ChannelsPage() {
                     <FormItem>
                       <FormLabel>{t("channels.modal.apiKey")}</FormLabel>
                       <FormControl>
-                        <Input {...field} type="password" placeholder="sk-..." />
+                        <Input
+                          {...field}
+                          type="password"
+                          placeholder="sk-..."
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -934,7 +1053,10 @@ export function ChannelsPage() {
                     <FormItem className="flex flex-row items-center justify-between space-y-0">
                       <FormLabel>{t("channels.modal.enabled")}</FormLabel>
                       <FormControl>
-                        <Switch checked={field.value} onCheckedChange={field.onChange} />
+                        <Switch
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                        />
                       </FormControl>
                     </FormItem>
                   )}
@@ -946,11 +1068,18 @@ export function ChannelsPage() {
                   render={({ field }) => (
                     <FormItem className="flex flex-row items-start justify-between gap-4 space-y-0">
                       <div className="space-y-1">
-                        <FormLabel>{t("channels.modal.ignoreChannelProtection")}</FormLabel>
-                        <FormDescription>{t("channels.modal.ignoreChannelProtectionHint")}</FormDescription>
+                        <FormLabel>
+                          {t("channels.modal.ignoreChannelProtection")}
+                        </FormLabel>
+                        <FormDescription>
+                          {t("channels.modal.ignoreChannelProtectionHint")}
+                        </FormDescription>
                       </div>
                       <FormControl>
-                        <Switch checked={field.value} onCheckedChange={field.onChange} />
+                        <Switch
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                        />
                       </FormControl>
                     </FormItem>
                   )}
@@ -958,7 +1087,12 @@ export function ChannelsPage() {
               </div>
 
               <DialogFooter className="shrink-0">
-                <Button type="button" variant="outline" onClick={() => setModalOpen(false)} disabled={submitting}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setModalOpen(false)}
+                  disabled={submitting}
+                >
                   {t("common.cancel")}
                 </Button>
                 <Button type="submit" disabled={submitting}>
@@ -976,7 +1110,9 @@ export function ChannelsPage() {
           <DialogHeader className="shrink-0">
             <DialogTitle>{t("channels.autoSort.title")}</DialogTitle>
             <DialogDescription>
-              {t("channels.autoSort.description", { terminal: protocolLabel(t, activeProtocol) })}
+              {t("channels.autoSort.description", {
+                terminal: protocolLabel(t, activeProtocol),
+              })}
             </DialogDescription>
           </DialogHeader>
 
@@ -997,10 +1133,17 @@ export function ChannelsPage() {
           </div>
 
           <DialogFooter className="shrink-0">
-            <Button variant="outline" onClick={() => setAutoSortOpen(false)} disabled={autoSortApplying}>
+            <Button
+              variant="outline"
+              onClick={() => setAutoSortOpen(false)}
+              disabled={autoSortApplying}
+            >
               {t("common.cancel")}
             </Button>
-            <Button onClick={applyAutoSort} disabled={!autoSortChanged || autoSortApplying}>
+            <Button
+              onClick={applyAutoSort}
+              disabled={!autoSortChanged || autoSortApplying}
+            >
               {t("channels.autoSort.apply")}
             </Button>
           </DialogFooter>
@@ -1020,19 +1163,26 @@ export function ChannelsPage() {
             <DialogTitle>{t("channels.deleteDialog.title")}</DialogTitle>
             <DialogDescription>
               {deleteTarget
-                ? t("channels.deleteDialog.confirmWithName", { name: deleteTarget.name })
+                ? t("channels.deleteDialog.confirmWithName", {
+                    name: deleteTarget.name,
+                  })
                 : t("channels.deleteDialog.confirm")}
             </DialogDescription>
           </DialogHeader>
           {deleteTarget?.managed_by_remote ? (
             <div className="flex items-center justify-between rounded-md border p-3">
               <div className="space-y-1">
-                <div className="text-sm font-medium">{t("channels.deleteDialog.syncDeleteRemote")}</div>
+                <div className="text-sm font-medium">
+                  {t("channels.deleteDialog.syncDeleteRemote")}
+                </div>
                 <div className="text-xs text-muted-foreground">
                   {t("channels.deleteDialog.syncDeleteRemoteHint")}
                 </div>
               </div>
-              <Switch checked={deleteSyncRemote} onCheckedChange={setDeleteSyncRemote} />
+              <Switch
+                checked={deleteSyncRemote}
+                onCheckedChange={setDeleteSyncRemote}
+              />
             </div>
           ) : null}
           <DialogFooter>
@@ -1046,7 +1196,11 @@ export function ChannelsPage() {
             >
               {t("common.cancel")}
             </Button>
-            <Button variant="destructive" onClick={confirmDelete} disabled={deleting || !deleteTarget}>
+            <Button
+              variant="destructive"
+              onClick={confirmDelete}
+              disabled={deleting || !deleteTarget}
+            >
               {t("common.delete")}
             </Button>
           </DialogFooter>

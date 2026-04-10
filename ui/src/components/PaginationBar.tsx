@@ -40,8 +40,8 @@ export function PaginationBar({
   }
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-3 py-2 dark:border-slate-800">
-      <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
+    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-3 py-2">
+      <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
         <span>{t("common.pagination.total", { total: formatNumber(total) })}</span>
         <span>{t("common.pagination.page", { page, totalPages })}</span>
         <Select

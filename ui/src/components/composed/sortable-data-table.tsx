@@ -51,7 +51,10 @@ type SortableDataTableProps<TData> = {
   className?: string;
   tableClassName?: string;
   containerClassName?: string;
-  rowClassName?: (row: Row<TData>, state: { isDragging: boolean }) => string | undefined;
+  rowClassName?: (
+    row: Row<TData>,
+    state: { isDragging: boolean },
+  ) => string | undefined;
 };
 
 type SortableHandleContextValue = {
@@ -61,19 +64,29 @@ type SortableHandleContextValue = {
   disabled: boolean;
 };
 
-const SortableHandleContext = React.createContext<SortableHandleContextValue | null>(null);
+const SortableHandleContext =
+  React.createContext<SortableHandleContextValue | null>(null);
 
-function getColumnMeta<TData>(column: ColumnDef<TData, unknown>): DataTableColumnMeta {
+function getColumnMeta<TData>(
+  column: ColumnDef<TData, unknown>,
+): DataTableColumnMeta {
   return (column.meta ?? {}) as DataTableColumnMeta;
 }
 
 type SortableRowProps<TData> = {
   row: Row<TData>;
   disabled: boolean;
-  rowClassName?: (row: Row<TData>, state: { isDragging: boolean }) => string | undefined;
+  rowClassName?: (
+    row: Row<TData>,
+    state: { isDragging: boolean },
+  ) => string | undefined;
 };
 
-function SortableRow<TData>({ row, disabled, rowClassName }: SortableRowProps<TData>) {
+function SortableRow<TData>({
+  row,
+  disabled,
+  rowClassName,
+}: SortableRowProps<TData>) {
   const {
     attributes,
     listeners,
@@ -96,7 +109,10 @@ function SortableRow<TData>({ row, disabled, rowClassName }: SortableRowProps<TD
     <SortableHandleContext.Provider
       value={{
         attributes: attributes as unknown as Record<string, unknown>,
-        listeners: (listeners ?? {}) as Record<string, ((event: Event) => void) | undefined>,
+        listeners: (listeners ?? {}) as Record<
+          string,
+          ((event: Event) => void) | undefined
+        >,
         setActivatorNodeRef,
         disabled,
       }}
@@ -106,7 +122,7 @@ function SortableRow<TData>({ row, disabled, rowClassName }: SortableRowProps<TD
         style={style}
         className={cn(
           isDragging && "relative z-10 opacity-70",
-          rowClassName?.(row, { isDragging })
+          rowClassName?.(row, { isDragging }),
         )}
       >
         {row.getVisibleCells().map((cell) => {
@@ -142,8 +158,8 @@ export function SortableDataTableHandle({
       type="button"
       ref={context.setActivatorNodeRef}
       className={cn(
-        "cursor-grab text-slate-400 hover:text-slate-900 active:cursor-grabbing disabled:cursor-not-allowed disabled:opacity-50 dark:text-slate-500 dark:hover:text-slate-100",
-        className
+        "cursor-grab text-muted-foreground hover:text-foreground active:cursor-grabbing disabled:cursor-not-allowed disabled:opacity-50",
+        className,
       )}
       title={title}
       disabled={context.disabled}
@@ -176,7 +192,7 @@ export function SortableDataTable<TData>({
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: 6 },
-    })
+    }),
   );
 
   const table = useReactTable({
@@ -186,11 +202,14 @@ export function SortableDataTable<TData>({
     getRowId: (row) => getRowId(row),
   });
 
-  const items = React.useMemo(() => data.map((item) => getRowId(item)), [data, getRowId]);
+  const items = React.useMemo(
+    () => data.map((item) => getRowId(item)),
+    [data, getRowId],
+  );
   const leafColumns = table.getVisibleLeafColumns();
   const activeItem = React.useMemo(
     () => data.find((item) => getRowId(item) === activeId) ?? null,
-    [activeId, data, getRowId]
+    [activeId, data, getRowId],
   );
   const showLoadingRows = loading && data.length === 0;
   const skeletonRowCount = Math.min(loadingRowCount ?? 5, 6);
@@ -235,16 +254,22 @@ export function SortableDataTable<TData>({
             containerClassName={cn("overflow-auto", containerClassName)}
             className={tableClassName}
           >
-            <TableHeader className="sticky top-0 z-10 bg-white dark:bg-slate-900">
+            <TableHeader className="sticky top-0 z-10 bg-card">
               {table.getHeaderGroups().map((headerGroup) => (
                 <TableRow key={headerGroup.id}>
                   {headerGroup.headers.map((header) => {
                     const meta = getColumnMeta(header.column.columnDef);
                     return (
-                      <TableHead key={header.id} className={meta.headerClassName}>
+                      <TableHead
+                        key={header.id}
+                        className={meta.headerClassName}
+                      >
                         {header.isPlaceholder
                           ? null
-                          : flexRender(header.column.columnDef.header, header.getContext())}
+                          : flexRender(
+                              header.column.columnDef.header,
+                              header.getContext(),
+                            )}
                       </TableHead>
                     );
                   })}
@@ -262,7 +287,9 @@ export function SortableDataTable<TData>({
                           key={`${column.id}-${rowIndex}`}
                           className={meta.cellClassName}
                         >
-                          <Skeleton className={cn("h-4 w-full", meta.skeletonClassName)} />
+                          <Skeleton
+                            className={cn("h-4 w-full", meta.skeletonClassName)}
+                          />
                         </TableCell>
                       );
                     })}
@@ -272,13 +299,16 @@ export function SortableDataTable<TData>({
                 <TableRow>
                   <TableCell
                     colSpan={Math.max(leafColumns.length, 1)}
-                    className="py-8 text-center text-slate-500 dark:text-slate-400"
+                    className="py-8 text-center text-muted-foreground"
                   >
                     {emptyState}
                   </TableCell>
                 </TableRow>
               ) : (
-                <SortableContext items={items} strategy={verticalListSortingStrategy}>
+                <SortableContext
+                  items={items}
+                  strategy={verticalListSortingStrategy}
+                >
                   {table.getRowModel().rows.map((row) => (
                     <SortableRow
                       key={row.id}
@@ -293,7 +323,9 @@ export function SortableDataTable<TData>({
           </Table>
 
           <DragOverlay>
-            {activeItem && renderDragOverlay ? renderDragOverlay(activeItem) : null}
+            {activeItem && renderDragOverlay
+              ? renderDragOverlay(activeItem)
+              : null}
           </DragOverlay>
         </DndContext>
       </div>

@@ -1,7 +1,10 @@
 import type { Protocol } from "@/types/api";
 export { formatDateTime, formatNumber } from "@/lib/format";
 
-export type Translator = (key: string, vars?: Record<string, string | number>) => string;
+export type Translator = (
+  key: string,
+  vars?: Record<string, string | number>,
+) => string;
 
 export function protocolLabelKey(protocol: Protocol): string {
   switch (protocol) {
@@ -18,36 +21,44 @@ export function protocolLabel(t: Translator, protocol: Protocol): string {
   return t(protocolLabelKey(protocol));
 }
 
-export function protocolColor(protocol: Protocol): string {
+function protocolThemeName(protocol: Protocol): "codex" | "claude" | "gemini" {
   switch (protocol) {
     case "openai":
-      return "#0d9488";
+      return "codex";
     case "anthropic":
-      return "#ea580c";
+      return "claude";
     case "gemini":
-      return "#2563eb";
+      return "gemini";
   }
 }
 
-export function protocolBadgeClassName(protocol: Protocol): string {
+export function protocolColor(protocol: Protocol): string {
+  return `oklch(var(--${protocolThemeName(protocol)}))`;
+}
+
+export function protocolDotClassName(protocol: Protocol): string {
   switch (protocol) {
     case "openai":
-      return "border-transparent bg-teal-50 text-teal-600 dark:bg-teal-950 dark:text-teal-400";
+      return "bg-codex";
     case "anthropic":
-      return "border-transparent bg-orange-50 text-orange-600 dark:bg-orange-950 dark:text-orange-400";
+      return "bg-claude";
     case "gemini":
-      return "border-transparent bg-blue-50 text-blue-600 dark:bg-blue-950 dark:text-blue-400";
+      return "bg-gemini";
   }
+}
+
+export function protocolBadgeClassName(_protocol: Protocol): string {
+  return "border-border/80 bg-secondary/55 text-foreground";
 }
 
 export function protocolProgressClassName(protocol: Protocol): string {
   switch (protocol) {
     case "openai":
-      return "bg-teal-500";
+      return "bg-codex";
     case "anthropic":
-      return "bg-orange-500";
+      return "bg-claude";
     case "gemini":
-      return "bg-blue-600 dark:bg-blue-500";
+      return "bg-gemini";
   }
 }
 

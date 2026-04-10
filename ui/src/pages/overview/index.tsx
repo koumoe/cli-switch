@@ -19,11 +19,21 @@ import {
 } from "@/components/composed/trend-chart";
 import { PageHeader } from "@/components/PageHeader";
 import { PageBody } from "@/components/layout/page-body";
-import { getSettings, listChannels, statsChannels, statsSummary, statsTrend } from "@/api";
+import {
+  getSettings,
+  listChannels,
+  statsChannels,
+  statsSummary,
+  statsTrend,
+} from "@/api";
 import { useCurrency } from "@/hooks/use-currency";
 import { useI18n } from "@/hooks/use-i18n";
 import { humanizeApiError } from "@/lib/error";
-import { formatDecimal, formatMoney, parseDecimalLike } from "@/providers/currency-provider";
+import {
+  formatDecimal,
+  formatMoney,
+  parseDecimalLike,
+} from "@/providers/currency-provider";
 import type {
   AppSettings,
   Channel,
@@ -32,11 +42,7 @@ import type {
   StatsSummary,
   TrendPoint,
 } from "@/types/api";
-import {
-  formatNumber,
-  protocolColor,
-  protocolLabel,
-} from "../../lib";
+import { formatNumber, protocolLabel } from "../../lib";
 import { ActiveChannelChain } from "./active-channel-chain";
 import { ChannelDistribution } from "./channel-distribution";
 
@@ -106,7 +112,11 @@ export function OverviewPage() {
   }, []);
 
   const enabledByProtocol = useMemo(() => {
-    const by: Record<Protocol, Channel[]> = { openai: [], anthropic: [], gemini: [] };
+    const by: Record<Protocol, Channel[]> = {
+      openai: [],
+      anthropic: [],
+      gemini: [],
+    };
     for (const c of channels) {
       if (!c.enabled) continue;
       const blockedByProtection =
@@ -118,7 +128,10 @@ export function OverviewPage() {
       }
     }
     for (const p of Object.keys(by) as Protocol[]) {
-      by[p].sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0) || a.name.localeCompare(b.name));
+      by[p].sort(
+        (a, b) =>
+          (b.priority ?? 0) - (a.priority ?? 0) || a.name.localeCompare(b.name),
+      );
     }
     return by;
   }, [appSettings?.auto_disable_enabled, channels, nowMs]);
@@ -160,14 +173,11 @@ export function OverviewPage() {
 
   const monthTrend = useMemo(() => {
     const palette = [
-      protocolColor("openai"),
-      protocolColor("anthropic"),
-      protocolColor("gemini"),
-      "#8b5cf6",
-      "#ef4444",
-      "#10b981",
-      "#f59e0b",
-      "#ec4899",
+      "oklch(var(--chart-1))",
+      "oklch(var(--chart-2))",
+      "oklch(var(--chart-3))",
+      "oklch(var(--chart-4))",
+      "oklch(var(--chart-5))",
     ];
 
     const startMs = stats?.start_ms ?? Date.now();
@@ -192,7 +202,9 @@ export function OverviewPage() {
 
     const used = [...totals.entries()]
       .filter(([, v]) => v.total > 0)
-      .sort((a, b) => b[1].total - a[1].total || a[1].name.localeCompare(b[1].name));
+      .sort(
+        (a, b) => b[1].total - a[1].total || a[1].name.localeCompare(b[1].name),
+      );
 
     const series: TrendChartSeries[] = used.map(([channel_id, meta], idx) => ({
       channel_id,
@@ -216,28 +228,32 @@ export function OverviewPage() {
             <MetricCard
               label={t("overview.cards.todayRequests")}
               value={stats?.requests ?? "-"}
-              barColor="bg-blue-600"
+              barColor="bg-primary"
               loading={loading}
               className="animate-fade-up"
             />
             <MetricCard
               label={t("overview.cards.totalTokens")}
               value={formatNumber(stats?.total_tokens)}
-              barColor="bg-teal-500"
+              barColor="bg-muted-foreground/45"
               loading={loading}
               className="animate-fade-up [animation-delay:60ms]"
             />
             <MetricCard
               label={t("overview.cards.estimatedCost")}
-              value={estimatedOfficialCost === null ? "-" : `$${formatDecimal(estimatedOfficialCost)}`}
-              barColor="bg-amber-500"
+              value={
+                estimatedOfficialCost === null
+                  ? "-"
+                  : `$${formatDecimal(estimatedOfficialCost)}`
+              }
+              barColor="bg-warning"
               loading={loading}
               className="animate-fade-up [animation-delay:120ms]"
             />
             <MetricCard
               label={t("overview.cards.actualSpend")}
               value={formatMoney(actualSpend, currency)}
-              barColor="bg-emerald-500"
+              barColor="bg-success"
               loading={loading}
               className="animate-fade-up [animation-delay:180ms]"
             />
@@ -255,7 +271,7 @@ export function OverviewPage() {
                     <Skeleton className="h-[220px] w-full" />
                   </div>
                 ) : monthTrend.series.length === 0 ? (
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                  <p className="text-xs text-muted-foreground">
                     {t("overview.trend.empty")}
                   </p>
                 ) : (
@@ -275,7 +291,9 @@ export function OverviewPage() {
                   <Tabs
                     value={distributionView}
                     onValueChange={(value) =>
-                      setDistributionView(value === "usage" ? "usage" : "percent")
+                      setDistributionView(
+                        value === "usage" ? "usage" : "percent",
+                      )
                     }
                   >
                     <TabsList>
@@ -297,7 +315,7 @@ export function OverviewPage() {
                     <Skeleton className="h-5 w-4/5" />
                   </div>
                 ) : channelStatsUsed.length === 0 ? (
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                  <p className="text-xs text-muted-foreground">
                     {t("overview.distribution.empty")}
                   </p>
                 ) : (
@@ -325,7 +343,7 @@ export function OverviewPage() {
                   <Skeleton className="h-8 w-40" />
                 </div>
               ) : !hasAnyEnabled ? (
-                <p className="text-xs text-slate-500 dark:text-slate-400">
+                <p className="text-xs text-muted-foreground">
                   {t("overview.activeChannels.empty")}
                 </p>
               ) : (

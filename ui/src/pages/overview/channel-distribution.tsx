@@ -2,10 +2,7 @@ import { Progress } from "@/components/ui";
 import { ProtocolBadge } from "@/components/composed/protocol-badge";
 import type { ChannelStats, Protocol } from "@/types/api";
 
-import {
-  formatNumber,
-  protocolProgressClassName,
-} from "../../lib";
+import { formatNumber, protocolProgressClassName } from "../../lib";
 
 type ChannelDistributionProps = {
   stats: ChannelStats[];
@@ -33,16 +30,26 @@ export function ChannelDistribution({
           <div key={item.channel_id} className="space-y-1">
             <div className="mb-1 flex items-center justify-between text-[11px]">
               <div className="min-w-0 flex items-center gap-1.5">
-                <ProtocolBadge protocol={item.protocol} className="px-1.5 py-px text-[9px]">
+                <ProtocolBadge
+                  protocol={item.protocol}
+                  className="px-1.5 py-px text-[9px]"
+                >
                   {protocolLabel(item.protocol)}
                 </ProtocolBadge>
-                <span className="truncate font-semibold">{item.name}</span>
+                <span className="truncate font-medium text-foreground">
+                  {item.name}
+                </span>
               </div>
-              <span className="ml-2 shrink-0 text-[10px] font-semibold text-slate-500 dark:text-slate-400">
-                {view === "percent" ? `${formatNumber(percent)}%` : formatNumber(item.success)}
+              <span className="ml-2 shrink-0 text-[10px] font-semibold text-muted-foreground">
+                {view === "percent"
+                  ? `${formatNumber(percent)}%`
+                  : formatNumber(item.success)}
               </span>
             </div>
-            <Progress value={percent} indicatorClassName={protocolProgressClassName(item.protocol)} />
+            <Progress
+              value={percent}
+              indicatorClassName={protocolProgressClassName(item.protocol)}
+            />
           </div>
         );
       })}

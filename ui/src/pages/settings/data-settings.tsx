@@ -167,7 +167,7 @@ export function DataSettings({
             hint={t("settings.storage.dataDirHint")}
           />
           <div className="flex max-w-[380px] shrink-0 items-center gap-2">
-            <span className="truncate text-[10px] font-mono text-slate-500 dark:text-slate-400" title={dataDir}>
+            <span className="truncate text-[10px] font-mono text-muted-foreground" title={dataDir}>
               {dataDir}
             </span>
             <Button
@@ -186,7 +186,7 @@ export function DataSettings({
             label={t("settings.storage.dbFile")}
             hint={t("settings.maintenance.databaseSubtitle")}
           />
-          <span className="max-w-[380px] truncate text-[10px] font-mono text-slate-500 dark:text-slate-400" title={dbPath}>
+          <span className="max-w-[380px] truncate text-[10px] font-mono text-muted-foreground" title={dbPath}>
             {dbPath}
           </span>
         </SettingsRow>
@@ -197,7 +197,7 @@ export function DataSettings({
             hint={t("settings.storage.subtitle")}
           />
           <div className="flex shrink-0 items-center gap-2">
-            <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400">{dbSizeText}</span>
+            <span className="text-[11px] font-mono text-muted-foreground">{dbSizeText}</span>
             <Button variant="outline" size="icon" onClick={() => void onRefreshDbSize()} disabled={dbSizeLoading}>
               <RefreshCw className={`h-3.5 w-3.5 ${dbSizeLoading ? "animate-spin" : ""}`} />
             </Button>
@@ -210,7 +210,7 @@ export function DataSettings({
             hint={t("settings.logging.subtitle")}
           />
           <div className="flex shrink-0 items-center gap-2">
-            <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400">{logsSizeText}</span>
+            <span className="text-[11px] font-mono text-muted-foreground">{logsSizeText}</span>
             <Button
               variant="outline"
               size="icon"

@@ -1,10 +1,6 @@
 import type { ReactNode } from "react";
 
-import {
-  Card,
-  CardContent,
-  Skeleton,
-} from "@/components/ui";
+import { Card, CardContent, Skeleton } from "@/components/ui";
 import { cn } from "@/lib/utils";
 
 type MetricCardProps = {
@@ -29,7 +25,7 @@ export function MetricCard({
         className={cn("absolute inset-y-3 left-0 w-[3px] rounded-r", barColor)}
       />
       <CardContent className="space-y-1.5 p-0">
-        <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+        <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
           {label}
         </div>
         {loading ? (

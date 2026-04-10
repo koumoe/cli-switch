@@ -1,9 +1,6 @@
 import { RefreshCw } from "lucide-react";
 
-import {
-  Button,
-  Switch,
-} from "@/components/ui";
+import { Button, Switch } from "@/components/ui";
 import { useI18n } from "@/hooks/use-i18n";
 import type {
   AppSettings,
@@ -24,7 +21,10 @@ type CliToolsSettingsProps = {
   onApplyCliProxyConfig: (toolId: CliToolId) => void | Promise<void>;
   onRefreshCliToolsStatus: () => void | Promise<void>;
   onInstallCliTool: (toolId: CliToolId) => void | Promise<void>;
-  onCliToolAutoUpdateChange: (toolId: CliToolId, enabled: boolean) => void | Promise<void>;
+  onCliToolAutoUpdateChange: (
+    toolId: CliToolId,
+    enabled: boolean,
+  ) => void | Promise<void>;
 };
 
 export function CliToolsSettings({
@@ -45,8 +45,8 @@ export function CliToolsSettings({
 
   return (
     <div className="pb-4">
-      <div className="flex items-center justify-between gap-3 border-t border-slate-100 px-5 pb-1 pt-2.5 dark:border-slate-800/40">
-        <div className="text-[10px] font-bold uppercase tracking-[0.06em] text-slate-400 dark:text-slate-500">
+      <div className="flex items-center justify-between gap-3 border-t border-border px-5 pb-1 pt-2.5">
+        <div className="text-[10px] font-bold uppercase tracking-[0.06em] text-muted-foreground">
           {t("settings.cliProxyConfig.title")}
         </div>
         <Button
@@ -56,12 +56,14 @@ export function CliToolsSettings({
           disabled={cliToolsProxyConfigLoading}
           className="h-7 gap-1.5 rounded-md px-2 text-[11px]"
         >
-          <RefreshCw className={`h-3.5 w-3.5 ${cliToolsProxyConfigLoading ? "animate-spin" : ""}`} />
+          <RefreshCw
+            className={`h-3.5 w-3.5 ${cliToolsProxyConfigLoading ? "animate-spin" : ""}`}
+          />
           {t("settings.cliProxyConfig.refresh")}
         </Button>
       </div>
       {!cliToolsProxyConfig ? (
-        <div className="border-t border-slate-100 px-5 py-3 text-[11px] text-slate-500 dark:border-slate-800/40 dark:text-slate-400">
+        <div className="border-t border-border px-5 py-3 text-[11px] text-muted-foreground">
           {cliToolsProxyConfigLoading ? t("common.loading") : "-"}
         </div>
       ) : null}
@@ -70,12 +72,14 @@ export function CliToolsSettings({
         return (
           <div
             key={tool.id}
-            className="flex min-h-[50px] items-center justify-between gap-4 border-t border-slate-100 px-5 py-3 transition-colors hover:bg-blue-50/25 dark:border-slate-800/40 dark:hover:bg-slate-800/25"
+            className="flex min-h-[50px] items-center justify-between gap-4 border-t border-border px-5 py-3 transition-colors hover:bg-secondary/35"
           >
             <div className="min-w-0 flex-1">
               <div className="text-[12.5px] font-semibold">{tool.name}</div>
-              <div className="mt-0.5 text-[10.5px] text-slate-500 dark:text-slate-400">
-                {tool.ok ? t("settings.cliProxyConfig.ok") : t("settings.cliProxyConfig.needsFix")}
+              <div className="mt-0.5 text-[10.5px] text-muted-foreground">
+                {tool.ok
+                  ? t("settings.cliProxyConfig.ok")
+                  : t("settings.cliProxyConfig.needsFix")}
               </div>
             </div>
             <Button
@@ -90,8 +94,8 @@ export function CliToolsSettings({
         );
       })}
 
-      <div className="flex items-center justify-between gap-3 border-t border-slate-100 px-5 pb-1 pt-2.5 dark:border-slate-800/40">
-        <div className="text-[10px] font-bold uppercase tracking-[0.06em] text-slate-400 dark:text-slate-500">
+      <div className="flex items-center justify-between gap-3 border-t border-border px-5 pb-1 pt-2.5">
+        <div className="text-[10px] font-bold uppercase tracking-[0.06em] text-muted-foreground">
           {t("settings.cliTools.title")}
         </div>
         <Button
@@ -101,12 +105,14 @@ export function CliToolsSettings({
           disabled={cliToolsLoading}
           className="h-7 gap-1.5 rounded-md px-2 text-[11px]"
         >
-          <RefreshCw className={`h-3.5 w-3.5 ${cliToolsLoading ? "animate-spin" : ""}`} />
+          <RefreshCw
+            className={`h-3.5 w-3.5 ${cliToolsLoading ? "animate-spin" : ""}`}
+          />
           {t("settings.cliTools.refresh")}
         </Button>
       </div>
       {!cliToolsStatus ? (
-        <div className="border-t border-slate-100 px-5 py-3 text-[11px] text-slate-500 dark:border-slate-800/40 dark:text-slate-400">
+        <div className="border-t border-border px-5 py-3 text-[11px] text-muted-foreground">
           {cliToolsLoading ? t("common.loading") : "-"}
         </div>
       ) : null}
@@ -124,11 +130,11 @@ export function CliToolsSettings({
         return (
           <div
             key={tool.id}
-            className="flex min-h-[50px] items-center justify-between gap-4 border-t border-slate-100 px-5 py-3 transition-colors hover:bg-blue-50/25 dark:border-slate-800/40 dark:hover:bg-slate-800/25"
+            className="flex min-h-[50px] items-center justify-between gap-4 border-t border-border px-5 py-3 transition-colors hover:bg-secondary/35"
           >
             <div className="min-w-0 flex-1">
               <div className="text-[12.5px] font-semibold">{tool.name}</div>
-              <div className="mt-0.5 text-[10.5px] text-slate-500 dark:text-slate-400">
+              <div className="mt-0.5 text-[10.5px] text-muted-foreground">
                 {installed
                   ? t("settings.cliTools.installedWithVersion", { version })
                   : t("settings.cliTools.notInstalled")}
@@ -142,10 +148,12 @@ export function CliToolsSettings({
                 onClick={() => void onInstallCliTool(tool.id)}
                 className="h-7 rounded-md px-2 text-[11px]"
               >
-                {installed ? t("settings.cliTools.update") : t("settings.cliTools.install")}
+                {installed
+                  ? t("settings.cliTools.update")
+                  : t("settings.cliTools.install")}
               </Button>
               <div className="flex items-center gap-2">
-                <div className="text-[10.5px] text-slate-500 dark:text-slate-400">
+                <div className="text-[10.5px] text-muted-foreground">
                   {t("settings.cliTools.autoEnable")}
                 </div>
                 <Switch

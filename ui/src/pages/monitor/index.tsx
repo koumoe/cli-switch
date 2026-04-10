@@ -3,12 +3,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import type { DateRange } from "react-day-picker";
-import {
-  Button,
-  Card,
-  CardContent,
-  Badge,
-} from "@/components/ui";
+import { Button, Card, CardContent } from "@/components/ui";
 import { DataTable } from "@/components/composed/data-table";
 import { DateRangePicker } from "@/components/composed/date-range-picker";
 import { MetricCard } from "@/components/composed/metric-card";
@@ -23,7 +18,7 @@ import { humanizeApiError } from "@/lib/error";
 import { formatMoney, parseDecimalLike } from "@/providers/currency-provider";
 import { listChannels, statsChannels, statsSummary } from "@/api";
 import type { Channel, ChannelStats, StatsSummary } from "@/types/api";
-import { protocolBadgeClassName, protocolLabel } from "../../lib";
+import { protocolLabel } from "../../lib";
 
 export function MonitorPage() {
   const { locale, t } = useI18n();
@@ -73,10 +68,12 @@ export function MonitorPage() {
           if (b.success !== a.success) return b.success - a.success;
           if (b.requests !== a.requests) return b.requests - a.requests;
           return a.name.localeCompare(b.name);
-        })
+        }),
       );
     } catch (e) {
-      toast.error(t("monitor.toast.loadFail"), { description: humanizeApiError(e, t) });
+      toast.error(t("monitor.toast.loadFail"), {
+        description: humanizeApiError(e, t),
+      });
     } finally {
       setLoading(false);
       loadingRef.current = false;
@@ -97,7 +94,10 @@ export function MonitorPage() {
       ? Math.round((stats.success / stats.requests) * 100)
       : 0;
 
-  const channelsById = React.useMemo(() => new Map(channels.map((c) => [c.id, c] as const)), [channels]);
+  const channelsById = React.useMemo(
+    () => new Map(channels.map((c) => [c.id, c] as const)),
+    [channels],
+  );
 
   const totalActualSpend = React.useMemo(() => {
     if (!channelStats.length || !channels.length) return null;
@@ -120,7 +120,9 @@ export function MonitorPage() {
         accessorKey: "name",
         header: t("monitor.channelStats.headers.channel"),
         enableSorting: true,
-        cell: ({ row }) => <span className="font-medium">{row.original.name}</span>,
+        cell: ({ row }) => (
+          <span className="font-medium">{row.original.name}</span>
+        ),
         meta: {
           headerClassName: `${colClass.channel} text-left`,
           cellClassName: "text-left",
@@ -155,7 +157,9 @@ export function MonitorPage() {
         accessorKey: "success",
         header: t("monitor.channelStats.headers.success"),
         enableSorting: true,
-        cell: ({ row }) => <span className="text-emerald-600 dark:text-emerald-400">{row.original.success}</span>,
+        cell: ({ row }) => (
+          <span className="text-success">{row.original.success}</span>
+        ),
         meta: {
           headerClassName: colClass.success,
           skeletonClassName: "w-10 mx-auto",
@@ -165,7 +169,9 @@ export function MonitorPage() {
         accessorKey: "failed",
         header: t("monitor.channelStats.headers.failed"),
         enableSorting: true,
-        cell: ({ row }) => <span className="text-red-500 dark:text-red-400">{row.original.failed}</span>,
+        cell: ({ row }) => (
+          <span className="text-destructive">{row.original.failed}</span>
+        ),
         meta: {
           headerClassName: colClass.failed,
           skeletonClassName: "w-10 mx-auto",
@@ -177,8 +183,10 @@ export function MonitorPage() {
         accessorFn: (row) => parseDecimalLike(row.estimated_cost_usd) ?? -1,
         enableSorting: true,
         cell: ({ row }) => (
-          <span className="font-mono text-slate-500 dark:text-slate-400">
-            {row.original.estimated_cost_usd ? `$${row.original.estimated_cost_usd}` : "-"}
+          <span className="font-mono text-muted-foreground">
+            {row.original.estimated_cost_usd
+              ? `$${row.original.estimated_cost_usd}`
+              : "-"}
           </span>
         ),
         meta: {
@@ -202,11 +210,16 @@ export function MonitorPage() {
           const est = parseDecimalLike(row.original.estimated_cost_usd);
           const channel = channelsById.get(row.original.channel_id);
           const real = Number(channel?.real_multiplier ?? 1);
-          if (!est || est <= 0) return <span className="font-mono text-slate-500 dark:text-slate-400">-</span>;
+          if (!est || est <= 0)
+            return <span className="font-mono text-muted-foreground">-</span>;
           if (!Number.isFinite(real) || real < 0) {
-            return <span className="font-mono text-slate-500 dark:text-slate-400">-</span>;
+            return <span className="font-mono text-muted-foreground">-</span>;
           }
-          return <span className="font-mono text-slate-500 dark:text-slate-400">{formatMoney(est * real, currency)}</span>;
+          return (
+            <span className="font-mono text-muted-foreground">
+              {formatMoney(est * real, currency)}
+            </span>
+          );
         },
         meta: {
           headerClassName: colClass.actualSpend,
@@ -218,8 +231,10 @@ export function MonitorPage() {
         header: t("monitor.channelStats.headers.avgLatency"),
         enableSorting: true,
         cell: ({ row }) => (
-          <span className="text-slate-500 dark:text-slate-400">
-            {row.original.avg_latency_ms ? `${Math.round(row.original.avg_latency_ms)}ms` : "-"}
+          <span className="text-muted-foreground">
+            {row.original.avg_latency_ms
+              ? `${Math.round(row.original.avg_latency_ms)}ms`
+              : "-"}
           </span>
         ),
         meta: {
@@ -228,7 +243,19 @@ export function MonitorPage() {
         },
       },
     ],
-    [channelsById, colClass.actualSpend, colClass.avgLatency, colClass.channel, colClass.estimatedCost, colClass.failed, colClass.requests, colClass.success, colClass.terminal, currency, t]
+    [
+      channelsById,
+      colClass.actualSpend,
+      colClass.avgLatency,
+      colClass.channel,
+      colClass.estimatedCost,
+      colClass.failed,
+      colClass.requests,
+      colClass.success,
+      colClass.terminal,
+      currency,
+      t,
+    ],
   );
 
   return (
@@ -251,7 +278,9 @@ export function MonitorPage() {
               onClick={refresh}
               disabled={loading || !dateRange?.from}
             >
-              <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+              <RefreshCw
+                className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`}
+              />
               {t("common.refresh")}
             </Button>
           </>
@@ -263,36 +292,36 @@ export function MonitorPage() {
             <MetricCard
               label={t("monitor.cards.totalRequests")}
               value={stats?.requests ?? "-"}
-              barColor="bg-blue-600"
+              barColor="bg-primary"
               className="animate-fade-up"
             />
             <MetricCard
               label={t("monitor.cards.successRate")}
               value={`${successRate}%`}
-              barColor="bg-teal-500"
+              barColor="bg-success"
               className="animate-fade-up [animation-delay:60ms]"
             />
             <MetricCard
               label={t("monitor.cards.failed")}
               value={stats?.failed ?? "-"}
-              barColor="bg-red-500"
+              barColor="bg-destructive"
               className="animate-fade-up [animation-delay:120ms]"
             />
             <MetricCard
               label={t("monitor.cards.estimatedCost")}
               value={`$${stats?.estimated_cost_usd ?? "-"}`}
-              barColor="bg-amber-500"
+              barColor="bg-warning"
               className="animate-fade-up [animation-delay:180ms]"
             />
             <MetricCard
               label={t("monitor.cards.actualSpend")}
               value={formatMoney(totalActualSpend, currency)}
-              barColor="bg-emerald-500"
+              barColor="bg-muted-foreground/45"
               className="animate-fade-up [animation-delay:240ms]"
             />
           </div>
 
-          <Card className="flex min-h-0 flex-col">
+          <Card className="flex min-h-0 flex-col overflow-hidden">
             <CardContent className="flex min-h-0 flex-col p-0">
               <DataTable
                 columns={columns}

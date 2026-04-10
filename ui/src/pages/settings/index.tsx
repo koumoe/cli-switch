@@ -164,11 +164,18 @@ function normalizeSettingsTab(value: string | undefined): SettingsTab {
   return SETTINGS_TAB_ALIASES[value ?? ""] ?? DEFAULT_SETTINGS_TAB;
 }
 
+const settingsInlineTabsListClassName =
+  "w-full justify-start rounded-none border-b border-border bg-transparent p-0";
+
+const settingsInlineTabsTriggerClassName =
+  "flex-1 rounded-none border-b-2 border-transparent px-0 py-2 text-[11.5px] text-muted-foreground data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none";
+
 export function SettingsPage() {
   const navigate = useNavigate();
   const routeTab = useParams({
     strict: false,
-    select: (params) => (typeof params.tab === "string" ? params.tab : undefined),
+    select: (params) =>
+      typeof params.tab === "string" ? params.tab : undefined,
   });
   const { theme, setTheme } = useTheme();
   const { locale, setLocale, locales, t } = useI18n();
@@ -179,18 +186,31 @@ export function SettingsPage() {
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null);
   const [updateChecking, setUpdateChecking] = useState(false);
   const [updatePromptOpen, setUpdatePromptOpen] = useState(false);
-  const [updatePromptVersion, setUpdatePromptVersion] = useState<string | null>(null);
-  const [updateCheckResult, setUpdateCheckResult] = useState<UpdateCheck | null>(null);
-  const [updateChangelogSections, setUpdateChangelogSections] = useState<ChangelogSection[] | null>(null);
+  const [updatePromptVersion, setUpdatePromptVersion] = useState<string | null>(
+    null,
+  );
+  const [updateCheckResult, setUpdateCheckResult] =
+    useState<UpdateCheck | null>(null);
+  const [updateChangelogSections, setUpdateChangelogSections] = useState<
+    ChangelogSection[] | null
+  >(null);
   const [updateChangelogLoading, setUpdateChangelogLoading] = useState(false);
-  const [updateChangelogError, setUpdateChangelogError] = useState<string | null>(null);
+  const [updateChangelogError, setUpdateChangelogError] = useState<
+    string | null
+  >(null);
   const [updateDownloading, setUpdateDownloading] = useState(false);
   const [updateIgnoring, setUpdateIgnoring] = useState(false);
-  const [cliToolsStatus, setCliToolsStatus] = useState<CliToolsStatus | null>(null);
+  const [cliToolsStatus, setCliToolsStatus] = useState<CliToolsStatus | null>(
+    null,
+  );
   const [cliToolsLoading, setCliToolsLoading] = useState(false);
-  const [cliToolsProxyConfig, setCliToolsProxyConfig] = useState<CliToolProxyConfigStatus | null>(null);
-  const [cliToolsProxyConfigLoading, setCliToolsProxyConfigLoading] = useState(false);
-  const [cliProxyConfigBusy, setCliProxyConfigBusy] = useState<Record<CliToolId, boolean>>({
+  const [cliToolsProxyConfig, setCliToolsProxyConfig] =
+    useState<CliToolProxyConfigStatus | null>(null);
+  const [cliToolsProxyConfigLoading, setCliToolsProxyConfigLoading] =
+    useState(false);
+  const [cliProxyConfigBusy, setCliProxyConfigBusy] = useState<
+    Record<CliToolId, boolean>
+  >({
     gemini: false,
     claude: false,
     codex: false,
@@ -202,36 +222,62 @@ export function SettingsPage() {
   });
   const [syncing, setSyncing] = useState(false);
   const [chatBridgeSaving, setChatBridgeSaving] = useState(false);
-  const [chatBridgeBindings, setChatBridgeBindings] = useState<ChatBridgeBinding[]>([]);
-  const [chatBridgeBindingsLoading, setChatBridgeBindingsLoading] = useState(false);
-  const [chatBridgePairingToken, setChatBridgePairingToken] = useState<ChatBridgePairingToken | null>(null);
-  const [chatBridgePairingCreating, setChatBridgePairingCreating] = useState(false);
-  const [chatBridgePairingPlatform, setChatBridgePairingPlatform] = useState<ChatPlatform>("weixin");
-  const [chatBridgeUnbindTarget, setChatBridgeUnbindTarget] = useState<ChatBridgeBinding | null>(null);
+  const [chatBridgeBindings, setChatBridgeBindings] = useState<
+    ChatBridgeBinding[]
+  >([]);
+  const [chatBridgeBindingsLoading, setChatBridgeBindingsLoading] =
+    useState(false);
+  const [chatBridgePairingToken, setChatBridgePairingToken] =
+    useState<ChatBridgePairingToken | null>(null);
+  const [chatBridgePairingCreating, setChatBridgePairingCreating] =
+    useState(false);
+  const [chatBridgePairingPlatform, setChatBridgePairingPlatform] =
+    useState<ChatPlatform>("weixin");
+  const [chatBridgeUnbindTarget, setChatBridgeUnbindTarget] =
+    useState<ChatBridgeBinding | null>(null);
   const [chatBridgeUnbinding, setChatBridgeUnbinding] = useState(false);
-  const [chatBridgePlatformTab, setChatBridgePlatformTab] = useState<ChatPlatform>("weixin");
-  const [chatBridgePairingDialogOpen, setChatBridgePairingDialogOpen] = useState(false);
-  const [chatBridgeBindingsDialogPlatform, setChatBridgeBindingsDialogPlatform] = useState<ChatPlatform | null>(null);
-  const [chatBridgeLoginDialogPlatform, setChatBridgeLoginDialogPlatform] = useState<ChatBridgeQrPlatform | null>(null);
-  const [chatBridgeWhatsAppStatus, setChatBridgeWhatsAppStatus] = useState<ChatBridgeWhatsAppStatus | null>(null);
-  const [chatBridgeWhatsAppStatusLoading, setChatBridgeWhatsAppStatusLoading] = useState(false);
-  const [chatBridgeWhatsAppActionBusy, setChatBridgeWhatsAppActionBusy] = useState(false);
-  const [chatBridgeWeixinStatus, setChatBridgeWeixinStatus] = useState<ChatBridgeWeixinStatus | null>(null);
-  const [chatBridgeWeixinStatusLoading, setChatBridgeWeixinStatusLoading] = useState(false);
-  const [chatBridgeWeixinActionBusy, setChatBridgeWeixinActionBusy] = useState(false);
+  const [chatBridgePlatformTab, setChatBridgePlatformTab] =
+    useState<ChatPlatform>("weixin");
+  const [chatBridgePairingDialogOpen, setChatBridgePairingDialogOpen] =
+    useState(false);
+  const [
+    chatBridgeBindingsDialogPlatform,
+    setChatBridgeBindingsDialogPlatform,
+  ] = useState<ChatPlatform | null>(null);
+  const [chatBridgeLoginDialogPlatform, setChatBridgeLoginDialogPlatform] =
+    useState<ChatBridgeQrPlatform | null>(null);
+  const [chatBridgeWhatsAppStatus, setChatBridgeWhatsAppStatus] =
+    useState<ChatBridgeWhatsAppStatus | null>(null);
+  const [chatBridgeWhatsAppStatusLoading, setChatBridgeWhatsAppStatusLoading] =
+    useState(false);
+  const [chatBridgeWhatsAppActionBusy, setChatBridgeWhatsAppActionBusy] =
+    useState(false);
+  const [chatBridgeWeixinStatus, setChatBridgeWeixinStatus] =
+    useState<ChatBridgeWeixinStatus | null>(null);
+  const [chatBridgeWeixinStatusLoading, setChatBridgeWeixinStatusLoading] =
+    useState(false);
+  const [chatBridgeWeixinActionBusy, setChatBridgeWeixinActionBusy] =
+    useState(false);
 
   const [dbSize, setDbSize] = useState<DbSize | null>(null);
   const [dbSizeLoading, setDbSizeLoading] = useState(false);
-  const [recordsType, setRecordsType] = useState<Exclude<RecordsClearMode, "date_range">>("all");
-  const [recordsTimeScope, setRecordsTimeScope] = useState<"all" | "date_range">("all");
-  const [recordsDateRange, setRecordsDateRange] = useState<DateRange | undefined>(undefined);
+  const [recordsType, setRecordsType] =
+    useState<Exclude<RecordsClearMode, "date_range">>("all");
+  const [recordsTimeScope, setRecordsTimeScope] = useState<
+    "all" | "date_range"
+  >("all");
+  const [recordsDateRange, setRecordsDateRange] = useState<
+    DateRange | undefined
+  >(undefined);
   const [recordsPromptOpen, setRecordsPromptOpen] = useState(false);
   const [recordsClearing, setRecordsClearing] = useState(false);
 
   const [logsSize, setLogsSize] = useState<LogsSize | null>(null);
   const [logsSizeLoading, setLogsSizeLoading] = useState(false);
   const [logsScope, setLogsScope] = useState<"all" | "date_range">("all");
-  const [logsDateRange, setLogsDateRange] = useState<DateRange | undefined>(undefined);
+  const [logsDateRange, setLogsDateRange] = useState<DateRange | undefined>(
+    undefined,
+  );
   const [logsPromptOpen, setLogsPromptOpen] = useState(false);
   const [logsClearing, setLogsClearing] = useState(false);
 
@@ -241,7 +287,9 @@ export function SettingsPage() {
       const next = await getDbSize();
       setDbSize(next);
     } catch (e) {
-      toast.error(t("settings.storage.dbSizeFail"), { description: humanizeApiError(e, t) });
+      toast.error(t("settings.storage.dbSizeFail"), {
+        description: humanizeApiError(e, t),
+      });
     } finally {
       setDbSizeLoading(false);
     }
@@ -253,7 +301,9 @@ export function SettingsPage() {
       const next = await getLogsSize();
       setLogsSize(next);
     } catch (e) {
-      toast.error(t("settings.maintenance.logsSizeFail"), { description: humanizeApiError(e, t) });
+      toast.error(t("settings.maintenance.logsSizeFail"), {
+        description: humanizeApiError(e, t),
+      });
     } finally {
       setLogsSizeLoading(false);
     }
@@ -265,7 +315,9 @@ export function SettingsPage() {
       const next = await getCliToolsStatus();
       setCliToolsStatus(next);
     } catch (e) {
-      toast.error(t("settings.cliTools.loadFail"), { description: humanizeApiError(e, t) });
+      toast.error(t("settings.cliTools.loadFail"), {
+        description: humanizeApiError(e, t),
+      });
     } finally {
       setCliToolsLoading(false);
     }
@@ -277,7 +329,9 @@ export function SettingsPage() {
       const next = await getCliToolsProxyConfigStatus();
       setCliToolsProxyConfig(next);
     } catch (e) {
-      toast.error(t("settings.cliProxyConfig.loadFail"), { description: humanizeApiError(e, t) });
+      toast.error(t("settings.cliProxyConfig.loadFail"), {
+        description: humanizeApiError(e, t),
+      });
     } finally {
       setCliToolsProxyConfigLoading(false);
     }
@@ -289,7 +343,9 @@ export function SettingsPage() {
       const next = await listChatBridgeBindings();
       setChatBridgeBindings(next);
     } catch (e) {
-      toast.error(t("settings.chatBridge.bindings.loadFail"), { description: humanizeApiError(e, t) });
+      toast.error(t("settings.chatBridge.bindings.loadFail"), {
+        description: humanizeApiError(e, t),
+      });
     } finally {
       setChatBridgeBindingsLoading(false);
     }
@@ -304,13 +360,17 @@ export function SettingsPage() {
       setChatBridgeUnbindTarget(null);
       await refreshChatBridgeBindings();
     } catch (e) {
-      toast.error(t("settings.chatBridge.bindings.unbindFail"), { description: humanizeApiError(e, t) });
+      toast.error(t("settings.chatBridge.bindings.unbindFail"), {
+        description: humanizeApiError(e, t),
+      });
     } finally {
       setChatBridgeUnbinding(false);
     }
   }
 
-  async function refreshChatBridgeWhatsAppStatus(options?: { silent?: boolean }) {
+  async function refreshChatBridgeWhatsAppStatus(options?: {
+    silent?: boolean;
+  }) {
     const shouldShowSpinner = !options?.silent;
     if (shouldShowSpinner) {
       setChatBridgeWhatsAppStatusLoading(true);
@@ -367,13 +427,19 @@ export function SettingsPage() {
       });
       setAppSettings(saved);
     } catch (e) {
-      toast.error(t("settings.chatBridge.saveFail"), { description: humanizeApiError(e, t) });
+      toast.error(t("settings.chatBridge.saveFail"), {
+        description: humanizeApiError(e, t),
+      });
       saved = null;
     } finally {
       setChatBridgeSaving(false);
     }
 
-    if (!saved || !saved.chat_bridge_enabled || !saved.chat_bridge_whatsapp_enabled) {
+    if (
+      !saved ||
+      !saved.chat_bridge_enabled ||
+      !saved.chat_bridge_whatsapp_enabled
+    ) {
       toast.error(t("settings.chatBridge.whatsapp.enableRequired"));
       return;
     }
@@ -418,13 +484,19 @@ export function SettingsPage() {
       });
       setAppSettings(saved);
     } catch (e) {
-      toast.error(t("settings.chatBridge.saveFail"), { description: humanizeApiError(e, t) });
+      toast.error(t("settings.chatBridge.saveFail"), {
+        description: humanizeApiError(e, t),
+      });
       saved = null;
     } finally {
       setChatBridgeSaving(false);
     }
 
-    if (!saved || !saved.chat_bridge_enabled || !saved.chat_bridge_weixin_enabled) {
+    if (
+      !saved ||
+      !saved.chat_bridge_enabled ||
+      !saved.chat_bridge_weixin_enabled
+    ) {
       toast.error(t("settings.chatBridge.weixin.enableRequired"));
       return;
     }
@@ -467,7 +539,9 @@ export function SettingsPage() {
       setChatBridgePairingToken(next);
       toast.success(t("settings.chatBridge.pairing.created"));
     } catch (e) {
-      toast.error(t("settings.chatBridge.pairing.createFail"), { description: humanizeApiError(e, t) });
+      toast.error(t("settings.chatBridge.pairing.createFail"), {
+        description: humanizeApiError(e, t),
+      });
     } finally {
       setChatBridgePairingCreating(false);
     }
@@ -529,17 +603,34 @@ export function SettingsPage() {
       if (!st) return;
       setUpdateStatus(st);
     };
-    window.addEventListener("cliswitch-update-status", onUpdateStatus as EventListener);
+    window.addEventListener(
+      "cliswitch-update-status",
+      onUpdateStatus as EventListener,
+    );
     return () => {
-      window.removeEventListener("cliswitch-update-status", onUpdateStatus as EventListener);
+      window.removeEventListener(
+        "cliswitch-update-status",
+        onUpdateStatus as EventListener,
+      );
     };
   }, []);
 
-  const chatBridgeBindingsByPlatform: Record<ChatPlatform, ChatBridgeBinding[]> = {
-    telegram: chatBridgeBindings.filter((binding) => binding.platform === "telegram"),
-    whatsapp: chatBridgeBindings.filter((binding) => binding.platform === "whatsapp"),
-    weixin: chatBridgeBindings.filter((binding) => binding.platform === "weixin"),
-    discord: chatBridgeBindings.filter((binding) => binding.platform === "discord"),
+  const chatBridgeBindingsByPlatform: Record<
+    ChatPlatform,
+    ChatBridgeBinding[]
+  > = {
+    telegram: chatBridgeBindings.filter(
+      (binding) => binding.platform === "telegram",
+    ),
+    whatsapp: chatBridgeBindings.filter(
+      (binding) => binding.platform === "whatsapp",
+    ),
+    weixin: chatBridgeBindings.filter(
+      (binding) => binding.platform === "weixin",
+    ),
+    discord: chatBridgeBindings.filter(
+      (binding) => binding.platform === "discord",
+    ),
   };
 
   const chatBridgeBindingsDialogItems = chatBridgeBindingsDialogPlatform
@@ -547,7 +638,9 @@ export function SettingsPage() {
     : [];
 
   const apiEndpoint = (() => {
-    const env = (import.meta.env.VITE_BACKEND_URL as string | undefined)?.trim();
+    const env = (
+      import.meta.env.VITE_BACKEND_URL as string | undefined
+    )?.trim();
     if (env) return env.replace(/\/+$/, "");
     if (import.meta.env.DEV) return "http://127.0.0.1:3210";
     return window.location.origin;
@@ -563,7 +656,11 @@ export function SettingsPage() {
     // ignore
   }
 
-  const themeOptions: { value: Theme; label: string; icon: React.ElementType }[] = [
+  const themeOptions: {
+    value: Theme;
+    label: string;
+    icon: React.ElementType;
+  }[] = [
     { value: "light", label: t("theme.light"), icon: Sun },
     { value: "dark", label: t("theme.dark"), icon: Moon },
     { value: "system", label: t("theme.system"), icon: Monitor },
@@ -574,32 +671,41 @@ export function SettingsPage() {
       ? t("status.running")
       : health?.status === "offline"
         ? t("status.offline")
-        : health?.status ?? t("status.checking");
+        : (health?.status ?? t("status.checking"));
 
-  const updateServerVersion = updateStatus?.latest_version ?? updateCheckResult?.latest_version ?? null;
+  const updateServerVersion =
+    updateStatus?.latest_version ?? updateCheckResult?.latest_version ?? null;
   const updateIgnored =
-    (updateStatus?.latest_ignored ?? updateCheckResult?.latest_ignored ?? false) && !!updateServerVersion;
+    (updateStatus?.latest_ignored ??
+      updateCheckResult?.latest_ignored ??
+      false) &&
+    !!updateServerVersion;
   const updateDownloadingSuffix =
     updateStatus && updateStatus.stage === "downloading"
       ? updateStatus.download_percent !== null
-        ? t("settings.update.downloadingSuffix", { percent: updateStatus.download_percent })
+        ? t("settings.update.downloadingSuffix", {
+            percent: updateStatus.download_percent,
+          })
         : t("settings.update.downloadingSuffixUnknown")
       : "";
   const updateStatusText = updateStatus?.pending_version
     ? t("settings.update.ready", { version: updateStatus.pending_version })
     : updateStatus?.stage === "error"
-      ? humanizeIssue(updateStatus.issue, t) ?? t("settings.update.checkFail")
-    : updateStatus?.stage === "staging"
-      ? t("settings.update.staging")
-    : updateStatus?.stage === "downloading"
-      ? `${t("settings.update.latest")}${updateDownloadingSuffix}`
-      : updateServerVersion
-        ? (updateStatus?.update_available ?? updateCheckResult?.update_available)
-          ? updateIgnored
-            ? `${t("settings.update.available", { version: updateServerVersion })}${t("settings.update.ignoredSuffix")}`
-            : t("settings.update.available", { version: updateServerVersion })
-          : t("settings.update.latest")
-        : "-";
+      ? (humanizeIssue(updateStatus.issue, t) ?? t("settings.update.checkFail"))
+      : updateStatus?.stage === "staging"
+        ? t("settings.update.staging")
+        : updateStatus?.stage === "downloading"
+          ? `${t("settings.update.latest")}${updateDownloadingSuffix}`
+          : updateServerVersion
+            ? (updateStatus?.update_available ??
+              updateCheckResult?.update_available)
+              ? updateIgnored
+                ? `${t("settings.update.available", { version: updateServerVersion })}${t("settings.update.ignoredSuffix")}`
+                : t("settings.update.available", {
+                    version: updateServerVersion,
+                  })
+              : t("settings.update.latest")
+            : "-";
 
   const recordsDateStr = recordsDateRange?.from
     ? `${format(recordsDateRange.from, "yyyy-MM-dd")}${recordsDateRange.to ? ` ~ ${format(recordsDateRange.to, "yyyy-MM-dd")}` : ""}`
@@ -627,7 +733,11 @@ export function SettingsPage() {
     const version = status.pending_version;
     if (!version) return;
     clearUpdateReadyShown(version);
-    window.dispatchEvent(new CustomEvent<UpdateStatus>("cliswitch-update-status", { detail: status }));
+    window.dispatchEvent(
+      new CustomEvent<UpdateStatus>("cliswitch-update-status", {
+        detail: status,
+      }),
+    );
   }
 
   function openUpdatePrompt(version: string) {
@@ -675,7 +785,8 @@ export function SettingsPage() {
       (appSettings?.chat_bridge_enabled ?? false) &&
       (appSettings?.chat_bridge_whatsapp_enabled ?? false);
     const whatsappPollingActive =
-      chatBridgePlatformTab === "whatsapp" || chatBridgeLoginDialogPlatform === "whatsapp";
+      chatBridgePlatformTab === "whatsapp" ||
+      chatBridgeLoginDialogPlatform === "whatsapp";
     if (!whatsappPollingActive || !whatsappEnabled) {
       return;
     }
@@ -718,7 +829,8 @@ export function SettingsPage() {
       (appSettings?.chat_bridge_enabled ?? false) &&
       (appSettings?.chat_bridge_weixin_enabled ?? false);
     const weixinPollingActive =
-      chatBridgePlatformTab === "weixin" || chatBridgeLoginDialogPlatform === "weixin";
+      chatBridgePlatformTab === "weixin" ||
+      chatBridgeLoginDialogPlatform === "weixin";
     if (!weixinPollingActive || !weixinEnabled) {
       return;
     }
@@ -758,101 +870,131 @@ export function SettingsPage() {
 
   const whatsappStatusKey = chatBridgeWhatsAppStatus?.state ?? "disabled";
   const whatsappConnected = chatBridgeWhatsAppStatus?.connected ?? false;
-  const whatsappQrImageSrc = normalizeQrImageSrc(chatBridgeWhatsAppStatus?.qr_image);
-  const whatsappStatusLabel = t(`settings.chatBridge.whatsapp.state.${whatsappStatusKey}`);
-  const whatsappLastErrorMessage = humanizeIssue(chatBridgeWhatsAppStatus?.issue, t)
-    ?? (whatsappStatusKey === "error" ? t("settings.chatBridge.whatsapp.lastErrorGeneric") : null);
-  const whatsappStatusTone = whatsappStatusKey === "error"
-    ? "destructive"
-    : whatsappConnected
-      ? "success"
-      : "secondary";
+  const whatsappQrImageSrc = normalizeQrImageSrc(
+    chatBridgeWhatsAppStatus?.qr_image,
+  );
+  const whatsappStatusLabel = t(
+    `settings.chatBridge.whatsapp.state.${whatsappStatusKey}`,
+  );
+  const whatsappLastErrorMessage =
+    humanizeIssue(chatBridgeWhatsAppStatus?.issue, t) ??
+    (whatsappStatusKey === "error"
+      ? t("settings.chatBridge.whatsapp.lastErrorGeneric")
+      : null);
+  const whatsappStatusTone =
+    whatsappStatusKey === "error"
+      ? "destructive"
+      : whatsappConnected
+        ? "success"
+        : "secondary";
   const weixinStatusKey = chatBridgeWeixinStatus?.state ?? "disabled";
   const weixinConnected = chatBridgeWeixinStatus?.connected ?? false;
-  const weixinQrImageSrc = normalizeQrImageSrc(chatBridgeWeixinStatus?.qr_image);
-  const weixinStatusLabel = t(`settings.chatBridge.weixin.state.${weixinStatusKey}`);
-  const weixinLastErrorMessage = humanizeIssue(chatBridgeWeixinStatus?.issue, t)
-    ?? (weixinStatusKey === "error" ? t("settings.chatBridge.weixin.lastErrorGeneric") : null);
-  const weixinStatusTone = weixinStatusKey === "error"
-    ? "destructive"
-    : weixinConnected
-      ? "success"
-      : "secondary";
-  const chatBridgeLoginDialogStatus = chatBridgeLoginDialogPlatform === "whatsapp"
-    ? chatBridgeWhatsAppStatus
-    : chatBridgeLoginDialogPlatform === "weixin"
-      ? chatBridgeWeixinStatus
-      : null;
-  const chatBridgeLoginDialogStatusLoading = chatBridgeLoginDialogPlatform === "whatsapp"
-    ? chatBridgeWhatsAppStatusLoading
-    : chatBridgeLoginDialogPlatform === "weixin"
-      ? chatBridgeWeixinStatusLoading
-      : false;
-  const chatBridgeLoginDialogActionBusy = chatBridgeLoginDialogPlatform === "whatsapp"
-    ? chatBridgeWhatsAppActionBusy
-    : chatBridgeLoginDialogPlatform === "weixin"
-      ? chatBridgeWeixinActionBusy
-      : false;
-  const chatBridgeLoginDialogConnected = chatBridgeLoginDialogStatus?.connected ?? false;
-  const chatBridgeLoginDialogStatusTone = chatBridgeLoginDialogPlatform === "whatsapp"
-    ? whatsappStatusTone
-    : chatBridgeLoginDialogPlatform === "weixin"
-      ? weixinStatusTone
-      : "secondary";
+  const weixinQrImageSrc = normalizeQrImageSrc(
+    chatBridgeWeixinStatus?.qr_image,
+  );
+  const weixinStatusLabel = t(
+    `settings.chatBridge.weixin.state.${weixinStatusKey}`,
+  );
+  const weixinLastErrorMessage =
+    humanizeIssue(chatBridgeWeixinStatus?.issue, t) ??
+    (weixinStatusKey === "error"
+      ? t("settings.chatBridge.weixin.lastErrorGeneric")
+      : null);
+  const weixinStatusTone =
+    weixinStatusKey === "error"
+      ? "destructive"
+      : weixinConnected
+        ? "success"
+        : "secondary";
+  const chatBridgeLoginDialogStatus =
+    chatBridgeLoginDialogPlatform === "whatsapp"
+      ? chatBridgeWhatsAppStatus
+      : chatBridgeLoginDialogPlatform === "weixin"
+        ? chatBridgeWeixinStatus
+        : null;
+  const chatBridgeLoginDialogStatusLoading =
+    chatBridgeLoginDialogPlatform === "whatsapp"
+      ? chatBridgeWhatsAppStatusLoading
+      : chatBridgeLoginDialogPlatform === "weixin"
+        ? chatBridgeWeixinStatusLoading
+        : false;
+  const chatBridgeLoginDialogActionBusy =
+    chatBridgeLoginDialogPlatform === "whatsapp"
+      ? chatBridgeWhatsAppActionBusy
+      : chatBridgeLoginDialogPlatform === "weixin"
+        ? chatBridgeWeixinActionBusy
+        : false;
+  const chatBridgeLoginDialogConnected =
+    chatBridgeLoginDialogStatus?.connected ?? false;
+  const chatBridgeLoginDialogStatusTone =
+    chatBridgeLoginDialogPlatform === "whatsapp"
+      ? whatsappStatusTone
+      : chatBridgeLoginDialogPlatform === "weixin"
+        ? weixinStatusTone
+        : "secondary";
   const chatBridgeLoginDialogStatusLabel = chatBridgeLoginDialogPlatform
-    ? t(`settings.chatBridge.${chatBridgeLoginDialogPlatform}.state.${chatBridgeLoginDialogStatus?.state ?? "disabled"}`)
+    ? t(
+        `settings.chatBridge.${chatBridgeLoginDialogPlatform}.state.${chatBridgeLoginDialogStatus?.state ?? "disabled"}`,
+      )
     : "";
-  const chatBridgeLoginDialogQrImageSrc = chatBridgeLoginDialogPlatform === "whatsapp"
-    ? whatsappQrImageSrc
-    : chatBridgeLoginDialogPlatform === "weixin"
-      ? weixinQrImageSrc
-      : null;
-  const chatBridgeLoginDialogLastErrorMessage = chatBridgeLoginDialogPlatform === "whatsapp"
-    ? whatsappLastErrorMessage
-    : chatBridgeLoginDialogPlatform === "weixin"
-      ? weixinLastErrorMessage
-      : null;
+  const chatBridgeLoginDialogQrImageSrc =
+    chatBridgeLoginDialogPlatform === "whatsapp"
+      ? whatsappQrImageSrc
+      : chatBridgeLoginDialogPlatform === "weixin"
+        ? weixinQrImageSrc
+        : null;
+  const chatBridgeLoginDialogLastErrorMessage =
+    chatBridgeLoginDialogPlatform === "whatsapp"
+      ? whatsappLastErrorMessage
+      : chatBridgeLoginDialogPlatform === "weixin"
+        ? weixinLastErrorMessage
+        : null;
 
   const chatBridgeTab = (
     <>
-      <ChatBridgeBaseSettingsCard settings={appSettings} onSaved={setAppSettings} />
+      <ChatBridgeBaseSettingsCard
+        settings={appSettings}
+        onSaved={setAppSettings}
+      />
 
-      <div className="border-t border-slate-100 px-5 pb-1 pt-2.5 dark:border-slate-800/40">
-        <div className="text-[10px] font-bold uppercase tracking-[0.06em] text-slate-400 dark:text-slate-500">
+      <div className="border-t border-border px-5 pb-1 pt-2.5">
+        <div className="text-[10px] font-bold uppercase tracking-[0.06em] text-muted-foreground">
           {t("settings.chatBridge.platformConfigTitle")}
         </div>
-        <div className="mt-0.5 text-[10.5px] text-slate-500 dark:text-slate-400">
+        <div className="mt-0.5 text-[10.5px] text-muted-foreground">
           {t("settings.chatBridge.platformConfigHint")}
         </div>
       </div>
-      <div className="border-t border-slate-100 px-5 py-3 dark:border-slate-800/40">
+      <div className="border-t border-border px-5 py-3">
         <Tabs
           value={chatBridgePlatformTab}
-          onValueChange={(value) => setChatBridgePlatformTab(value as ChatPlatform)}
+          onValueChange={(value) =>
+            setChatBridgePlatformTab(value as ChatPlatform)
+          }
           className="w-full"
         >
-          <TabsList className="w-full justify-start rounded-none border-b border-slate-100 bg-transparent p-0 dark:border-slate-800/40 dark:bg-transparent">
+          <TabsList className={settingsInlineTabsListClassName}>
             <TabsTrigger
               value="weixin"
-              className="flex-1 rounded-none border-b-2 border-transparent px-0 py-2 text-[11.5px] text-slate-500 data-[state=active]:border-blue-600 data-[state=active]:bg-transparent data-[state=active]:text-blue-600 data-[state=active]:shadow-none dark:text-slate-400 dark:data-[state=active]:border-blue-500 dark:data-[state=active]:bg-transparent dark:data-[state=active]:text-blue-400"
+              className={settingsInlineTabsTriggerClassName}
             >
               {t("settings.chatBridge.platform.weixin")}
             </TabsTrigger>
             <TabsTrigger
               value="telegram"
-              className="flex-1 rounded-none border-b-2 border-transparent px-0 py-2 text-[11.5px] text-slate-500 data-[state=active]:border-blue-600 data-[state=active]:bg-transparent data-[state=active]:text-blue-600 data-[state=active]:shadow-none dark:text-slate-400 dark:data-[state=active]:border-blue-500 dark:data-[state=active]:bg-transparent dark:data-[state=active]:text-blue-400"
+              className={settingsInlineTabsTriggerClassName}
             >
               {t("settings.chatBridge.platform.telegram")}
             </TabsTrigger>
             <TabsTrigger
               value="whatsapp"
-              className="flex-1 rounded-none border-b-2 border-transparent px-0 py-2 text-[11.5px] text-slate-500 data-[state=active]:border-blue-600 data-[state=active]:bg-transparent data-[state=active]:text-blue-600 data-[state=active]:shadow-none dark:text-slate-400 dark:data-[state=active]:border-blue-500 dark:data-[state=active]:bg-transparent dark:data-[state=active]:text-blue-400"
+              className={settingsInlineTabsTriggerClassName}
             >
               {t("settings.chatBridge.platform.whatsapp")}
             </TabsTrigger>
             <TabsTrigger
               value="discord"
-              className="flex-1 rounded-none border-b-2 border-transparent px-0 py-2 text-[11.5px] text-slate-500 data-[state=active]:border-blue-600 data-[state=active]:bg-transparent data-[state=active]:text-blue-600 data-[state=active]:shadow-none dark:text-slate-400 dark:data-[state=active]:border-blue-500 dark:data-[state=active]:bg-transparent dark:data-[state=active]:text-blue-400"
+              className={settingsInlineTabsTriggerClassName}
             >
               {t("settings.chatBridge.platform.discord")}
             </TabsTrigger>
@@ -862,7 +1004,9 @@ export function SettingsPage() {
             <ChatBridgeTelegramSettingsCard
               settings={appSettings}
               bindingCount={chatBridgeBindingsByPlatform.telegram.length}
-              tokenConfigured={appSettings?.chat_bridge_telegram_bot_token_configured ?? false}
+              tokenConfigured={
+                appSettings?.chat_bridge_telegram_bot_token_configured ?? false
+              }
               onOpenPairing={() => openChatBridgePairing("telegram")}
               onOpenBindings={() => openChatBridgeBindings("telegram")}
               onSaved={setAppSettings}
@@ -873,7 +1017,9 @@ export function SettingsPage() {
             <ChatBridgeDiscordSettingsCard
               settings={appSettings}
               bindingCount={chatBridgeBindingsByPlatform.discord.length}
-              tokenConfigured={appSettings?.chat_bridge_discord_bot_token_configured ?? false}
+              tokenConfigured={
+                appSettings?.chat_bridge_discord_bot_token_configured ?? false
+              }
               onOpenPairing={() => openChatBridgePairing("discord")}
               onOpenBindings={() => openChatBridgeBindings("discord")}
               onSaved={setAppSettings}
@@ -922,12 +1068,16 @@ export function SettingsPage() {
           <DialogHeader>
             <DialogTitle>
               {chatBridgeLoginDialogPlatform
-                ? t(`settings.chatBridge.${chatBridgeLoginDialogPlatform}.qrTitle`)
+                ? t(
+                    `settings.chatBridge.${chatBridgeLoginDialogPlatform}.qrTitle`,
+                  )
                 : ""}
             </DialogTitle>
             <DialogDescription>
               {chatBridgeLoginDialogPlatform
-                ? t(`settings.chatBridge.${chatBridgeLoginDialogPlatform}.dialogHint`)
+                ? t(
+                    `settings.chatBridge.${chatBridgeLoginDialogPlatform}.dialogHint`,
+                  )
                 : ""}
             </DialogDescription>
           </DialogHeader>
@@ -938,32 +1088,49 @@ export function SettingsPage() {
                 <div className="flex items-start justify-between gap-3">
                   <div className="space-y-1">
                     <div className="font-medium text-sm">
-                      {t(`settings.chatBridge.${chatBridgeLoginDialogPlatform}.runtimeTitle`)}
+                      {t(
+                        `settings.chatBridge.${chatBridgeLoginDialogPlatform}.runtimeTitle`,
+                      )}
                     </div>
                     <div className="text-xs text-muted-foreground">
-                      {t(`settings.chatBridge.${chatBridgeLoginDialogPlatform}.runtimeHint`)}
+                      {t(
+                        `settings.chatBridge.${chatBridgeLoginDialogPlatform}.runtimeHint`,
+                      )}
                     </div>
                   </div>
-                  <Badge variant={chatBridgeLoginDialogStatusTone}>{chatBridgeLoginDialogStatusLabel}</Badge>
+                  <Badge variant={chatBridgeLoginDialogStatusTone}>
+                    {chatBridgeLoginDialogStatusLabel}
+                  </Badge>
                 </div>
 
                 <div className="grid gap-3 md:grid-cols-2">
                   <div className="rounded-lg border bg-background px-3 py-3 space-y-1">
                     <div className="text-xs text-muted-foreground">
-                      {t(`settings.chatBridge.${chatBridgeLoginDialogPlatform}.connectionLabel`)}
+                      {t(
+                        `settings.chatBridge.${chatBridgeLoginDialogPlatform}.connectionLabel`,
+                      )}
                     </div>
                     <div className="text-sm font-medium">
                       {chatBridgeLoginDialogConnected
-                        ? t(`settings.chatBridge.${chatBridgeLoginDialogPlatform}.connectionConnected`)
-                        : t(`settings.chatBridge.${chatBridgeLoginDialogPlatform}.connectionDisconnected`)}
+                        ? t(
+                            `settings.chatBridge.${chatBridgeLoginDialogPlatform}.connectionConnected`,
+                          )
+                        : t(
+                            `settings.chatBridge.${chatBridgeLoginDialogPlatform}.connectionDisconnected`,
+                          )}
                     </div>
                   </div>
                   <div className="rounded-lg border bg-background px-3 py-3 space-y-1">
                     <div className="text-xs text-muted-foreground">
-                      {t(`settings.chatBridge.${chatBridgeLoginDialogPlatform}.accountLabel`)}
+                      {t(
+                        `settings.chatBridge.${chatBridgeLoginDialogPlatform}.accountLabel`,
+                      )}
                     </div>
                     <div className="text-sm font-medium break-all">
-                      {chatBridgeLoginDialogStatus?.me || t(`settings.chatBridge.${chatBridgeLoginDialogPlatform}.accountEmpty`)}
+                      {chatBridgeLoginDialogStatus?.me ||
+                        t(
+                          `settings.chatBridge.${chatBridgeLoginDialogPlatform}.accountEmpty`,
+                        )}
                     </div>
                   </div>
                 </div>
@@ -971,34 +1138,46 @@ export function SettingsPage() {
                 {chatBridgeLoginDialogLastErrorMessage ? (
                   <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-3 space-y-1">
                     <div className="text-xs text-muted-foreground">
-                      {t(`settings.chatBridge.${chatBridgeLoginDialogPlatform}.lastErrorLabel`)}
+                      {t(
+                        `settings.chatBridge.${chatBridgeLoginDialogPlatform}.lastErrorLabel`,
+                      )}
                     </div>
-                    <div className="text-sm break-words">{chatBridgeLoginDialogLastErrorMessage}</div>
+                    <div className="text-sm break-words">
+                      {chatBridgeLoginDialogLastErrorMessage}
+                    </div>
                   </div>
                 ) : null}
 
                 <div className="rounded-lg border bg-background px-3 py-3 space-y-3">
                   <div className="space-y-1">
                     <div className="font-medium text-sm">
-                      {t(`settings.chatBridge.${chatBridgeLoginDialogPlatform}.qrTitle`)}
+                      {t(
+                        `settings.chatBridge.${chatBridgeLoginDialogPlatform}.qrTitle`,
+                      )}
                     </div>
                     <div className="text-xs text-muted-foreground">
-                      {t(`settings.chatBridge.${chatBridgeLoginDialogPlatform}.qrHint`)}
+                      {t(
+                        `settings.chatBridge.${chatBridgeLoginDialogPlatform}.qrHint`,
+                      )}
                     </div>
                   </div>
                   {chatBridgeLoginDialogQrImageSrc ? (
                     <div className="flex justify-center">
                       <img
                         src={chatBridgeLoginDialogQrImageSrc}
-                        alt={t(`settings.chatBridge.${chatBridgeLoginDialogPlatform}.qrAlt`)}
-                        className="h-56 w-56 rounded-lg border bg-white p-3"
+                        alt={t(
+                          `settings.chatBridge.${chatBridgeLoginDialogPlatform}.qrAlt`,
+                        )}
+                        className="h-56 w-56 rounded-md border bg-background p-3"
                       />
                     </div>
                   ) : (
                     <div className="rounded-lg border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
                       {chatBridgeLoginDialogStatusLoading
                         ? t("common.loading")
-                        : t(`settings.chatBridge.${chatBridgeLoginDialogPlatform}.qrEmpty`)}
+                        : t(
+                            `settings.chatBridge.${chatBridgeLoginDialogPlatform}.qrEmpty`,
+                          )}
                     </div>
                   )}
                 </div>
@@ -1023,10 +1202,17 @@ export function SettingsPage() {
                     void beginWeixinLogin();
                   }
                 }}
-                disabled={!chatBridgeLoginDialogPlatform || !appSettings || chatBridgeSaving || chatBridgeLoginDialogActionBusy}
+                disabled={
+                  !chatBridgeLoginDialogPlatform ||
+                  !appSettings ||
+                  chatBridgeSaving ||
+                  chatBridgeLoginDialogActionBusy
+                }
               >
                 {chatBridgeLoginDialogPlatform
-                  ? t(`settings.chatBridge.${chatBridgeLoginDialogPlatform}.loginAction`)
+                  ? t(
+                      `settings.chatBridge.${chatBridgeLoginDialogPlatform}.loginAction`,
+                    )
                   : ""}
               </Button>
               <Button
@@ -1039,10 +1225,17 @@ export function SettingsPage() {
                     void disconnectWeixin();
                   }
                 }}
-                disabled={!chatBridgeLoginDialogPlatform || !appSettings || chatBridgeSaving || chatBridgeLoginDialogActionBusy}
+                disabled={
+                  !chatBridgeLoginDialogPlatform ||
+                  !appSettings ||
+                  chatBridgeSaving ||
+                  chatBridgeLoginDialogActionBusy
+                }
               >
                 {chatBridgeLoginDialogPlatform
-                  ? t(`settings.chatBridge.${chatBridgeLoginDialogPlatform}.logoutAction`)
+                  ? t(
+                      `settings.chatBridge.${chatBridgeLoginDialogPlatform}.logoutAction`,
+                    )
                   : ""}
               </Button>
               <Button
@@ -1055,7 +1248,11 @@ export function SettingsPage() {
                     void refreshChatBridgeWeixinStatus();
                   }
                 }}
-                disabled={!chatBridgeLoginDialogPlatform || chatBridgeLoginDialogStatusLoading || chatBridgeLoginDialogActionBusy}
+                disabled={
+                  !chatBridgeLoginDialogPlatform ||
+                  chatBridgeLoginDialogStatusLoading ||
+                  chatBridgeLoginDialogActionBusy
+                }
               >
                 {t("common.refresh")}
               </Button>
@@ -1077,38 +1274,63 @@ export function SettingsPage() {
             <DialogTitle>{t("settings.chatBridge.pairing.title")}</DialogTitle>
             <DialogDescription>
               {t("settings.chatBridge.pairing.subtitle", {
-                platform: t(`settings.chatBridge.platform.${chatBridgePairingPlatform}`),
+                platform: t(
+                  `settings.chatBridge.platform.${chatBridgePairingPlatform}`,
+                ),
               })}
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
             <div className="space-y-2">
-              <label className="text-sm font-medium">{t("settings.chatBridge.pairing.platform")}</label>
+              <label className="text-sm font-medium">
+                {t("settings.chatBridge.pairing.platform")}
+              </label>
               <Input
-                value={t(`settings.chatBridge.platform.${chatBridgePairingPlatform}`)}
+                value={t(
+                  `settings.chatBridge.platform.${chatBridgePairingPlatform}`,
+                )}
                 disabled
               />
               <p className="text-xs text-muted-foreground">
                 {t("settings.chatBridge.pairing.platformHint", {
-                  platform: t(`settings.chatBridge.platform.${chatBridgePairingPlatform}`),
+                  platform: t(
+                    `settings.chatBridge.platform.${chatBridgePairingPlatform}`,
+                  ),
                 })}
               </p>
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium">{t("settings.chatBridge.pairing.token")}</label>
-              <Input value={chatBridgePairingToken?.token ?? ""} disabled placeholder={t("settings.chatBridge.pairing.empty")} className="font-mono text-sm" />
-              <p className="text-xs text-muted-foreground">{t("settings.chatBridge.pairing.tokenHint")}</p>
+              <label className="text-sm font-medium">
+                {t("settings.chatBridge.pairing.token")}
+              </label>
+              <Input
+                value={chatBridgePairingToken?.token ?? ""}
+                disabled
+                placeholder={t("settings.chatBridge.pairing.empty")}
+                className="font-mono text-sm"
+              />
+              <p className="text-xs text-muted-foreground">
+                {t("settings.chatBridge.pairing.tokenHint")}
+              </p>
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium">{t("settings.chatBridge.pairing.expiresAt")}</label>
+              <label className="text-sm font-medium">
+                {t("settings.chatBridge.pairing.expiresAt")}
+              </label>
               <Input
-                value={chatBridgePairingToken?.expires_at_ms ? formatDateTime(chatBridgePairingToken.expires_at_ms) : "-"}
+                value={
+                  chatBridgePairingToken?.expires_at_ms
+                    ? formatDateTime(chatBridgePairingToken.expires_at_ms)
+                    : "-"
+                }
                 disabled
               />
-              <p className="text-xs text-muted-foreground">{t("settings.chatBridge.pairing.expiresHint")}</p>
+              <p className="text-xs text-muted-foreground">
+                {t("settings.chatBridge.pairing.expiresHint")}
+              </p>
             </div>
           </div>
 
@@ -1120,7 +1342,10 @@ export function SettingsPage() {
             >
               {t("common.cancel")}
             </Button>
-            <Button onClick={() => void generateChatBridgePairingToken()} disabled={chatBridgePairingCreating}>
+            <Button
+              onClick={() => void generateChatBridgePairingToken()}
+              disabled={chatBridgePairingCreating}
+            >
               {t("settings.chatBridge.pairing.generate")}
             </Button>
           </DialogFooter>
@@ -1139,28 +1364,40 @@ export function SettingsPage() {
           <DialogHeader>
             <DialogTitle>
               {t("settings.chatBridge.bindings.dialogTitle", {
-                platform: t(`settings.chatBridge.platform.${chatBridgeBindingsDialogPlatform ?? "telegram"}`),
+                platform: t(
+                  `settings.chatBridge.platform.${chatBridgeBindingsDialogPlatform ?? "telegram"}`,
+                ),
               })}
             </DialogTitle>
             <DialogDescription>
               {t("settings.chatBridge.bindings.dialogSubtitle", {
-                platform: t(`settings.chatBridge.platform.${chatBridgeBindingsDialogPlatform ?? "telegram"}`),
+                platform: t(
+                  `settings.chatBridge.platform.${chatBridgeBindingsDialogPlatform ?? "telegram"}`,
+                ),
               })}
             </DialogDescription>
           </DialogHeader>
 
-          {chatBridgeBindingsLoading && chatBridgeBindingsDialogItems.length === 0 ? (
-            <div className="text-sm text-muted-foreground">{t("common.loading")}</div>
+          {chatBridgeBindingsLoading &&
+          chatBridgeBindingsDialogItems.length === 0 ? (
+            <div className="text-sm text-muted-foreground">
+              {t("common.loading")}
+            </div>
           ) : chatBridgeBindingsDialogItems.length === 0 ? (
             <div className="text-sm text-muted-foreground">
               {t("settings.chatBridge.bindings.emptyForPlatform", {
-                platform: t(`settings.chatBridge.platform.${chatBridgeBindingsDialogPlatform ?? "telegram"}`),
+                platform: t(
+                  `settings.chatBridge.platform.${chatBridgeBindingsDialogPlatform ?? "telegram"}`,
+                ),
               })}
             </div>
           ) : (
             <div className="space-y-2 max-h-[360px] overflow-y-auto pr-1">
               {chatBridgeBindingsDialogItems.map((binding) => (
-                <div key={binding.id} className="flex items-start justify-between gap-4 rounded-lg border bg-background px-3 py-2">
+                <div
+                  key={binding.id}
+                  className="flex items-start justify-between gap-4 rounded-lg border bg-background px-3 py-2"
+                >
                   <div className="min-w-0">
                     <div className="font-medium text-sm truncate">
                       {binding.display_name ?? binding.platform_user_id}
@@ -1188,29 +1425,55 @@ export function SettingsPage() {
           )}
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setChatBridgeBindingsDialogPlatform(null)} disabled={chatBridgeUnbinding}>
+            <Button
+              variant="outline"
+              onClick={() => setChatBridgeBindingsDialogPlatform(null)}
+              disabled={chatBridgeUnbinding}
+            >
               {t("common.ok")}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={!!chatBridgeUnbindTarget} onOpenChange={(v) => { if (!chatBridgeUnbinding) { if (!v) setChatBridgeUnbindTarget(null); } }}>
+      <Dialog
+        open={!!chatBridgeUnbindTarget}
+        onOpenChange={(v) => {
+          if (!chatBridgeUnbinding) {
+            if (!v) setChatBridgeUnbindTarget(null);
+          }
+        }}
+      >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{t("settings.chatBridge.bindings.unbindTitle")}</DialogTitle>
+            <DialogTitle>
+              {t("settings.chatBridge.bindings.unbindTitle")}
+            </DialogTitle>
             <DialogDescription>
               {t("settings.chatBridge.bindings.unbindConfirm", {
-                name: chatBridgeUnbindTarget?.display_name ?? chatBridgeUnbindTarget?.platform_user_id ?? "",
-                platform: t(`settings.chatBridge.platform.${chatBridgeUnbindTarget?.platform ?? "telegram"}`)
+                name:
+                  chatBridgeUnbindTarget?.display_name ??
+                  chatBridgeUnbindTarget?.platform_user_id ??
+                  "",
+                platform: t(
+                  `settings.chatBridge.platform.${chatBridgeUnbindTarget?.platform ?? "telegram"}`,
+                ),
               })}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setChatBridgeUnbindTarget(null)} disabled={chatBridgeUnbinding}>
+            <Button
+              variant="outline"
+              onClick={() => setChatBridgeUnbindTarget(null)}
+              disabled={chatBridgeUnbinding}
+            >
               {t("common.cancel")}
             </Button>
-            <Button variant="destructive" onClick={confirmUnbind} disabled={chatBridgeUnbinding}>
+            <Button
+              variant="destructive"
+              onClick={confirmUnbind}
+              disabled={chatBridgeUnbinding}
+            >
               {t("settings.chatBridge.bindings.unbind")}
             </Button>
           </DialogFooter>
@@ -1231,25 +1494,39 @@ export function SettingsPage() {
               void navigate({
                 to: "/settings/{-$tab}",
                 params: {
-                  tab: nextValue === DEFAULT_SETTINGS_TAB ? undefined : nextValue,
+                  tab:
+                    nextValue === DEFAULT_SETTINGS_TAB ? undefined : nextValue,
                 },
                 replace: true,
               });
             }}
             className="flex h-full min-h-0 flex-col gap-3"
           >
-            <TabsList className="shrink-0 self-start">
-              <TabsTrigger value="general">{t("settings.tabs.general")}</TabsTrigger>
-              <TabsTrigger value="channel">{t("settings.tabs.channel")}</TabsTrigger>
-              <TabsTrigger value="notifications">{t("settings.tabs.notifications")}</TabsTrigger>
+            <TabsList className="animate-fade-up shrink-0 self-start">
+              <TabsTrigger value="general">
+                {t("settings.tabs.general")}
+              </TabsTrigger>
+              <TabsTrigger value="channel">
+                {t("settings.tabs.channel")}
+              </TabsTrigger>
+              <TabsTrigger value="notifications">
+                {t("settings.tabs.notifications")}
+              </TabsTrigger>
               <TabsTrigger value="cli">{t("settings.tabs.cli")}</TabsTrigger>
               <TabsTrigger value="data">{t("settings.tabs.data")}</TabsTrigger>
-              <TabsTrigger value="chatBridge">{t("settings.tabs.chatBridge")}</TabsTrigger>
-              <TabsTrigger value="system">{t("settings.tabs.system")}</TabsTrigger>
+              <TabsTrigger value="chatBridge">
+                {t("settings.tabs.chatBridge")}
+              </TabsTrigger>
+              <TabsTrigger value="system">
+                {t("settings.tabs.system")}
+              </TabsTrigger>
             </TabsList>
 
-            <div className="flex-1 min-h-0 overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-              <TabsContent value="general" className="mt-0 h-full min-h-0 overflow-y-auto">
+            <div className="animate-fade-up anim-d1 flex-1 min-h-0 overflow-hidden rounded-lg border border-border bg-card">
+              <TabsContent
+                value="general"
+                className="mt-0 h-full min-h-0 overflow-y-auto"
+              >
                 <AppearanceSettings
                   theme={theme}
                   themeOptions={themeOptions}
@@ -1270,36 +1547,53 @@ export function SettingsPage() {
                   currencyMode={currencyMode}
                   onCurrencyModeChange={setCurrencyMode}
                 />
-                <ApplicationSettings settings={appSettings} onSaved={setAppSettings} />
+                <ApplicationSettings
+                  settings={appSettings}
+                  onSaved={setAppSettings}
+                />
               </TabsContent>
 
-              <TabsContent value="channel" className="mt-0 h-full min-h-0 overflow-y-auto">
-          <ChannelSettings
-            settings={appSettings}
-            pricing={pricing}
-            syncing={syncing}
-            onSaved={setAppSettings}
-            onSync={async () => {
-              setSyncing(true);
-              try {
-                await pricingSync();
-                const st = await pricingStatus();
-                setPricing(st);
-                toast.success(t("settings.pricingData.syncOk"));
-              } catch (e) {
-                toast.error(t("settings.pricingData.syncFail"), { description: humanizeApiError(e, t) });
-              } finally {
-                setSyncing(false);
-              }
-            }}
-          />
+              <TabsContent
+                value="channel"
+                className="mt-0 h-full min-h-0 overflow-y-auto"
+              >
+                <ChannelSettings
+                  settings={appSettings}
+                  pricing={pricing}
+                  syncing={syncing}
+                  onSaved={setAppSettings}
+                  onSync={async () => {
+                    setSyncing(true);
+                    try {
+                      await pricingSync();
+                      const st = await pricingStatus();
+                      setPricing(st);
+                      toast.success(t("settings.pricingData.syncOk"));
+                    } catch (e) {
+                      toast.error(t("settings.pricingData.syncFail"), {
+                        description: humanizeApiError(e, t),
+                      });
+                    } finally {
+                      setSyncing(false);
+                    }
+                  }}
+                />
               </TabsContent>
 
-              <TabsContent value="notifications" className="mt-0 h-full min-h-0 overflow-y-auto">
-                <NotificationSettings settings={appSettings} onSaved={setAppSettings} />
+              <TabsContent
+                value="notifications"
+                className="mt-0 h-full min-h-0 overflow-y-auto"
+              >
+                <NotificationSettings
+                  settings={appSettings}
+                  onSaved={setAppSettings}
+                />
               </TabsContent>
 
-              <TabsContent value="cli" className="mt-0 h-full min-h-0 overflow-y-auto">
+              <TabsContent
+                value="cli"
+                className="mt-0 h-full min-h-0 overflow-y-auto"
+              >
                 <CliToolsSettings
                   cliToolsProxyConfig={cliToolsProxyConfig}
                   cliToolsProxyConfigLoading={cliToolsProxyConfigLoading}
@@ -1308,13 +1602,22 @@ export function SettingsPage() {
                   cliToolsLoading={cliToolsLoading}
                   cliToolBusy={cliToolBusy}
                   appSettings={appSettings}
-                  onRefreshCliToolsProxyConfigStatus={refreshCliToolsProxyConfigStatus}
+                  onRefreshCliToolsProxyConfigStatus={
+                    refreshCliToolsProxyConfigStatus
+                  }
                   onApplyCliProxyConfig={async (toolId) => {
-                    setCliProxyConfigBusy((prev) => ({ ...prev, [toolId]: true }));
+                    setCliProxyConfigBusy((prev) => ({
+                      ...prev,
+                      [toolId]: true,
+                    }));
                     try {
-                      const res = await applyCliToolsProxyConfig({ tools: [toolId] });
+                      const res = await applyCliToolsProxyConfig({
+                        tools: [toolId],
+                      });
                       setCliToolsProxyConfig(res.status);
-                      const applied = res.applied.find((item) => item.id === toolId);
+                      const applied = res.applied.find(
+                        (item) => item.id === toolId,
+                      );
                       if (applied?.ok) {
                         toast.success(t("settings.cliProxyConfig.applied"));
                       } else {
@@ -1327,13 +1630,18 @@ export function SettingsPage() {
                         description: humanizeApiError(e, t),
                       });
                     } finally {
-                      setCliProxyConfigBusy((prev) => ({ ...prev, [toolId]: false }));
+                      setCliProxyConfigBusy((prev) => ({
+                        ...prev,
+                        [toolId]: false,
+                      }));
                       void refreshCliToolsProxyConfigStatus();
                     }
                   }}
                   onRefreshCliToolsStatus={refreshCliToolsStatus}
                   onInstallCliTool={async (toolId) => {
-                    const tool = cliToolsStatus?.tools.find((item) => item.id === toolId);
+                    const tool = cliToolsStatus?.tools.find(
+                      (item) => item.id === toolId,
+                    );
                     if (!tool) return;
                     setCliToolBusy((prev) => ({ ...prev, [toolId]: true }));
                     try {
@@ -1360,10 +1668,11 @@ export function SettingsPage() {
                     if (!appSettings) return;
                     const previous =
                       toolId === "gemini"
-                        ? appSettings.gemini_cli_auto_update_enabled ?? false
+                        ? (appSettings.gemini_cli_auto_update_enabled ?? false)
                         : toolId === "claude"
-                          ? appSettings.claude_code_auto_update_enabled ?? false
-                          : appSettings.codex_auto_update_enabled ?? false;
+                          ? (appSettings.claude_code_auto_update_enabled ??
+                            false)
+                          : (appSettings.codex_auto_update_enabled ?? false);
                     const patch =
                       toolId === "gemini"
                         ? { gemini_cli_auto_update_enabled: enabled }
@@ -1382,7 +1691,10 @@ export function SettingsPage() {
                           : toolId === "claude"
                             ? { claude_code_auto_update_enabled: previous }
                             : { codex_auto_update_enabled: previous };
-                      setAppSettings({ ...appSettings, ...rollback } as AppSettings);
+                      setAppSettings({
+                        ...appSettings,
+                        ...rollback,
+                      } as AppSettings);
                       toast.error(t("settings.cliTools.saveFail"), {
                         description: humanizeApiError(e, t),
                       });
@@ -1391,267 +1703,323 @@ export function SettingsPage() {
                 />
               </TabsContent>
 
-              <TabsContent value="data" className="mt-0 h-full min-h-0 overflow-y-auto">
-          <DataSettings
-            settings={appSettings}
-            onSaved={setAppSettings}
-            locale={locale}
-            dataDir={health?.data_dir ?? "-"}
-            dbPath={health?.db_path ?? "-"}
-            dbSizeText={dbSize ? formatBytes(dbSize.total_bytes) : "-"}
-            dbSizeLoading={dbSizeLoading}
-            onRefreshDbSize={refreshDbSize}
-            onOpenDataDir={async () => {
-              try {
-                await openDataDir();
-              } catch (e) {
-                toast.error(t("settings.storage.openFail"), {
-                  description: humanizeApiError(e, t),
-                });
-              }
-            }}
-            recordsType={recordsType}
-            onRecordsTypeChange={setRecordsType}
-            recordsTimeScope={recordsTimeScope}
-            onRecordsTimeScopeChange={setRecordsTimeScope}
-            recordsDateRange={recordsDateRange}
-            onRecordsDateRangeChange={setRecordsDateRange}
-            recordsPromptOpen={recordsPromptOpen}
-            onRecordsPromptOpenChange={(open) => {
-              if (recordsClearing) return;
-              setRecordsPromptOpen(open);
-            }}
-            recordsClearing={recordsClearing}
-            onRequestClearRecords={() => {
-              if (recordsTimeScope === "date_range" && !recordsDateRange?.from) {
-                toast.error(t("settings.records.invalidDate"));
-                return;
-              }
-              setRecordsPromptOpen(true);
-            }}
-            onConfirmClearRecords={async () => {
-              setRecordsClearing(true);
-              try {
-                const msRange = recordsTimeScope === "date_range" ? dateRangeToMs(recordsDateRange) : null;
-                if (recordsTimeScope === "date_range" && !msRange) {
-                  toast.error(t("settings.records.invalidDate"));
-                  return;
-                }
-                const res = await clearRecords({
-                  mode: recordsType,
-                  start_ms: msRange?.start_ms,
-                  end_ms: msRange?.end_ms,
-                });
-                toast.success(t("settings.records.cleared"), {
-                  description: t(
-                    recordsType === "errors"
-                      ? "settings.records.clearedDetailErrors"
-                      : "settings.records.clearedDetail",
-                    { count: formatNumber(res.usage_events_deleted) },
-                  ),
-                });
-                setRecordsPromptOpen(false);
-                setRecordsDateRange(undefined);
-                await refreshDbSize();
-              } catch (e) {
-                toast.error(t("settings.records.clearFail"), {
-                  description: humanizeApiError(e, t),
-                });
-              } finally {
-                setRecordsClearing(false);
-              }
-            }}
-            recordsDateStr={recordsDateStr}
-            logsSizeText={logsSize ? formatBytes(logsSize.total_bytes) : "-"}
-            logsSizeLoading={logsSizeLoading}
-            onRefreshLogsSize={refreshLogsSize}
-            logsScope={logsScope}
-            onLogsScopeChange={setLogsScope}
-            logsDateRange={logsDateRange}
-            onLogsDateRangeChange={setLogsDateRange}
-            logsPromptOpen={logsPromptOpen}
-            onLogsPromptOpenChange={(open) => {
-              if (logsClearing) return;
-              setLogsPromptOpen(open);
-            }}
-            logsClearing={logsClearing}
-            onRequestClearLogs={() => {
-              if (logsScope === "date_range" && !logsDateRange?.from) {
-                toast.error(t("settings.logging.invalidDate"));
-                return;
-              }
-              setLogsPromptOpen(true);
-            }}
-            onConfirmClearLogs={async () => {
-              setLogsClearing(true);
-              try {
-                if (logsScope === "date_range") {
-                  const range = dateRangeToStrings(logsDateRange);
-                  if (!range) {
-                    toast.error(t("settings.logging.invalidDate"));
-                    return;
+              <TabsContent
+                value="data"
+                className="mt-0 h-full min-h-0 overflow-y-auto"
+              >
+                <DataSettings
+                  settings={appSettings}
+                  onSaved={setAppSettings}
+                  locale={locale}
+                  dataDir={health?.data_dir ?? "-"}
+                  dbPath={health?.db_path ?? "-"}
+                  dbSizeText={dbSize ? formatBytes(dbSize.total_bytes) : "-"}
+                  dbSizeLoading={dbSizeLoading}
+                  onRefreshDbSize={refreshDbSize}
+                  onOpenDataDir={async () => {
+                    try {
+                      await openDataDir();
+                    } catch (e) {
+                      toast.error(t("settings.storage.openFail"), {
+                        description: humanizeApiError(e, t),
+                      });
+                    }
+                  }}
+                  recordsType={recordsType}
+                  onRecordsTypeChange={setRecordsType}
+                  recordsTimeScope={recordsTimeScope}
+                  onRecordsTimeScopeChange={setRecordsTimeScope}
+                  recordsDateRange={recordsDateRange}
+                  onRecordsDateRangeChange={setRecordsDateRange}
+                  recordsPromptOpen={recordsPromptOpen}
+                  onRecordsPromptOpenChange={(open) => {
+                    if (recordsClearing) return;
+                    setRecordsPromptOpen(open);
+                  }}
+                  recordsClearing={recordsClearing}
+                  onRequestClearRecords={() => {
+                    if (
+                      recordsTimeScope === "date_range" &&
+                      !recordsDateRange?.from
+                    ) {
+                      toast.error(t("settings.records.invalidDate"));
+                      return;
+                    }
+                    setRecordsPromptOpen(true);
+                  }}
+                  onConfirmClearRecords={async () => {
+                    setRecordsClearing(true);
+                    try {
+                      const msRange =
+                        recordsTimeScope === "date_range"
+                          ? dateRangeToMs(recordsDateRange)
+                          : null;
+                      if (recordsTimeScope === "date_range" && !msRange) {
+                        toast.error(t("settings.records.invalidDate"));
+                        return;
+                      }
+                      const res = await clearRecords({
+                        mode: recordsType,
+                        start_ms: msRange?.start_ms,
+                        end_ms: msRange?.end_ms,
+                      });
+                      toast.success(t("settings.records.cleared"), {
+                        description: t(
+                          recordsType === "errors"
+                            ? "settings.records.clearedDetailErrors"
+                            : "settings.records.clearedDetail",
+                          { count: formatNumber(res.usage_events_deleted) },
+                        ),
+                      });
+                      setRecordsPromptOpen(false);
+                      setRecordsDateRange(undefined);
+                      await refreshDbSize();
+                    } catch (e) {
+                      toast.error(t("settings.records.clearFail"), {
+                        description: humanizeApiError(e, t),
+                      });
+                    } finally {
+                      setRecordsClearing(false);
+                    }
+                  }}
+                  recordsDateStr={recordsDateStr}
+                  logsSizeText={
+                    logsSize ? formatBytes(logsSize.total_bytes) : "-"
                   }
-                  const res = await clearLogs({
-                    mode: "date_range",
-                    start_date: range.start,
-                    end_date: range.end,
-                  });
-                  toast.success(t("settings.logging.cleared"), {
-                    description: t("settings.logging.clearedDetail", {
-                      deleted: res.deleted_files,
-                      truncated: res.truncated_files,
-                    }),
-                  });
-                } else {
-                  const res = await clearLogs({ mode: "all" });
-                  toast.success(t("settings.logging.cleared"), {
-                    description: t("settings.logging.clearedDetail", {
-                      deleted: res.deleted_files,
-                      truncated: res.truncated_files,
-                    }),
-                  });
-                }
-                setLogsPromptOpen(false);
-                setLogsDateRange(undefined);
-                await refreshLogsSize();
-              } catch (e) {
-                toast.error(t("settings.logging.clearFail"), {
-                  description: humanizeApiError(e, t),
-                });
-              } finally {
-                setLogsClearing(false);
-              }
-            }}
-            logsDateStr={logsDateStr}
-          />
+                  logsSizeLoading={logsSizeLoading}
+                  onRefreshLogsSize={refreshLogsSize}
+                  logsScope={logsScope}
+                  onLogsScopeChange={setLogsScope}
+                  logsDateRange={logsDateRange}
+                  onLogsDateRangeChange={setLogsDateRange}
+                  logsPromptOpen={logsPromptOpen}
+                  onLogsPromptOpenChange={(open) => {
+                    if (logsClearing) return;
+                    setLogsPromptOpen(open);
+                  }}
+                  logsClearing={logsClearing}
+                  onRequestClearLogs={() => {
+                    if (logsScope === "date_range" && !logsDateRange?.from) {
+                      toast.error(t("settings.logging.invalidDate"));
+                      return;
+                    }
+                    setLogsPromptOpen(true);
+                  }}
+                  onConfirmClearLogs={async () => {
+                    setLogsClearing(true);
+                    try {
+                      if (logsScope === "date_range") {
+                        const range = dateRangeToStrings(logsDateRange);
+                        if (!range) {
+                          toast.error(t("settings.logging.invalidDate"));
+                          return;
+                        }
+                        const res = await clearLogs({
+                          mode: "date_range",
+                          start_date: range.start,
+                          end_date: range.end,
+                        });
+                        toast.success(t("settings.logging.cleared"), {
+                          description: t("settings.logging.clearedDetail", {
+                            deleted: res.deleted_files,
+                            truncated: res.truncated_files,
+                          }),
+                        });
+                      } else {
+                        const res = await clearLogs({ mode: "all" });
+                        toast.success(t("settings.logging.cleared"), {
+                          description: t("settings.logging.clearedDetail", {
+                            deleted: res.deleted_files,
+                            truncated: res.truncated_files,
+                          }),
+                        });
+                      }
+                      setLogsPromptOpen(false);
+                      setLogsDateRange(undefined);
+                      await refreshLogsSize();
+                    } catch (e) {
+                      toast.error(t("settings.logging.clearFail"), {
+                        description: humanizeApiError(e, t),
+                      });
+                    } finally {
+                      setLogsClearing(false);
+                    }
+                  }}
+                  logsDateStr={logsDateStr}
+                />
               </TabsContent>
 
-              <TabsContent value="chatBridge" className="mt-0 h-full min-h-0 overflow-y-auto">
+              <TabsContent
+                value="chatBridge"
+                className="mt-0 h-full min-h-0 overflow-y-auto"
+              >
                 {chatBridgeTab}
               </TabsContent>
 
-              <TabsContent value="system" className="mt-0 h-full min-h-0 overflow-y-auto">
+              <TabsContent
+                value="system"
+                className="mt-0 h-full min-h-0 overflow-y-auto"
+              >
                 <SystemSettings
-            settings={appSettings}
-            health={health}
-            backendStatusLabel={backendStatusLabel}
-            apiHost={apiHost}
-            apiPort={apiPort}
-            updateDialog={(
-              <UpdatePromptDialog
-                open={updatePromptOpen}
-                onOpenChange={setUpdatePromptOpen}
-                title={t("settings.update.promptTitle")}
-                description={t("settings.update.promptDesc", { version: updatePromptVersion ?? "-" })}
-                overviewTitle={t("settings.update.promptOverviewTitle")}
-                loadingText={t("settings.update.promptLoading")}
-                loadFailText={t("settings.update.promptLoadFail")}
-                sections={updateChangelogSections}
-                loading={updateChangelogLoading}
-                loadError={updateChangelogError}
-                updateText={t("settings.update.updateNow")}
-                laterText={t("settings.update.later")}
-                ignoreText={t("settings.update.ignore")}
-                busy={updateDownloading || updateIgnoring}
-                onLater={() => setUpdatePromptOpen(false)}
-                onUpdate={async () => {
-                  setUpdateDownloading(true);
-                  try {
-                    const dl = await downloadUpdate();
-                    setUpdateStatus(dl.status);
-                    toast.success(t("settings.update.downloading"));
-                    setUpdatePromptOpen(false);
-                  } catch (e) {
-                    toast.error(t("settings.update.downloadFail"), { description: humanizeApiError(e, t) });
-                  } finally {
-                    setUpdateDownloading(false);
+                  settings={appSettings}
+                  health={health}
+                  backendStatusLabel={backendStatusLabel}
+                  apiHost={apiHost}
+                  apiPort={apiPort}
+                  updateDialog={
+                    <UpdatePromptDialog
+                      open={updatePromptOpen}
+                      onOpenChange={setUpdatePromptOpen}
+                      title={t("settings.update.promptTitle")}
+                      description={t("settings.update.promptDesc", {
+                        version: updatePromptVersion ?? "-",
+                      })}
+                      overviewTitle={t("settings.update.promptOverviewTitle")}
+                      loadingText={t("settings.update.promptLoading")}
+                      loadFailText={t("settings.update.promptLoadFail")}
+                      sections={updateChangelogSections}
+                      loading={updateChangelogLoading}
+                      loadError={updateChangelogError}
+                      updateText={t("settings.update.updateNow")}
+                      laterText={t("settings.update.later")}
+                      ignoreText={t("settings.update.ignore")}
+                      busy={updateDownloading || updateIgnoring}
+                      onLater={() => setUpdatePromptOpen(false)}
+                      onUpdate={async () => {
+                        setUpdateDownloading(true);
+                        try {
+                          const dl = await downloadUpdate();
+                          setUpdateStatus(dl.status);
+                          toast.success(t("settings.update.downloading"));
+                          setUpdatePromptOpen(false);
+                        } catch (e) {
+                          toast.error(t("settings.update.downloadFail"), {
+                            description: humanizeApiError(e, t),
+                          });
+                        } finally {
+                          setUpdateDownloading(false);
+                        }
+                      }}
+                      onIgnore={async () => {
+                        const version = updatePromptVersion;
+                        if (!version) return;
+                        setUpdateIgnoring(true);
+                        try {
+                          const next = await ignoreUpdate(version);
+                          setUpdateStatus(next);
+                          toast.success(
+                            t("settings.update.ignoredToast", { version }),
+                          );
+                          setUpdatePromptOpen(false);
+                        } catch (e) {
+                          toast.error(t("settings.update.ignoreFail"), {
+                            description: humanizeApiError(e, t),
+                          });
+                        } finally {
+                          setUpdateIgnoring(false);
+                        }
+                      }}
+                    />
                   }
-                }}
-                onIgnore={async () => {
-                  const version = updatePromptVersion;
-                  if (!version) return;
-                  setUpdateIgnoring(true);
-                  try {
-                    const next = await ignoreUpdate(version);
-                    setUpdateStatus(next);
-                    toast.success(t("settings.update.ignoredToast", { version }));
-                    setUpdatePromptOpen(false);
-                  } catch (e) {
-                    toast.error(t("settings.update.ignoreFail"), { description: humanizeApiError(e, t) });
-                  } finally {
-                    setUpdateIgnoring(false);
-                  }
-                }}
-              />
-            )}
-            updateStatusText={updateStatusText}
-            updateServerVersion={updateServerVersion}
-            updateChecking={updateChecking}
-            onSaved={setAppSettings}
-            onCheck={async () => {
-              setUpdateChecking(true);
-              try {
-                const res = await checkUpdate();
-                setUpdateCheckResult(res);
-                const nextStatus = await getUpdateStatus().catch(() => null);
-                if (nextStatus) setUpdateStatus(nextStatus);
+                  updateStatusText={updateStatusText}
+                  updateServerVersion={updateServerVersion}
+                  updateChecking={updateChecking}
+                  onSaved={setAppSettings}
+                  onCheck={async () => {
+                    setUpdateChecking(true);
+                    try {
+                      const res = await checkUpdate();
+                      setUpdateCheckResult(res);
+                      const nextStatus = await getUpdateStatus().catch(
+                        () => null,
+                      );
+                      if (nextStatus) setUpdateStatus(nextStatus);
 
-                if (nextStatus?.pending_version) {
-                  const pending = nextStatus.pending_version;
-                  const latest = res.latest_version;
-                  if (res.update_available && latest && latest !== pending) {
-                    if (res.latest_ignored) {
-                      toast.info(t("settings.update.ignoredToast", { version: latest }));
-                      return;
+                      if (nextStatus?.pending_version) {
+                        const pending = nextStatus.pending_version;
+                        const latest = res.latest_version;
+                        if (
+                          res.update_available &&
+                          latest &&
+                          latest !== pending
+                        ) {
+                          if (res.latest_ignored) {
+                            toast.info(
+                              t("settings.update.ignoredToast", {
+                                version: latest,
+                              }),
+                            );
+                            return;
+                          }
+                          toast.success(
+                            t("settings.update.found", { version: latest }),
+                          );
+                          openUpdatePrompt(latest);
+                          return;
+                        }
+                        reopenUpdateReadyPrompt(nextStatus);
+                        return;
+                      }
+
+                      if (!res.update_available) {
+                        toast.success(t("settings.update.uptodate"));
+                        return;
+                      }
+
+                      const latest = res.latest_version ?? "-";
+                      if (res.latest_ignored) {
+                        toast.info(
+                          t("settings.update.ignoredToast", {
+                            version: latest,
+                          }),
+                        );
+                        return;
+                      }
+                      toast.success(
+                        t("settings.update.found", { version: latest }),
+                      );
+                      if (res.latest_version)
+                        openUpdatePrompt(res.latest_version);
+                    } catch (e) {
+                      toast.error(t("settings.update.checkFail"), {
+                        description: humanizeApiError(e, t),
+                      });
+                    } finally {
+                      setUpdateChecking(false);
                     }
-                    toast.success(t("settings.update.found", { version: latest }));
-                    openUpdatePrompt(latest);
-                    return;
-                  }
-                  reopenUpdateReadyPrompt(nextStatus);
-                  return;
-                }
-
-                if (!res.update_available) {
-                  toast.success(t("settings.update.uptodate"));
-                  return;
-                }
-
-                const latest = res.latest_version ?? "-";
-                if (res.latest_ignored) {
-                  toast.info(t("settings.update.ignoredToast", { version: latest }));
-                  return;
-                }
-                toast.success(t("settings.update.found", { version: latest }));
-                if (res.latest_version) openUpdatePrompt(res.latest_version);
-              } catch (e) {
-                toast.error(t("settings.update.checkFail"), { description: humanizeApiError(e, t) });
-              } finally {
-                setUpdateChecking(false);
-              }
-            }}
-            onAutoUpdateChange={async (enabled) => {
-              try {
-                const next = await updateSettings({ app_auto_update_enabled: enabled });
-                setAppSettings(next);
-                toast.success(t("settings.update.saved"));
-                if (enabled) {
-                  const res = await checkUpdate();
-                  setUpdateCheckResult(res);
-                  if (res.update_available && res.latest_version) {
-                    if (res.latest_ignored) {
-                      toast.info(t("settings.update.ignoredToast", { version: res.latest_version }));
-                    } else {
-                      openUpdatePrompt(res.latest_version);
+                  }}
+                  onAutoUpdateChange={async (enabled) => {
+                    try {
+                      const next = await updateSettings({
+                        app_auto_update_enabled: enabled,
+                      });
+                      setAppSettings(next);
+                      toast.success(t("settings.update.saved"));
+                      if (enabled) {
+                        const res = await checkUpdate();
+                        setUpdateCheckResult(res);
+                        if (res.update_available && res.latest_version) {
+                          if (res.latest_ignored) {
+                            toast.info(
+                              t("settings.update.ignoredToast", {
+                                version: res.latest_version,
+                              }),
+                            );
+                          } else {
+                            openUpdatePrompt(res.latest_version);
+                          }
+                        }
+                        const nextStatus = await getUpdateStatus().catch(
+                          () => null,
+                        );
+                        if (nextStatus) setUpdateStatus(nextStatus);
+                      }
+                    } catch (e) {
+                      toast.error(t("settings.update.saveFail"), {
+                        description: humanizeApiError(e, t),
+                      });
                     }
-                  }
-                  const nextStatus = await getUpdateStatus().catch(() => null);
-                  if (nextStatus) setUpdateStatus(nextStatus);
-                }
-              } catch (e) {
-                toast.error(t("settings.update.saveFail"), { description: humanizeApiError(e, t) });
-              }
-            }}
+                  }}
                 />
               </TabsContent>
             </div>

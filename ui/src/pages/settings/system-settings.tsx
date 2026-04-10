@@ -1,8 +1,6 @@
 import type { ReactNode } from "react";
 
-import {
-  Badge,
-} from "@/components/ui";
+import { Badge } from "@/components/ui";
 import { useI18n } from "@/hooks/use-i18n";
 import {
   AppUpdateSettingsCard,
@@ -63,29 +61,43 @@ export function SystemSettings({
         onCheck={onCheck}
         onAutoUpdateChange={onAutoUpdateChange}
       />
-      <div className="border-t border-slate-100 px-5 pb-1 pt-2.5 text-[10px] font-bold uppercase tracking-[0.06em] text-slate-400 dark:border-slate-800/40 dark:text-slate-500">
+      <div className="border-t border-border px-5 pb-1 pt-2.5 text-[10px] font-bold uppercase tracking-[0.06em] text-muted-foreground">
         {t("settings.about.title")}
       </div>
-      <div className="flex min-h-[50px] items-center justify-between gap-4 border-t border-slate-100 px-5 py-3 transition-colors hover:bg-blue-50/25 dark:border-slate-800/40 dark:hover:bg-slate-800/25">
-        <span className="text-[12.5px] font-semibold">{t("settings.about.appName")}</span>
+      <div className="flex min-h-[50px] items-center justify-between gap-4 border-t border-border px-5 py-3 transition-colors hover:bg-secondary/35">
+        <span className="text-[12.5px] font-semibold">
+          {t("settings.about.appName")}
+        </span>
         <span className="text-xs font-medium">CliSwitch</span>
       </div>
-      <div className="flex min-h-[50px] items-center justify-between gap-4 border-t border-slate-100 px-5 py-3 transition-colors hover:bg-blue-50/25 dark:border-slate-800/40 dark:hover:bg-slate-800/25">
-        <span className="text-[12.5px] font-semibold">{t("settings.about.version")}</span>
-        <span className="text-xs font-mono">{health?.version ? `v${health.version}` : "-"}</span>
+      <div className="flex min-h-[50px] items-center justify-between gap-4 border-t border-border px-5 py-3 transition-colors hover:bg-secondary/35">
+        <span className="text-[12.5px] font-semibold">
+          {t("settings.about.version")}
+        </span>
+        <span className="text-xs font-mono">
+          {health?.version ? `v${health.version}` : "-"}
+        </span>
       </div>
-      <div className="flex min-h-[50px] items-center justify-between gap-4 border-t border-slate-100 px-5 py-3 transition-colors hover:bg-blue-50/25 dark:border-slate-800/40 dark:hover:bg-slate-800/25">
-        <span className="text-[12.5px] font-semibold">{t("settings.about.backendStatus")}</span>
-        <Badge variant={health?.status === "ok" ? "success" : "destructive"}>{backendStatusLabel}</Badge>
+      <div className="flex min-h-[50px] items-center justify-between gap-4 border-t border-border px-5 py-3 transition-colors hover:bg-secondary/35">
+        <span className="text-[12.5px] font-semibold">
+          {t("settings.about.backendStatus")}
+        </span>
+        <Badge variant={health?.status === "ok" ? "success" : "destructive"}>
+          {backendStatusLabel}
+        </Badge>
       </div>
-      <div className="flex min-h-[50px] items-center justify-between gap-4 border-t border-slate-100 px-5 py-3 transition-colors hover:bg-blue-50/25 dark:border-slate-800/40 dark:hover:bg-slate-800/25">
-        <span className="text-[12.5px] font-semibold">{t("settings.about.description")}</span>
-        <span className="max-w-[320px] text-right text-[10.5px] text-slate-500 dark:text-slate-400">
+      <div className="flex min-h-[50px] items-center justify-between gap-4 border-t border-border px-5 py-3 transition-colors hover:bg-secondary/35">
+        <span className="text-[12.5px] font-semibold">
+          {t("settings.about.description")}
+        </span>
+        <span className="max-w-[320px] text-right text-[10.5px] text-muted-foreground">
           {t("settings.about.descText")}
         </span>
       </div>
-      <div className="border-t border-slate-100 px-5 py-3 dark:border-slate-800/40">
-        <p className="text-[10.5px] text-slate-500 dark:text-slate-400">{t("settings.about.intro")}</p>
+      <div className="border-t border-border px-5 py-3">
+        <p className="text-[10.5px] text-muted-foreground">
+          {t("settings.about.intro")}
+        </p>
       </div>
     </div>
   );

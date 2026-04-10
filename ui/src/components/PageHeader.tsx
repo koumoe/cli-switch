@@ -13,14 +13,14 @@ export function PageHeader({ title, description, actions, className }: PageHeade
   return (
     <header
       className={cn(
-        "flex h-[55px] shrink-0 items-center justify-between border-b border-slate-200 px-5 dark:border-slate-800",
+        "flex h-[55px] shrink-0 items-center justify-between border-b border-border px-5",
         className
       )}
     >
       <div className="min-w-0">
         <h1 className="truncate text-base font-bold">{title}</h1>
         {description ? (
-          <p className="mt-0.5 truncate text-[11px] text-slate-500 dark:text-slate-400">
+          <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
             {description}
           </p>
         ) : null}

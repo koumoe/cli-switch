@@ -31,19 +31,22 @@ export function ActiveChannelChain({
               <div className="flex flex-wrap items-center gap-1.5">
                 {list.map((channel, index) => (
                   <div key={channel.id} className="contents">
-                    <div className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11.5px] font-medium dark:border-slate-800 dark:bg-slate-900">
-                      <Badge className="flex h-[18px] w-[18px] items-center justify-center rounded bg-slate-100 px-0 text-[9px] font-extrabold text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+                    <div className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-secondary/25 px-2.5 py-1 text-[11.5px] font-medium">
+                      <Badge
+                        variant="secondary"
+                        className="flex h-[18px] w-[18px] items-center justify-center rounded-sm px-0 text-[9px] font-bold text-muted-foreground"
+                      >
                         {index + 1}
                       </Badge>
                       <span>{channel.name}</span>
                       {settings?.channel_retry_enabled ? (
-                        <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                        <span className="text-[10px] text-muted-foreground">
                           ({Math.max(1, channel.retry_times ?? 1)})
                         </span>
                       ) : null}
                     </div>
                     {index < list.length - 1 ? (
-                      <ArrowRight className="h-3 w-3 text-slate-400/50 dark:text-slate-500/60" />
+                      <ArrowRight className="h-3 w-3 text-muted-foreground/60" />
                     ) : null}
                   </div>
                 ))}
