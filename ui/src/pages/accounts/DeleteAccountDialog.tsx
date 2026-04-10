@@ -1,6 +1,6 @@
 import React from "react";
 
-import type { RemoteAccount } from "@/api";
+import type { RemoteAccount } from "@/types/api";
 import {
   Button,
   Dialog,
@@ -11,7 +11,7 @@ import {
   DialogTitle,
   Switch,
 } from "@/components/ui";
-import { useI18n } from "@/lib/i18n";
+import { useI18n } from "@/hooks/use-i18n";
 
 import { resolveAccountDisplayName } from "./shared";
 

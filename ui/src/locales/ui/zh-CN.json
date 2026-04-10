@@ -30,6 +30,7 @@
     "loading": "加载中...",
     "refresh": "刷新",
     "cancel": "取消",
+    "close": "关闭",
     "ok": "知道了",
     "save": "保存",
     "delete": "删除",
@@ -39,6 +40,15 @@
     "disabled": "禁用",
     "free": "免费",
     "actions": "操作",
+    "dateRangePicker": {
+      "placeholder": "选择日期范围",
+      "presets": {
+        "today": "今日",
+        "yesterday": "昨日",
+        "week": "本周",
+        "month": "本月"
+      }
+    },
     "pagination": {
       "total": "共 {{total}} 条",
       "page": "第 {{page}} / {{totalPages}} 页",
@@ -72,6 +82,7 @@
       "unsavedConfirm": "当前有未保存修改，确认放弃吗？",
       "globalBadge": "全局",
       "projectBadge": "项目",
+      "sourceLabel": "Markdown 源码",
       "noSelection": "未选择提示词",
       "size": "内容大小：{{current}} / {{max}}"
     },
@@ -208,6 +219,8 @@
       "testFail": "测试失败",
       "nameRequired": "名称不能为空",
       "baseUrlRequired": "Base URL 不能为空",
+      "baseUrlInvalid": "Base URL 必须是 http/https 地址",
+      "priorityInvalid": "优先级必须是整数",
       "retryTimesInvalid": "重试次数必须是 >= 1 的整数",
       "realMultiplierInvalid": "真实倍率必须是 >= 0 的数字，且最多 2 位小数",
       "testReachableOkTitle": "{{name}} 连通正常",
@@ -220,8 +233,16 @@
     },
     "remoteMissing": {
       "title": "托管渠道远端关联缺失",
+      "descriptionGeneric": "检测到远端托管资源异常，请确认是否禁用或删除本地渠道。",
+      "descriptionMissingResourceAndGroup": "检测到渠道 {{name}} 对应的远端{{resource}}和分组均未在列表中找到，请选择禁用或删除。",
+      "descriptionMissingGroup": "检测到渠道 {{name}} 对应的远端分组未在列表中找到，请选择禁用或删除。",
+      "descriptionMissingResource": "检测到渠道 {{name}} 对应的远端{{resource}}未在列表中找到，请选择禁用或删除。",
       "baseUrl": "账号 Base URL：{{value}}",
       "group": "分组：{{value}}",
+      "resourceGeneric": "资源",
+      "resourceToken": "Token",
+      "resourceKey": "Key",
+      "resourceLine": "{{label}}：{{value}}",
       "hint": "禁用后会保留本地配置但停止使用；删除时可选择是否同步删除远端资源。",
       "syncDeleteRemote": "删除本地时同步删除远端资源",
       "syncDeleteRemoteHint": "建议在远端资源仍存在时开启，关闭后仅删除本地渠道记录。",
@@ -365,8 +386,11 @@
       "loadFail": "加载账号失败",
       "actionFail": "操作失败",
       "baseUrlRequired": "Base URL 不能为空",
+      "baseUrlInvalid": "Base URL 必须是 http/https 地址",
+      "apiUrlInvalid": "API 地址必须是 http/https 地址",
       "bearerTokenRequired": "sub2api 账号需要先通过登录窗口获取 Authorization",
       "thresholdInvalid": "低余额阈值必须是 >= 0 的数字",
+      "autoCheckinTimeInvalid": "自动签到时间必须是 HH:MM:SS 格式",
       "createOk": "账号创建成功",
       "updateOk": "账号更新成功",
       "refreshOk": "账号信息已刷新",
@@ -374,6 +398,7 @@
       "systemCheckinOk": "系统签到成功",
       "systemCheckinFail": "系统签到失败",
       "pageCheckinUrlRequired": "请先配置页面签到地址",
+      "pageCheckinUrlInvalid": "页面签到地址必须是 http/https 地址",
       "manualCheckinOk": "{{name}} 签到完成",
       "deleteOk": "账号已删除",
       "deleteFail": "删除账号失败",
@@ -413,7 +438,8 @@
         "estimatedCost": "官方额度",
         "actualSpend": "预估费用",
         "avgLatency": "平均耗时"
-      }
+      },
+      "empty": "暂无渠道统计"
     },
     "toast": {
       "loadFail": "加载失败"

@@ -1,5 +1,6 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { tanstackRouter } from "@tanstack/router-plugin/vite";
 import path from "path";
 
 function isNodeModulePkg(id: string, name: string): boolean {
@@ -67,7 +68,13 @@ const EDITOR_MARKDOWN_PATTERNS = [
 export default defineConfig(() => {
   const sourcemap = process.env.VITE_SOURCEMAP === "true";
   return {
-    plugins: [react()],
+    plugins: [
+      tanstackRouter({
+        target: "react",
+        autoCodeSplitting: true,
+      }),
+      react(),
+    ],
     resolve: {
       alias: {
         "@": path.resolve(__dirname, "./src"),

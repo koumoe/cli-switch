@@ -30,6 +30,7 @@
     "loading": "Loading...",
     "refresh": "Refresh",
     "cancel": "Cancel",
+    "close": "Close",
     "ok": "OK",
     "save": "Save",
     "delete": "Delete",
@@ -39,6 +40,15 @@
     "disabled": "Disabled",
     "free": "Free",
     "actions": "Actions",
+    "dateRangePicker": {
+      "placeholder": "Select date range",
+      "presets": {
+        "today": "Today",
+        "yesterday": "Yesterday",
+        "week": "This week",
+        "month": "This month"
+      }
+    },
     "pagination": {
       "total": "{{total}} total",
       "page": "Page {{page}} / {{totalPages}}",
@@ -72,6 +82,7 @@
       "unsavedConfirm": "You have unsaved changes. Discard them?",
       "globalBadge": "Global",
       "projectBadge": "Project",
+      "sourceLabel": "Markdown Source",
       "noSelection": "No prompt selected",
       "size": "Size: {{current}} / {{max}}"
     },
@@ -208,6 +219,8 @@
       "testFail": "Test failed",
       "nameRequired": "Name is required",
       "baseUrlRequired": "Base URL is required",
+      "baseUrlInvalid": "Base URL must be an http/https URL",
+      "priorityInvalid": "Priority must be an integer",
       "retryTimesInvalid": "Retry count must be an integer >= 1",
       "realMultiplierInvalid": "Real multiplier must be a finite number >= 0 with up to 2 decimals",
       "testReachableOkTitle": "{{name}} is reachable",
@@ -220,8 +233,16 @@
     },
     "remoteMissing": {
       "title": "Managed Channel Remote Reference Missing",
+      "descriptionGeneric": "A remote managed resource changed. Disable or delete the local channel as needed.",
+      "descriptionMissingResourceAndGroup": "The remote {{resource}} and group for channel {{name}} were not found in the latest list. Disable or delete the local channel.",
+      "descriptionMissingGroup": "The remote group for channel {{name}} was not found in the latest list. Disable or delete the local channel.",
+      "descriptionMissingResource": "The remote {{resource}} for channel {{name}} was not found in the latest list. Disable or delete the local channel.",
       "baseUrl": "Account Base URL: {{value}}",
       "group": "Group: {{value}}",
+      "resourceGeneric": "resource",
+      "resourceToken": "Token",
+      "resourceKey": "Key",
+      "resourceLine": "{{label}}: {{value}}",
       "hint": "Disable keeps the local config but stops using it. When deleting, you can choose whether to remove the remote resource too.",
       "syncDeleteRemote": "Also delete the remote resource",
       "syncDeleteRemoteHint": "Recommended while the remote resource still exists. If disabled, only the local channel record is removed.",
@@ -365,8 +386,11 @@
       "loadFail": "Failed to load accounts",
       "actionFail": "Operation failed",
       "baseUrlRequired": "Base URL is required",
+      "baseUrlInvalid": "Base URL must be an http/https URL",
+      "apiUrlInvalid": "API URL must be an http/https URL",
       "bearerTokenRequired": "Sign in first to capture Authorization for sub2api",
       "thresholdInvalid": "Threshold must be a finite number >= 0",
+      "autoCheckinTimeInvalid": "Auto check-in time must use HH:MM:SS",
       "createOk": "Account created",
       "updateOk": "Account updated",
       "refreshOk": "Account refreshed",
@@ -374,6 +398,7 @@
       "systemCheckinOk": "System check-in completed",
       "systemCheckinFail": "System check-in failed",
       "pageCheckinUrlRequired": "Please configure page check-in URL first",
+      "pageCheckinUrlInvalid": "Page check-in URL must be an http/https URL",
       "manualCheckinOk": "{{name}} check-in completed",
       "deleteOk": "Account deleted",
       "deleteFail": "Failed to delete account",
@@ -413,7 +438,8 @@
         "estimatedCost": "Official Credits",
         "actualSpend": "Estimated Cost",
         "avgLatency": "Avg Duration"
-      }
+      },
+      "empty": "No channel statistics"
     },
     "toast": {
       "loadFail": "Failed to load"

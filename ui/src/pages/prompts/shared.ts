@@ -1,4 +1,4 @@
-import type { CliToolId, PromptProject } from "@/api";
+import type { CliToolId, PromptProject } from "@/types/api";
 
 export const PROMPT_DOCUMENT_MAX_BYTES = 256 * 1024;
 export const PROMPT_TOOL_IDS: CliToolId[] = ["codex", "claude", "gemini"];

@@ -1,7 +1,7 @@
 import React, { Suspense, useEffect } from "react";
 import { Save, Trash2 } from "lucide-react";
 
-import type { PromptDocument } from "@/api";
+import type { PromptDocument } from "@/types/api";
 import {
   Badge,
   Button,
@@ -11,7 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui";
-import { useI18n } from "@/lib/i18n";
+import { useI18n } from "@/hooks/use-i18n";
 
 import { PROMPT_DOCUMENT_MAX_BYTES, formatBytes } from "./shared";
 

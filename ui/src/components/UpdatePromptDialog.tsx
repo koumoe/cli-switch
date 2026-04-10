@@ -1,5 +1,5 @@
 import React from "react";
-import type { ChangelogSection } from "@/api";
+import type { ChangelogSection } from "@/types/api";
 import { Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui";
 
 export function UpdatePromptDialog(props: {

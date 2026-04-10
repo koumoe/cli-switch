@@ -1,5 +1,6 @@
-import { installCliTool, type CliToolStatus, type InstallCliToolResponse } from "@/api";
+import { installCliTool } from "@/api";
 import { humanizeApiError, humanizeIssue } from "@/lib/error";
+import type { CliToolStatus, InstallCliToolResponse } from "@/types/api";
 import { toast } from "sonner";
 
 type Translator = (key: string, vars?: Record<string, string | number>) => string;

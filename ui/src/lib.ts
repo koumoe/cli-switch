@@ -1,4 +1,4 @@
-import type { Protocol } from "./api";
+import type { Protocol } from "@/types/api";
 export { formatDateTime, formatNumber } from "@/lib/format";
 
 export type Translator = (key: string, vars?: Record<string, string | number>) => string;
@@ -16,6 +16,39 @@ export function protocolLabelKey(protocol: Protocol): string {
 
 export function protocolLabel(t: Translator, protocol: Protocol): string {
   return t(protocolLabelKey(protocol));
+}
+
+export function protocolColor(protocol: Protocol): string {
+  switch (protocol) {
+    case "openai":
+      return "hsl(var(--codex))";
+    case "anthropic":
+      return "hsl(var(--claude))";
+    case "gemini":
+      return "hsl(var(--gemini))";
+  }
+}
+
+export function protocolBadgeClassName(protocol: Protocol): string {
+  switch (protocol) {
+    case "openai":
+      return "border-codex/20 bg-codex/10 text-codex";
+    case "anthropic":
+      return "border-claude/20 bg-claude/10 text-claude";
+    case "gemini":
+      return "border-gemini/20 bg-gemini/10 text-gemini";
+  }
+}
+
+export function protocolProgressClassName(protocol: Protocol): string {
+  switch (protocol) {
+    case "openai":
+      return "bg-[linear-gradient(90deg,hsl(var(--codex)),hsl(var(--primary)))]";
+    case "anthropic":
+      return "bg-[linear-gradient(90deg,hsl(var(--claude)),hsl(var(--warning)))]";
+    case "gemini":
+      return "bg-[linear-gradient(90deg,hsl(var(--gemini)),hsl(var(--primary)))]";
+  }
 }
 
 export function formatDuration(ms: number | null | undefined): string {

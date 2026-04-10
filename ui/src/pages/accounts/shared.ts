@@ -8,7 +8,7 @@ import type {
   RemoteAccountProvider,
   RemoteGroupOption,
   Sub2ApiRemoteAccount,
-} from "@/api";
+} from "@/types/api";
 
 export type AccountCheckinModeOption = RemoteAccountCheckinMode;
 
@@ -25,6 +25,10 @@ export type AccountDraft = {
   auto_checkin_time: string;
   low_balance_alert_threshold: string;
   recharge_currency: RechargeCurrency;
+};
+
+export type AccountFormValues = AccountDraft & {
+  stored_token_configured: boolean;
 };
 
 export type ManagedChannelDraft = {
@@ -49,6 +53,33 @@ export function emptyAccountDraft(rechargeCurrency: RechargeCurrency = "CNY"): A
     auto_checkin_time: "00:05:00",
     low_balance_alert_threshold: "0",
     recharge_currency: rechargeCurrency,
+  };
+}
+
+export function emptyAccountFormValues(
+  rechargeCurrency: RechargeCurrency = "CNY",
+): AccountFormValues {
+  return {
+    ...emptyAccountDraft(rechargeCurrency),
+    stored_token_configured: false,
+  };
+}
+
+export function accountToFormValues(account: RemoteAccount): AccountFormValues {
+  return {
+    provider: account.provider,
+    base_url: account.base_url ?? "",
+    api_url: account.api_url ?? "",
+    user_id: account.provider === "newapi" ? account.user_id ?? "" : "",
+    user_token: "",
+    bearer_token: "",
+    refresh_token: "",
+    page_checkin_url: account.page_checkin_url ?? "",
+    checkin_mode: resolveCheckinMode(account),
+    auto_checkin_time: account.auto_checkin_time ?? "00:05:00",
+    low_balance_alert_threshold: String(account.low_balance_alert_threshold ?? 0),
+    recharge_currency: account.recharge_currency,
+    stored_token_configured: account.user_token_configured,
   };
 }
 
@@ -136,56 +167,4 @@ export function resolveAccountDisplayName(
   return account.remote_username?.trim()
     || account.user_id.trim()
     || account.base_url;
-}
-
-export type DragState = {
-  dragId: string | null;
-  dragOverId: string | null;
-  snapshot: RemoteAccount[] | null;
-};
-
-export type DragAction =
-  | { type: "start"; dragId: string; snapshot: RemoteAccount[] }
-  | { type: "over"; dragOverId: string | null }
-  | { type: "clear" };
-
-export const initialDragState: DragState = {
-  dragId: null,
-  dragOverId: null,
-  snapshot: null,
-};
-
-export function dragReducer(state: DragState, action: DragAction): DragState {
-  switch (action.type) {
-    case "start":
-      return { dragId: action.dragId, dragOverId: null, snapshot: action.snapshot };
-    case "over":
-      return { ...state, dragOverId: action.dragOverId };
-    case "clear":
-      return initialDragState;
-    default: {
-      const _exhaustive: never = action;
-      return state;
-    }
-  }
-}
-
-export function moveInList(list: RemoteAccount[], fromId: string, toId: string): RemoteAccount[] {
-  if (fromId === toId) return list;
-  const fromIdx = list.findIndex((item) => item.id === fromId);
-  const toIdx = list.findIndex((item) => item.id === toId);
-  if (fromIdx < 0 || toIdx < 0 || fromIdx === toIdx) return list;
-  const next = [...list];
-  const [item] = next.splice(fromIdx, 1);
-  next.splice(toIdx, 0, item);
-  return next;
-}
-
-export function moveToEndList(list: RemoteAccount[], fromId: string): RemoteAccount[] {
-  const fromIdx = list.findIndex((item) => item.id === fromId);
-  if (fromIdx < 0) return list;
-  const next = [...list];
-  const [item] = next.splice(fromIdx, 1);
-  next.push(item);
-  return next;
 }

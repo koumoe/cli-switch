@@ -13,15 +13,15 @@ export function PageHeader({ title, description, actions, className }: PageHeade
   return (
     <div
       className={cn(
-        "flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between",
+        "animate-fade-up flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between",
         className
       )}
     >
       <div className="flex min-h-11 flex-col justify-center">
-        <h1 className="text-lg font-semibold leading-6">{title}</h1>
+        <h1 className="font-heading text-lg font-semibold leading-6 tracking-tight">{title}</h1>
         <p
           className={cn(
-            "mt-0.5 min-h-4 text-xs leading-4 text-muted-foreground",
+            "mt-0.5 min-h-4 text-xs leading-4 text-fg-muted",
             !description && "invisible"
           )}
         >

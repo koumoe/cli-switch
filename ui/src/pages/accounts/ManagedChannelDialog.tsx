@@ -1,6 +1,6 @@
 import React from "react";
 
-import type { Protocol, RemoteAccount, RemoteGroupOption } from "@/api";
+import type { Protocol, RemoteAccount, RemoteGroupOption } from "@/types/api";
 import {
   Button,
   Dialog,
@@ -16,7 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui";
-import { useI18n } from "@/lib/i18n";
+import { useI18n } from "@/hooks/use-i18n";
 
 import { defaultManagedName, formatGroupLabel, type ManagedChannelDraft } from "./shared";
 
