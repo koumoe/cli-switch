@@ -1,3 +1,16 @@
+## [0.58.0](https://github.com/koumoe/cli-switch/compare/v0.57.3...v0.58.0) (2026-04-11)
+
+### 功能
+* 完成 UI 迁移 P0-P8 阶段 ([8bcb119](https://github.com/koumoe/cli-switch/commit/8bcb1195e470335e6e85f49ef23089a2cc00fc42))
+* 优化与 demo 对齐的 UI 重构 ([7361389](https://github.com/koumoe/cli-switch/commit/736138995be7f5fbcf4a18bda0a66bf7407eb3d9))
+* 完善 UI 表格规范与概览图表 ([4d33c7f](https://github.com/koumoe/cli-switch/commit/4d33c7f478006c2d4996845e34eab6a3c75d7cf0))
+* 统一剩余 UI 非标准样式 ([c9338be](https://github.com/koumoe/cli-switch/commit/c9338be028fd9f144e5c55e37e090d2d93df2140))
+
+### 修复
+* 修复 UI review 后续问题 ([282a933](https://github.com/koumoe/cli-switch/commit/282a933028d012f37a2bf8ecb22dd1c34560fe8b))
+* 保持代理请求无感 ([4d606db](https://github.com/koumoe/cli-switch/commit/4d606db92e4818861e84facf557f2f76f37e7311))
+* 清理未使用的 UI 文案键 ([14be16f](https://github.com/koumoe/cli-switch/commit/14be16f0a027163274e919b4e37d3ee68d09e899))
+* 统一弹窗正文间距规范 ([8d58988](https://github.com/koumoe/cli-switch/commit/8d5898861c552b894881612956d5efe79b76ae42))
 ## [0.57.3](https://github.com/koumoe/cli-switch/compare/v0.57.2...v0.57.3) (2026-04-05)
 
 ### 修复

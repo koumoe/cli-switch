@@ -1,3 +1,18 @@
+## [0.58.0](https://github.com/koumoe/cli-switch/compare/v0.57.3...v0.58.0) (2026-04-11)
+
+### Features
+
+* complete ui migration phases p0-p8 ([8bcb119](https://github.com/koumoe/cli-switch/commit/8bcb1195e470335e6e85f49ef23089a2cc00fc42))
+* refine demo-aligned ui refactor ([7361389](https://github.com/koumoe/cli-switch/commit/736138995be7f5fbcf4a18bda0a66bf7407eb3d9))
+* refine ui table standards and overview charts ([4d33c7f](https://github.com/koumoe/cli-switch/commit/4d33c7f478006c2d4996845e34eab6a3c75d7cf0))
+* standardize remaining ui styles ([c9338be](https://github.com/koumoe/cli-switch/commit/c9338be028fd9f144e5c55e37e090d2d93df2140))
+
+### Bug Fixes
+
+* address ui review follow-ups ([282a933](https://github.com/koumoe/cli-switch/commit/282a933028d012f37a2bf8ecb22dd1c34560fe8b))
+* keep proxy requests transparent ([4d606db](https://github.com/koumoe/cli-switch/commit/4d606db92e4818861e84facf557f2f76f37e7311))
+* remove unused ui locale keys ([14be16f](https://github.com/koumoe/cli-switch/commit/14be16f0a027163274e919b4e37d3ee68d09e899))
+* standardize dialog body spacing ([8d58988](https://github.com/koumoe/cli-switch/commit/8d5898861c552b894881612956d5efe79b76ae42))
 ## [0.57.3](https://github.com/koumoe/cli-switch/compare/v0.57.2...v0.57.3) (2026-04-05)
 
 ### Bug Fixes
