@@ -1,13 +1,17 @@
-import { useEffect, useEffectEvent } from "react";
+import { useEffect, useRef } from "react";
 
 export function useWindowEvent(eventName: string, handler: (event: Event) => void) {
-  const onEvent = useEffectEvent(handler);
+  const handlerRef = useRef(handler);
 
   useEffect(() => {
-    const listener = (event: Event) => onEvent(event);
+    handlerRef.current = handler;
+  }, [handler]);
+
+  useEffect(() => {
+    const listener = (event: Event) => handlerRef.current(event);
     window.addEventListener(eventName, listener as EventListener);
     return () => {
       window.removeEventListener(eventName, listener as EventListener);
     };
-  }, [eventName, onEvent]);
+  }, [eventName]);
 }

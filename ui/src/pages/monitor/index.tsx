@@ -20,19 +20,20 @@ import { listChannels, statsChannels, statsSummary } from "@/api";
 import type { Channel, ChannelStats, StatsSummary } from "@/types/api";
 import { protocolLabel } from "../../lib";
 
+const colClass = {
+  channel: "w-28",
+  terminal: "w-20",
+  requests: "w-16",
+  success: "w-16",
+  failed: "w-16",
+  estimatedCost: "w-28",
+  actualSpend: "w-28",
+  avgLatency: "w-24",
+} as const;
+
 export function MonitorPage() {
   const { locale, t } = useI18n();
   const { currency } = useCurrency();
-  const colClass = {
-    channel: "w-28",
-    terminal: "w-20",
-    requests: "w-16",
-    success: "w-16",
-    failed: "w-16",
-    estimatedCost: "w-28",
-    actualSpend: "w-28",
-    avgLatency: "w-24",
-  } as const;
   const [stats, setStats] = useState<StatsSummary | null>(null);
   const [channelStats, setChannelStats] = useState<ChannelStats[]>([]);
   const [channels, setChannels] = useState<Channel[]>([]);
@@ -249,14 +250,6 @@ export function MonitorPage() {
     ],
     [
       channelsById,
-      colClass.actualSpend,
-      colClass.avgLatency,
-      colClass.channel,
-      colClass.estimatedCost,
-      colClass.failed,
-      colClass.requests,
-      colClass.success,
-      colClass.terminal,
       currency,
       t,
     ],

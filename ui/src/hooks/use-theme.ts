@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useState } from "react";
+import { useEffect, useState } from "react";
 
 export type Theme = "light" | "dark" | "system";
 
@@ -22,21 +22,24 @@ export function useTheme() {
     return (window.localStorage.getItem(STORAGE_KEY) as Theme) || "system";
   });
 
-  const syncSystemTheme = useEffectEvent(() => {
-    if (theme === "system") {
-      applyTheme("system");
-    }
-  });
-
   useEffect(() => {
     applyTheme(theme);
   }, [theme]);
 
   useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+
     const media = window.matchMedia("(prefers-color-scheme: dark)");
-    media.addEventListener("change", syncSystemTheme);
-    return () => media.removeEventListener("change", syncSystemTheme);
-  }, [syncSystemTheme]);
+
+    const handleChange = () => {
+      if (theme === "system") {
+        applyTheme("system");
+      }
+    };
+
+    media.addEventListener("change", handleChange);
+    return () => media.removeEventListener("change", handleChange);
+  }, [theme]);
 
   const setTheme = (nextTheme: Theme) => {
     window.localStorage.setItem(STORAGE_KEY, nextTheme);

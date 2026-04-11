@@ -47,7 +47,7 @@ export function protocolDotClassName(protocol: Protocol): string {
   }
 }
 
-export function protocolBadgeClassName(_protocol: Protocol): string {
+export function protocolBadgeClassName(): string {
   return "border-border/80 bg-secondary/55 text-foreground";
 }
 
