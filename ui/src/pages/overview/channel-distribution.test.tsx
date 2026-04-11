@@ -78,7 +78,7 @@ describe("ChannelDistribution", () => {
     expect(text.indexOf("Beta")).toBeLessThan(text.indexOf("Alpha"));
     expect(text.indexOf("Alpha")).toBeLessThan(text.indexOf("Gamma"));
     expect(getByText("60%")).toBeInTheDocument();
-    expect(container.querySelector(".bg-claude")).toBeTruthy();
+    expect(container.querySelector(".bg-primary")).toBeTruthy();
   });
 
   it("shows usage counts in usage mode", () => {
@@ -115,6 +115,6 @@ describe("ChannelDistribution", () => {
 
     expect(getByText("20")).toBeInTheDocument();
     expect(getByText("5")).toBeInTheDocument();
-    expect(container.querySelector(".bg-codex")).toBeTruthy();
+    expect(container.querySelector(".bg-primary")).toBeTruthy();
   });
 });

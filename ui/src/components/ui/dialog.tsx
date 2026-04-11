@@ -16,7 +16,7 @@ const DialogOverlay = React.forwardRef<
   <DialogPrimitive.Overlay
     ref={ref}
     className={cn(
-      "fixed inset-0 z-50 bg-black/45 data-[state=closed]:pointer-events-none data-[state=closed]:opacity-0 data-[state=open]:opacity-100 transition-opacity",
+      "fixed inset-0 z-50 bg-black/50 backdrop-blur-[1px] data-[state=closed]:pointer-events-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0",
       className,
     )}
     {...props}
@@ -37,7 +37,7 @@ const DialogContent = React.forwardRef<
       <DialogPrimitive.Content
         ref={ref}
         className={cn(
-          "fixed left-1/2 top-1/2 z-50 flex w-[90%] max-w-[480px] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-lg border border-border bg-popover shadow-2xl transition-transform duration-200 data-[state=closed]:pointer-events-none data-[state=closed]:translate-y-2 data-[state=closed]:scale-[0.98] data-[state=open]:translate-y-0 data-[state=open]:scale-100",
+          "fixed left-[50%] top-[50%] z-50 flex w-[calc(100vw-2rem)] max-w-[480px] translate-x-[-50%] translate-y-[-50%] flex-col overflow-hidden rounded-lg border border-border bg-card text-card-foreground shadow-xl duration-200 data-[state=closed]:pointer-events-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95",
           className,
         )}
         {...props}
@@ -59,7 +59,7 @@ const DialogHeader = ({
 }: React.HTMLAttributes<HTMLDivElement>) => (
   <div
     className={cn(
-      "shrink-0 border-b border-border px-5 pt-4 pb-3 text-left",
+      "shrink-0 border-b border-border px-5 pt-4 pb-3.5 text-left",
       className,
     )}
     {...props}
@@ -73,7 +73,7 @@ const DialogFooter = ({
 }: React.HTMLAttributes<HTMLDivElement>) => (
   <div
     className={cn(
-      "shrink-0 flex items-center justify-end gap-2 border-t border-border px-5 py-3",
+      "shrink-0 flex items-center justify-end gap-2 border-t border-border px-5 py-3.5",
       className,
     )}
     {...props}
@@ -81,13 +81,27 @@ const DialogFooter = ({
 );
 DialogFooter.displayName = "DialogFooter";
 
+const DialogBody = ({
+  className,
+  ...props
+}: React.HTMLAttributes<HTMLDivElement>) => (
+  <div
+    className={cn(
+      "px-5 py-4",
+      className,
+    )}
+    {...props}
+  />
+);
+DialogBody.displayName = "DialogBody";
+
 const DialogTitle = React.forwardRef<
   React.ComponentRef<typeof DialogPrimitive.Title>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Title>
 >(({ className, ...props }, ref) => (
   <DialogPrimitive.Title
     ref={ref}
-    className={cn("text-sm font-bold leading-none", className)}
+    className={cn("text-sm font-semibold leading-none tracking-tight", className)}
     {...props}
   />
 ));
@@ -99,7 +113,7 @@ const DialogDescription = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <DialogPrimitive.Description
     ref={ref}
-    className={cn("mt-0.5 text-[11px] text-muted-foreground", className)}
+    className={cn("mt-1 text-[11px] leading-5 text-muted-foreground", className)}
     {...props}
   />
 ));
@@ -113,6 +127,7 @@ export {
   DialogClose,
   DialogContent,
   DialogHeader,
+  DialogBody,
   DialogFooter,
   DialogTitle,
   DialogDescription,

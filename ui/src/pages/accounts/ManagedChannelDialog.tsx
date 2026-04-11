@@ -4,6 +4,7 @@ import type { Protocol, RemoteAccount, RemoteGroupOption } from "@/types/api";
 import {
   Button,
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -77,113 +78,116 @@ export function ManagedChannelDialog({
           </DialogDescription>
         </DialogHeader>
         {draft ? (
-          <div className="flex-1 min-h-0 space-y-4 py-2 overflow-y-auto pr-1">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">{t("accounts.managed.name")}</label>
-                <Input
-                  value={draft.name}
-                  onChange={(e) => setDraft((current) => (current ? { ...current, name: e.target.value } : current))}
-                />
+          <DialogBody className="flex-1 min-h-0 overflow-y-auto">
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">{t("accounts.managed.name")}</label>
+                  <Input
+                    value={draft.name}
+                    onChange={(e) => setDraft((current) => (current ? { ...current, name: e.target.value } : current))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">{t("accounts.managed.protocol")}</label>
+                  <Select
+                    value={draft.protocol ?? ""}
+                    onValueChange={(value) => {
+                      setDraft((current) => {
+                        if (!current) return current;
+                        const protocol = value as Protocol;
+                        if (!target) return { ...current, protocol };
+                        const oldAuto = defaultManagedName(target, current.protocol);
+                        const nextName = current.name === oldAuto ? defaultManagedName(target, protocol) : current.name;
+                        return { ...current, protocol, name: nextName };
+                      });
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={t("accounts.managed.protocolPlaceholder")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="openai">OpenAI</SelectItem>
+                      <SelectItem value="anthropic">Anthropic</SelectItem>
+                      <SelectItem value="gemini">Gemini</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
+
               <div className="space-y-2">
-                <label className="text-sm font-medium">{t("accounts.managed.protocol")}</label>
+                <label className="text-sm font-medium">{t("accounts.managed.group")}</label>
                 <Select
-                  value={draft.protocol ?? ""}
+                  value={selectedGroup ? groupSelectValue(selectedGroup) : ""}
                   onValueChange={(value) => {
-                    setDraft((current) => {
-                      if (!current) return current;
-                      const protocol = value as Protocol;
-                      if (!target) return { ...current, protocol };
-                      const oldAuto = defaultManagedName(target, current.protocol);
-                      const nextName = current.name === oldAuto ? defaultManagedName(target, protocol) : current.name;
-                      return { ...current, protocol, name: nextName };
-                    });
+                    const group = groups.find((item) => groupSelectValue(item) === value) ?? null;
+                    setDraft((current) => (current && group ? {
+                      ...current,
+                      group_name: group.name,
+                      group_id: group.id,
+                    } : current));
                   }}
+                  disabled={loadingGroups}
                 >
-                  <SelectTrigger>
-                    <SelectValue placeholder={t("accounts.managed.protocolPlaceholder")} />
+                  <SelectTrigger
+                    title={selectedGroupTitle || undefined}
+                    className="h-auto min-h-[3.5rem] py-2 [&>span]:whitespace-normal"
+                  >
+                    <SelectValue
+                      placeholder={t("accounts.managed.groupPlaceholder")}
+                      aria-label={selectedGroupTitle || undefined}
+                    >
+                      {selectedGroup ? (
+                        <div className="min-w-0">
+                          <div className="truncate">{selectedGroupLabel}</div>
+                          {selectedGroupMeta ? (
+                            <div className="line-clamp-1 text-xs text-muted-foreground">{selectedGroupMeta}</div>
+                          ) : null}
+                        </div>
+                      ) : undefined}
+                    </SelectValue>
                   </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="openai">OpenAI</SelectItem>
-                    <SelectItem value="anthropic">Anthropic</SelectItem>
-                    <SelectItem value="gemini">Gemini</SelectItem>
+                  <SelectContent
+                    side="bottom"
+                    align="start"
+                    avoidCollisions={false}
+                    collisionPadding={16}
+                    className="max-w-[min(32rem,calc(100vw-2rem))]"
+                  >
+                    {groups.map((group) => (
+                      <SelectItem key={groupSelectValue(group)} value={groupSelectValue(group)}>
+                        <div className="min-w-0 flex flex-col pr-2">
+                          <span className="truncate">{formatGroupLabel(group)}</span>
+                          {[group.description, group.managed_channel_count > 0
+                            ? t("accounts.managed.groupAdded", { count: group.managed_channel_count })
+                            : "",
+                          ].filter((value) => !!value).join(" · ") ? (
+                            <span className="text-xs text-muted-foreground">
+                              {[group.description, group.managed_channel_count > 0
+                                ? t("accounts.managed.groupAdded", { count: group.managed_channel_count })
+                                : "",
+                              ].filter((value) => !!value).join(" · ")}
+                            </span>
+                          ) : null}
+                        </div>
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">{t("accounts.managed.baseUrlOverride")}</label>
+                <Input
+                  value={draft.base_url_override}
+                  onChange={(e) => {
+                    setDraft((current) => (current ? { ...current, base_url_override: e.target.value } : current));
+                  }}
+                  placeholder={target?.api_url || target?.base_url || "https://api.example.com/v1"}
+                />
+                <p className="text-xs text-muted-foreground">{t("accounts.managed.baseUrlOverrideHint")}</p>
+              </div>
             </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">{t("accounts.managed.group")}</label>
-              <Select
-                value={selectedGroup ? groupSelectValue(selectedGroup) : ""}
-                onValueChange={(value) => {
-                  const group = groups.find((item) => groupSelectValue(item) === value) ?? null;
-                  setDraft((current) => (current && group ? {
-                    ...current,
-                    group_name: group.name,
-                    group_id: group.id,
-                  } : current));
-                }}
-                disabled={loadingGroups}
-              >
-                <SelectTrigger
-                  title={selectedGroupTitle || undefined}
-                  className="h-auto min-h-[3.5rem] py-2 [&>span]:whitespace-normal"
-                >
-                  <SelectValue
-                    placeholder={t("accounts.managed.groupPlaceholder")}
-                    aria-label={selectedGroupTitle || undefined}
-                  >
-                    {selectedGroup ? (
-                      <div className="min-w-0">
-                        <div className="truncate">{selectedGroupLabel}</div>
-                        {selectedGroupMeta ? (
-                          <div className="line-clamp-1 text-xs text-muted-foreground">{selectedGroupMeta}</div>
-                        ) : null}
-                      </div>
-                    ) : undefined}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent
-                  side="bottom"
-                  align="start"
-                  avoidCollisions={false}
-                  collisionPadding={16}
-                  className="max-w-[min(32rem,calc(100vw-2rem))]"
-                >
-                  {groups.map((group) => (
-                    <SelectItem key={groupSelectValue(group)} value={groupSelectValue(group)}>
-                      <div className="min-w-0 flex flex-col pr-2">
-                        <span className="truncate">{formatGroupLabel(group)}</span>
-                        {[group.description, group.managed_channel_count > 0
-                          ? t("accounts.managed.groupAdded", { count: group.managed_channel_count })
-                          : "",
-                        ].filter((value) => !!value).join(" · ") ? (
-                          <span className="text-xs text-muted-foreground">
-                            {[group.description, group.managed_channel_count > 0
-                              ? t("accounts.managed.groupAdded", { count: group.managed_channel_count })
-                              : "",
-                            ].filter((value) => !!value).join(" · ")}
-                          </span>
-                        ) : null}
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">{t("accounts.managed.baseUrlOverride")}</label>
-              <Input
-                value={draft.base_url_override}
-                onChange={(e) => {
-                  setDraft((current) => (current ? { ...current, base_url_override: e.target.value } : current));
-                }}
-                placeholder={target?.api_url || target?.base_url || "https://api.example.com/v1"}
-              />
-              <p className="text-xs text-muted-foreground">{t("accounts.managed.baseUrlOverrideHint")}</p>
-            </div>
-          </div>
+          </DialogBody>
         ) : null}
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={creating}>

@@ -9,6 +9,7 @@ import {
   Badge,
   Button,
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -215,37 +216,6 @@ export function AccountWizardDialog({
           <DialogDescription>{t("accounts.wizard.description")}</DialogDescription>
         </DialogHeader>
 
-        <div className="grid grid-cols-3 gap-2">
-          {steps.map((item) => {
-            const active = step === item.id;
-            const done = step > item.id;
-            return (
-              <div
-                key={item.id}
-                className={cn(
-                  "rounded-lg border px-3 py-2 text-sm",
-                  active ? "border-primary bg-primary/5" : "border-border",
-                  done ? "text-foreground" : "text-muted-foreground",
-                )}
-              >
-                <div className="text-xs">{t("accounts.wizard.stepLabel", { step: item.id })}</div>
-                <div className="font-medium">{item.label}</div>
-              </div>
-            );
-          })}
-        </div>
-
-        {step > 1 && detection ? (
-          <div className="rounded-lg border bg-muted/20 px-4 py-3 space-y-2">
-            <div className="flex items-center gap-2">
-              <Badge variant={detection.provider === "newapi" ? "secondary" : "outline"}>
-                {t(`accounts.providers.${detection.provider}`)}
-              </Badge>
-              <span className="font-mono text-sm">{baseUrl}</span>
-            </div>
-          </div>
-        ) : null}
-
         <Form {...form}>
           <form onSubmit={submit} className="flex flex-1 min-h-0 flex-col overflow-hidden">
             <FormField
@@ -254,153 +224,156 @@ export function AccountWizardDialog({
               render={({ field }) => <input type="hidden" value={field.value ? "true" : "false"} readOnly />}
             />
 
-            <div className="flex-1 min-h-0 overflow-y-auto pr-1">
-              {step === 1 ? (
-                <div className="space-y-4 py-2">
-                  <FormField
-                    control={form.control}
-                    name="base_url"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>{t("accounts.editor.baseUrl")}</FormLabel>
-                        <FormControl>
-                          <Input {...field} placeholder="https://api.example.com" />
-                        </FormControl>
-                        <FormDescription>{t("accounts.wizard.baseUrlHint")}</FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+            <DialogBody className="flex-1 min-h-0 overflow-y-auto">
+              <div className="space-y-4">
+                <div className="grid grid-cols-3 gap-2">
+                  {steps.map((item) => {
+                    const active = step === item.id;
+                    const done = step > item.id;
+                    return (
+                      <div
+                        key={item.id}
+                        className={cn(
+                          "rounded-lg border px-3 py-2 text-sm",
+                          active ? "border-primary bg-primary/5" : "border-border",
+                          done ? "text-foreground" : "text-muted-foreground",
+                        )}
+                      >
+                        <div className="text-xs">{t("accounts.wizard.stepLabel", { step: item.id })}</div>
+                        <div className="font-medium">{item.label}</div>
+                      </div>
+                    );
+                  })}
                 </div>
-              ) : null}
 
-              {step === 2 ? (
-                <div className="space-y-4 py-2">
-                  {provider === "newapi" ? (
-                    <>
-                      <FormField
-                        control={form.control}
-                        name="user_id"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>{t("accounts.editor.userId")}</FormLabel>
-                            <FormControl>
-                              <Input {...field} placeholder="1001" />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
+                {step > 1 && detection ? (
+                  <div className="space-y-2 rounded-lg border bg-muted/20 px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <Badge variant={detection.provider === "newapi" ? "secondary" : "outline"}>
+                        {t(`accounts.providers.${detection.provider}`)}
+                      </Badge>
+                      <span className="font-mono text-sm">{baseUrl}</span>
+                    </div>
+                  </div>
+                ) : null}
 
-                      <FormField
-                        control={form.control}
-                        name="user_token"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>{t("accounts.editor.userToken")}</FormLabel>
-                            <FormControl>
-                              <Input {...field} type="password" placeholder="sk-..." />
-                            </FormControl>
-                            <FormDescription>{t("accounts.wizard.newapiAuthHint")}</FormDescription>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </>
-                  ) : (
+                {step === 1 ? (
+                  <div className="space-y-4">
                     <FormField
                       control={form.control}
-                      name="bearer_token"
-                      render={() => (
+                      name="base_url"
+                      render={({ field }) => (
                         <FormItem>
-                          <div className="flex items-center justify-between gap-3">
-                            <FormLabel>{t("accounts.editor.bearerToken")}</FormLabel>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() => void handleCaptureSub2ApiAuth()}
-                              disabled={saving || detecting || openingLogin}
-                            >
-                              <ExternalLink className="h-4 w-4 mr-2" />
-                              {openingLogin ? t("accounts.editor.openLoginPageOpening") : t("accounts.editor.openLoginPage")}
-                            </Button>
-                          </div>
-                          <div className="rounded-md border bg-muted/20 px-3 py-2 text-sm">
-                            {bearerToken.trim()
-                              ? t("accounts.editor.bearerTokenCaptured")
-                              : t("accounts.editor.bearerTokenMissing")}
-                          </div>
-                          <FormDescription>{t("accounts.editor.bearerTokenHint")}</FormDescription>
+                          <FormLabel>{t("accounts.editor.baseUrl")}</FormLabel>
+                          <FormControl>
+                            <Input {...field} placeholder="https://api.example.com" />
+                          </FormControl>
+                          <FormDescription>{t("accounts.wizard.baseUrlHint")}</FormDescription>
                           <FormMessage />
                         </FormItem>
                       )}
                     />
-                  )}
-                </div>
-              ) : null}
+                  </div>
+                ) : null}
 
-              {step === 3 ? (
-                <div className="space-y-4 py-2">
-                  <FormField
-                    control={form.control}
-                    name="api_url"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>{t("accounts.editor.apiUrl")}</FormLabel>
-                        <FormControl>
-                          <Input {...field} placeholder="https://api.example.com/v1" />
-                        </FormControl>
-                        <FormDescription>{t("accounts.editor.apiUrlHint")}</FormDescription>
-                        <FormMessage />
-                      </FormItem>
+                {step === 2 ? (
+                  <div className="space-y-4">
+                    {provider === "newapi" ? (
+                      <>
+                        <FormField
+                          control={form.control}
+                          name="user_id"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>{t("accounts.editor.userId")}</FormLabel>
+                              <FormControl>
+                                <Input {...field} placeholder="1001" />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={form.control}
+                          name="user_token"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>{t("accounts.editor.userToken")}</FormLabel>
+                              <FormControl>
+                                <Input {...field} type="password" placeholder="sk-..." />
+                              </FormControl>
+                              <FormDescription>{t("accounts.wizard.newapiAuthHint")}</FormDescription>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </>
+                    ) : (
+                      <FormField
+                        control={form.control}
+                        name="bearer_token"
+                        render={() => (
+                          <FormItem>
+                            <div className="flex items-center justify-between gap-3">
+                              <FormLabel>{t("accounts.editor.bearerToken")}</FormLabel>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => void handleCaptureSub2ApiAuth()}
+                                disabled={saving || detecting || openingLogin}
+                              >
+                                <ExternalLink className="mr-2 h-4 w-4" />
+                                {openingLogin ? t("accounts.editor.openLoginPageOpening") : t("accounts.editor.openLoginPage")}
+                              </Button>
+                            </div>
+                            <div className="rounded-md border bg-muted/20 px-3 py-2 text-sm">
+                              {bearerToken.trim()
+                                ? t("accounts.editor.bearerTokenCaptured")
+                                : t("accounts.editor.bearerTokenMissing")}
+                            </div>
+                            <FormDescription>{t("accounts.editor.bearerTokenHint")}</FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
                     )}
-                  />
+                  </div>
+                ) : null}
 
-                  <FormField
-                    control={form.control}
-                    name="recharge_currency"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>{t("accounts.editor.rechargeCurrency")}</FormLabel>
-                        <Select value={field.value} onValueChange={field.onChange}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="CNY">{t("accounts.editor.rechargeCurrencyOptions.cny")}</SelectItem>
-                            <SelectItem value="USD">{t("accounts.editor.rechargeCurrencyOptions.usd")}</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <div className={showSystemTime ? "grid grid-cols-2 gap-4" : "space-y-2"}>
+                {step === 3 ? (
+                  <div className="space-y-4">
                     <FormField
                       control={form.control}
-                      name="checkin_mode"
+                      name="api_url"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>{t("accounts.editor.checkinMode")}</FormLabel>
-                          <Select
-                            value={field.value}
-                            onValueChange={(value) => field.onChange(value as RemoteAccountCheckinMode)}
-                          >
+                          <FormLabel>{t("accounts.editor.apiUrl")}</FormLabel>
+                          <FormControl>
+                            <Input {...field} placeholder="https://api.example.com/v1" />
+                          </FormControl>
+                          <FormDescription>{t("accounts.editor.apiUrlHint")}</FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="recharge_currency"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>{t("accounts.editor.rechargeCurrency")}</FormLabel>
+                          <Select value={field.value} onValueChange={field.onChange}>
                             <FormControl>
                               <SelectTrigger>
                                 <SelectValue />
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              {modeOptions.map((mode) => (
-                                <SelectItem key={mode} value={mode}>
-                                  {t(`accounts.checkin.mode${mode === "disabled" ? "Disabled" : mode === "system_api" ? "System" : "Page"}`)}
-                                </SelectItem>
-                              ))}
+                              <SelectItem value="CNY">{t("accounts.editor.rechargeCurrencyOptions.cny")}</SelectItem>
+                              <SelectItem value="USD">{t("accounts.editor.rechargeCurrencyOptions.usd")}</SelectItem>
                             </SelectContent>
                           </Select>
                           <FormMessage />
@@ -408,64 +381,94 @@ export function AccountWizardDialog({
                       )}
                     />
 
-                    {showSystemTime ? (
+                    <div className={showSystemTime ? "grid grid-cols-2 gap-4" : "space-y-2"}>
                       <FormField
                         control={form.control}
-                        name="auto_checkin_time"
+                        name="checkin_mode"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>{t("accounts.editor.autoCheckinTime")}</FormLabel>
+                            <FormLabel>{t("accounts.editor.checkinMode")}</FormLabel>
+                            <Select
+                              value={field.value}
+                              onValueChange={(value) => field.onChange(value as RemoteAccountCheckinMode)}
+                            >
+                              <FormControl>
+                                <SelectTrigger>
+                                  <SelectValue />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                {modeOptions.map((mode) => (
+                                  <SelectItem key={mode} value={mode}>
+                                    {t(`accounts.checkin.mode${mode === "disabled" ? "Disabled" : mode === "system_api" ? "System" : "Page"}`)}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      {showSystemTime ? (
+                        <FormField
+                          control={form.control}
+                          name="auto_checkin_time"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>{t("accounts.editor.autoCheckinTime")}</FormLabel>
+                              <FormControl>
+                                <Input {...field} placeholder="00:05:00" />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      ) : null}
+                    </div>
+
+                    {checkinMode === "page_open" ? (
+                      <FormField
+                        control={form.control}
+                        name="page_checkin_url"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>{t("accounts.editor.pageCheckinUrl")}</FormLabel>
                             <FormControl>
-                              <Input {...field} placeholder="00:05:00" />
+                              <Input {...field} placeholder="https://api.example.com/dashboard" />
                             </FormControl>
                             <FormMessage />
                           </FormItem>
                         )}
                       />
                     ) : null}
-                  </div>
 
-                  {checkinMode === "page_open" ? (
+                    {!showSystemTime ? (
+                      <FormField
+                        control={form.control}
+                        name="auto_checkin_time"
+                        render={({ field }) => <input type="hidden" {...field} />}
+                      />
+                    ) : null}
+
                     <FormField
                       control={form.control}
-                      name="page_checkin_url"
+                      name="low_balance_alert_threshold"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>{t("accounts.editor.pageCheckinUrl")}</FormLabel>
+                          <FormLabel>{t("accounts.editor.lowBalanceThreshold")}</FormLabel>
                           <FormControl>
-                            <Input {...field} placeholder="https://api.example.com/dashboard" />
+                            <Input {...field} type="number" step="0.01" min="0" placeholder="0" />
                           </FormControl>
+                          <FormDescription>{t("accounts.editor.lowBalanceHint")}</FormDescription>
                           <FormMessage />
                         </FormItem>
                       )}
                     />
-                  ) : null}
-
-                  {!showSystemTime ? (
-                    <FormField
-                      control={form.control}
-                      name="auto_checkin_time"
-                      render={({ field }) => <input type="hidden" {...field} />}
-                    />
-                  ) : null}
-
-                  <FormField
-                    control={form.control}
-                    name="low_balance_alert_threshold"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>{t("accounts.editor.lowBalanceThreshold")}</FormLabel>
-                        <FormControl>
-                          <Input {...field} type="number" step="0.01" min="0" placeholder="0" />
-                        </FormControl>
-                        <FormDescription>{t("accounts.editor.lowBalanceHint")}</FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-              ) : null}
-            </div>
+                  </div>
+                ) : null}
+              </div>
+            </DialogBody>
 
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={saving || detecting}>

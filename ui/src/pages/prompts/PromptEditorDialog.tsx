@@ -6,6 +6,7 @@ import {
   Badge,
   Button,
   Dialog,
+  DialogBody,
   DialogContent,
   DialogFooter,
   DialogHeader,
@@ -96,7 +97,7 @@ export function PromptEditorDialog({
           </div>
         </DialogHeader>
 
-        <div className="flex-1 min-h-0 overflow-hidden">
+        <DialogBody className="flex-1 min-h-0 overflow-hidden">
           {loading ? (
             <div className="flex h-full min-h-[300px] items-center justify-center text-sm text-muted-foreground">
               {t("common.loading")}
@@ -117,7 +118,7 @@ export function PromptEditorDialog({
               />
             </Suspense>
           )}
-        </div>
+        </DialogBody>
 
         <DialogFooter className="shrink-0 gap-3 sm:flex-row sm:items-center sm:justify-between">
           <Button

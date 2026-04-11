@@ -19,6 +19,7 @@ import {
   Card,
   CardContent,
   Dialog,
+  DialogBody,
   DialogClose,
   DialogContent,
   DialogDescription,
@@ -649,7 +650,7 @@ export function LogsPage() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+          <DialogBody className="min-h-0 flex-1 overflow-y-auto">
             {detailEvent ? (
               <div className="grid grid-cols-[110px_1fr]">
                 <DetailRow label={t("logs.details.id")}>{detailEvent.id}</DetailRow>
@@ -723,7 +724,7 @@ export function LogsPage() {
                 </DetailRow>
               </div>
             ) : null}
-          </div>
+          </DialogBody>
 
           <DialogFooter>
             <DialogClose asChild>

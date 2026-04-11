@@ -17,6 +17,7 @@ import { UpdatePromptDialog } from "@/components/UpdatePromptDialog";
 import {
   Button,
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -561,13 +562,15 @@ export function GlobalDialogs() {
             <DialogDescription>{t("closePrompt.description")}</DialogDescription>
           </DialogHeader>
 
-          <div className="flex items-center justify-between gap-3 py-1">
-            <div>
-              <div className="text-sm font-medium">{t("closePrompt.remember")}</div>
-              <div className="text-xs text-muted-foreground">{t("closePrompt.rememberHint")}</div>
+          <DialogBody className="py-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="text-sm font-medium">{t("closePrompt.remember")}</div>
+                <div className="text-xs text-muted-foreground">{t("closePrompt.rememberHint")}</div>
+              </div>
+              <Switch checked={closeRemember} onCheckedChange={setCloseRemember} />
             </div>
-            <Switch checked={closeRemember} onCheckedChange={setCloseRemember} />
-          </div>
+          </DialogBody>
 
           <DialogFooter>
             <Button onClick={() => sendCloseDecision("cancel", false)} variant="outline">
@@ -603,7 +606,7 @@ export function GlobalDialogs() {
           </DialogHeader>
 
           {activeManagedMissing ? (
-            <div className="space-y-3 text-sm">
+            <DialogBody className="space-y-3 text-sm">
               <div className="space-y-1 rounded-md border p-3">
                 <div className="font-medium">{activeManagedMissing.channel_name}</div>
                 <div className="text-xs text-muted-foreground">
@@ -649,7 +652,7 @@ export function GlobalDialogs() {
               <p className="text-xs text-muted-foreground">
                 {t("channels.remoteMissing.hint")}
               </p>
-            </div>
+            </DialogBody>
           ) : null}
 
           <DialogFooter>
@@ -697,7 +700,7 @@ export function GlobalDialogs() {
           </DialogHeader>
 
           {activeManagedMultiplier ? (
-            <div className="space-y-3 text-sm">
+            <DialogBody className="space-y-3 text-sm">
               <div className="space-y-1 rounded-md border p-3">
                 <div className="font-medium">{activeManagedMultiplier.channel_name}</div>
                 <div className="text-xs text-muted-foreground">
@@ -726,7 +729,7 @@ export function GlobalDialogs() {
               <p className="text-xs text-muted-foreground">
                 {t("channels.remoteMultiplier.hint")}
               </p>
-            </div>
+            </DialogBody>
           ) : null}
 
           <DialogFooter>
@@ -794,7 +797,7 @@ export function GlobalDialogs() {
             <DialogDescription>{t("settings.cliTools.onboardingDesc")}</DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-3">
+          <DialogBody className="space-y-3">
             {(cliToolsOnboardingStatus?.tools ?? [])
               .filter((tool) => !tool.installed)
               .map((tool) => {
@@ -838,7 +841,7 @@ export function GlobalDialogs() {
                   </div>
                 );
               })}
-          </div>
+          </DialogBody>
 
           <DialogFooter>
             <Button

@@ -19,6 +19,7 @@ import {
   CardContent,
   Badge,
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -817,49 +818,131 @@ export function ChannelsPage() {
                 )}
               />
 
-              <div className="flex-1 min-h-0 space-y-4 overflow-y-auto py-4 pr-1">
-                <div className="grid grid-cols-2 gap-4">
+              <DialogBody className="flex-1 min-h-0 overflow-y-auto">
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField
+                      control={channelForm.control}
+                      name="name"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>{t("channels.modal.name")}</FormLabel>
+                          <FormControl>
+                            <Input {...field} placeholder="openai-main" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={channelForm.control}
+                      name="protocol"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>{t("channels.modal.terminal")}</FormLabel>
+                          <Select
+                            value={field.value}
+                            onValueChange={(value) => {
+                              const nextProtocol = value as Protocol;
+                              const currentBaseUrl = channelForm
+                                .getValues("base_url")
+                                .trim();
+                              const prevDefault = defaultBaseUrl(field.value);
+                              const nextDefault = defaultBaseUrl(nextProtocol);
+                              const shouldUpdateBase =
+                                !currentBaseUrl || currentBaseUrl === prevDefault;
+
+                              field.onChange(nextProtocol);
+                              if (shouldUpdateBase) {
+                                channelForm.setValue("base_url", nextDefault, {
+                                  shouldDirty: true,
+                                  shouldValidate: true,
+                                });
+                              }
+                            }}
+                            disabled={modalMode === "edit"}
+                          >
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="anthropic">
+                                {t("channels.tabs.claude")}
+                              </SelectItem>
+                              <SelectItem value="openai">
+                                {t("channels.tabs.codex")}
+                              </SelectItem>
+                              <SelectItem value="gemini">
+                                {t("channels.tabs.gemini")}
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
                   <FormField
                     control={channelForm.control}
-                    name="name"
+                    name="priority"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>{t("channels.modal.name")}</FormLabel>
+                        <FormLabel>{t("channels.modal.priority")}</FormLabel>
                         <FormControl>
-                          <Input {...field} placeholder="openai-main" />
+                          <Input {...field} type="number" placeholder="0" />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
 
+                  {appSettings?.channel_retry_enabled ? (
+                    <FormField
+                      control={channelForm.control}
+                      name="retry_times"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>{t("channels.modal.retryTimes")}</FormLabel>
+                          <FormControl>
+                            <Input
+                              {...field}
+                              type="number"
+                              min="1"
+                              placeholder="1"
+                            />
+                          </FormControl>
+                          <FormDescription>
+                            {t("channels.modal.retryTimesHint")}
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  ) : (
+                    <FormField
+                      control={channelForm.control}
+                      name="retry_times"
+                      render={({ field }) => (
+                        <input type="hidden" value={field.value} readOnly />
+                      )}
+                    />
+                  )}
+
                   <FormField
                     control={channelForm.control}
-                    name="protocol"
+                    name="recharge_currency"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>{t("channels.modal.terminal")}</FormLabel>
+                        <FormLabel>
+                          {t("channels.modal.rechargeCurrency")}
+                        </FormLabel>
                         <Select
                           value={field.value}
-                          onValueChange={(value) => {
-                            const nextProtocol = value as Protocol;
-                            const currentBaseUrl = channelForm
-                              .getValues("base_url")
-                              .trim();
-                            const prevDefault = defaultBaseUrl(field.value);
-                            const nextDefault = defaultBaseUrl(nextProtocol);
-                            const shouldUpdateBase =
-                              !currentBaseUrl || currentBaseUrl === prevDefault;
-
-                            field.onChange(nextProtocol);
-                            if (shouldUpdateBase) {
-                              channelForm.setValue("base_url", nextDefault, {
-                                shouldDirty: true,
-                                shouldValidate: true,
-                              });
-                            }
-                          }}
-                          disabled={modalMode === "edit"}
+                          onValueChange={field.onChange}
                         >
                           <FormControl>
                             <SelectTrigger>
@@ -867,14 +950,11 @@ export function ChannelsPage() {
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            <SelectItem value="anthropic">
-                              {t("channels.tabs.claude")}
+                            <SelectItem value="CNY">
+                              {t("channels.modal.rechargeCurrencyOptions.cny")}
                             </SelectItem>
-                            <SelectItem value="openai">
-                              {t("channels.tabs.codex")}
-                            </SelectItem>
-                            <SelectItem value="gemini">
-                              {t("channels.tabs.gemini")}
+                            <SelectItem value="USD">
+                              {t("channels.modal.rechargeCurrencyOptions.usd")}
                             </SelectItem>
                           </SelectContent>
                         </Select>
@@ -882,198 +962,121 @@ export function ChannelsPage() {
                       </FormItem>
                     )}
                   />
-                </div>
 
-                <FormField
-                  control={channelForm.control}
-                  name="priority"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{t("channels.modal.priority")}</FormLabel>
-                      <FormControl>
-                        <Input {...field} type="number" placeholder="0" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                {appSettings?.channel_retry_enabled ? (
                   <FormField
                     control={channelForm.control}
-                    name="retry_times"
+                    name="real_multiplier"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>{t("channels.modal.retryTimes")}</FormLabel>
+                        <FormLabel>
+                          {t("channels.modal.realMultiplier")}
+                        </FormLabel>
                         <FormControl>
                           <Input
                             {...field}
-                            type="number"
-                            min="1"
-                            placeholder="1"
+                            type="text"
+                            inputMode="decimal"
+                            placeholder="1.00"
+                            onBlur={(event) => {
+                              field.onBlur();
+                              const raw = event.target.value.trim();
+                              if (!raw || !/^\d+(\.\d{0,2})?$/.test(raw)) return;
+                              const number = Number(raw);
+                              if (!Number.isFinite(number) || number < 0) return;
+                              channelForm.setValue(
+                                "real_multiplier",
+                                formatFixed2(number),
+                                {
+                                  shouldDirty: true,
+                                  shouldValidate: true,
+                                },
+                              );
+                            }}
                           />
                         </FormControl>
                         <FormDescription>
-                          {t("channels.modal.retryTimesHint")}
+                          {t("channels.modal.realMultiplierHint")}
                         </FormDescription>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
-                ) : (
+
                   <FormField
                     control={channelForm.control}
-                    name="retry_times"
+                    name="base_url"
                     render={({ field }) => (
-                      <input type="hidden" value={field.value} readOnly />
+                      <FormItem>
+                        <FormLabel>{t("channels.modal.baseUrl")}</FormLabel>
+                        <FormControl>
+                          <Input
+                            {...field}
+                            placeholder="https://api.openai.com"
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
                     )}
                   />
-                )}
 
-                <FormField
-                  control={channelForm.control}
-                  name="recharge_currency"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>
-                        {t("channels.modal.rechargeCurrency")}
-                      </FormLabel>
-                      <Select
-                        value={field.value}
-                        onValueChange={field.onChange}
-                      >
+                  <FormField
+                    control={channelForm.control}
+                    name="auth_ref"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>{t("channels.modal.apiKey")}</FormLabel>
                         <FormControl>
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
+                          <Input
+                            {...field}
+                            type="password"
+                            placeholder="sk-..."
+                          />
                         </FormControl>
-                        <SelectContent>
-                          <SelectItem value="CNY">
-                            {t("channels.modal.rechargeCurrencyOptions.cny")}
-                          </SelectItem>
-                          <SelectItem value="USD">
-                            {t("channels.modal.rechargeCurrencyOptions.usd")}
-                          </SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
-                <FormField
-                  control={channelForm.control}
-                  name="real_multiplier"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>
-                        {t("channels.modal.realMultiplier")}
-                      </FormLabel>
-                      <FormControl>
-                        <Input
-                          {...field}
-                          type="text"
-                          inputMode="decimal"
-                          placeholder="1.00"
-                          onBlur={(event) => {
-                            field.onBlur();
-                            const raw = event.target.value.trim();
-                            if (!raw || !/^\d+(\.\d{0,2})?$/.test(raw)) return;
-                            const number = Number(raw);
-                            if (!Number.isFinite(number) || number < 0) return;
-                            channelForm.setValue(
-                              "real_multiplier",
-                              formatFixed2(number),
-                              {
-                                shouldDirty: true,
-                                shouldValidate: true,
-                              },
-                            );
-                          }}
-                        />
-                      </FormControl>
-                      <FormDescription>
-                        {t("channels.modal.realMultiplierHint")}
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                  <FormField
+                    control={channelForm.control}
+                    name="enabled"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-row items-center justify-between space-y-0">
+                        <FormLabel>{t("channels.modal.enabled")}</FormLabel>
+                        <FormControl>
+                          <Switch
+                            checked={field.value}
+                            onCheckedChange={field.onChange}
+                          />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
 
-                <FormField
-                  control={channelForm.control}
-                  name="base_url"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{t("channels.modal.baseUrl")}</FormLabel>
-                      <FormControl>
-                        <Input
-                          {...field}
-                          placeholder="https://api.openai.com"
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={channelForm.control}
-                  name="auth_ref"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{t("channels.modal.apiKey")}</FormLabel>
-                      <FormControl>
-                        <Input
-                          {...field}
-                          type="password"
-                          placeholder="sk-..."
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={channelForm.control}
-                  name="enabled"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-row items-center justify-between space-y-0">
-                      <FormLabel>{t("channels.modal.enabled")}</FormLabel>
-                      <FormControl>
-                        <Switch
-                          checked={field.value}
-                          onCheckedChange={field.onChange}
-                        />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={channelForm.control}
-                  name="ignore_channel_protection"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-row items-start justify-between gap-4 space-y-0">
-                      <div className="space-y-1">
-                        <FormLabel>
-                          {t("channels.modal.ignoreChannelProtection")}
-                        </FormLabel>
-                        <FormDescription>
-                          {t("channels.modal.ignoreChannelProtectionHint")}
-                        </FormDescription>
-                      </div>
-                      <FormControl>
-                        <Switch
-                          checked={field.value}
-                          onCheckedChange={field.onChange}
-                        />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-              </div>
+                  <FormField
+                    control={channelForm.control}
+                    name="ignore_channel_protection"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-row items-start justify-between gap-4 space-y-0">
+                        <div className="space-y-1">
+                          <FormLabel>
+                            {t("channels.modal.ignoreChannelProtection")}
+                          </FormLabel>
+                          <FormDescription>
+                            {t("channels.modal.ignoreChannelProtectionHint")}
+                          </FormDescription>
+                        </div>
+                        <FormControl>
+                          <Switch
+                            checked={field.value}
+                            onCheckedChange={field.onChange}
+                          />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              </DialogBody>
 
               <DialogFooter className="shrink-0">
                 <Button
@@ -1105,7 +1108,7 @@ export function ChannelsPage() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="flex-1 min-h-0 space-y-3 overflow-y-auto pr-1">
+          <DialogBody className="flex-1 min-h-0 overflow-y-auto">
             {!autoSortChanged ? (
               <div className="text-sm text-muted-foreground">
                 {t("channels.autoSort.noChange")}
@@ -1119,7 +1122,7 @@ export function ChannelsPage() {
                 stickyHeader={false}
               />
             )}
-          </div>
+          </DialogBody>
 
           <DialogFooter className="shrink-0">
             <Button
@@ -1159,20 +1162,22 @@ export function ChannelsPage() {
             </DialogDescription>
           </DialogHeader>
           {deleteTarget?.managed_by_remote ? (
-            <div className="flex items-center justify-between rounded-md border p-3">
-              <div className="space-y-1">
-                <div className="text-sm font-medium">
-                  {t("channels.deleteDialog.syncDeleteRemote")}
+            <DialogBody>
+              <div className="flex items-center justify-between rounded-md border p-3">
+                <div className="space-y-1">
+                  <div className="text-sm font-medium">
+                    {t("channels.deleteDialog.syncDeleteRemote")}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {t("channels.deleteDialog.syncDeleteRemoteHint")}
+                  </div>
                 </div>
-                <div className="text-xs text-muted-foreground">
-                  {t("channels.deleteDialog.syncDeleteRemoteHint")}
-                </div>
+                <Switch
+                  checked={deleteSyncRemote}
+                  onCheckedChange={setDeleteSyncRemote}
+                />
               </div>
-              <Switch
-                checked={deleteSyncRemote}
-                onCheckedChange={setDeleteSyncRemote}
-              />
-            </div>
+            </DialogBody>
           ) : null}
           <DialogFooter>
             <Button

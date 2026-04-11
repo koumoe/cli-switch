@@ -8,6 +8,7 @@ import {
   Button,
   Badge,
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -1083,11 +1084,11 @@ export function SettingsPage() {
           </DialogHeader>
 
           {chatBridgeLoginDialogPlatform ? (
-            <div className="space-y-4">
-              <div className="rounded-lg border bg-muted/20 p-4 space-y-3">
+            <DialogBody className="space-y-4">
+              <div className="space-y-3 rounded-lg border bg-muted/20 p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="space-y-1">
-                    <div className="font-medium text-sm">
+                    <div className="text-sm font-medium">
                       {t(
                         `settings.chatBridge.${chatBridgeLoginDialogPlatform}.runtimeTitle`,
                       )}
@@ -1104,7 +1105,7 @@ export function SettingsPage() {
                 </div>
 
                 <div className="grid gap-3 md:grid-cols-2">
-                  <div className="rounded-lg border bg-background px-3 py-3 space-y-1">
+                  <div className="space-y-1 rounded-lg border bg-background px-3 py-3">
                     <div className="text-xs text-muted-foreground">
                       {t(
                         `settings.chatBridge.${chatBridgeLoginDialogPlatform}.connectionLabel`,
@@ -1120,13 +1121,13 @@ export function SettingsPage() {
                           )}
                     </div>
                   </div>
-                  <div className="rounded-lg border bg-background px-3 py-3 space-y-1">
+                  <div className="space-y-1 rounded-lg border bg-background px-3 py-3">
                     <div className="text-xs text-muted-foreground">
                       {t(
                         `settings.chatBridge.${chatBridgeLoginDialogPlatform}.accountLabel`,
                       )}
                     </div>
-                    <div className="text-sm font-medium break-all">
+                    <div className="break-all text-sm font-medium">
                       {chatBridgeLoginDialogStatus?.me ||
                         t(
                           `settings.chatBridge.${chatBridgeLoginDialogPlatform}.accountEmpty`,
@@ -1136,21 +1137,21 @@ export function SettingsPage() {
                 </div>
 
                 {chatBridgeLoginDialogLastErrorMessage ? (
-                  <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-3 space-y-1">
+                  <div className="space-y-1 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-3">
                     <div className="text-xs text-muted-foreground">
                       {t(
                         `settings.chatBridge.${chatBridgeLoginDialogPlatform}.lastErrorLabel`,
                       )}
                     </div>
-                    <div className="text-sm break-words">
+                    <div className="break-words text-sm">
                       {chatBridgeLoginDialogLastErrorMessage}
                     </div>
                   </div>
                 ) : null}
 
-                <div className="rounded-lg border bg-background px-3 py-3 space-y-3">
+                <div className="space-y-3 rounded-lg border bg-background px-3 py-3">
                   <div className="space-y-1">
-                    <div className="font-medium text-sm">
+                    <div className="text-sm font-medium">
                       {t(
                         `settings.chatBridge.${chatBridgeLoginDialogPlatform}.qrTitle`,
                       )}
@@ -1182,7 +1183,7 @@ export function SettingsPage() {
                   )}
                 </div>
               </div>
-            </div>
+            </DialogBody>
           ) : null}
 
           <DialogFooter className="gap-2 sm:justify-between">
@@ -1281,7 +1282,7 @@ export function SettingsPage() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4">
+          <DialogBody className="space-y-4">
             <div className="space-y-2">
               <label className="text-sm font-medium">
                 {t("settings.chatBridge.pairing.platform")}
@@ -1332,7 +1333,7 @@ export function SettingsPage() {
                 {t("settings.chatBridge.pairing.expiresHint")}
               </p>
             </div>
-          </div>
+          </DialogBody>
 
           <DialogFooter>
             <Button
@@ -1378,51 +1379,53 @@ export function SettingsPage() {
             </DialogDescription>
           </DialogHeader>
 
-          {chatBridgeBindingsLoading &&
-          chatBridgeBindingsDialogItems.length === 0 ? (
-            <div className="text-sm text-muted-foreground">
-              {t("common.loading")}
-            </div>
-          ) : chatBridgeBindingsDialogItems.length === 0 ? (
-            <div className="text-sm text-muted-foreground">
-              {t("settings.chatBridge.bindings.emptyForPlatform", {
-                platform: t(
-                  `settings.chatBridge.platform.${chatBridgeBindingsDialogPlatform ?? "telegram"}`,
-                ),
-              })}
-            </div>
-          ) : (
-            <div className="space-y-2 max-h-[360px] overflow-y-auto pr-1">
-              {chatBridgeBindingsDialogItems.map((binding) => (
-                <div
-                  key={binding.id}
-                  className="flex items-start justify-between gap-4 rounded-lg border bg-background px-3 py-2"
-                >
-                  <div className="min-w-0">
-                    <div className="font-medium text-sm truncate">
-                      {binding.display_name ?? binding.platform_user_id}
+          <DialogBody className="max-h-[360px] overflow-y-auto">
+            {chatBridgeBindingsLoading &&
+            chatBridgeBindingsDialogItems.length === 0 ? (
+              <div className="text-sm text-muted-foreground">
+                {t("common.loading")}
+              </div>
+            ) : chatBridgeBindingsDialogItems.length === 0 ? (
+              <div className="text-sm text-muted-foreground">
+                {t("settings.chatBridge.bindings.emptyForPlatform", {
+                  platform: t(
+                    `settings.chatBridge.platform.${chatBridgeBindingsDialogPlatform ?? "telegram"}`,
+                  ),
+                })}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {chatBridgeBindingsDialogItems.map((binding) => (
+                  <div
+                    key={binding.id}
+                    className="flex items-start justify-between gap-4 rounded-lg border bg-background px-3 py-2"
+                  >
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-medium">
+                        {binding.display_name ?? binding.platform_user_id}
+                      </div>
+                      <div className="truncate text-xs text-muted-foreground">
+                        {binding.platform_user_id}
+                      </div>
                     </div>
-                    <div className="text-xs text-muted-foreground truncate">
-                      {binding.platform_user_id}
+                    <div className="flex flex-shrink-0 items-center gap-2">
+                      <div className="whitespace-nowrap text-xs text-muted-foreground">
+                        {formatDateTime(binding.bound_at_ms)}
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-destructive hover:text-destructive"
+                        onClick={() => setChatBridgeUnbindTarget(binding)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <div className="text-xs text-muted-foreground whitespace-nowrap">
-                      {formatDateTime(binding.bound_at_ms)}
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 text-destructive hover:text-destructive"
-                      onClick={() => setChatBridgeUnbindTarget(binding)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+                ))}
+              </div>
+            )}
+          </DialogBody>
 
           <DialogFooter>
             <Button
