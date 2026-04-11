@@ -2040,6 +2040,7 @@ mod tests {
             listen_addr: "127.0.0.1:0".parse().expect("listen addr"),
             db_path: Arc::new(db_path),
             http_client: reqwest::Client::new(),
+            proxy_http_client: reqwest::Client::new(),
             settings_notify,
             settings_cache,
             settings_cache_rx,

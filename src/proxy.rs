@@ -214,12 +214,6 @@ pub async fn forward_with_config(
             };
 
             let mut out_headers = filtered_headers(&parts.headers);
-            // Prefer identity encoding to reduce decode errors on streaming responses when upstream
-            // closes the connection abruptly.
-            out_headers.insert(
-                axum::http::header::ACCEPT_ENCODING,
-                HeaderValue::from_static("identity"),
-            );
             if let Err(e) = apply_auth(&channel, protocol, &mut url, &mut out_headers) {
                 let auto_disabled = if !is_count_tokens {
                     attempt_ctx
@@ -769,10 +763,6 @@ fn filtered_headers(src: &HeaderMap) -> HeaderMap {
         if name == axum::http::header::HOST || name == axum::http::header::CONTENT_LENGTH {
             continue;
         }
-        if name == axum::http::header::ACCEPT_ENCODING {
-            continue;
-        }
-
         let lname = name.as_str().to_ascii_lowercase();
         if connection_tokens.iter().any(|t| t == &lname) {
             continue;
