@@ -1,7 +1,10 @@
-import type { Protocol } from "./api";
+import type { Protocol } from "@/types/api";
 export { formatDateTime, formatNumber } from "@/lib/format";
 
-export type Translator = (key: string, vars?: Record<string, string | number>) => string;
+export type Translator = (
+  key: string,
+  vars?: Record<string, string | number>,
+) => string;
 
 export function protocolLabelKey(protocol: Protocol): string {
   switch (protocol) {
@@ -16,6 +19,47 @@ export function protocolLabelKey(protocol: Protocol): string {
 
 export function protocolLabel(t: Translator, protocol: Protocol): string {
   return t(protocolLabelKey(protocol));
+}
+
+function protocolThemeName(protocol: Protocol): "codex" | "claude" | "gemini" {
+  switch (protocol) {
+    case "openai":
+      return "codex";
+    case "anthropic":
+      return "claude";
+    case "gemini":
+      return "gemini";
+  }
+}
+
+export function protocolColor(protocol: Protocol): string {
+  return `oklch(var(--${protocolThemeName(protocol)}))`;
+}
+
+export function protocolDotClassName(protocol: Protocol): string {
+  switch (protocol) {
+    case "openai":
+      return "bg-codex";
+    case "anthropic":
+      return "bg-claude";
+    case "gemini":
+      return "bg-gemini";
+  }
+}
+
+export function protocolBadgeClassName(): string {
+  return "border-border/80 bg-secondary/55 text-foreground";
+}
+
+export function protocolProgressClassName(protocol: Protocol): string {
+  switch (protocol) {
+    case "openai":
+      return "bg-codex";
+    case "anthropic":
+      return "bg-claude";
+    case "gemini":
+      return "bg-gemini";
+  }
 }
 
 export function formatDuration(ms: number | null | undefined): string {

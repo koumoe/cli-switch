@@ -9,7 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui";
-import { useI18n } from "@/lib/i18n";
+import { useI18n } from "@/hooks/use-i18n";
 
 type DeleteConfirmDialogProps = {
   open: boolean;
@@ -34,8 +34,7 @@ export function DeleteConfirmDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      {/* Offset slightly above center (44%) so this dialog clears the tall editor dialog behind it */}
-      <DialogContent className="top-[44%] translate-y-[-44%] sm:max-w-[480px]">
+      <DialogContent className="sm:max-w-[480px]">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>

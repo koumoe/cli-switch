@@ -27,7 +27,7 @@ import {
 } from "@mdxeditor/editor";
 import "@mdxeditor/editor/style.css";
 
-import { useI18n } from "@/lib/i18n";
+import { useI18n } from "@/hooks/use-i18n";
 
 type PromptMarkdownEditorProps = {
   value: string;
@@ -106,11 +106,11 @@ export function PromptMarkdownEditor({
   disabled = false,
   onChange,
 }: PromptMarkdownEditorProps) {
-  const { locale } = useI18n();
+  const { locale, t } = useI18n();
   const editorRef = useRef<MDXEditorMethods | null>(null);
   const syncingRef = useRef(false);
   const [overlayContainer, setOverlayContainer] = useState<HTMLDivElement | null>(null);
-  const sourceLabel = locale === "zh-CN" ? "Markdown 源码" : "Markdown Source";
+  const sourceLabel = t("prompts.editor.sourceLabel");
 
   const translation = useMemo<Translation>(() => {
     return (key, defaultValue, interpolations) => {

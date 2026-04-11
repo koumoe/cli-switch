@@ -1,0 +1,83 @@
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 14px, 0) scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 200% 0;
+  }
+
+  to {
+    background-position: -200% 0;
+  }
+}
+
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 0.72;
+    transform: scale(0.92);
+  }
+
+  45% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+}
+
+@utility animate-fade-up {
+  animation: fade-up 0.42s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@utility animate-shimmer {
+  background-image: linear-gradient(
+    110deg,
+    hsl(var(--muted) / 0.9) 0%,
+    hsl(var(--muted) / 0.4) 34%,
+    hsl(var(--muted) / 0.72) 68%,
+    hsl(var(--muted) / 0.9) 100%
+  );
+  background-size: 220% 100%;
+  animation: shimmer 1.35s linear infinite;
+}
+
+@utility animate-pulse-dot {
+  animation: pulse-dot 1.9s ease-out infinite;
+}
+
+@utility anim-d1 {
+  animation-delay: 60ms;
+}
+
+@utility anim-d2 {
+  animation-delay: 120ms;
+}
+
+@utility anim-d3 {
+  animation-delay: 180ms;
+}
+
+@utility anim-d4 {
+  animation-delay: 240ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-up,
+  .animate-shimmer,
+  .animate-pulse-dot,
+  .anim-d1,
+  .anim-d2,
+  .anim-d3,
+  .anim-d4 {
+    animation: none !important;
+    transition: none !important;
+  }
+}

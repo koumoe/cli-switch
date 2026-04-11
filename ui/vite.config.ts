@@ -1,5 +1,6 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { tanstackRouter } from "@tanstack/router-plugin/vite";
 import path from "path";
 
 function isNodeModulePkg(id: string, name: string): boolean {
@@ -67,12 +68,25 @@ const EDITOR_MARKDOWN_PATTERNS = [
 export default defineConfig(() => {
   const sourcemap = process.env.VITE_SOURCEMAP === "true";
   return {
-    plugins: [react()],
+    plugins: [
+      tanstackRouter({
+        target: "react",
+        autoCodeSplitting: true,
+      }),
+      react(),
+    ],
     resolve: {
       alias: {
         "@": path.resolve(__dirname, "./src"),
         "@shared-locales": path.resolve(__dirname, "../i18n/locales/shared"),
       },
+    },
+    optimizeDeps: {
+      include: [
+        "react-apexcharts/core",
+        "apexcharts/core",
+        "apexcharts/line",
+      ],
     },
     build: {
       outDir: "dist",
@@ -89,6 +103,9 @@ export default defineConfig(() => {
               return "radix-vendor";
             }
             if (isNodeModulePkg(id, "lucide-react")) return "icons-vendor";
+            if (isNodeModulePkg(id, "apexcharts") || isNodeModulePkg(id, "react-apexcharts")) {
+              return "chart-vendor";
+            }
             if (
               isNodeModulePkg(id, "react") ||
               isNodeModulePkg(id, "react-dom") ||

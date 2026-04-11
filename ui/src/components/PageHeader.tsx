@@ -11,29 +11,26 @@ type PageHeaderProps = {
 
 export function PageHeader({ title, description, actions, className }: PageHeaderProps) {
   return (
-    <div
+    <header
       className={cn(
-        "flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between",
+        "flex h-[55px] shrink-0 items-center justify-between border-b border-border px-5",
         className
       )}
     >
-      <div className="flex min-h-11 flex-col justify-center">
-        <h1 className="text-lg font-semibold leading-6">{title}</h1>
-        <p
-          className={cn(
-            "mt-0.5 min-h-4 text-xs leading-4 text-muted-foreground",
-            !description && "invisible"
-          )}
-        >
-          {description ?? "\u00A0"}
-        </p>
+      <div className="min-w-0">
+        <h1 className="truncate text-base font-bold">{title}</h1>
+        {description ? (
+          <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+            {description}
+          </p>
+        ) : null}
       </div>
 
       {actions ? (
-        <div className="flex min-h-11 flex-wrap items-center gap-2 sm:justify-end">
+        <div className="flex items-center gap-2">
           {actions}
         </div>
       ) : null}
-    </div>
+    </header>
   );
 }

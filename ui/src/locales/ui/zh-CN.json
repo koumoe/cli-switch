@@ -22,23 +22,29 @@
     "offline": "离线",
     "checking": "检测中..."
   },
-  "sidebar": {
-    "expand": "展开侧边栏",
-    "collapse": "收起侧边栏"
-  },
+  "sidebar": {},
   "common": {
     "loading": "加载中...",
     "refresh": "刷新",
     "cancel": "取消",
+    "close": "关闭",
     "ok": "知道了",
     "save": "保存",
     "delete": "删除",
-    "open": "打开",
     "details": "详情",
     "enabled": "启用",
     "disabled": "禁用",
     "free": "免费",
     "actions": "操作",
+    "dateRangePicker": {
+      "placeholder": "选择日期范围",
+      "presets": {
+        "today": "今日",
+        "yesterday": "昨日",
+        "week": "本周",
+        "month": "本月"
+      }
+    },
     "pagination": {
       "total": "共 {{total}} 条",
       "page": "第 {{page}} / {{totalPages}} 页",
@@ -72,6 +78,7 @@
       "unsavedConfirm": "当前有未保存修改，确认放弃吗？",
       "globalBadge": "全局",
       "projectBadge": "项目",
+      "sourceLabel": "Markdown 源码",
       "noSelection": "未选择提示词",
       "size": "内容大小：{{current}} / {{max}}"
     },
@@ -108,7 +115,11 @@
     },
     "trend": {
       "title": "本月请求趋势",
-      "empty": "暂无趋势数据"
+      "empty": "暂无趋势数据",
+      "tooltip": {
+        "empty": "当前日期暂无请求",
+        "omitted": "其余 {{count}} 个渠道已省略"
+      }
     },
     "distribution": {
       "title": "渠道使用分布",
@@ -181,7 +192,6 @@
       },
       "realMultiplier": "真实倍率",
       "realMultiplierHint": "支持 0 表示免费渠道，最多 2 位小数",
-      "realMultiplierTooManyDecimals": "最多只能输入 2 位小数",
       "baseUrl": "Base URL",
       "apiKey": "API Key / Token",
       "enabled": "启用",
@@ -208,6 +218,8 @@
       "testFail": "测试失败",
       "nameRequired": "名称不能为空",
       "baseUrlRequired": "Base URL 不能为空",
+      "baseUrlInvalid": "Base URL 必须是 http/https 地址",
+      "priorityInvalid": "优先级必须是整数",
       "retryTimesInvalid": "重试次数必须是 >= 1 的整数",
       "realMultiplierInvalid": "真实倍率必须是 >= 0 的数字，且最多 2 位小数",
       "testReachableOkTitle": "{{name}} 连通正常",
@@ -220,8 +232,16 @@
     },
     "remoteMissing": {
       "title": "托管渠道远端关联缺失",
+      "descriptionGeneric": "检测到远端托管资源异常，请确认是否禁用或删除本地渠道。",
+      "descriptionMissingResourceAndGroup": "检测到渠道 {{name}} 对应的远端{{resource}}和分组均未在列表中找到，请选择禁用或删除。",
+      "descriptionMissingGroup": "检测到渠道 {{name}} 对应的远端分组未在列表中找到，请选择禁用或删除。",
+      "descriptionMissingResource": "检测到渠道 {{name}} 对应的远端{{resource}}未在列表中找到，请选择禁用或删除。",
       "baseUrl": "账号 Base URL：{{value}}",
       "group": "分组：{{value}}",
+      "resourceGeneric": "资源",
+      "resourceToken": "Token",
+      "resourceKey": "Key",
+      "resourceLine": "{{label}}：{{value}}",
       "hint": "禁用后会保留本地配置但停止使用；删除时可选择是否同步删除远端资源。",
       "syncDeleteRemote": "删除本地时同步删除远端资源",
       "syncDeleteRemoteHint": "建议在远端资源仍存在时开启，关闭后仅删除本地渠道记录。",
@@ -365,8 +385,11 @@
       "loadFail": "加载账号失败",
       "actionFail": "操作失败",
       "baseUrlRequired": "Base URL 不能为空",
+      "baseUrlInvalid": "Base URL 必须是 http/https 地址",
+      "apiUrlInvalid": "API 地址必须是 http/https 地址",
       "bearerTokenRequired": "sub2api 账号需要先通过登录窗口获取 Authorization",
       "thresholdInvalid": "低余额阈值必须是 >= 0 的数字",
+      "autoCheckinTimeInvalid": "自动签到时间必须是 HH:MM:SS 格式",
       "createOk": "账号创建成功",
       "updateOk": "账号更新成功",
       "refreshOk": "账号信息已刷新",
@@ -374,6 +397,7 @@
       "systemCheckinOk": "系统签到成功",
       "systemCheckinFail": "系统签到失败",
       "pageCheckinUrlRequired": "请先配置页面签到地址",
+      "pageCheckinUrlInvalid": "页面签到地址必须是 http/https 地址",
       "manualCheckinOk": "{{name}} 签到完成",
       "deleteOk": "账号已删除",
       "deleteFail": "删除账号失败",
@@ -413,7 +437,8 @@
         "estimatedCost": "官方额度",
         "actualSpend": "预估费用",
         "avgLatency": "平均耗时"
-      }
+      },
+      "empty": "暂无渠道统计"
     },
     "toast": {
       "loadFail": "加载失败"
@@ -423,15 +448,9 @@
     "title": "请求明细",
     "filters": {
       "all": "全部",
-      "dateRange": "日期区间",
-      "selectDateRange": "选择日期区间",
-      "terminal": "终端",
       "channel": "渠道",
       "model": "模型",
-      "modelPlaceholder": "模糊匹配",
       "dimension": "请求 ID",
-      "dimensionPlaceholder": "请求 ID",
-      "status": "状态",
       "success": "成功",
       "failed": "失败",
       "search": "查询",
@@ -450,11 +469,18 @@
     "cell": {
       "duration": "耗时",
       "ttft": "首字",
+      "ttftCompact": "首字",
       "input": "输入",
       "output": "输出",
       "total": "总计",
       "cacheRead": "缓存读",
-      "cacheWrite": "缓存写"
+      "cacheWrite": "缓存写",
+      "cacheReadCompact": "读",
+      "cacheWriteCompact": "写"
+    },
+    "pagination": {
+      "range": "{{start}}-{{end}} / 共 {{total}} 条",
+      "pageSize": "每页 {{value}} 条"
     },
     "details": {
       "id": "ID",
@@ -490,29 +516,24 @@
   "settings": {
     "title": "设置",
     "tabs": {
-      "appearance": "界面",
+      "general": "通用",
       "channel": "渠道",
       "notifications": "系统通知",
-      "application": "应用",
       "chatBridge": "消息互联",
-      "update": "CLI",
+      "cli": "CLI",
       "data": "数据",
       "system": "系统"
     },
     "appearance": {
       "title": "外观",
-      "subtitle": "自定义应用的视觉风格",
       "theme": "主题",
       "themeHint": "选择浅色、深色或跟随系统设置"
     },
     "language": {
-      "title": "语言",
-      "subtitle": "切换界面与聊天命令的显示语言",
       "label": "应用语言",
       "saveFail": "保存应用语言失败"
     },
     "currency": {
-      "title": "货币单位",
       "subtitle": "用于显示「预估费用」等金额单位（官方额度固定按官方 USD 计算）",
       "label": "默认货币",
       "options": {
@@ -523,7 +544,6 @@
     },
     "channelProtection": {
       "title": "渠道保护",
-      "subtitle": "渠道连续失败时自动暂停使用",
       "enable": "启用渠道保护",
       "enableHint": "触发条件满足后将临时跳过该渠道",
       "windowMinutes": "检测窗口",
@@ -538,7 +558,6 @@
     },
     "channelRetry": {
       "title": "渠道级重试",
-      "subtitle": "开启后可为每个渠道单独设置重试次数",
       "enable": "启用渠道级重试",
       "enableHint": "关闭后每个渠道只尝试 1 次",
       "saved": "渠道级重试设置已保存",
@@ -546,8 +565,6 @@
     },
     "systemNotifications": {
       "title": "系统通知",
-      "subtitle": "控制系统通知总开关",
-      "newApiSubtitle": "管理远端账号低余额与托管渠道相关提醒",
       "enable": "启用系统通知",
       "enableHint": "关闭后不再发送任何系统级通知",
       "lowBalance": "低余额提醒",
@@ -563,7 +580,6 @@
     },
     "newApiManaged": {
       "title": "远端托管渠道",
-      "subtitle": "管理托管渠道的变更检测与倍率同步确认",
       "missingPrompt": "渠道变更检测",
       "missingPromptHint": "开启后定期检测远端资源是否存在，缺失时提示禁用或删除",
       "syncMultiplier": "同步渠道倍率",
@@ -575,7 +591,6 @@
     },
     "pricingData": {
       "title": "定价数据",
-      "subtitle": "用于计算日志金额与成本统计",
       "status": "同步状态",
       "count": "模型数：{{count}}",
       "lastSync": "上次同步：{{time}}",
@@ -592,7 +607,6 @@
     },
     "windowClose": {
       "title": "窗口关闭",
-      "subtitle": "设置点击关闭按钮时的默认动作",
       "behavior": "关闭时",
       "behaviorHint": "可选：每次询问 / 最小化到托盘 / 直接退出",
       "ask": "每次询问",
@@ -603,20 +617,17 @@
     },
     "startup": {
       "title": "开机自启动",
-      "subtitle": "登录系统后自动启动 CliSwitch",
       "enable": "开机自启动",
       "enableHint": "开启后会将 CliSwitch 添加到系统登录项",
       "launchMode": "开机自启后",
       "launchModeHint": "选择登录后自动启动时的窗口展示方式",
       "launchShow": "展示主界面",
       "launchMinimize": "缩到状态栏/托盘",
-      "launchSaved": "启动方式已保存",
       "saved": "设置已保存",
       "saveFail": "保存失败"
     },
     "cliTools": {
       "title": "CLI 更新",
-      "subtitle": "管理 Gemini CLI / Claude Code / Codex 的安装与更新",
       "refresh": "刷新",
       "loadFail": "获取 CLI 状态失败",
       "installedWithVersion": "已安装 · {{version}}",
@@ -637,7 +648,6 @@
     },
     "cliProxyConfig": {
       "title": "CLI 代理配置",
-      "subtitle": "检查 Claude Code / Codex / Gemini CLI 是否已指向 CliSwitch，未配置项可直接写入",
       "refresh": "刷新",
       "loadFail": "获取配置状态失败",
       "apply": "一键配置",
@@ -648,7 +658,6 @@
     },
     "update": {
       "title": "CliSwitch 更新",
-      "subtitle": "检查并下载新版本（支持自动更新）",
       "autoEnable": "开启自动更新",
       "autoEnableHint": "开启后会定时检测并弹窗提示更新",
       "status": "更新状态",
@@ -704,7 +713,6 @@
       "levelError": "Error",
       "saved": "日志设置已保存",
       "saveFail": "保存失败",
-      "dir": "日志目录",
       "clear": "清理",
       "clearLogs": "清理日志",
       "selectRange": "选择日期区间",
@@ -718,8 +726,8 @@
       "clearFail": "清理失败"
     },
     "maintenance": {
-      "databaseTitle": "数据库",
       "databaseSubtitle": "查看大小并清理请求记录",
+      "cleanupTitle": "清理",
       "logsSize": "日志大小",
       "logsSizeFail": "获取日志大小失败",
       "clearRecords": "清理记录",
@@ -746,7 +754,6 @@
     },
     "serviceInfo": {
       "title": "服务信息",
-      "subtitle": "CLI 工具应连接的服务地址",
       "host": "主机名",
       "hostHint": "CLI 连接的主机名 / IP 地址",
       "port": "端口",
@@ -758,7 +765,6 @@
     },
     "chatBridge": {
       "configTitle": "基础配置",
-      "configHint": "控制消息互联的启停与项目创建方式",
       "platformConfigTitle": "平台配置",
       "platformConfigHint": "支持 Telegram / Discord / WhatsApp / 微信，其中 WhatsApp 与微信需扫码登录",
       "enable": "启用消息互联",
@@ -892,7 +898,6 @@
     },
     "compatibility": {
       "title": "兼容性",
-      "subtitle": "兼容不同客户端的特殊接口",
       "mockCountTokens": "模拟 Anthropic count_tokens",
       "mockCountTokensHint": "拦截 /v1/messages/count_tokens 并在本地估算 input_tokens",
       "saved": "已保存",
@@ -900,7 +905,6 @@
     },
     "about": {
       "title": "关于",
-      "subtitle": "应用版本和系统信息",
       "appName": "应用名称",
       "version": "版本",
       "backendStatus": "后端状态",

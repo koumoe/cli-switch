@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
-import type { CliToolId, PromptDocument, PromptProject } from "@/api";
 import { deletePromptDocument, getPromptDocument, listPromptProjects, savePromptDocument } from "@/api";
+import { useI18n } from "@/hooks/use-i18n";
 import { humanizeApiError, isApiRequestError } from "@/lib/error";
-import { useI18n } from "@/lib/i18n";
+import type { CliToolId, PromptDocument, PromptProject } from "@/types/api";
 
 import {
   PROMPT_DOCUMENT_MAX_BYTES,

@@ -2,7 +2,10 @@ import { useEffect, useRef } from "react";
 
 export function useWindowEvent(eventName: string, handler: (event: Event) => void) {
   const handlerRef = useRef(handler);
-  handlerRef.current = handler;
+
+  useEffect(() => {
+    handlerRef.current = handler;
+  }, [handler]);
 
   useEffect(() => {
     const listener = (event: Event) => handlerRef.current(event);
@@ -12,4 +15,3 @@ export function useWindowEvent(eventName: string, handler: (event: Event) => voi
     };
   }, [eventName]);
 }
-

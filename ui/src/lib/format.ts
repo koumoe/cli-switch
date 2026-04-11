@@ -1,4 +1,5 @@
-import { getCurrentLocale, type Locale } from "@/lib/i18n";
+import { getCurrentLocale } from "@/providers/i18n-provider";
+import type { Locale } from "@/types/locale";
 
 type LocaleNumberOptions = Intl.NumberFormatOptions & {
   locale?: Locale;

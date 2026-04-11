@@ -1,11 +1,12 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 
 import sharedEnUS from "@shared-locales/en-US.json";
 import sharedZhCN from "@shared-locales/zh-CN.json";
 import uiEnUS from "@/locales/ui/en-US.json";
 import uiZhCN from "@/locales/ui/zh-CN.json";
+import type { Locale } from "@/types/locale";
 
-export type Locale = "zh-CN" | "en-US";
+export type { Locale } from "@/types/locale";
 
 const STORAGE_KEY = "cliswitch-locale";
 let currentLocale: Locale = "zh-CN";
@@ -16,16 +17,15 @@ function isMergeableRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function deepMergeMessages(base: unknown, overlay: unknown): unknown {
-  if (!isMergeableRecord(base) || !isMergeableRecord(overlay)) return overlay ?? base;
+  if (!isMergeableRecord(base) || !isMergeableRecord(overlay)) {
+    return overlay ?? base;
+  }
 
   const out: Record<string, unknown> = { ...base };
   for (const [key, value] of Object.entries(overlay)) {
     const prev = out[key];
-    if (isMergeableRecord(prev) && isMergeableRecord(value)) {
-      out[key] = deepMergeMessages(prev, value);
-    } else {
-      out[key] = value;
-    }
+    out[key] =
+      isMergeableRecord(prev) && isMergeableRecord(value) ? deepMergeMessages(prev, value) : value;
   }
   return out;
 }
@@ -36,9 +36,10 @@ const MESSAGES: Record<Locale, unknown> = {
 };
 
 export function normalizeLocale(input: string): Locale | null {
-  const v = input.trim();
-  if (!v) return null;
-  const lower = v.toLowerCase();
+  const value = input.trim();
+  if (!value) return null;
+
+  const lower = value.toLowerCase();
   if (lower === "zh" || lower.startsWith("zh-")) return "zh-CN";
   if (lower === "en" || lower.startsWith("en-")) return "en-US";
   return null;
@@ -46,17 +47,19 @@ export function normalizeLocale(input: string): Locale | null {
 
 export function detectSystemLocale(): Locale {
   if (typeof window === "undefined") return "zh-CN";
+
   const candidates = [navigator.language, ...(navigator.languages ?? [])].filter(Boolean);
-  for (const c of candidates) {
-    const n = normalizeLocale(String(c));
-    if (n) return n;
+  for (const candidate of candidates) {
+    const locale = normalizeLocale(String(candidate));
+    if (locale) return locale;
   }
+
   return "zh-CN";
 }
 
 export function getStoredLocale(): Locale | null {
   if (typeof window === "undefined") return null;
-  const stored = localStorage.getItem(STORAGE_KEY);
+  const stored = window.localStorage.getItem(STORAGE_KEY);
   return stored ? normalizeLocale(stored) : null;
 }
 
@@ -70,69 +73,85 @@ export function getCurrentLocale(): Locale {
   return currentLocale;
 }
 
+export function persistLocale(next: Locale) {
+  if (typeof window !== "undefined") {
+    window.localStorage.setItem(STORAGE_KEY, next);
+  }
+}
+
 function applyRuntimeLocale(
   next: Locale,
-  opts?: {
+  options?: {
     persist?: boolean;
     bumpRevision?: boolean;
-  }
+  },
 ) {
   currentLocale = next;
-  if (opts?.bumpRevision ?? true) {
+  if (options?.bumpRevision ?? true) {
     currentLocaleRevision += 1;
   }
-  if (opts?.persist ?? true) {
+  if (options?.persist ?? true) {
     persistLocale(next);
   }
 }
 
-export function persistLocale(next: Locale) {
-  if (typeof window !== "undefined") {
-    localStorage.setItem(STORAGE_KEY, next);
-  }
-}
-
 function getPathValue(obj: unknown, path: string): unknown {
-  if (!obj) return undefined;
-  if (!path) return undefined;
+  if (!obj || !path) return undefined;
+
   const parts = path.split(".").filter(Boolean);
-  let cur: any = obj;
-  for (const p of parts) {
-    if (cur && typeof cur === "object" && p in cur) {
-      cur = cur[p];
+  let current: unknown = obj;
+  for (const part of parts) {
+    if (
+      current &&
+      typeof current === "object" &&
+      !Array.isArray(current) &&
+      part in current
+    ) {
+      current = (current as Record<string, unknown>)[part];
     } else {
       return undefined;
     }
   }
-  return cur;
+  return current;
 }
 
 function interpolate(template: string, vars?: Record<string, string | number>): string {
   if (!vars) return template;
-  return template.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (m, k) => {
-    const v = vars[k];
-    return v === undefined || v === null ? m : String(v);
+
+  return template.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (match, key) => {
+    const value = vars[key];
+    return value === undefined || value === null ? match : String(value);
   });
 }
 
 function translate(locale: Locale, key: string, vars?: Record<string, string | number>): string {
-  const msg = getPathValue(MESSAGES[locale], key);
-  if (typeof msg === "string") return interpolate(msg, vars);
+  const message = getPathValue(MESSAGES[locale], key);
+  if (typeof message === "string") return interpolate(message, vars);
+
   const fallback = getPathValue(MESSAGES["zh-CN"], key);
   if (typeof fallback === "string") return interpolate(fallback, vars);
+
   return key;
 }
 
-type I18nContextValue = {
+export function translateForLocale(
+  locale: Locale,
+  key: string,
+  vars?: Record<string, string | number>,
+): string {
+  return translate(locale, key, vars);
+}
+
+export type I18nContextValue = {
   locale: Locale;
   setLocale: (next: Locale) => void;
   t: (key: string, vars?: Record<string, string | number>) => string;
   locales: { value: Locale; label: string }[];
 };
 
-const I18nContext = createContext<I18nContextValue | null>(null);
+export const I18nContext = createContext<I18nContextValue | null>(null);
 
-export function I18nProvider({ children }: { children: React.ReactNode }) {
+export function I18nProvider({ children }: { children: ReactNode }) {
   const [locale, setLocaleState] = useState<Locale>(() => currentLocale);
 
   const setLocale = useCallback((next: Locale) => {
@@ -146,36 +165,39 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
+
     const bootstrapLocale = async () => {
       const bootstrapRevision = currentLocaleRevision;
       try {
         const requestLocale = getCurrentLocale();
-        const res = await fetch("/api/settings", {
+        const response = await fetch("/api/settings", {
           method: "GET",
           headers: {
             "X-CliSwitch-Locale": requestLocale,
           },
         });
-        if (!res.ok) return;
-        const payload = (await res.json()) as { ui_locale?: string };
+        if (!response.ok) return;
+
+        const payload = (await response.json()) as { ui_locale?: string };
         const next = payload.ui_locale ? normalizeLocale(payload.ui_locale) : null;
         if (!next || cancelled || currentLocaleRevision !== bootstrapRevision) return;
+
         applyRuntimeLocale(next, { bumpRevision: false });
         setLocaleState(next);
       } catch {
-        // ignore: startup fallback locale is already available
+        // Ignore startup fallback failures.
       }
     };
+
     void bootstrapLocale();
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const t = useCallback(
     (key: string, vars?: Record<string, string | number>) => translate(locale, key, vars),
-    [locale]
+    [locale],
   );
 
   const locales = useMemo(
@@ -183,16 +205,10 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
       { value: "zh-CN" as const, label: translate(locale, "language.zhCN") },
       { value: "en-US" as const, label: translate(locale, "language.enUS") },
     ],
-    [locale]
+    [locale],
   );
 
   const value = useMemo(() => ({ locale, setLocale, t, locales }), [locale, setLocale, t, locales]);
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
-}
-
-export function useI18n() {
-  const ctx = useContext(I18nContext);
-  if (!ctx) throw new Error("useI18n must be used within I18nProvider");
-  return ctx;
 }

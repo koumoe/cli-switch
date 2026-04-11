@@ -1,21 +1,19 @@
-import React from "react";
+import { StrictMode } from "react";
 import ReactDOM from "react-dom/client";
-import App from "./App";
+import { RouterProvider } from "@tanstack/react-router";
 import { Toaster } from "sonner";
 import { TooltipProvider } from "@/components/ui";
-import "./index.css";
-import { I18nProvider } from "@/lib/i18n";
-import { CurrencyProvider } from "@/lib/currency";
+import "@/styles/globals.css";
+import { AppProviders } from "@/providers";
+import { router } from "@/router";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
-  <React.StrictMode>
-    <I18nProvider>
-      <CurrencyProvider>
-        <TooltipProvider delayDuration={200}>
-          <App />
-          <Toaster position="top-center" richColors />
-        </TooltipProvider>
-      </CurrencyProvider>
-    </I18nProvider>
-  </React.StrictMode>
+  <StrictMode>
+    <AppProviders>
+      <TooltipProvider delayDuration={200}>
+        <RouterProvider router={router} />
+        <Toaster position="top-center" richColors />
+      </TooltipProvider>
+    </AppProviders>
+  </StrictMode>
 );

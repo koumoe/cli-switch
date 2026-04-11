@@ -9,8 +9,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui";
-import { useI18n } from "@/lib/i18n";
-import type { RemoteAccount } from "@/api";
+import { useI18n } from "@/hooks/use-i18n";
+import type { RemoteAccount } from "@/types/api";
 
 import { resolveAccountDisplayName } from "./shared";
 

@@ -22,23 +22,29 @@
     "offline": "Offline",
     "checking": "Checking..."
   },
-  "sidebar": {
-    "expand": "Expand sidebar",
-    "collapse": "Collapse sidebar"
-  },
+  "sidebar": {},
   "common": {
     "loading": "Loading...",
     "refresh": "Refresh",
     "cancel": "Cancel",
+    "close": "Close",
     "ok": "OK",
     "save": "Save",
     "delete": "Delete",
-    "open": "Open",
     "details": "Details",
     "enabled": "Enabled",
     "disabled": "Disabled",
     "free": "Free",
     "actions": "Actions",
+    "dateRangePicker": {
+      "placeholder": "Select date range",
+      "presets": {
+        "today": "Today",
+        "yesterday": "Yesterday",
+        "week": "This week",
+        "month": "This month"
+      }
+    },
     "pagination": {
       "total": "{{total}} total",
       "page": "Page {{page}} / {{totalPages}}",
@@ -72,6 +78,7 @@
       "unsavedConfirm": "You have unsaved changes. Discard them?",
       "globalBadge": "Global",
       "projectBadge": "Project",
+      "sourceLabel": "Markdown Source",
       "noSelection": "No prompt selected",
       "size": "Size: {{current}} / {{max}}"
     },
@@ -108,7 +115,11 @@
     },
     "trend": {
       "title": "This Month Request Trend",
-      "empty": "No trend data"
+      "empty": "No trend data",
+      "tooltip": {
+        "empty": "No requests for this day",
+        "omitted": "{{count}} more channels hidden"
+      }
     },
     "distribution": {
       "title": "Channel Usage",
@@ -181,7 +192,6 @@
       },
       "realMultiplier": "Real multiplier",
       "realMultiplierHint": "0 means free channel; up to 2 decimals",
-      "realMultiplierTooManyDecimals": "Up to 2 decimal places",
       "baseUrl": "Base URL",
       "apiKey": "API Key / Token",
       "enabled": "Enabled",
@@ -208,6 +218,8 @@
       "testFail": "Test failed",
       "nameRequired": "Name is required",
       "baseUrlRequired": "Base URL is required",
+      "baseUrlInvalid": "Base URL must be an http/https URL",
+      "priorityInvalid": "Priority must be an integer",
       "retryTimesInvalid": "Retry count must be an integer >= 1",
       "realMultiplierInvalid": "Real multiplier must be a finite number >= 0 with up to 2 decimals",
       "testReachableOkTitle": "{{name}} is reachable",
@@ -220,8 +232,16 @@
     },
     "remoteMissing": {
       "title": "Managed Channel Remote Reference Missing",
+      "descriptionGeneric": "A remote managed resource changed. Disable or delete the local channel as needed.",
+      "descriptionMissingResourceAndGroup": "The remote {{resource}} and group for channel {{name}} were not found in the latest list. Disable or delete the local channel.",
+      "descriptionMissingGroup": "The remote group for channel {{name}} was not found in the latest list. Disable or delete the local channel.",
+      "descriptionMissingResource": "The remote {{resource}} for channel {{name}} was not found in the latest list. Disable or delete the local channel.",
       "baseUrl": "Account Base URL: {{value}}",
       "group": "Group: {{value}}",
+      "resourceGeneric": "resource",
+      "resourceToken": "Token",
+      "resourceKey": "Key",
+      "resourceLine": "{{label}}: {{value}}",
       "hint": "Disable keeps the local config but stops using it. When deleting, you can choose whether to remove the remote resource too.",
       "syncDeleteRemote": "Also delete the remote resource",
       "syncDeleteRemoteHint": "Recommended while the remote resource still exists. If disabled, only the local channel record is removed.",
@@ -365,8 +385,11 @@
       "loadFail": "Failed to load accounts",
       "actionFail": "Operation failed",
       "baseUrlRequired": "Base URL is required",
+      "baseUrlInvalid": "Base URL must be an http/https URL",
+      "apiUrlInvalid": "API URL must be an http/https URL",
       "bearerTokenRequired": "Sign in first to capture Authorization for sub2api",
       "thresholdInvalid": "Threshold must be a finite number >= 0",
+      "autoCheckinTimeInvalid": "Auto check-in time must use HH:MM:SS",
       "createOk": "Account created",
       "updateOk": "Account updated",
       "refreshOk": "Account refreshed",
@@ -374,6 +397,7 @@
       "systemCheckinOk": "System check-in completed",
       "systemCheckinFail": "System check-in failed",
       "pageCheckinUrlRequired": "Please configure page check-in URL first",
+      "pageCheckinUrlInvalid": "Page check-in URL must be an http/https URL",
       "manualCheckinOk": "{{name}} check-in completed",
       "deleteOk": "Account deleted",
       "deleteFail": "Failed to delete account",
@@ -413,7 +437,8 @@
         "estimatedCost": "Official Credits",
         "actualSpend": "Estimated Cost",
         "avgLatency": "Avg Duration"
-      }
+      },
+      "empty": "No channel statistics"
     },
     "toast": {
       "loadFail": "Failed to load"
@@ -423,15 +448,9 @@
     "title": "Request Details",
     "filters": {
       "all": "All",
-      "dateRange": "Date range",
-      "selectDateRange": "Select date range",
-      "terminal": "Terminal",
       "channel": "Channel",
       "model": "Model",
-      "modelPlaceholder": "Fuzzy match",
       "dimension": "Request ID",
-      "dimensionPlaceholder": "Request ID",
-      "status": "Status",
       "success": "Success",
       "failed": "Failed",
       "search": "Search",
@@ -450,11 +469,18 @@
     "cell": {
       "duration": "Duration",
       "ttft": "TTFT",
+      "ttftCompact": "TTFT",
       "input": "In",
       "output": "Out",
       "total": "Total",
       "cacheRead": "Cache read",
-      "cacheWrite": "Cache write"
+      "cacheWrite": "Cache write",
+      "cacheReadCompact": "R",
+      "cacheWriteCompact": "W"
+    },
+    "pagination": {
+      "range": "{{start}}-{{end}} of {{total}}",
+      "pageSize": "{{value}} / page"
     },
     "details": {
       "id": "ID",
@@ -490,29 +516,24 @@
   "settings": {
     "title": "Settings",
     "tabs": {
-      "appearance": "Appearance",
+      "general": "General",
       "channel": "Channel",
       "notifications": "Notifications",
-      "application": "App",
       "chatBridge": "Messaging",
-      "update": "CLI",
+      "cli": "CLI",
       "data": "Data",
       "system": "System"
     },
     "appearance": {
       "title": "Appearance",
-      "subtitle": "Customize the look and feel",
       "theme": "Theme",
       "themeHint": "Choose light, dark, or follow system"
     },
     "language": {
-      "title": "Language",
-      "subtitle": "Switch the display language for UI and chat commands",
       "label": "App language",
       "saveFail": "Failed to save app language"
     },
     "currency": {
-      "title": "Currency",
       "subtitle": "Used for displaying values like Estimated Cost (Official Credits are always calculated in official USD)",
       "label": "Default currency",
       "options": {
@@ -523,7 +544,6 @@
     },
     "channelProtection": {
       "title": "Channel Protection",
-      "subtitle": "Automatically pause channels after repeated failures",
       "enable": "Enable channel protection",
       "enableHint": "When triggered, the channel will be skipped temporarily",
       "windowMinutes": "Detection window",
@@ -538,7 +558,6 @@
     },
     "channelRetry": {
       "title": "Per-channel Retry",
-      "subtitle": "When enabled, each channel can define its own retry count",
       "enable": "Enable per-channel retry",
       "enableHint": "When disabled, each channel is tried only once",
       "saved": "Per-channel retry settings saved",
@@ -546,8 +565,6 @@
     },
     "systemNotifications": {
       "title": "System Notifications",
-      "subtitle": "Control the global system notification switch",
-      "newApiSubtitle": "Manage low-balance and managed-channel alerts for remote accounts",
       "enable": "Enable system notifications",
       "enableHint": "When disabled, no system-level notifications will be sent",
       "lowBalance": "Low-balance alerts",
@@ -563,7 +580,6 @@
     },
     "newApiManaged": {
       "title": "Remote Managed Channels",
-      "subtitle": "Control managed channel change detection and multiplier sync confirmations",
       "missingPrompt": "Managed channel change detection",
       "missingPromptHint": "When enabled, periodically check if remote resources still exist and prompt to disable or delete if missing",
       "syncMultiplier": "Sync channel multipliers",
@@ -575,7 +591,6 @@
     },
     "pricingData": {
       "title": "Pricing Data",
-      "subtitle": "Used for per-log cost calculation and cost stats",
       "status": "Sync status",
       "count": "Models: {{count}}",
       "lastSync": "Last sync: {{time}}",
@@ -592,7 +607,6 @@
     },
     "windowClose": {
       "title": "Window Close",
-      "subtitle": "Choose what happens when you click the window close button",
       "behavior": "On close",
       "behaviorHint": "Ask every time / Minimize to tray / Quit",
       "ask": "Ask every time",
@@ -603,20 +617,17 @@
     },
     "startup": {
       "title": "Launch on Startup",
-      "subtitle": "Start CliSwitch automatically after you log in",
       "enable": "Launch on startup",
       "enableHint": "Adds CliSwitch to your system login items",
       "launchMode": "After launch",
       "launchModeHint": "Choose how the window appears when auto-started",
       "launchShow": "Show main window",
       "launchMinimize": "Minimize to tray",
-      "launchSaved": "Launch mode saved",
       "saved": "Saved",
       "saveFail": "Save failed"
     },
     "cliTools": {
       "title": "CLI Tools",
-      "subtitle": "Install and update Gemini CLI / Claude Code / Codex",
       "refresh": "Refresh",
       "loadFail": "Failed to load CLI status",
       "installedWithVersion": "Installed · {{version}}",
@@ -637,7 +648,6 @@
     },
     "cliProxyConfig": {
       "title": "CLI Proxy Config",
-      "subtitle": "Check whether Claude Code / Codex / Gemini CLI are pointing to CliSwitch, and apply missing items directly",
       "refresh": "Refresh",
       "loadFail": "Failed to load config status",
       "apply": "Apply",
@@ -648,7 +658,6 @@
     },
     "update": {
       "title": "CliSwitch Update",
-      "subtitle": "Check and download new versions (supports auto update)",
       "autoEnable": "Enable auto update",
       "autoEnableHint": "When enabled, periodically checks for updates and shows a prompt",
       "status": "Update status",
@@ -704,7 +713,6 @@
       "levelError": "Error",
       "saved": "Log settings saved",
       "saveFail": "Save failed",
-      "dir": "Log directory",
       "clear": "Clear",
       "clearLogs": "Clear logs",
       "selectRange": "Select date range",
@@ -718,8 +726,8 @@
       "clearFail": "Clear failed"
     },
     "maintenance": {
-      "databaseTitle": "Database",
       "databaseSubtitle": "View size and clear request records",
+      "cleanupTitle": "Cleanup",
       "logsSize": "Log size",
       "logsSizeFail": "Failed to get log size",
       "clearRecords": "Clear records",
@@ -746,7 +754,6 @@
     },
     "serviceInfo": {
       "title": "Service Info",
-      "subtitle": "Service address for CLI tools to connect",
       "host": "Hostname",
       "hostHint": "Hostname / IP address for CLI connection",
       "port": "Port",
@@ -758,7 +765,6 @@
     },
     "chatBridge": {
       "configTitle": "Base Config",
-      "configHint": "Control messaging service and how chat-created projects are handled",
       "platformConfigTitle": "Platform Config",
       "platformConfigHint": "Supports Telegram, Discord, WhatsApp, and Weixin. WhatsApp and Weixin require QR code login.",
       "enable": "Enable Messaging",
@@ -892,7 +898,6 @@
     },
     "compatibility": {
       "title": "Compatibility",
-      "subtitle": "Special endpoints for client compatibility",
       "mockCountTokens": "Mock Anthropic count_tokens",
       "mockCountTokensHint": "Intercept /v1/messages/count_tokens and estimate input_tokens locally",
       "saved": "Saved",
@@ -900,7 +905,6 @@
     },
     "about": {
       "title": "About",
-      "subtitle": "App version and system info",
       "appName": "App name",
       "version": "Version",
       "backendStatus": "Backend status",
