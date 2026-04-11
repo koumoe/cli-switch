@@ -67,6 +67,27 @@ function buildMonthDays(startMs: number, end: Date): TrendChartDay[] {
   return out;
 }
 
+const trendPalette = [
+  "oklch(var(--chart-1))",
+  "oklch(var(--chart-2))",
+  "oklch(var(--chart-3))",
+  "oklch(var(--chart-4))",
+  "oklch(var(--chart-5))",
+  "oklch(var(--chart-6))",
+  "oklch(var(--chart-7))",
+  "oklch(var(--chart-8))",
+  "oklch(var(--chart-9))",
+  "oklch(var(--chart-10))",
+] as const;
+
+function pickTrendColor(channelId: string): string {
+  let hash = 0;
+  for (let index = 0; index < channelId.length; index += 1) {
+    hash = (hash * 33 + channelId.charCodeAt(index)) >>> 0;
+  }
+  return trendPalette[hash % trendPalette.length]!;
+}
+
 export function OverviewPage() {
   const { t } = useI18n();
   const { currency } = useCurrency();
@@ -172,14 +193,6 @@ export function OverviewPage() {
   );
 
   const monthTrend = useMemo(() => {
-    const palette = [
-      "oklch(var(--chart-1))",
-      "oklch(var(--chart-2))",
-      "oklch(var(--chart-3))",
-      "oklch(var(--chart-4))",
-      "oklch(var(--chart-5))",
-    ];
-
     const startMs = stats?.start_ms ?? Date.now();
     const days = buildMonthDays(startMs, new Date());
     const byDayChannel = new Map<string, number>();
@@ -206,11 +219,11 @@ export function OverviewPage() {
         (a, b) => b[1].total - a[1].total || a[1].name.localeCompare(b[1].name),
       );
 
-    const series: TrendChartSeries[] = used.map(([channel_id, meta], idx) => ({
+    const series: TrendChartSeries[] = used.map(([channel_id, meta]) => ({
       channel_id,
       name: meta.name,
       protocol: protocolById.get(channel_id) ?? null,
-      color: palette[idx % palette.length]!,
+      color: pickTrendColor(channel_id),
       values: days.map((d) => byDayChannel.get(`${d.key}|${channel_id}`) ?? 0),
     }));
 
@@ -218,6 +231,13 @@ export function OverviewPage() {
   }, [trendItems, stats?.start_ms, channels]);
 
   const protocolLabelText = (protocol: Protocol) => protocolLabel(t, protocol);
+  const trendTooltipLabels = useMemo(
+    () => ({
+      empty: t("overview.trend.tooltip.empty"),
+      omitted: (count: number) => t("overview.trend.tooltip.omitted", { count }),
+    }),
+    [t],
+  );
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -279,6 +299,7 @@ export function OverviewPage() {
                     days={monthTrend.days}
                     series={monthTrend.series}
                     protocolLabel={protocolLabelText}
+                    tooltipLabels={trendTooltipLabels}
                   />
                 )}
               </CardContent>
@@ -286,8 +307,10 @@ export function OverviewPage() {
 
             <Card className="animate-fade-up flex flex-col overflow-hidden [animation-delay:60ms]">
               <CardHeader className="px-4 pt-3.5 pb-2.5">
-                <div className="flex items-center justify-between gap-2">
-                  <CardTitle>{t("overview.distribution.title")}</CardTitle>
+                <div className="flex items-center justify-between gap-3">
+                  <CardTitle className="shrink-0 self-center whitespace-nowrap">
+                    {t("overview.distribution.title")}
+                  </CardTitle>
                   <Tabs
                     value={distributionView}
                     onValueChange={(value) =>
@@ -296,11 +319,17 @@ export function OverviewPage() {
                       )
                     }
                   >
-                    <TabsList>
-                      <TabsTrigger value="percent">
+                    <TabsList className="shrink-0 self-center">
+                      <TabsTrigger
+                        value="percent"
+                        className="text-[10px]"
+                      >
                         {t("overview.distribution.view.percent")}
                       </TabsTrigger>
-                      <TabsTrigger value="usage">
+                      <TabsTrigger
+                        value="usage"
+                        className="text-[10px]"
+                      >
                         {t("overview.distribution.view.usage")}
                       </TabsTrigger>
                     </TabsList>

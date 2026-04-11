@@ -2,7 +2,7 @@ import { Progress } from "@/components/ui";
 import { ProtocolBadge } from "@/components/composed/protocol-badge";
 import type { ChannelStats, Protocol } from "@/types/api";
 
-import { formatNumber, protocolProgressClassName } from "../../lib";
+import { formatNumber } from "../../lib";
 
 type ChannelDistributionProps = {
   stats: ChannelStats[];
@@ -48,7 +48,7 @@ export function ChannelDistribution({
             </div>
             <Progress
               value={percent}
-              indicatorClassName={protocolProgressClassName(item.protocol)}
+              indicatorClassName="bg-primary"
             />
           </div>
         );

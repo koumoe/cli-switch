@@ -2,12 +2,10 @@ import * as React from "react";
 import {
   closestCenter,
   DndContext,
-  DragOverlay,
   PointerSensor,
   useSensor,
   useSensors,
   type DragEndEvent,
-  type DragStartEvent,
 } from "@dnd-kit/core";
 import {
   SortableContext,
@@ -47,7 +45,6 @@ type SortableDataTableProps<TData> = {
   loadingRowCount?: number;
   disabled?: boolean;
   emptyState?: React.ReactNode;
-  renderDragOverlay?: (item: TData) => React.ReactNode;
   className?: string;
   tableClassName?: string;
   containerClassName?: string;
@@ -181,14 +178,11 @@ export function SortableDataTable<TData>({
   loadingRowCount,
   disabled = false,
   emptyState = null,
-  renderDragOverlay,
   className,
   tableClassName,
   containerClassName,
   rowClassName,
 }: SortableDataTableProps<TData>) {
-  const [activeId, setActiveId] = React.useState<string | null>(null);
-
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: 6 },
@@ -207,16 +201,11 @@ export function SortableDataTable<TData>({
     [data, getRowId],
   );
   const leafColumns = table.getVisibleLeafColumns();
-  const activeItem = React.useMemo(
-    () => data.find((item) => getRowId(item) === activeId) ?? null,
-    [activeId, data, getRowId],
-  );
   const showLoadingRows = loading && data.length === 0;
   const skeletonRowCount = Math.min(loadingRowCount ?? 5, 6);
 
   async function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
-    setActiveId(null);
 
     if (!over || active.id === over.id) {
       return;
@@ -234,21 +223,15 @@ export function SortableDataTable<TData>({
     await onReorderCommit?.(next);
   }
 
-  function handleDragStart(event: DragStartEvent) {
-    setActiveId(String(event.active.id));
-  }
-
   return (
     <div className={cn("flex min-h-0 flex-1 flex-col", className)}>
       <div className="flex-1 min-h-0 overflow-hidden">
         <DndContext
           sensors={sensors}
           collisionDetection={closestCenter}
-          onDragStart={handleDragStart}
           onDragEnd={(event) => {
             void handleDragEnd(event);
           }}
-          onDragCancel={() => setActiveId(null)}
         >
           <Table
             containerClassName={cn("overflow-auto", containerClassName)}
@@ -321,12 +304,6 @@ export function SortableDataTable<TData>({
               )}
             </TableBody>
           </Table>
-
-          <DragOverlay>
-            {activeItem && renderDragOverlay
-              ? renderDragOverlay(activeItem)
-              : null}
-          </DragOverlay>
         </DndContext>
       </div>
     </div>

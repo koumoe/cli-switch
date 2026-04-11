@@ -81,6 +81,13 @@ export default defineConfig(() => {
         "@shared-locales": path.resolve(__dirname, "../i18n/locales/shared"),
       },
     },
+    optimizeDeps: {
+      include: [
+        "react-apexcharts/core",
+        "apexcharts/core",
+        "apexcharts/line",
+      ],
+    },
     build: {
       outDir: "dist",
       sourcemap,
@@ -96,6 +103,9 @@ export default defineConfig(() => {
               return "radix-vendor";
             }
             if (isNodeModulePkg(id, "lucide-react")) return "icons-vendor";
+            if (isNodeModulePkg(id, "apexcharts") || isNodeModulePkg(id, "react-apexcharts")) {
+              return "chart-vendor";
+            }
             if (
               isNodeModulePkg(id, "react") ||
               isNodeModulePkg(id, "react-dom") ||

@@ -119,7 +119,11 @@
     },
     "trend": {
       "title": "本月请求趋势",
-      "empty": "暂无趋势数据"
+      "empty": "暂无趋势数据",
+      "tooltip": {
+        "empty": "当前日期暂无请求",
+        "omitted": "其余 {{count}} 个渠道已省略"
+      }
     },
     "distribution": {
       "title": "渠道使用分布",
@@ -476,11 +480,18 @@
     "cell": {
       "duration": "耗时",
       "ttft": "首字",
+      "ttftCompact": "首字",
       "input": "输入",
       "output": "输出",
       "total": "总计",
       "cacheRead": "缓存读",
-      "cacheWrite": "缓存写"
+      "cacheWrite": "缓存写",
+      "cacheReadCompact": "读",
+      "cacheWriteCompact": "写"
+    },
+    "pagination": {
+      "range": "{{start}}-{{end}} / 共 {{total}} 条",
+      "pageSize": "每页 {{value}} 条"
     },
     "details": {
       "id": "ID",

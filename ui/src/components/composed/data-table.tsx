@@ -33,6 +33,9 @@ export type DataTablePagination = {
   pageSize: number;
   total?: number;
   pageSizeOptions?: number[];
+  summary?: React.ReactNode;
+  pageSizeOptionLabel?: (pageSize: number) => React.ReactNode;
+  pageSizeSuffix?: React.ReactNode;
   disabled?: boolean;
   manual?: boolean;
   onPageChange: (page: number) => void;
@@ -261,6 +264,9 @@ export function DataTable<TData>({
           totalPages={totalPages}
           pageSize={pagination.pageSize}
           pageSizeOptions={pagination.pageSizeOptions}
+          summary={pagination.summary}
+          pageSizeOptionLabel={pagination.pageSizeOptionLabel}
+          pageSizeSuffix={pagination.pageSizeSuffix}
           disabled={pagination.disabled}
           onPageChange={pagination.onPageChange}
           onPageSizeChange={pagination.onPageSizeChange}

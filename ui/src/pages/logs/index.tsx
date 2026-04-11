@@ -1,18 +1,18 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import {
-  ChevronLeft,
-  ChevronRight,
-  Eye,
-  RefreshCw,
-  Search,
-} from "lucide-react";
+import { Eye, RefreshCw, Search } from "lucide-react";
+import type { ColumnDef } from "@tanstack/react-table";
 import { parseAsInteger, parseAsString, parseAsStringLiteral, useQueryStates } from "nuqs";
 import { toast } from "sonner";
 
 import { listChannels, usageList } from "@/api";
 import { PageHeader } from "@/components/PageHeader";
 import { PageBody } from "@/components/layout/page-body";
+import { DataTable } from "@/components/composed/data-table";
 import { ProtocolBadge } from "@/components/composed/protocol-badge";
+import {
+  TableIconButton,
+  TableMetricStack,
+} from "@/components/composed/table-primitives";
 import {
   Badge,
   Button,
@@ -44,13 +44,7 @@ import { formatDuration, formatNumber, protocolLabel } from "../../lib";
 
 const LOG_PROTOCOL_OPTIONS = ["all", "openai", "anthropic", "gemini"] as const;
 const LOG_STATUS_OPTIONS = ["all", "success", "failed"] as const;
-const logsTableHeaderClassName =
-  "border-b border-border/70 px-3 py-2 text-center text-[10px] font-semibold uppercase tracking-wider text-muted-foreground whitespace-nowrap";
-const logsTableCellClassName =
-  "border-b border-border/60 px-3 py-2 text-center whitespace-nowrap align-middle";
-const logsTableStateCellClassName =
-  "border-b border-border/60 px-3 py-10 text-center text-xs text-muted-foreground";
-const logsTableSubtextClassName = "font-mono text-[10px] text-muted-foreground";
+const logsTableCellClassName = "whitespace-nowrap";
 
 function formatLogDateParts(ms: number | null | undefined) {
   if (ms === null || ms === undefined) {
@@ -68,18 +62,6 @@ function formatLogDateParts(ms: number | null | undefined) {
     date: `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}`,
     time: `${pad(value.getHours())}:${pad(value.getMinutes())}:${pad(value.getSeconds())}`,
   };
-}
-
-function getVisiblePages(page: number, totalPages: number) {
-  const pages: number[] = [];
-  const start = Math.max(1, page - 1);
-  const end = Math.min(totalPages, start + 2);
-
-  for (let current = Math.max(1, end - 2); current <= end; current += 1) {
-    pages.push(current);
-  }
-
-  return pages;
 }
 
 function DetailRow({
@@ -157,7 +139,6 @@ export function LogsPage() {
     return Math.max(1, Math.ceil(total / pageSize));
   }, [pageSize, total]);
 
-  const visiblePages = useMemo(() => getVisiblePages(page, totalPages), [page, totalPages]);
   const pageSizeOptions = useMemo(
     () => ([10, 20, 50].includes(pageSize) ? [10, 20, 50] : [10, 20, 50, pageSize].sort((a, b) => a - b)),
     [pageSize],
@@ -286,10 +267,169 @@ export function LogsPage() {
   });
 
   const rangeInfo = total === 0
-    ? "0 records"
-    : `${(page - 1) * pageSize + 1}-${Math.min(page * pageSize, total)} of ${formatNumber(total)}`;
+    ? t("common.pagination.total", { total: formatNumber(total) })
+    : t("logs.pagination.range", {
+        start: (page - 1) * pageSize + 1,
+        end: Math.min(page * pageSize, total),
+        total: formatNumber(total),
+      });
 
-  const pageSizeLabel = (value: number) => `${value} / page`;
+  const pageSizeLabel = (value: number) => t("logs.pagination.pageSize", { value });
+  const columns: Array<ColumnDef<UsageEvent>> = [
+    {
+      id: "time",
+      header: t("logs.headers.time"),
+      cell: ({ row }) => {
+        const { date, time } = formatLogDateParts(row.original.ts_ms);
+        return (
+          <TableMetricStack
+            primary={date}
+            secondary={time}
+            primaryClassName="font-mono"
+          />
+        );
+      },
+      meta: {
+        headerClassName: "w-[11%]",
+        cellClassName: logsTableCellClassName,
+        skeletonClassName: "mx-auto w-20",
+      },
+    },
+    {
+      id: "terminal",
+      header: t("logs.headers.terminal"),
+      cell: ({ row }) => (
+        <ProtocolBadge protocol={row.original.protocol}>
+          {protocolLabel(t, row.original.protocol)}
+        </ProtocolBadge>
+      ),
+      meta: {
+        headerClassName: "w-[11%]",
+        cellClassName: logsTableCellClassName,
+        skeletonClassName: "mx-auto w-16",
+      },
+    },
+    {
+      id: "channel",
+      header: t("logs.headers.channel"),
+      cell: ({ row }) => (
+        <span className="inline-block max-w-full truncate align-middle text-xs font-semibold">
+          {channelNames.get(row.original.channel_id) ?? "-"}
+        </span>
+      ),
+      meta: {
+        headerClassName: "w-[10%]",
+        cellClassName: logsTableCellClassName,
+        skeletonClassName: "mx-auto w-24",
+      },
+    },
+    {
+      id: "model",
+      header: t("logs.headers.model"),
+      cell: ({ row }) => (
+        <span className="inline-block max-w-full truncate align-middle text-xs font-medium">
+          {row.original.model ?? "-"}
+        </span>
+      ),
+      meta: {
+        headerClassName: "w-[15%]",
+        cellClassName: logsTableCellClassName,
+        skeletonClassName: "mx-auto w-28",
+      },
+    },
+    {
+      id: "timing",
+      header: t("logs.headers.timing"),
+      cell: ({ row }) => (
+        <TableMetricStack
+          primary={formatDuration(row.original.latency_ms)}
+          secondary={`${t("logs.cell.ttftCompact")} ${formatDuration(row.original.ttft_ms)}`}
+          primaryClassName="font-mono"
+        />
+      ),
+      meta: {
+        headerClassName: "w-[11%]",
+        cellClassName: logsTableCellClassName,
+        skeletonClassName: "mx-auto w-16",
+      },
+    },
+    {
+      id: "tokens",
+      header: t("logs.headers.tokens"),
+      cell: ({ row }) => {
+        const cacheRead = row.original.cache_read_tokens ?? 0;
+        const cacheWrite = row.original.cache_write_tokens ?? 0;
+        const hasCache = cacheRead > 0 || cacheWrite > 0;
+
+        return (
+          <TableMetricStack
+            primary={`${formatNumber(row.original.prompt_tokens)} / ${formatNumber(row.original.completion_tokens)}`}
+            secondary={
+              hasCache
+                ? `${t("logs.cell.cacheWriteCompact")}:${formatNumber(cacheWrite)} ${t("logs.cell.cacheReadCompact")}:${formatNumber(cacheRead)}`
+                : "—"
+            }
+            primaryClassName="font-mono"
+          />
+        );
+      },
+      meta: {
+        headerClassName: "w-[17%]",
+        cellClassName: logsTableCellClassName,
+        skeletonClassName: "mx-auto w-32",
+      },
+    },
+    {
+      id: "cost",
+      header: t("logs.headers.cost"),
+      cell: ({ row }) => (
+        <TableMetricStack
+          primary={formatOfficialCost(row.original.estimated_cost_usd)}
+          secondary={getEstimatedSpend(row.original)}
+          primaryClassName="font-mono"
+        />
+      ),
+      meta: {
+        headerClassName: "w-[11%]",
+        cellClassName: logsTableCellClassName,
+        skeletonClassName: "mx-auto w-20",
+      },
+    },
+    {
+      id: "result",
+      header: t("logs.headers.result"),
+      cell: ({ row }) =>
+        row.original.success ? (
+          <Badge variant="success">{t("logs.filters.success")}</Badge>
+        ) : (
+          <Badge variant="destructive">{t("logs.filters.failed")}</Badge>
+        ),
+      meta: {
+        headerClassName: "w-[7%]",
+        cellClassName: logsTableCellClassName,
+        skeletonClassName: "mx-auto w-14",
+      },
+    },
+    {
+      id: "actions",
+      header: "",
+      cell: ({ row }) => (
+        <TableIconButton
+          aria-label={t("common.details")}
+          onClick={() => {
+            setDetailEventId(row.original.id);
+          }}
+        >
+          <Eye className="h-3 w-3" />
+        </TableIconButton>
+      ),
+      meta: {
+        headerClassName: "w-[7%]",
+        cellClassName: logsTableCellClassName,
+        skeletonClassName: "mx-auto w-7",
+      },
+    },
+  ];
 
   return (
     <>
@@ -459,226 +599,35 @@ export function LogsPage() {
             </Card>
 
             <Card className="animate-fade-up [animation-delay:60ms] flex min-h-0 flex-1 flex-col overflow-hidden">
-              <div className="flex-1 min-h-0 overflow-y-auto">
-                <table className="w-full border-collapse text-[11px]">
-                  <colgroup>
-                    <col style={{ width: "11%" }} />
-                    <col style={{ width: "11%" }} />
-                    <col style={{ width: "10%" }} />
-                    <col style={{ width: "15%" }} />
-                    <col style={{ width: "11%" }} />
-                    <col style={{ width: "17%" }} />
-                    <col style={{ width: "11%" }} />
-                    <col style={{ width: "7%" }} />
-                    <col style={{ width: "7%" }} />
-                  </colgroup>
-                  <thead>
-                    <tr>
-                      {[
-                        t("logs.headers.time"),
-                        t("logs.headers.terminal"),
-                        t("logs.headers.channel"),
-                        t("logs.headers.model"),
-                        t("logs.headers.timing"),
-                        t("logs.headers.tokens"),
-                        t("logs.headers.cost"),
-                        t("logs.headers.result"),
-                        "",
-                      ].map((header) => (
-                        <th
-                          key={header || "actions"}
-                          className={logsTableHeaderClassName}
-                        >
-                          {header}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {loading ? (
-                      <tr>
-                        <td
-                          className={logsTableStateCellClassName}
-                          colSpan={9}
-                        >
-                          <div className="flex items-center justify-center gap-2">
-                            <RefreshCw className="h-4 w-4 animate-spin" />
-                            <span>{t("common.loading")}</span>
-                          </div>
-                        </td>
-                      </tr>
-                    ) : events.length === 0 ? (
-                      <tr>
-                        <td
-                          className={logsTableStateCellClassName}
-                          colSpan={9}
-                        >
-                          {t("logs.empty")}
-                        </td>
-                      </tr>
-                    ) : (
-                      events.map((event) => {
-                        const { date, time } = formatLogDateParts(event.ts_ms);
-                        const cacheRead = event.cache_read_tokens ?? 0;
-                        const cacheWrite = event.cache_write_tokens ?? 0;
-                        const hasCache = cacheRead > 0 || cacheWrite > 0;
-
-                        return (
-                          <tr
-                            key={event.id}
-                            className="hover:bg-secondary/35"
-                          >
-                            <td className={logsTableCellClassName}>
-                              <div className="font-mono">{date}</div>
-                              <div className={logsTableSubtextClassName}>
-                                {time}
-                              </div>
-                            </td>
-                            <td className={logsTableCellClassName}>
-                              <ProtocolBadge protocol={event.protocol}>
-                                {protocolLabel(t, event.protocol)}
-                              </ProtocolBadge>
-                            </td>
-                            <td className={cn(logsTableCellClassName, "text-xs font-semibold")}>
-                              <span className="inline-block max-w-full truncate align-middle">
-                                {channelNames.get(event.channel_id) ?? "-"}
-                              </span>
-                            </td>
-                            <td className={cn(logsTableCellClassName, "text-xs font-medium")}>
-                              <span className="inline-block max-w-full truncate align-middle">
-                                {event.model ?? "-"}
-                              </span>
-                            </td>
-                            <td className={logsTableCellClassName}>
-                              <div className="font-mono">{formatDuration(event.latency_ms)}</div>
-                              <div className={logsTableSubtextClassName}>
-                                TTFT {formatDuration(event.ttft_ms)}
-                              </div>
-                            </td>
-                            <td className={logsTableCellClassName}>
-                              <div className="font-mono">
-                                {formatNumber(event.prompt_tokens)} / {formatNumber(event.completion_tokens)}
-                              </div>
-                              <div className={logsTableSubtextClassName}>
-                                {hasCache
-                                  ? `W:${formatNumber(cacheWrite)} R:${formatNumber(cacheRead)}`
-                                  : "—"}
-                              </div>
-                            </td>
-                            <td className={logsTableCellClassName}>
-                              <div className="font-mono">
-                                {formatOfficialCost(event.estimated_cost_usd)}
-                              </div>
-                              <div className={logsTableSubtextClassName}>
-                                {getEstimatedSpend(event)}
-                              </div>
-                            </td>
-                            <td className={logsTableCellClassName}>
-                              {event.success ? (
-                                <Badge variant="success">OK</Badge>
-                              ) : (
-                                <Badge variant="destructive">Fail</Badge>
-                              )}
-                            </td>
-                            <td className={logsTableCellClassName}>
-                              <Button
-                                aria-label={t("common.details")}
-                                className="h-6 w-6 rounded-sm px-0 py-0"
-                                size="icon"
-                                variant="ghost"
-                                onClick={() => {
-                                  setDetailEventId(event.id);
-                                }}
-                              >
-                                <Eye className="h-3 w-3" />
-                              </Button>
-                            </td>
-                          </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
-              </div>
-
-              <div className="flex shrink-0 items-center justify-between border-t border-border/70 px-3 py-2">
-                <div className="flex items-center gap-3">
-                  <span className="text-[11px] text-muted-foreground">
-                    {rangeInfo}
-                  </span>
-                  <Select
-                    disabled={loading}
-                    value={String(pageSize)}
-                    onValueChange={(value) => {
-                      const next = Number(value);
-                      if (Number.isFinite(next) && next > 0) {
-                        void setSearch({ pageSize: next, page: 1 });
-                      }
-                    }}
-                  >
-                    <SelectTrigger className="h-7 w-[92px] px-2 py-1 text-[11px]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {pageSizeOptions.map((value) => (
-                        <SelectItem key={value} value={String(value)}>
-                          {pageSizeLabel(value)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="flex items-center gap-1">
-                  <Button
-                    aria-label={t("common.pagination.prev")}
-                    disabled={page <= 1 || loading}
-                    className="h-7 w-7 text-muted-foreground hover:text-foreground"
-                    size="icon"
-                    type="button"
-                    variant="outline"
-                    onClick={() => {
-                      void setSearch({ page: Math.max(1, page - 1) });
-                    }}
-                  >
-                    <ChevronLeft className="h-3.5 w-3.5" />
-                  </Button>
-
-                  {visiblePages.map((value) => (
-                    <Button
-                      key={value}
-                      aria-current={value === page ? "page" : undefined}
-                      className={cn(
-                        "h-7 w-7",
-                        value !== page && "text-muted-foreground hover:text-foreground",
-                      )}
-                      disabled={loading}
-                      size="icon"
-                      type="button"
-                      variant={value === page ? "default" : "outline"}
-                      onClick={() => {
-                        void setSearch({ page: value });
-                      }}
-                    >
-                      {value}
-                    </Button>
-                  ))}
-
-                  <Button
-                    aria-label={t("common.pagination.next")}
-                    disabled={page >= totalPages || loading}
-                    className="h-7 w-7 text-muted-foreground hover:text-foreground"
-                    size="icon"
-                    type="button"
-                    variant="outline"
-                    onClick={() => {
-                      void setSearch({ page: Math.min(totalPages, page + 1) });
-                    }}
-                  >
-                    <ChevronRight className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              </div>
+              <DataTable
+                columns={columns}
+                data={events}
+                loading={loading}
+                loadingRowCount={pageSize}
+                getRowId={(row) => row.id}
+                className="min-h-0"
+                tableClassName="table-fixed text-[11px]"
+                containerClassName="h-full overflow-y-auto"
+                emptyState={t("logs.empty")}
+                rowClassName={() => "hover:!bg-secondary/35"}
+                pagination={{
+                  page,
+                  total,
+                  pageSize,
+                  pageSizeOptions,
+                  manual: true,
+                  summary: <span>{rangeInfo}</span>,
+                  pageSizeOptionLabel: pageSizeLabel,
+                  pageSizeSuffix: null,
+                  disabled: loading,
+                  onPageChange: (nextPage) => {
+                    void setSearch({ page: nextPage });
+                  },
+                  onPageSizeChange: (nextPageSize) => {
+                    void setSearch({ pageSize: nextPageSize, page: 1 });
+                  },
+                }}
+              />
             </Card>
           </PageBody>
         </div>
@@ -720,9 +669,13 @@ export function LogsPage() {
                 </DetailRow>
                 <DetailRow label={t("logs.headers.result")}>
                   {detailEvent.success ? (
-                    <Badge variant="success">{detailEvent.http_status ?? 200} OK</Badge>
+                    <Badge variant="success">
+                      {detailEvent.http_status ?? 200} {t("logs.filters.success")}
+                    </Badge>
                   ) : (
-                    <Badge variant="destructive">{detailEvent.http_status ?? "ERR"}</Badge>
+                    <Badge variant="destructive">
+                      {detailEvent.http_status ?? "ERR"} {t("logs.filters.failed")}
+                    </Badge>
                   )}
                 </DetailRow>
                 <DetailRow label={t("logs.cell.duration")}>

@@ -19,6 +19,10 @@ import {
   TabsTrigger,
 } from "@/components/ui";
 import { DataTable } from "@/components/composed/data-table";
+import {
+  TableActionGroup,
+  TableTextActionButton,
+} from "@/components/composed/table-primitives";
 import { PageHeader } from "@/components/PageHeader";
 import { PageBody } from "@/components/layout/page-body";
 import { deletePromptProject } from "@/api";
@@ -209,9 +213,8 @@ export function PromptsPage() {
             <Badge variant="outline">{t("prompts.editor.projectBadge")}</Badge>
           ),
         meta: {
-          headerClassName: "w-24 text-left",
-          cellClassName: "text-left",
-          skeletonClassName: "w-16",
+          headerClassName: "w-24",
+          skeletonClassName: "w-16 mx-auto",
         },
       },
       {
@@ -220,16 +223,22 @@ export function PromptsPage() {
         accessorFn: (row) =>
           row.kind === "global" ? t("prompts.global.title") : row.project.name,
         cell: ({ row }) => (
-          <span className="font-medium">
+          <span
+            className="mx-auto block max-w-[220px] truncate text-center font-medium"
+            title={
+              row.original.kind === "global"
+                ? t("prompts.global.title")
+                : row.original.project.name
+            }
+          >
             {row.original.kind === "global"
               ? t("prompts.global.title")
               : row.original.project.name}
           </span>
         ),
         meta: {
-          headerClassName: "w-48 text-left",
-          cellClassName: "text-left",
-          skeletonClassName: "w-36",
+          headerClassName: "w-48",
+          skeletonClassName: "w-36 mx-auto",
         },
       },
       {
@@ -241,16 +250,14 @@ export function PromptsPage() {
             <span className="text-xs text-muted-foreground">—</span>
           ) : (
             <div
-              className="max-w-[300px] truncate font-mono text-xs text-muted-foreground"
+              className="mx-auto max-w-[300px] truncate text-center font-mono text-xs text-muted-foreground"
               title={row.original.project.path}
             >
               {row.original.project.path}
             </div>
           ),
         meta: {
-          headerClassName: "text-left",
-          cellClassName: "text-left",
-          skeletonClassName: "w-56",
+          skeletonClassName: "w-56 mx-auto",
         },
       },
       {
@@ -258,35 +265,27 @@ export function PromptsPage() {
         header: t("common.actions"),
         cell: ({ row }) =>
           row.original.kind === "global" ? (
-            <div className="flex items-center justify-center gap-1">
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 min-w-20 text-xs"
+            <TableActionGroup>
+              <TableTextActionButton
                 onClick={() => handleEditDocument("global")}
                 title={t("prompts.editor.edit")}
               >
                 {t("prompts.editor.edit")}
-              </Button>
-            </div>
+              </TableTextActionButton>
+            </TableActionGroup>
           ) : (
             (() => {
               const project = row.original.project;
               return (
-                <div className="flex items-center justify-center gap-1">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-8 min-w-20 text-xs"
+                <TableActionGroup>
+                  <TableTextActionButton
                     onClick={() => handleEditDocument("project", project.id)}
                     title={t("prompts.editor.edit")}
                   >
                     {t("prompts.editor.edit")}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-8 min-w-20 border-destructive/40 text-xs text-destructive hover:border-destructive hover:bg-destructive/10 hover:text-destructive"
+                  </TableTextActionButton>
+                  <TableTextActionButton
+                    tone="danger"
                     onClick={() => {
                       setProjectDeleteTarget(project);
                       setProjectDeleteOpen(true);
@@ -294,15 +293,15 @@ export function PromptsPage() {
                     title={t("prompts.actions.deleteProject")}
                   >
                     {t("prompts.actions.deleteProject")}
-                  </Button>
-                </div>
+                  </TableTextActionButton>
+                </TableActionGroup>
               );
             })()
           ),
         meta: {
           headerClassName: "w-52",
           cellClassName: "text-center",
-          skeletonClassName: "w-32 ml-auto",
+          skeletonClassName: "w-32 mx-auto",
         },
       },
     ],

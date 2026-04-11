@@ -3,11 +3,15 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { GripVertical, Link2, Pencil, RefreshCw, Trash2 } from "lucide-react";
 
 import type { RemoteAccount } from "@/types/api";
-import { Badge, Button, Card, CardContent } from "@/components/ui";
+import { Badge, Card, CardContent } from "@/components/ui";
 import {
   SortableDataTable,
   SortableDataTableHandle,
 } from "@/components/composed/sortable-data-table";
+import {
+  TableActionGroup,
+  TableIconButton,
+} from "@/components/composed/table-primitives";
 import { useI18n } from "@/hooks/use-i18n";
 
 import {
@@ -81,7 +85,7 @@ export function AccountsTable({
         accessorKey: "base_url",
         header: t("accounts.table.baseUrl"),
         cell: ({ row }) => (
-          <div className="max-w-[360px] text-left">
+          <div className="mx-auto max-w-[360px] text-center">
             <div className="truncate font-medium" title={row.original.base_url}>
               {row.original.base_url}
             </div>
@@ -94,9 +98,7 @@ export function AccountsTable({
           </div>
         ),
         meta: {
-          headerClassName: "text-left",
-          cellClassName: "text-left",
-          skeletonClassName: "w-56",
+          skeletonClassName: "w-56 mx-auto",
         },
       },
       {
@@ -127,7 +129,7 @@ export function AccountsTable({
           </div>
         ),
         meta: {
-          skeletonClassName: "w-18 ml-auto",
+          skeletonClassName: "w-18 mx-auto",
         },
       },
       {
@@ -197,42 +199,34 @@ export function AccountsTable({
           const canManageRemote = accountHasUserApiCredentials(item);
 
           return (
-            <div className="flex items-center justify-center gap-1">
-              <Button
-                variant="ghost"
-                size="icon"
+            <TableActionGroup>
+              <TableIconButton
                 onClick={() => void onRefreshAccount(item)}
                 disabled={!!refreshing[item.id]}
                 title={t("accounts.actions.refresh")}
               >
                 <RefreshCw className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
+              </TableIconButton>
+              <TableIconButton
                 onClick={() => void onOpenCreateManagedChannelDialog(item)}
                 disabled={!canManageRemote}
                 title={t("accounts.actions.createManaged")}
               >
                 <Link2 className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
+              </TableIconButton>
+              <TableIconButton
                 onClick={() => onOpenEdit(item)}
                 title={t("accounts.actions.edit")}
               >
                 <Pencil className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
+              </TableIconButton>
+              <TableIconButton
                 onClick={() => onOpenDeleteDialog(item)}
                 title={t("accounts.actions.delete")}
               >
                 <Trash2 className="h-4 w-4 text-destructive" />
-              </Button>
-            </div>
+              </TableIconButton>
+            </TableActionGroup>
           );
         },
         meta: {
@@ -271,16 +265,6 @@ export function AccountsTable({
           onReorder={setAccounts}
           onReorderCommit={persistOrder}
           emptyState={t("accounts.table.empty")}
-          renderDragOverlay={(item) => (
-            <div className="min-w-[280px] max-w-[380px] rounded-md border border-border bg-card px-3 py-2 shadow-xl">
-              <div className="text-center text-sm font-semibold">
-                {item.base_url}
-              </div>
-              <div className="mt-1 text-center text-xs text-muted-foreground">
-                {t(`accounts.providers.${item.provider}`)}
-              </div>
-            </div>
-          )}
         />
       </CardContent>
     </Card>

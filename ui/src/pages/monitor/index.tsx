@@ -121,12 +121,16 @@ export function MonitorPage() {
         header: t("monitor.channelStats.headers.channel"),
         enableSorting: true,
         cell: ({ row }) => (
-          <span className="font-medium">{row.original.name}</span>
+          <span
+            className="mx-auto block max-w-[220px] truncate text-center font-medium"
+            title={row.original.name}
+          >
+            {row.original.name}
+          </span>
         ),
         meta: {
-          headerClassName: `${colClass.channel} text-left`,
-          cellClassName: "text-left",
-          skeletonClassName: "w-28",
+          headerClassName: colClass.channel,
+          skeletonClassName: "w-28 mx-auto",
         },
       },
       {
@@ -191,7 +195,7 @@ export function MonitorPage() {
         ),
         meta: {
           headerClassName: colClass.estimatedCost,
-          skeletonClassName: "w-18 ml-auto",
+          skeletonClassName: "w-18 mx-auto",
         },
       },
       {
@@ -223,7 +227,7 @@ export function MonitorPage() {
         },
         meta: {
           headerClassName: colClass.actualSpend,
-          skeletonClassName: "w-18 ml-auto",
+          skeletonClassName: "w-18 mx-auto",
         },
       },
       {

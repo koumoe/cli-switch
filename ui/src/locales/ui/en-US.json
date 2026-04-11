@@ -119,7 +119,11 @@
     },
     "trend": {
       "title": "This Month Request Trend",
-      "empty": "No trend data"
+      "empty": "No trend data",
+      "tooltip": {
+        "empty": "No requests for this day",
+        "omitted": "{{count}} more channels hidden"
+      }
     },
     "distribution": {
       "title": "Channel Usage",
@@ -476,11 +480,18 @@
     "cell": {
       "duration": "Duration",
       "ttft": "TTFT",
+      "ttftCompact": "TTFT",
       "input": "In",
       "output": "Out",
       "total": "Total",
       "cacheRead": "Cache read",
-      "cacheWrite": "Cache write"
+      "cacheWrite": "Cache write",
+      "cacheReadCompact": "R",
+      "cacheWriteCompact": "W"
+    },
+    "pagination": {
+      "range": "{{start}}-{{end}} of {{total}}",
+      "pageSize": "{{value}} / page"
     },
     "details": {
       "id": "ID",

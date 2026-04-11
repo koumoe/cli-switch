@@ -45,6 +45,10 @@ import {
 } from "@/components/ui";
 import { DataTable } from "@/components/composed/data-table";
 import {
+  TableActionGroup,
+  TableIconButton,
+} from "@/components/composed/table-primitives";
+import {
   SortableDataTable,
   SortableDataTableHandle,
 } from "@/components/composed/sortable-data-table";
@@ -489,12 +493,16 @@ export function ChannelsPage() {
         accessorKey: "name",
         header: t("channels.table.name"),
         cell: ({ row }) => (
-          <div className="font-medium text-left">{row.original.name}</div>
+          <div
+            className="mx-auto max-w-[220px] truncate text-center font-medium"
+            title={row.original.name}
+          >
+            {row.original.name}
+          </div>
         ),
         meta: {
-          headerClassName: "w-44 text-left",
-          cellClassName: "text-left",
-          skeletonClassName: "w-28",
+          headerClassName: "w-44",
+          skeletonClassName: "w-28 mx-auto",
         },
       },
       {
@@ -587,19 +595,15 @@ export function ChannelsPage() {
           const effectiveEnabled = channel.enabled && !isAutoDisabled;
 
           return (
-            <div className="flex items-center justify-center gap-1">
-              <Button
-                variant="ghost"
-                size="icon"
+            <TableActionGroup>
+              <TableIconButton
                 onClick={() => void onTest(channel)}
                 disabled={testing[channel.id]}
                 title={t("channels.actions.test")}
               >
                 <TestTube className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
+              </TableIconButton>
+              <TableIconButton
                 onClick={() => void toggleEnabled(channel)}
                 title={
                   effectiveEnabled
@@ -612,24 +616,20 @@ export function ChannelsPage() {
                 ) : (
                   <Power className="h-4 w-4" />
                 )}
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
+              </TableIconButton>
+              <TableIconButton
                 onClick={() => openEdit(channel)}
                 title={t("channels.actions.edit")}
               >
                 <Pencil className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
+              </TableIconButton>
+              <TableIconButton
                 onClick={() => void onDelete(channel)}
                 title={t("channels.actions.delete")}
               >
                 <Trash2 className="h-4 w-4 text-destructive" />
-              </Button>
-            </div>
+              </TableIconButton>
+            </TableActionGroup>
           );
         },
         meta: {
@@ -656,15 +656,6 @@ export function ChannelsPage() {
             }}
             onReorderCommit={(next) => persistOrder(protocol, next)}
             emptyState={t("channels.table.empty")}
-            renderDragOverlay={(channel) => (
-              <div className="min-w-[260px] max-w-[360px] rounded-md border border-border bg-card px-3 py-2 shadow-xl">
-                <div className="text-sm font-semibold">{channel.name}</div>
-                <div className="mt-1 truncate text-xs text-muted-foreground">
-                  {t("channels.table.priority")}: {channel.priority} ·{" "}
-                  {channel.base_url}
-                </div>
-              </div>
-            )}
           />
         </CardContent>
       </Card>
@@ -714,21 +705,19 @@ export function ChannelsPage() {
         id: "channel",
         header: t("channels.autoSort.headers.channel"),
         cell: ({ row }) => (
-          <div className="min-w-0 text-left">
-            <div className="flex min-w-0 items-center gap-2">
-              <span className="truncate">{row.original.channel.name}</span>
-              {!row.original.channel.enabled ? (
-                <Badge variant="outline" className="px-1 py-0 text-[10px]">
-                  {t("common.disabled")}
-                </Badge>
-              ) : null}
-            </div>
+          <div className="mx-auto flex max-w-[260px] min-w-0 flex-col items-center gap-1 text-center">
+            <span className="truncate font-medium">
+              {row.original.channel.name}
+            </span>
+            {!row.original.channel.enabled ? (
+              <Badge variant="outline" className="px-1 py-0 text-[10px]">
+                {t("common.disabled")}
+              </Badge>
+            ) : null}
           </div>
         ),
         meta: {
-          headerClassName: "text-left",
-          cellClassName: "text-left",
-          skeletonClassName: "w-28",
+          skeletonClassName: "w-28 mx-auto",
         },
       },
       {
@@ -743,7 +732,7 @@ export function ChannelsPage() {
         ),
         meta: {
           headerClassName: "w-36",
-          skeletonClassName: "w-12 ml-auto",
+          skeletonClassName: "w-12 mx-auto",
         },
       },
     ],
