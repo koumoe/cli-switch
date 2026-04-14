@@ -10,7 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as SettingsRouteImport } from './routes/settings'
-import { Route as PromptsRouteImport } from './routes/prompts'
+import { Route as ProjectsRouteImport } from './routes/projects'
 import { Route as MonitorRouteImport } from './routes/monitor'
 import { Route as LogsRouteImport } from './routes/logs'
 import { Route as ChannelsRouteImport } from './routes/channels'
@@ -23,9 +23,9 @@ const SettingsRoute = SettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => rootRouteImport,
 } as any)
-const PromptsRoute = PromptsRouteImport.update({
-  id: '/prompts',
-  path: '/prompts',
+const ProjectsRoute = ProjectsRouteImport.update({
+  id: '/projects',
+  path: '/projects',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MonitorRoute = MonitorRouteImport.update({
@@ -66,7 +66,7 @@ export interface FileRoutesByFullPath {
   '/channels': typeof ChannelsRoute
   '/logs': typeof LogsRoute
   '/monitor': typeof MonitorRoute
-  '/prompts': typeof PromptsRoute
+  '/projects': typeof ProjectsRoute
   '/settings': typeof SettingsRouteWithChildren
   '/settings/{-$tab}': typeof SettingsChar123TabChar125Route
 }
@@ -76,7 +76,7 @@ export interface FileRoutesByTo {
   '/channels': typeof ChannelsRoute
   '/logs': typeof LogsRoute
   '/monitor': typeof MonitorRoute
-  '/prompts': typeof PromptsRoute
+  '/projects': typeof ProjectsRoute
   '/settings': typeof SettingsRouteWithChildren
   '/settings/{-$tab}': typeof SettingsChar123TabChar125Route
 }
@@ -87,7 +87,7 @@ export interface FileRoutesById {
   '/channels': typeof ChannelsRoute
   '/logs': typeof LogsRoute
   '/monitor': typeof MonitorRoute
-  '/prompts': typeof PromptsRoute
+  '/projects': typeof ProjectsRoute
   '/settings': typeof SettingsRouteWithChildren
   '/settings/{-$tab}': typeof SettingsChar123TabChar125Route
 }
@@ -99,7 +99,7 @@ export interface FileRouteTypes {
     | '/channels'
     | '/logs'
     | '/monitor'
-    | '/prompts'
+    | '/projects'
     | '/settings'
     | '/settings/{-$tab}'
   fileRoutesByTo: FileRoutesByTo
@@ -109,7 +109,7 @@ export interface FileRouteTypes {
     | '/channels'
     | '/logs'
     | '/monitor'
-    | '/prompts'
+    | '/projects'
     | '/settings'
     | '/settings/{-$tab}'
   id:
@@ -119,7 +119,7 @@ export interface FileRouteTypes {
     | '/channels'
     | '/logs'
     | '/monitor'
-    | '/prompts'
+    | '/projects'
     | '/settings'
     | '/settings/{-$tab}'
   fileRoutesById: FileRoutesById
@@ -130,7 +130,7 @@ export interface RootRouteChildren {
   ChannelsRoute: typeof ChannelsRoute
   LogsRoute: typeof LogsRoute
   MonitorRoute: typeof MonitorRoute
-  PromptsRoute: typeof PromptsRoute
+  ProjectsRoute: typeof ProjectsRoute
   SettingsRoute: typeof SettingsRouteWithChildren
 }
 
@@ -143,11 +143,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/prompts': {
-      id: '/prompts'
-      path: '/prompts'
-      fullPath: '/prompts'
-      preLoaderRoute: typeof PromptsRouteImport
+    '/projects': {
+      id: '/projects'
+      path: '/projects'
+      fullPath: '/projects'
+      preLoaderRoute: typeof ProjectsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/monitor': {
@@ -213,7 +213,7 @@ const rootRouteChildren: RootRouteChildren = {
   ChannelsRoute: ChannelsRoute,
   LogsRoute: LogsRoute,
   MonitorRoute: MonitorRoute,
-  PromptsRoute: PromptsRoute,
+  ProjectsRoute: ProjectsRoute,
   SettingsRoute: SettingsRouteWithChildren,
 }
 export const routeTree = rootRouteImport

@@ -6,15 +6,24 @@ const ROUTER_STATE_KEY = "cliswitch-router-href";
 const ROUTE_PREFIXES = [
   "/channels",
   "/accounts",
-  "/prompts",
+  "/projects",
   "/monitor",
   "/logs",
   "/settings",
 ] as const;
 
+function normalizeLegacyHref(href: string | null | undefined): string | null {
+  if (typeof href !== "string") return null;
+  if (href === "/prompts" || href.startsWith("/prompts/")) {
+    return href.replace(/^\/prompts/, "/projects");
+  }
+  return href;
+}
+
 function isAppHref(href: string | null | undefined): href is string {
   if (typeof href !== "string") return false;
-  const trimmed = href.trim();
+  const trimmed = normalizeLegacyHref(href)?.trim();
+  if (!trimmed) return false;
   if (!trimmed.startsWith("/") || trimmed.startsWith("//")) return false;
 
   const [pathname] = trimmed.split(/[?#]/);
@@ -27,7 +36,7 @@ function isAppHref(href: string | null | undefined): href is string {
 function readPersistedHref(): string | null {
   if (typeof window === "undefined") return null;
   try {
-    return window.localStorage.getItem(ROUTER_STATE_KEY);
+    return normalizeLegacyHref(window.localStorage.getItem(ROUTER_STATE_KEY));
   } catch {
     return null;
   }
@@ -44,7 +53,9 @@ function writePersistedHref(href: string): void {
 
 function readBrowserHref(): string | null {
   if (typeof window === "undefined") return null;
-  const href = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+  const href = normalizeLegacyHref(
+    `${window.location.pathname}${window.location.search}${window.location.hash}`
+  );
   return isAppHref(href) ? href : null;
 }
 

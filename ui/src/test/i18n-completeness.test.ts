@@ -11,7 +11,7 @@ import zhCN from "@/locales/ui/zh-CN.json";
 const HAN_RE = /\p{Script=Han}/u;
 const SOURCE_ROOT = path.resolve(import.meta.dirname, "..");
 const ALLOWED_LITERAL_FILES = new Set([
-  path.resolve(SOURCE_ROOT, "pages/prompts/PromptMarkdownEditor.tsx"),
+  path.resolve(SOURCE_ROOT, "pages/projects/ProjectMarkdownEditor.tsx"),
 ]);
 
 function flattenKeys(value: unknown, prefix = ""): string[] {

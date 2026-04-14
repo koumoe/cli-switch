@@ -12,7 +12,7 @@ mod checkin;
 mod error;
 mod newapi;
 mod pricing;
-mod prompt;
+mod project;
 mod protocol;
 mod remote_account;
 mod remote_group_snapshot;
@@ -61,10 +61,10 @@ pub use pricing::{
     PricingModel, PricingStatus, UpsertPricingModel, pricing_status, search_pricing_models,
     upsert_pricing_models,
 };
-pub use prompt::{
-    DeletePromptDocument, PromptDocument, PromptProject, PromptScope, SavePromptDocument,
-    delete_prompt_document, delete_prompt_project, get_prompt_document, list_prompt_projects,
-    save_prompt_document,
+pub use project::{
+    DeleteProjectDocument, ProjectDocument, ProjectRecord, ProjectScope, SaveProjectDocument,
+    delete_project, delete_project_document, get_project_document, list_projects,
+    save_project_document,
 };
 pub use protocol::Protocol;
 pub(crate) use protocol::normalize_base_url;

@@ -29,7 +29,7 @@ import "@mdxeditor/editor/style.css";
 
 import { useI18n } from "@/hooks/use-i18n";
 
-type PromptMarkdownEditorProps = {
+type ProjectMarkdownEditorProps = {
   value: string;
   placeholder: string;
   disabled?: boolean;
@@ -100,17 +100,17 @@ function interpolate(template: string, values?: Record<string, unknown>) {
   });
 }
 
-export function PromptMarkdownEditor({
+export function ProjectMarkdownEditor({
   value,
   placeholder,
   disabled = false,
   onChange,
-}: PromptMarkdownEditorProps) {
+}: ProjectMarkdownEditorProps) {
   const { locale, t } = useI18n();
   const editorRef = useRef<MDXEditorMethods | null>(null);
   const syncingRef = useRef(false);
   const [overlayContainer, setOverlayContainer] = useState<HTMLDivElement | null>(null);
-  const sourceLabel = t("prompts.editor.sourceLabel");
+  const sourceLabel = t("projects.editor.sourceLabel");
 
   const translation = useMemo<Translation>(() => {
     return (key, defaultValue, interpolations) => {

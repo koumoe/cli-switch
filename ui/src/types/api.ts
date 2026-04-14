@@ -105,9 +105,9 @@ export type CreateChatBridgePairingTokenInput = {
 
 export type CliToolId = "gemini" | "claude" | "codex";
 
-export type PromptScope = "global" | "project";
+export type ProjectScope = "global" | "project";
 
-export type PromptProject = {
+export type ProjectRecord = {
   id: string;
   name: string;
   path: string;
@@ -115,9 +115,9 @@ export type PromptProject = {
   updated_at_ms: number;
 };
 
-export type PromptDocument = {
+export type ProjectDocument = {
   tool: CliToolId;
-  scope: PromptScope;
+  scope: ProjectScope;
   project_id: string | null;
   content_md: string;
   exists: boolean;
@@ -125,23 +125,23 @@ export type PromptDocument = {
   updated_at_ms: number | null;
 };
 
-export type GetPromptDocumentQuery = {
+export type GetProjectDocumentQuery = {
   tool: CliToolId;
-  scope: PromptScope;
+  scope: ProjectScope;
   project_id?: string | null;
 };
 
-export type SavePromptDocumentInput = {
+export type SaveProjectDocumentInput = {
   tool: CliToolId;
-  scope: PromptScope;
+  scope: ProjectScope;
   project_id?: string | null;
   content_md: string;
   expected_updated_at_ms?: number | null;
 };
 
-export type DeletePromptDocumentInput = {
+export type DeleteProjectDocumentInput = {
   tool: CliToolId;
-  scope: PromptScope;
+  scope: ProjectScope;
   project_id?: string | null;
   expected_updated_at_ms?: number | null;
 };

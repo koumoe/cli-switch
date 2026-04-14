@@ -28,9 +28,9 @@ import type {
   CreateRemoteManagedChannelResponse,
   DbSize,
   DeleteChannelInput,
-  DeletePromptDocumentInput,
+  DeleteProjectDocumentInput,
   DeleteRemoteAccountInput,
-  GetPromptDocumentQuery,
+  GetProjectDocumentQuery,
   Health,
   InstallCliToolResponse,
   LogsSize,
@@ -39,8 +39,8 @@ import type {
   PricingModel,
   PricingStatus,
   PricingSyncResponse,
-  PromptDocument,
-  PromptProject,
+  ProjectDocument,
+  ProjectRecord,
   Protocol,
   RemoteAccount,
   RemoteAccountCheckinsToday,
@@ -48,7 +48,7 @@ import type {
   RemoteAccountSystemCheckinResult,
   RemoteGroupOption,
   RemoteKey,
-  SavePromptDocumentInput,
+  SaveProjectDocumentInput,
   StatsChannels,
   StatsQuery,
   StatsSummary,
@@ -254,32 +254,38 @@ export function pickFolder(input: PickFolderInput = {}): Promise<PickFolderRespo
   return http<PickFolderResponse>("POST", "/api/system/pick_folder", input);
 }
 
-export function listPromptProjects(tool: CliToolId): Promise<PromptProject[]> {
+export function listProjects(tool: CliToolId): Promise<ProjectRecord[]> {
   const p = new URLSearchParams();
   p.set("tool", tool);
-  return http<PromptProject[]>("GET", `/api/prompts/projects?${p.toString()}`);
+  return http<ProjectRecord[]>("GET", `/api/projects?${p.toString()}`);
 }
 
-export function deletePromptProject(tool: CliToolId, projectId: string): Promise<void> {
+export function deleteProject(tool: CliToolId, projectId: string): Promise<void> {
   const p = new URLSearchParams();
   p.set("tool", tool);
   p.set("project_id", projectId);
-  return http<void>("DELETE", `/api/prompts/projects?${p.toString()}`);
+  return http<void>("DELETE", `/api/projects?${p.toString()}`);
 }
 
-export function getPromptDocument(query: GetPromptDocumentQuery): Promise<PromptDocument> {
+export function getProjectDocument(
+  query: GetProjectDocumentQuery
+): Promise<ProjectDocument> {
   const p = new URLSearchParams();
   p.set("tool", query.tool);
   p.set("scope", query.scope);
   if (query.project_id) p.set("project_id", query.project_id);
-  return http<PromptDocument>("GET", `/api/prompts/document?${p.toString()}`);
+  return http<ProjectDocument>("GET", `/api/projects/document?${p.toString()}`);
 }
 
-export function savePromptDocument(input: SavePromptDocumentInput): Promise<PromptDocument> {
-  return http<PromptDocument>("PUT", "/api/prompts/document", input);
+export function saveProjectDocument(
+  input: SaveProjectDocumentInput
+): Promise<ProjectDocument> {
+  return http<ProjectDocument>("PUT", "/api/projects/document", input);
 }
 
-export function deletePromptDocument(input: DeletePromptDocumentInput): Promise<void> {
+export function deleteProjectDocument(
+  input: DeleteProjectDocumentInput
+): Promise<void> {
   const p = new URLSearchParams();
   p.set("tool", input.tool);
   p.set("scope", input.scope);
@@ -287,7 +293,7 @@ export function deletePromptDocument(input: DeletePromptDocumentInput): Promise<
   if (input.expected_updated_at_ms !== undefined && input.expected_updated_at_ms !== null) {
     p.set("expected_updated_at_ms", String(input.expected_updated_at_ms));
   }
-  return http<void>("DELETE", `/api/prompts/document?${p.toString()}`);
+  return http<void>("DELETE", `/api/projects/document?${p.toString()}`);
 }
 
 export function listChannels(): Promise<Channel[]> {

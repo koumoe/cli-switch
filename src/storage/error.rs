@@ -24,14 +24,14 @@ pub enum StorageError {
     #[error("remote account reorder mismatch: {reason}")]
     RemoteAccountReorderMismatch { reason: &'static str },
 
-    #[error("prompt project not found: {project_id}")]
-    PromptProjectNotFound { project_id: String },
+    #[error("project not found: {project_id}")]
+    ProjectNotFound { project_id: String },
 
-    #[error("prompt document not found")]
-    PromptDocumentNotFound,
+    #[error("project document not found")]
+    ProjectDocumentNotFound,
 
-    #[error("prompt document too large: actual={actual_bytes} max={max_bytes}")]
-    PromptDocumentTooLarge {
+    #[error("project document too large: actual={actual_bytes} max={max_bytes}")]
+    ProjectDocumentTooLarge {
         actual_bytes: usize,
         max_bytes: usize,
     },
@@ -72,9 +72,9 @@ pub enum StorageError {
     ChatProjectPathNotFound { path: String },
 
     #[error(
-        "prompt document version conflict: expected={expected_updated_at_ms:?} current={current_updated_at_ms:?}"
+        "project document version conflict: expected={expected_updated_at_ms:?} current={current_updated_at_ms:?}"
     )]
-    PromptDocumentVersionConflict {
+    ProjectDocumentVersionConflict {
         expected_updated_at_ms: Option<i64>,
         current_updated_at_ms: Option<i64>,
     },

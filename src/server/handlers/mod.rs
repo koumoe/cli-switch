@@ -6,7 +6,7 @@ pub(super) mod health;
 pub(super) mod maintenance;
 pub(super) mod newapi;
 pub(super) mod pricing;
-pub(super) mod prompt;
+pub(super) mod project;
 pub(super) mod proxy;
 pub(super) mod remote;
 pub(super) mod settings;
@@ -32,9 +32,9 @@ pub(super) use chat_bridge_whatsapp::{
 pub(super) use health::health;
 pub(super) use maintenance::{db_size, frontend_log_ingest, logs_clear, logs_size, records_clear};
 pub(super) use pricing::{pricing_models, pricing_status, pricing_sync};
-pub(super) use prompt::{
-    delete_prompt_document, delete_prompt_project, get_prompt_document, list_prompt_projects,
-    save_prompt_document,
+pub(super) use project::{
+    delete_project, delete_project_document, get_project_document, list_projects,
+    save_project_document,
 };
 pub(super) use proxy::{proxy_anthropic, proxy_gemini, proxy_openai};
 pub(super) use remote::{

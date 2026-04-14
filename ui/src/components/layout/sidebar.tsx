@@ -19,7 +19,7 @@ export type SidebarRoute =
   | "overview"
   | "channels"
   | "accounts"
-  | "prompts"
+  | "projects"
   | "monitor"
   | "logs"
   | "settings";
@@ -28,7 +28,7 @@ type SidebarPath =
   | "/"
   | "/channels"
   | "/accounts"
-  | "/prompts"
+  | "/projects"
   | "/monitor"
   | "/logs"
   | "/settings";
@@ -41,7 +41,7 @@ const NAV_ITEMS: Array<{
   { route: "overview", labelKey: "nav.overview", icon: LayoutGrid },
   { route: "channels", labelKey: "nav.channels", icon: Radio },
   { route: "accounts", labelKey: "nav.accounts", icon: User },
-  { route: "prompts", labelKey: "nav.prompts", icon: FileText },
+  { route: "projects", labelKey: "nav.projects", icon: FileText },
   { route: "monitor", labelKey: "nav.monitor", icon: Activity },
   { route: "logs", labelKey: "nav.logs", icon: ScrollText },
   { route: "settings", labelKey: "nav.settings", icon: Settings },

@@ -46,9 +46,9 @@ impl ProjectStore {
         db_path: PathBuf,
     ) -> anyhow::Result<Vec<AggregatedProject>> {
         let (claude, codex, gemini, known) = tokio::join!(
-            storage::list_prompt_projects(db_path.clone(), CliToolId::Claude),
-            storage::list_prompt_projects(db_path.clone(), CliToolId::Codex),
-            storage::list_prompt_projects(db_path.clone(), CliToolId::Gemini),
+            storage::list_projects(db_path.clone(), CliToolId::Claude),
+            storage::list_projects(db_path.clone(), CliToolId::Codex),
+            storage::list_projects(db_path.clone(), CliToolId::Gemini),
             storage::list_bridge_known_projects(db_path),
         );
 

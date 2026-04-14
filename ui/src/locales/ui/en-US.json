@@ -7,7 +7,7 @@
     "overview": "Overview",
     "channels": "Channel Management",
     "accounts": "Account Management",
-    "prompts": "Project Management",
+    "projects": "Project Management",
     "monitor": "Channel Statistics",
     "logs": "Request Details",
     "settings": "Settings"
@@ -53,42 +53,41 @@
       "next": "Next"
     }
   },
-  "prompts": {
+  "projects": {
     "title": "Project Management",
-    "tabs": {
+    "tools": {
       "codex": "Codex",
       "claude": "Claude Code",
       "gemini": "Gemini CLI"
     },
-    "sidebar": {
-      "title": "Type"
-    },
     "global": {
-      "title": "Global Prompt"
+      "title": "Global Prompt",
+      "actionsLabel": "Global Prompt"
     },
-    "projects": {
-      "empty": "No projects discovered from {{tool}} yet. Open a project in that CLI first, then come back to edit it.",
+    "table": {
+      "empty": "No projects discovered from any CLI yet. Open a project in a supported CLI first, then come back to manage it.",
       "name": "Project Name",
       "path": "Project Path"
     },
     "editor": {
       "placeholder": "# Write your Markdown prompt here",
-      "edit": "Edit Prompt",
       "save": "Save Prompt",
       "unsavedConfirm": "You have unsaved changes. Discard them?",
       "globalBadge": "Global",
       "projectBadge": "Project",
       "sourceLabel": "Markdown Source",
-      "noSelection": "No prompt selected",
+      "noSelection": "No project selected",
       "size": "Size: {{current}} / {{max}}"
     },
     "actions": {
+      "editDocument": "Edit {{tool}} prompt",
+      "editGlobal": "Edit {{tool}} global prompt",
       "deleteDocument": "Delete Prompt File",
       "deleteProject": "Delete Project"
     },
     "projectDeleteDialog": {
       "title": "Delete Project",
-      "description": "Delete project \"{{name}}\"? This keeps the project folder and only removes CLI session discovery records."
+      "description": "Delete project \"{{name}}\"? This keeps the project folder and only removes discovered CLI records and sessions."
     },
     "documentDeleteDialog": {
       "title": "Delete Prompt File",
@@ -99,7 +98,8 @@
       "deleteDocumentFail": "Failed to delete prompt file",
       "projectDeleted": "Deleted project {{name}}",
       "deleteProjectFail": "Failed to delete project",
-      "loadProjectsFail": "Failed to load projects",
+      "deleteProjectPartialFail": "Project deletion was only partially completed",
+      "loadProjectsFail": "Failed to load project list",
       "loadDocumentFail": "Failed to load prompt",
       "documentSaved": "Prompt saved",
       "saveDocumentFail": "Failed to save prompt"
