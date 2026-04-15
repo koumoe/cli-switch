@@ -12,17 +12,9 @@ const ROUTE_PREFIXES = [
   "/settings",
 ] as const;
 
-function normalizeLegacyHref(href: string | null | undefined): string | null {
-  if (typeof href !== "string") return null;
-  if (href === "/prompts" || href.startsWith("/prompts/")) {
-    return href.replace(/^\/prompts/, "/projects");
-  }
-  return href;
-}
-
 function isAppHref(href: string | null | undefined): href is string {
   if (typeof href !== "string") return false;
-  const trimmed = normalizeLegacyHref(href)?.trim();
+  const trimmed = href.trim();
   if (!trimmed) return false;
   if (!trimmed.startsWith("/") || trimmed.startsWith("//")) return false;
 
@@ -36,7 +28,7 @@ function isAppHref(href: string | null | undefined): href is string {
 function readPersistedHref(): string | null {
   if (typeof window === "undefined") return null;
   try {
-    return normalizeLegacyHref(window.localStorage.getItem(ROUTER_STATE_KEY));
+    return window.localStorage.getItem(ROUTER_STATE_KEY);
   } catch {
     return null;
   }
@@ -53,9 +45,7 @@ function writePersistedHref(href: string): void {
 
 function readBrowserHref(): string | null {
   if (typeof window === "undefined") return null;
-  const href = normalizeLegacyHref(
-    `${window.location.pathname}${window.location.search}${window.location.hash}`
-  );
+  const href = `${window.location.pathname}${window.location.search}${window.location.hash}`;
   return isAppHref(href) ? href : null;
 }
 

@@ -61,8 +61,8 @@
       "gemini": "Gemini CLI"
     },
     "global": {
-      "title": "全局提示词",
-      "actionsLabel": "全局提示词"
+      "title": "全局文档",
+      "actionsLabel": "全局文档"
     },
     "table": {
       "empty": "尚未从任何 CLI 发现项目，请先在对应 CLI 中打开过项目后再回来管理。",
@@ -70,8 +70,8 @@
       "path": "项目路径"
     },
     "editor": {
-      "placeholder": "# 在这里编写 Markdown 提示词",
-      "save": "保存提示词",
+      "placeholder": "# 在这里编写项目 Markdown 文档",
+      "save": "保存项目文档",
       "unsavedConfirm": "当前有未保存修改，确认放弃吗？",
       "globalBadge": "全局",
       "projectBadge": "项目",
@@ -80,9 +80,9 @@
       "size": "内容大小：{{current}} / {{max}}"
     },
     "actions": {
-      "editDocument": "编辑 {{tool}} 提示词",
-      "editGlobal": "编辑 {{tool}} 全局提示词",
-      "deleteDocument": "删除提示词文件",
+      "editDocument": "编辑 {{tool}} 项目文档",
+      "editGlobal": "编辑 {{tool}} 全局文档",
+      "deleteDocument": "删除项目文档",
       "deleteProject": "删除项目"
     },
     "projectDeleteDialog": {
@@ -90,19 +90,19 @@
       "description": "确定删除项目“{{name}}”吗？不会删除项目文件夹，只会清理已发现的 CLI 记录和 session。"
     },
     "documentDeleteDialog": {
-      "title": "删除提示词文件",
-      "description": "确定删除“{{name}}”当前提示词文件吗？此操作不可撤销。"
+      "title": "删除项目文档",
+      "description": "确定删除“{{name}}”当前项目文档吗？此操作不可撤销。"
     },
     "toast": {
-      "documentDeleted": "提示词文件已删除",
-      "deleteDocumentFail": "删除提示词文件失败",
+      "documentDeleted": "项目文档已删除",
+      "deleteDocumentFail": "删除项目文档失败",
       "projectDeleted": "已删除项目 {{name}}",
       "deleteProjectFail": "删除项目失败",
       "deleteProjectPartialFail": "项目删除未完全成功",
       "loadProjectsFail": "加载项目列表失败",
-      "loadDocumentFail": "加载提示词失败",
-      "documentSaved": "提示词已保存",
-      "saveDocumentFail": "保存提示词失败"
+      "loadDocumentFail": "加载项目文档失败",
+      "documentSaved": "项目文档已保存",
+      "saveDocumentFail": "保存项目文档失败"
     }
   },
   "overview": {

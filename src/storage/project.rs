@@ -14,9 +14,9 @@ use super::StorageError;
 
 pub const PROJECT_DOCUMENT_MAX_BYTES: usize = 256 * 1024;
 
-const CLAUDE_PROMPT_FILENAME: &str = "CLAUDE.md";
-const CODEX_PROMPT_FILENAME: &str = "AGENTS.md";
-const GEMINI_PROMPT_FILENAME: &str = "GEMINI.md";
+const CLAUDE_PROJECT_DOCUMENT_FILENAME: &str = "CLAUDE.md";
+const CODEX_PROJECT_DOCUMENT_FILENAME: &str = "AGENTS.md";
+const GEMINI_PROJECT_DOCUMENT_FILENAME: &str = "GEMINI.md";
 const SESSION_SCAN_MAX_LINES: usize = 16;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -101,17 +101,17 @@ fn gemini_home_dir() -> anyhow::Result<PathBuf> {
 
 fn tool_project_document_filename(tool: CliToolId) -> &'static str {
     match tool {
-        CliToolId::Claude => CLAUDE_PROMPT_FILENAME,
-        CliToolId::Codex => CODEX_PROMPT_FILENAME,
-        CliToolId::Gemini => GEMINI_PROMPT_FILENAME,
+        CliToolId::Claude => CLAUDE_PROJECT_DOCUMENT_FILENAME,
+        CliToolId::Codex => CODEX_PROJECT_DOCUMENT_FILENAME,
+        CliToolId::Gemini => GEMINI_PROJECT_DOCUMENT_FILENAME,
     }
 }
 
 fn global_project_document_path(tool: CliToolId) -> anyhow::Result<PathBuf> {
     match tool {
-        CliToolId::Claude => Ok(claude_home_dir()?.join(CLAUDE_PROMPT_FILENAME)),
-        CliToolId::Codex => Ok(codex_home_dir()?.join(CODEX_PROMPT_FILENAME)),
-        CliToolId::Gemini => Ok(gemini_home_dir()?.join(GEMINI_PROMPT_FILENAME)),
+        CliToolId::Claude => Ok(claude_home_dir()?.join(CLAUDE_PROJECT_DOCUMENT_FILENAME)),
+        CliToolId::Codex => Ok(codex_home_dir()?.join(CODEX_PROJECT_DOCUMENT_FILENAME)),
+        CliToolId::Gemini => Ok(gemini_home_dir()?.join(GEMINI_PROJECT_DOCUMENT_FILENAME)),
     }
 }
 
@@ -735,7 +735,7 @@ mod tests {
 
     fn temp_dir(name: &str) -> PathBuf {
         let path =
-            std::env::temp_dir().join(format!("cliswitch-prompt-{}-{}", name, std::process::id()));
+            std::env::temp_dir().join(format!("cliswitch-project-{}-{}", name, std::process::id()));
         let _ = fs::remove_dir_all(&path);
         fs::create_dir_all(&path).unwrap();
         path
@@ -1032,7 +1032,7 @@ mod tests {
         fs::create_dir_all(&sessions_root).unwrap();
         fs::write(repo_root.join(".git"), "gitdir: /tmp/worktree").unwrap();
         fs::write(other_root.join(".git"), "gitdir: /tmp/worktree").unwrap();
-        fs::write(repo_root.join("AGENTS.md"), "# prompt").unwrap();
+        fs::write(repo_root.join("AGENTS.md"), "# project").unwrap();
 
         let target_session = sessions_root.join("target.jsonl");
         let other_session = sessions_root.join("other.jsonl");
@@ -1096,7 +1096,7 @@ mod tests {
         fs::create_dir_all(&projects_root).unwrap();
         fs::write(repo_root.join(".git"), "gitdir: /tmp/worktree").unwrap();
         fs::write(other_root.join(".git"), "gitdir: /tmp/worktree").unwrap();
-        fs::write(repo_root.join("CLAUDE.md"), "# prompt").unwrap();
+        fs::write(repo_root.join("CLAUDE.md"), "# project").unwrap();
 
         let target_session = projects_root.join("target.jsonl");
         let other_session = projects_root.join("other.jsonl");

@@ -61,8 +61,8 @@
       "gemini": "Gemini CLI"
     },
     "global": {
-      "title": "Global Prompt",
-      "actionsLabel": "Global Prompt"
+      "title": "Global Document",
+      "actionsLabel": "Global Document"
     },
     "table": {
       "empty": "No projects discovered from any CLI yet. Open a project in a supported CLI first, then come back to manage it.",
@@ -70,8 +70,8 @@
       "path": "Project Path"
     },
     "editor": {
-      "placeholder": "# Write your Markdown prompt here",
-      "save": "Save Prompt",
+      "placeholder": "# Write your project document in Markdown here",
+      "save": "Save Project Document",
       "unsavedConfirm": "You have unsaved changes. Discard them?",
       "globalBadge": "Global",
       "projectBadge": "Project",
@@ -80,9 +80,9 @@
       "size": "Size: {{current}} / {{max}}"
     },
     "actions": {
-      "editDocument": "Edit {{tool}} prompt",
-      "editGlobal": "Edit {{tool}} global prompt",
-      "deleteDocument": "Delete Prompt File",
+      "editDocument": "Edit {{tool}} project document",
+      "editGlobal": "Edit {{tool}} global document",
+      "deleteDocument": "Delete Project Document",
       "deleteProject": "Delete Project"
     },
     "projectDeleteDialog": {
@@ -90,19 +90,19 @@
       "description": "Delete project \"{{name}}\"? This keeps the project folder and only removes discovered CLI records and sessions."
     },
     "documentDeleteDialog": {
-      "title": "Delete Prompt File",
-      "description": "Delete the current prompt file for \"{{name}}\"? This cannot be undone."
+      "title": "Delete Project Document",
+      "description": "Delete the current project document for \"{{name}}\"? This cannot be undone."
     },
     "toast": {
-      "documentDeleted": "Prompt file deleted",
-      "deleteDocumentFail": "Failed to delete prompt file",
+      "documentDeleted": "Project document deleted",
+      "deleteDocumentFail": "Failed to delete project document",
       "projectDeleted": "Deleted project {{name}}",
       "deleteProjectFail": "Failed to delete project",
       "deleteProjectPartialFail": "Project deletion was only partially completed",
       "loadProjectsFail": "Failed to load project list",
-      "loadDocumentFail": "Failed to load prompt",
-      "documentSaved": "Prompt saved",
-      "saveDocumentFail": "Failed to save prompt"
+      "loadDocumentFail": "Failed to load project document",
+      "documentSaved": "Project document saved",
+      "saveDocumentFail": "Failed to save project document"
     }
   },
   "overview": {

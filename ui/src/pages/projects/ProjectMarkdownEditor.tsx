@@ -153,19 +153,21 @@ export function ProjectMarkdownEditor({
         spellCheck={false}
         trim={false}
         overlayContainer={overlayContainer ?? undefined}
-        className="prompt-mdx-editor-shell"
-        contentEditableClassName="prompt-mdx-editor-content"
+        className="project-mdx-editor-shell"
+        contentEditableClassName="project-mdx-editor-content"
         translation={translation}
         plugins={[
           toolbarPlugin({
-            toolbarClassName: "prompt-mdx-editor-toolbar",
+            toolbarClassName: "project-mdx-editor-toolbar",
             toolbarContents: () => (
               <>
                 <UndoRedo />
                 <Separator />
                 <DiffSourceToggleWrapper
                   options={["rich-text", "source"]}
-                  SourceToolbar={<span className="prompt-mdx-editor-source-label">{sourceLabel}</span>}
+                  SourceToolbar={
+                    <span className="project-mdx-editor-source-label">{sourceLabel}</span>
+                  }
                 >
                   <>
                     <BlockTypeSelect />
