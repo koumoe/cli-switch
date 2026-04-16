@@ -67,11 +67,11 @@ fn request_endpoint_template(method: &Method, path: &str) -> Option<&'static str
         ("POST", "/api/tools/install") => Some("/api/tools/install"),
         ("GET", "/api/tools/config/status") => Some("/api/tools/config/status"),
         ("GET", "/api/chat_bridge/bindings") => Some("/api/chat_bridge/bindings"),
-        ("GET", "/api/prompts/projects") => Some("/api/prompts/projects"),
-        ("DELETE", "/api/prompts/projects") => Some("/api/prompts/projects"),
-        ("GET", "/api/prompts/document") => Some("/api/prompts/document"),
-        ("PUT", "/api/prompts/document") => Some("/api/prompts/document"),
-        ("DELETE", "/api/prompts/document") => Some("/api/prompts/document"),
+        ("GET", "/api/projects") => Some("/api/projects"),
+        ("DELETE", "/api/projects") => Some("/api/projects"),
+        ("GET", "/api/projects/document") => Some("/api/projects/document"),
+        ("PUT", "/api/projects/document") => Some("/api/projects/document"),
+        ("DELETE", "/api/projects/document") => Some("/api/projects/document"),
         ("POST", "/api/tools/config/apply") => Some("/api/tools/config/apply"),
         ("POST", "/api/chat_bridge/pairing_tokens") => Some("/api/chat_bridge/pairing_tokens"),
         ("GET", "/api/chat_bridge/whatsapp/status") => Some("/api/chat_bridge/whatsapp/status"),
@@ -186,11 +186,11 @@ fn request_purpose(method: &Method, path: &str) -> &'static str {
         ("GET", "/api/chat_bridge/weixin/status") => "handlers::get_chat_bridge_weixin_status",
         ("POST", "/api/chat_bridge/weixin/login") => "handlers::start_chat_bridge_weixin_login",
         ("POST", "/api/chat_bridge/weixin/logout") => "handlers::logout_chat_bridge_weixin",
-        ("GET", "/api/prompts/projects") => "handlers::list_prompt_projects",
-        ("DELETE", "/api/prompts/projects") => "handlers::delete_prompt_project",
-        ("GET", "/api/prompts/document") => "handlers::get_prompt_document",
-        ("PUT", "/api/prompts/document") => "handlers::save_prompt_document",
-        ("DELETE", "/api/prompts/document") => "handlers::delete_prompt_document",
+        ("GET", "/api/projects") => "handlers::list_projects",
+        ("DELETE", "/api/projects") => "handlers::delete_project",
+        ("GET", "/api/projects/document") => "handlers::get_project_document",
+        ("PUT", "/api/projects/document") => "handlers::save_project_document",
+        ("DELETE", "/api/projects/document") => "handlers::delete_project_document",
         ("GET", "/api/channels") => "handlers::list_channels",
         ("POST", "/api/channels") => "handlers::create_channel",
         ("POST", "/api/channels/reorder") => "handlers::reorder_channels",
@@ -363,14 +363,14 @@ fn build_app(state: AppState) -> Router {
             post(handlers::logout_chat_bridge_weixin),
         )
         .route(
-            "/api/prompts/projects",
-            get(handlers::list_prompt_projects).delete(handlers::delete_prompt_project),
+            "/api/projects",
+            get(handlers::list_projects).delete(handlers::delete_project),
         )
         .route(
-            "/api/prompts/document",
-            get(handlers::get_prompt_document)
-                .put(handlers::save_prompt_document)
-                .delete(handlers::delete_prompt_document),
+            "/api/projects/document",
+            get(handlers::get_project_document)
+                .put(handlers::save_project_document)
+                .delete(handlers::delete_project_document),
         )
         .route(
             "/api/channels",

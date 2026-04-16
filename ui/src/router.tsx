@@ -6,7 +6,7 @@ const ROUTER_STATE_KEY = "cliswitch-router-href";
 const ROUTE_PREFIXES = [
   "/channels",
   "/accounts",
-  "/prompts",
+  "/projects",
   "/monitor",
   "/logs",
   "/settings",
@@ -15,6 +15,7 @@ const ROUTE_PREFIXES = [
 function isAppHref(href: string | null | undefined): href is string {
   if (typeof href !== "string") return false;
   const trimmed = href.trim();
+  if (!trimmed) return false;
   if (!trimmed.startsWith("/") || trimmed.startsWith("//")) return false;
 
   const [pathname] = trimmed.split(/[?#]/);

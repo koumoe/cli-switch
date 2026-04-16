@@ -10,25 +10,25 @@ use crate::server::error::{ApiError, map_storage_unit_no_content_err};
 use crate::storage;
 
 #[derive(Debug, Deserialize)]
-pub(in crate::server) struct PromptProjectsQuery {
+pub(in crate::server) struct ProjectsQuery {
     tool: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
-pub(in crate::server) struct DeletePromptProjectQuery {
+pub(in crate::server) struct DeleteProjectQuery {
     tool: Option<String>,
     project_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
-pub(in crate::server) struct PromptDocumentQuery {
+pub(in crate::server) struct ProjectDocumentQuery {
     tool: Option<String>,
     scope: Option<String>,
     project_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
-pub(in crate::server) struct DeletePromptDocumentQuery {
+pub(in crate::server) struct DeleteProjectDocumentQuery {
     tool: Option<String>,
     scope: Option<String>,
     project_id: Option<String>,
@@ -36,7 +36,7 @@ pub(in crate::server) struct DeletePromptDocumentQuery {
 }
 
 #[derive(Debug, Deserialize)]
-pub(in crate::server) struct SavePromptDocumentInput {
+pub(in crate::server) struct SaveProjectDocumentInput {
     tool: String,
     scope: String,
     project_id: Option<String>,
@@ -50,27 +50,27 @@ fn parse_tool(raw: Option<&str>) -> Result<CliToolId, ApiError> {
         Some("claude") => Ok(CliToolId::Claude),
         Some("codex") => Ok(CliToolId::Codex),
         Some(other) => Err(ApiError::bad_request(
-            "prompt_tool_invalid",
-            format!("Invalid prompt tool: {other}"),
+            "project_tool_invalid",
+            format!("Invalid project tool: {other}"),
         )),
         None => Err(ApiError::bad_request(
-            "prompt_tool_required",
-            "Prompt tool is required",
+            "project_tool_required",
+            "Project tool is required",
         )),
     }
 }
 
-fn parse_scope(raw: Option<&str>) -> Result<storage::PromptScope, ApiError> {
+fn parse_scope(raw: Option<&str>) -> Result<storage::ProjectScope, ApiError> {
     match raw.map(str::trim).filter(|value| !value.is_empty()) {
-        Some("global") => Ok(storage::PromptScope::Global),
-        Some("project") => Ok(storage::PromptScope::Project),
+        Some("global") => Ok(storage::ProjectScope::Global),
+        Some("project") => Ok(storage::ProjectScope::Project),
         Some(other) => Err(ApiError::bad_request(
-            "prompt_scope_invalid",
-            format!("Invalid prompt scope: {other}"),
+            "project_scope_invalid",
+            format!("Invalid project scope: {other}"),
         )),
         None => Err(ApiError::bad_request(
-            "prompt_scope_required",
-            "Prompt scope is required",
+            "project_scope_required",
+            "Project scope is required",
         )),
     }
 }
@@ -92,7 +92,7 @@ fn parse_optional_i64(
 }
 
 fn validate_project_id(
-    scope: storage::PromptScope,
+    scope: storage::ProjectScope,
     project_id: Option<String>,
 ) -> Result<Option<String>, ApiError> {
     let project_id = project_id
@@ -100,19 +100,19 @@ fn validate_project_id(
         .filter(|value| !value.is_empty());
 
     match scope {
-        storage::PromptScope::Global => {
+        storage::ProjectScope::Global => {
             if project_id.is_some() {
                 return Err(ApiError::bad_request(
-                    "prompt_document_project_id_forbidden",
-                    "Global prompt does not accept project_id",
+                    "project_document_project_id_forbidden",
+                    "Global project document does not accept project_id",
                 ));
             }
             Ok(None)
         }
-        storage::PromptScope::Project => project_id.map(Some).ok_or_else(|| {
+        storage::ProjectScope::Project => project_id.map(Some).ok_or_else(|| {
             ApiError::bad_request(
-                "prompt_document_project_id_required",
-                "project_id is required for project prompt",
+                "project_document_project_id_required",
+                "project_id is required for project document",
             )
         }),
     }
@@ -122,82 +122,84 @@ fn require_project_id(project_id: Option<String>) -> Result<String, ApiError> {
     project_id
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
-        .ok_or_else(|| {
-            ApiError::bad_request("prompt_project_id_required", "project_id is required")
-        })
+        .ok_or_else(|| ApiError::bad_request("project_id_required", "project_id is required"))
 }
 
-fn map_prompt_storage_error(err: &anyhow::Error) -> Option<ApiError> {
+fn map_project_storage_error(err: &anyhow::Error) -> Option<ApiError> {
     match err.downcast_ref::<storage::StorageError>() {
-        Some(storage::StorageError::PromptProjectNotFound { .. }) => Some(ApiError::not_found(
-            "prompt_project_not_found",
-            "Prompt project not found",
+        Some(storage::StorageError::ProjectNotFound { .. }) => Some(ApiError::not_found(
+            "project_not_found",
+            "Project not found",
         )),
-        Some(storage::StorageError::PromptDocumentNotFound) => Some(ApiError::not_found(
-            "prompt_document_not_found",
-            "Prompt document not found",
+        Some(storage::StorageError::ProjectDocumentNotFound) => Some(ApiError::not_found(
+            "project_document_not_found",
+            "Project document not found",
         )),
-        Some(storage::StorageError::PromptDocumentTooLarge { .. }) => Some(ApiError::bad_request(
-            "prompt_document_too_large",
-            "Prompt document is too large",
+        Some(storage::StorageError::ProjectDocumentTooLarge { .. }) => Some(ApiError::bad_request(
+            "project_document_too_large",
+            "Project document is too large",
         )),
-        Some(storage::StorageError::PromptDocumentVersionConflict { .. }) => {
+        Some(storage::StorageError::ProjectDocumentVersionConflict { .. }) => {
             Some(ApiError::conflict(
-                "prompt_document_version_conflict",
-                "Prompt document was updated by another editor",
+                "project_document_version_conflict",
+                "Project document was updated by another editor",
             ))
         }
         _ => None,
     }
 }
 
-pub(in crate::server) async fn list_prompt_projects(
+pub(in crate::server) async fn list_projects(
     State(state): State<AppState>,
-    Query(query): Query<PromptProjectsQuery>,
+    Query(query): Query<ProjectsQuery>,
 ) -> Result<impl IntoResponse, ApiError> {
     let tool = parse_tool(query.tool.as_deref())?;
-    let items = storage::list_prompt_projects(state.db_path(), tool)
+    let items = storage::list_projects(state.db_path(), tool)
         .await
-        .map_err(|err| map_prompt_storage_error(&err).unwrap_or_else(|| ApiError::Internal(err)))?;
+        .map_err(|err| {
+            map_project_storage_error(&err).unwrap_or_else(|| ApiError::Internal(err))
+        })?;
     Ok(Json(items))
 }
 
-pub(in crate::server) async fn get_prompt_document(
+pub(in crate::server) async fn get_project_document(
     State(state): State<AppState>,
-    Query(query): Query<PromptDocumentQuery>,
+    Query(query): Query<ProjectDocumentQuery>,
 ) -> Result<impl IntoResponse, ApiError> {
     let tool = parse_tool(query.tool.as_deref())?;
     let scope = parse_scope(query.scope.as_deref())?;
     let project_id = validate_project_id(scope, query.project_id)?;
 
-    let doc = storage::get_prompt_document(state.db_path(), tool, scope, project_id)
+    let doc = storage::get_project_document(state.db_path(), tool, scope, project_id)
         .await
-        .map_err(|err| map_prompt_storage_error(&err).unwrap_or_else(|| ApiError::Internal(err)))?;
+        .map_err(|err| {
+            map_project_storage_error(&err).unwrap_or_else(|| ApiError::Internal(err))
+        })?;
     Ok(Json(doc))
 }
 
-pub(in crate::server) async fn delete_prompt_project(
+pub(in crate::server) async fn delete_project(
     State(state): State<AppState>,
-    Query(query): Query<DeletePromptProjectQuery>,
+    Query(query): Query<DeleteProjectQuery>,
 ) -> Result<StatusCode, ApiError> {
     let tool = parse_tool(query.tool.as_deref())?;
     let project_id = require_project_id(query.project_id)?;
 
-    let res = storage::delete_prompt_project(state.db_path(), tool, project_id).await;
-    map_storage_unit_no_content_err(res, map_prompt_storage_error)
+    let res = storage::delete_project(state.db_path(), tool, project_id).await;
+    map_storage_unit_no_content_err(res, map_project_storage_error)
 }
 
-pub(in crate::server) async fn save_prompt_document(
+pub(in crate::server) async fn save_project_document(
     State(state): State<AppState>,
-    Json(input): Json<SavePromptDocumentInput>,
+    Json(input): Json<SaveProjectDocumentInput>,
 ) -> Result<impl IntoResponse, ApiError> {
     let tool = parse_tool(Some(&input.tool))?;
     let scope = parse_scope(Some(&input.scope))?;
     let project_id = validate_project_id(scope, input.project_id)?;
 
-    let doc = storage::save_prompt_document(
+    let doc = storage::save_project_document(
         state.db_path(),
-        storage::SavePromptDocument {
+        storage::SaveProjectDocument {
             tool,
             scope,
             project_id,
@@ -206,14 +208,14 @@ pub(in crate::server) async fn save_prompt_document(
         },
     )
     .await
-    .map_err(|err| map_prompt_storage_error(&err).unwrap_or_else(|| ApiError::Internal(err)))?;
+    .map_err(|err| map_project_storage_error(&err).unwrap_or_else(|| ApiError::Internal(err)))?;
 
     Ok((StatusCode::OK, Json(doc)))
 }
 
-pub(in crate::server) async fn delete_prompt_document(
+pub(in crate::server) async fn delete_project_document(
     State(state): State<AppState>,
-    Query(query): Query<DeletePromptDocumentQuery>,
+    Query(query): Query<DeleteProjectDocumentQuery>,
 ) -> Result<StatusCode, ApiError> {
     let tool = parse_tool(query.tool.as_deref())?;
     let scope = parse_scope(query.scope.as_deref())?;
@@ -221,12 +223,12 @@ pub(in crate::server) async fn delete_prompt_document(
     let expected_updated_at_ms = parse_optional_i64(
         "expected_updated_at_ms",
         query.expected_updated_at_ms,
-        "prompt_document_expected_updated_at_invalid",
+        "project_document_expected_updated_at_invalid",
     )?;
 
-    let res = storage::delete_prompt_document(
+    let res = storage::delete_project_document(
         state.db_path(),
-        storage::DeletePromptDocument {
+        storage::DeleteProjectDocument {
             tool,
             scope,
             project_id,
@@ -235,5 +237,5 @@ pub(in crate::server) async fn delete_prompt_document(
     )
     .await;
 
-    map_storage_unit_no_content_err(res, map_prompt_storage_error)
+    map_storage_unit_no_content_err(res, map_project_storage_error)
 }

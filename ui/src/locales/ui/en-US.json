@@ -7,7 +7,7 @@
     "overview": "Overview",
     "channels": "Channel Management",
     "accounts": "Account Management",
-    "prompts": "Project Management",
+    "projects": "Project Management",
     "monitor": "Channel Statistics",
     "logs": "Request Details",
     "settings": "Settings"
@@ -53,56 +53,56 @@
       "next": "Next"
     }
   },
-  "prompts": {
+  "projects": {
     "title": "Project Management",
-    "tabs": {
+    "tools": {
       "codex": "Codex",
       "claude": "Claude Code",
       "gemini": "Gemini CLI"
     },
-    "sidebar": {
-      "title": "Type"
-    },
     "global": {
-      "title": "Global Prompt"
+      "title": "Global Document",
+      "actionsLabel": "Global Document"
     },
-    "projects": {
-      "empty": "No projects discovered from {{tool}} yet. Open a project in that CLI first, then come back to edit it.",
+    "table": {
+      "empty": "No projects discovered from any CLI yet. Open a project in a supported CLI first, then come back to manage it.",
       "name": "Project Name",
       "path": "Project Path"
     },
     "editor": {
-      "placeholder": "# Write your Markdown prompt here",
-      "edit": "Edit Prompt",
-      "save": "Save Prompt",
+      "placeholder": "# Write your project document in Markdown here",
+      "save": "Save Project Document",
       "unsavedConfirm": "You have unsaved changes. Discard them?",
       "globalBadge": "Global",
       "projectBadge": "Project",
       "sourceLabel": "Markdown Source",
-      "noSelection": "No prompt selected",
+      "noSelection": "No project selected",
       "size": "Size: {{current}} / {{max}}"
     },
     "actions": {
-      "deleteDocument": "Delete Prompt File",
+      "editDocument": "Edit {{tool}} project document",
+      "editGlobal": "Edit {{tool}} global document",
+      "deleteDocument": "Delete Project Document",
       "deleteProject": "Delete Project"
     },
     "projectDeleteDialog": {
       "title": "Delete Project",
-      "description": "Delete project \"{{name}}\"? This keeps the project folder and only removes CLI session discovery records."
+      "description": "Delete project \"{{name}}\"? This keeps the project folder and only removes discovered CLI records and sessions."
     },
     "documentDeleteDialog": {
-      "title": "Delete Prompt File",
-      "description": "Delete the current prompt file for \"{{name}}\"? This cannot be undone."
+      "title": "Delete Project Document",
+      "description": "Delete the current project document for \"{{name}}\"? This cannot be undone."
     },
     "toast": {
-      "documentDeleted": "Prompt file deleted",
-      "deleteDocumentFail": "Failed to delete prompt file",
+      "documentDeleted": "Project document deleted",
+      "deleteDocumentFail": "Failed to delete project document",
       "projectDeleted": "Deleted project {{name}}",
       "deleteProjectFail": "Failed to delete project",
-      "loadProjectsFail": "Failed to load projects",
-      "loadDocumentFail": "Failed to load prompt",
-      "documentSaved": "Prompt saved",
-      "saveDocumentFail": "Failed to save prompt"
+      "deleteProjectPartialFail": "Project deletion was only partially completed",
+      "loadProjectsFail": "Failed to load project list",
+      "loadDocumentFail": "Failed to load project document",
+      "documentSaved": "Project document saved",
+      "saveDocumentFail": "Failed to save project document"
     }
   },
   "overview": {

@@ -1,7 +1,6 @@
-import React, { Suspense, useEffect } from "react";
+import React, { Suspense } from "react";
 import { Save, Trash2 } from "lucide-react";
 
-import type { PromptDocument } from "@/types/api";
 import {
   Badge,
   Button,
@@ -14,60 +13,49 @@ import {
 } from "@/components/ui";
 import { useI18n } from "@/hooks/use-i18n";
 
-import { PROMPT_DOCUMENT_MAX_BYTES, formatBytes } from "./shared";
+import { PROJECT_DOCUMENT_MAX_BYTES, formatBytes } from "./shared";
 
-const PromptMarkdownEditor = React.lazy(() =>
-  import("./PromptMarkdownEditor").then((module) => ({ default: module.PromptMarkdownEditor }))
+const ProjectMarkdownEditor = React.lazy(() =>
+  import("./ProjectMarkdownEditor").then((module) => ({
+    default: module.ProjectMarkdownEditor,
+  }))
 );
 
-type PromptEditorDialogProps = {
+type ProjectEditorDialogProps = {
   open: boolean;
   title: string;
   scopeLabel: string;
   toolLabel: string;
-  document: PromptDocument | null;
   loading: boolean;
-  editorOpen: boolean;
   draftContent: string;
   draftBytes: number;
   saving: boolean;
   deleting: boolean;
   documentExists: boolean;
   onDraftChange: (value: string) => void;
-  onStartEdit: () => void;
   onRequestDelete: () => void;
-  onSave: () => void;
+  onSave: () => void | Promise<void>;
   onClose: () => void;
 };
 
-export function PromptEditorDialog({
+export function ProjectEditorDialog({
   open,
   title,
   scopeLabel,
   toolLabel,
-  document,
   loading,
-  editorOpen,
   draftContent,
   draftBytes,
   saving,
   deleting,
   documentExists,
   onDraftChange,
-  onStartEdit,
   onRequestDelete,
   onSave,
   onClose,
-}: PromptEditorDialogProps) {
+}: ProjectEditorDialogProps) {
   const { t } = useI18n();
-  const overLimit = draftBytes > PROMPT_DOCUMENT_MAX_BYTES;
-
-  // Auto-start edit when document finishes loading
-  useEffect(() => {
-    if (open && !loading && !editorOpen) {
-      onStartEdit();
-    }
-  }, [open, loading]);
+  const overLimit = draftBytes > PROJECT_DOCUMENT_MAX_BYTES;
 
   return (
     <Dialog
@@ -89,9 +77,9 @@ export function PromptEditorDialog({
                   : "ml-1 text-xs text-muted-foreground"
               }
             >
-              {t("prompts.editor.size", {
+              {t("projects.editor.size", {
                 current: formatBytes(draftBytes),
-                max: formatBytes(PROMPT_DOCUMENT_MAX_BYTES),
+                max: formatBytes(PROJECT_DOCUMENT_MAX_BYTES),
               })}
             </span>
           </div>
@@ -110,10 +98,10 @@ export function PromptEditorDialog({
                 </div>
               }
             >
-              <PromptMarkdownEditor
+              <ProjectMarkdownEditor
                 value={draftContent}
                 onChange={onDraftChange}
-                placeholder={t("prompts.editor.placeholder")}
+                placeholder={t("projects.editor.placeholder")}
                 disabled={saving || deleting}
               />
             </Suspense>
@@ -128,7 +116,7 @@ export function PromptEditorDialog({
             disabled={saving || deleting || loading || !documentExists}
           >
             <Trash2 className="h-4 w-4" />
-            {t("prompts.actions.deleteDocument")}
+            {t("projects.actions.deleteDocument")}
           </Button>
           <div className="flex items-center gap-2 self-end sm:self-auto">
             <Button variant="outline" onClick={onClose} disabled={saving || deleting}>
@@ -136,11 +124,11 @@ export function PromptEditorDialog({
             </Button>
             <Button
               className="gap-2"
-              onClick={onSave}
+              onClick={() => void onSave()}
               disabled={saving || deleting || overLimit || loading}
             >
               <Save className="h-4 w-4" />
-              {saving ? "..." : t("prompts.editor.save")}
+              {saving ? "..." : t("projects.editor.save")}
             </Button>
           </div>
         </DialogFooter>

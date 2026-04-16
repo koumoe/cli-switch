@@ -12,22 +12,22 @@ use crate::cli_tools::CliToolId;
 
 use super::StorageError;
 
-pub const PROMPT_DOCUMENT_MAX_BYTES: usize = 256 * 1024;
+pub const PROJECT_DOCUMENT_MAX_BYTES: usize = 256 * 1024;
 
-const CLAUDE_PROMPT_FILENAME: &str = "CLAUDE.md";
-const CODEX_PROMPT_FILENAME: &str = "AGENTS.md";
-const GEMINI_PROMPT_FILENAME: &str = "GEMINI.md";
+const CLAUDE_PROJECT_DOCUMENT_FILENAME: &str = "CLAUDE.md";
+const CODEX_PROJECT_DOCUMENT_FILENAME: &str = "AGENTS.md";
+const GEMINI_PROJECT_DOCUMENT_FILENAME: &str = "GEMINI.md";
 const SESSION_SCAN_MAX_LINES: usize = 16;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub enum PromptScope {
+pub enum ProjectScope {
     Global,
     Project,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PromptProject {
+pub struct ProjectRecord {
     pub id: String,
     pub name: String,
     pub path: String,
@@ -36,9 +36,9 @@ pub struct PromptProject {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PromptDocument {
+pub struct ProjectDocument {
     pub tool: CliToolId,
-    pub scope: PromptScope,
+    pub scope: ProjectScope,
     pub project_id: Option<String>,
     pub content_md: String,
     pub exists: bool,
@@ -47,18 +47,18 @@ pub struct PromptDocument {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-pub struct SavePromptDocument {
+pub struct SaveProjectDocument {
     pub tool: CliToolId,
-    pub scope: PromptScope,
+    pub scope: ProjectScope,
     pub project_id: Option<String>,
     pub content_md: String,
     pub expected_updated_at_ms: Option<i64>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
-pub struct DeletePromptDocument {
+pub struct DeleteProjectDocument {
     pub tool: CliToolId,
-    pub scope: PromptScope,
+    pub scope: ProjectScope,
     pub project_id: Option<String>,
     pub expected_updated_at_ms: Option<i64>,
 }
@@ -70,7 +70,7 @@ struct DiscoveredProject {
 }
 
 #[derive(Debug, Clone)]
-struct PromptFileState {
+struct ProjectFileState {
     content_md: String,
     created_at_ms: i64,
     updated_at_ms: i64,
@@ -99,19 +99,19 @@ fn gemini_home_dir() -> anyhow::Result<PathBuf> {
     Ok(user_home_dir()?.join(".gemini"))
 }
 
-fn tool_prompt_filename(tool: CliToolId) -> &'static str {
+fn tool_project_document_filename(tool: CliToolId) -> &'static str {
     match tool {
-        CliToolId::Claude => CLAUDE_PROMPT_FILENAME,
-        CliToolId::Codex => CODEX_PROMPT_FILENAME,
-        CliToolId::Gemini => GEMINI_PROMPT_FILENAME,
+        CliToolId::Claude => CLAUDE_PROJECT_DOCUMENT_FILENAME,
+        CliToolId::Codex => CODEX_PROJECT_DOCUMENT_FILENAME,
+        CliToolId::Gemini => GEMINI_PROJECT_DOCUMENT_FILENAME,
     }
 }
 
-fn global_prompt_path(tool: CliToolId) -> anyhow::Result<PathBuf> {
+fn global_project_document_path(tool: CliToolId) -> anyhow::Result<PathBuf> {
     match tool {
-        CliToolId::Claude => Ok(claude_home_dir()?.join(CLAUDE_PROMPT_FILENAME)),
-        CliToolId::Codex => Ok(codex_home_dir()?.join(CODEX_PROMPT_FILENAME)),
-        CliToolId::Gemini => Ok(gemini_home_dir()?.join(GEMINI_PROMPT_FILENAME)),
+        CliToolId::Claude => Ok(claude_home_dir()?.join(CLAUDE_PROJECT_DOCUMENT_FILENAME)),
+        CliToolId::Codex => Ok(codex_home_dir()?.join(CODEX_PROJECT_DOCUMENT_FILENAME)),
+        CliToolId::Gemini => Ok(gemini_home_dir()?.join(GEMINI_PROJECT_DOCUMENT_FILENAME)),
     }
 }
 
@@ -171,10 +171,10 @@ fn default_project_name(path: &Path) -> String {
 
 fn validate_document_size(content_md: &str) -> anyhow::Result<()> {
     let actual_bytes = content_md.len();
-    if actual_bytes > PROMPT_DOCUMENT_MAX_BYTES {
-        return Err(StorageError::PromptDocumentTooLarge {
+    if actual_bytes > PROJECT_DOCUMENT_MAX_BYTES {
+        return Err(StorageError::ProjectDocumentTooLarge {
             actual_bytes,
-            max_bytes: PROMPT_DOCUMENT_MAX_BYTES,
+            max_bytes: PROJECT_DOCUMENT_MAX_BYTES,
         }
         .into());
     }
@@ -188,7 +188,7 @@ fn ensure_document_version(
     if existing_updated_at_ms == expected_updated_at_ms {
         return Ok(());
     }
-    Err(StorageError::PromptDocumentVersionConflict {
+    Err(StorageError::ProjectDocumentVersionConflict {
         expected_updated_at_ms,
         current_updated_at_ms: existing_updated_at_ms,
     }
@@ -203,7 +203,7 @@ fn visit_files_recursively(root: &Path, visitor: &mut impl FnMut(&Path)) -> anyh
     let entries = match fs::read_dir(root) {
         Ok(entries) => entries,
         Err(err) => {
-            tracing::warn!(path = %root.display(), err = %err, "failed to read prompt discovery dir");
+            tracing::warn!(path = %root.display(), err = %err, "failed to read project discovery dir");
             return Ok(());
         }
     };
@@ -281,8 +281,8 @@ fn merge_discovered_project(
         return;
     };
 
-    let prompt_path = root.join(tool_prompt_filename(tool));
-    let updated_at_ms = source_updated_at_ms.max(path_modified_ms(&prompt_path).unwrap_or(0));
+    let document_path = root.join(tool_project_document_filename(tool));
+    let updated_at_ms = source_updated_at_ms.max(path_modified_ms(&document_path).unwrap_or(0));
     let path_key = root.to_string_lossy().to_string();
 
     match projects.get_mut(&path_key) {
@@ -496,7 +496,7 @@ fn remove_gemini_project_entries(gemini_root: &Path, target_root: &Path) -> anyh
     remove_files(&marker_files, "Gemini 项目标记文件")
 }
 
-fn sort_prompt_projects(items: &mut [PromptProject]) {
+fn sort_projects(items: &mut [ProjectRecord]) {
     items.sort_by(|left, right| {
         right
             .updated_at_ms
@@ -506,14 +506,14 @@ fn sort_prompt_projects(items: &mut [PromptProject]) {
     });
 }
 
-fn prompt_document_from_file(
+fn project_document_from_file(
     tool: CliToolId,
-    scope: PromptScope,
+    scope: ProjectScope,
     project_id: Option<String>,
-    state: Option<PromptFileState>,
-) -> PromptDocument {
+    state: Option<ProjectFileState>,
+) -> ProjectDocument {
     match state {
-        Some(state) => PromptDocument {
+        Some(state) => ProjectDocument {
             tool,
             scope,
             project_id,
@@ -522,7 +522,7 @@ fn prompt_document_from_file(
             created_at_ms: Some(state.created_at_ms),
             updated_at_ms: Some(state.updated_at_ms),
         },
-        None => PromptDocument {
+        None => ProjectDocument {
             tool,
             scope,
             project_id,
@@ -534,16 +534,16 @@ fn prompt_document_from_file(
     }
 }
 
-fn read_prompt_file(path: &Path) -> anyhow::Result<Option<PromptFileState>> {
+fn read_project_document(path: &Path) -> anyhow::Result<Option<ProjectFileState>> {
     if !path.exists() {
         return Ok(None);
     }
 
     let content_md = fs::read_to_string(path)
-        .with_context(|| format!("读取提示词文件失败：{}", path.display()))?;
+        .with_context(|| format!("读取项目文档失败：{}", path.display()))?;
     let updated_at_ms = path_modified_ms(path).unwrap_or(0);
 
-    Ok(Some(PromptFileState {
+    Ok(Some(ProjectFileState {
         content_md,
         created_at_ms: updated_at_ms,
         updated_at_ms,
@@ -552,7 +552,7 @@ fn read_prompt_file(path: &Path) -> anyhow::Result<Option<PromptFileState>> {
 
 fn resolve_project_root(tool: CliToolId, project_id: &str) -> anyhow::Result<PathBuf> {
     let requested = canonical_project_root(Path::new(project_id)).ok_or_else(|| {
-        StorageError::PromptProjectNotFound {
+        StorageError::ProjectNotFound {
             project_id: project_id.to_string(),
         }
     })?;
@@ -566,52 +566,55 @@ fn resolve_project_root(tool: CliToolId, project_id: &str) -> anyhow::Result<Pat
         return Ok(requested);
     }
 
-    Err(StorageError::PromptProjectNotFound {
+    Err(StorageError::ProjectNotFound {
         project_id: project_id.to_string(),
     }
     .into())
 }
 
-fn resolve_prompt_path(
+fn resolve_project_document_path(
     tool: CliToolId,
-    scope: PromptScope,
+    scope: ProjectScope,
     project_id: Option<String>,
 ) -> anyhow::Result<(PathBuf, Option<String>)> {
     match scope {
-        PromptScope::Global => {
-            anyhow::ensure!(project_id.is_none(), "全局提示词不允许携带 project_id");
-            Ok((global_prompt_path(tool)?, None))
+        ProjectScope::Global => {
+            anyhow::ensure!(project_id.is_none(), "全局项目文档不允许携带 project_id");
+            Ok((global_project_document_path(tool)?, None))
         }
-        PromptScope::Project => {
+        ProjectScope::Project => {
             let project_id = project_id
                 .map(|value| value.trim().to_string())
                 .filter(|value| !value.is_empty())
-                .ok_or_else(|| anyhow::anyhow!("项目提示词缺少 project_id"))?;
+                .ok_or_else(|| anyhow::anyhow!("项目文档缺少 project_id"))?;
             let root = resolve_project_root(tool, &project_id)?;
             let project_id = root.to_string_lossy().to_string();
-            Ok((root.join(tool_prompt_filename(tool)), Some(project_id)))
+            Ok((
+                root.join(tool_project_document_filename(tool)),
+                Some(project_id),
+            ))
         }
     }
 }
 
-async fn run_prompt_io<T, F>(f: F) -> anyhow::Result<T>
+async fn run_project_io<T, F>(f: F) -> anyhow::Result<T>
 where
     T: Send + 'static,
     F: FnOnce() -> anyhow::Result<T> + Send + 'static,
 {
     tokio::task::spawn_blocking(f)
         .await
-        .context("等待 prompt 文件任务失败")?
+        .context("等待项目文档任务失败")?
 }
 
-pub async fn list_prompt_projects(
+pub async fn list_projects(
     _db_path: PathBuf,
     tool: CliToolId,
-) -> anyhow::Result<Vec<PromptProject>> {
-    run_prompt_io(move || {
+) -> anyhow::Result<Vec<ProjectRecord>> {
+    run_project_io(move || {
         let mut items = discover_projects(tool)?
             .into_iter()
-            .map(|item| PromptProject {
+            .map(|item| ProjectRecord {
                 id: item.root.to_string_lossy().to_string(),
                 name: default_project_name(&item.root),
                 path: item.root.to_string_lossy().to_string(),
@@ -620,35 +623,36 @@ pub async fn list_prompt_projects(
             })
             .collect::<Vec<_>>();
 
-        sort_prompt_projects(&mut items);
+        sort_projects(&mut items);
         Ok(items)
     })
     .await
 }
 
-pub async fn get_prompt_document(
+pub async fn get_project_document(
     _db_path: PathBuf,
     tool: CliToolId,
-    scope: PromptScope,
+    scope: ProjectScope,
     project_id: Option<String>,
-) -> anyhow::Result<PromptDocument> {
-    run_prompt_io(move || {
-        let (path, project_id) = resolve_prompt_path(tool, scope, project_id)?;
-        let state = read_prompt_file(&path)?;
-        Ok(prompt_document_from_file(tool, scope, project_id, state))
+) -> anyhow::Result<ProjectDocument> {
+    run_project_io(move || {
+        let (path, project_id) = resolve_project_document_path(tool, scope, project_id)?;
+        let state = read_project_document(&path)?;
+        Ok(project_document_from_file(tool, scope, project_id, state))
     })
     .await
 }
 
-pub async fn save_prompt_document(
+pub async fn save_project_document(
     _db_path: PathBuf,
-    input: SavePromptDocument,
-) -> anyhow::Result<PromptDocument> {
-    run_prompt_io(move || {
+    input: SaveProjectDocument,
+) -> anyhow::Result<ProjectDocument> {
+    run_project_io(move || {
         validate_document_size(&input.content_md)?;
 
-        let (path, project_id) = resolve_prompt_path(input.tool, input.scope, input.project_id)?;
-        let existing = read_prompt_file(&path)?;
+        let (path, project_id) =
+            resolve_project_document_path(input.tool, input.scope, input.project_id)?;
+        let existing = read_project_document(&path)?;
         ensure_document_version(
             existing.as_ref().map(|item| item.updated_at_ms),
             input.expected_updated_at_ms,
@@ -656,14 +660,14 @@ pub async fn save_prompt_document(
 
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)
-                .with_context(|| format!("创建提示词目录失败：{}", parent.display()))?;
+                .with_context(|| format!("创建项目文档目录失败：{}", parent.display()))?;
         }
 
         fs::write(&path, input.content_md.as_bytes())
-            .with_context(|| format!("保存提示词文件失败：{}", path.display()))?;
+            .with_context(|| format!("保存项目文档失败：{}", path.display()))?;
 
-        let saved = read_prompt_file(&path)?.context("提示词保存后读取文件失败")?;
-        Ok(prompt_document_from_file(
+        let saved = read_project_document(&path)?.context("项目文档保存后读取文件失败")?;
+        Ok(project_document_from_file(
             input.tool,
             input.scope,
             project_id,
@@ -673,28 +677,29 @@ pub async fn save_prompt_document(
     .await
 }
 
-pub async fn delete_prompt_document(
+pub async fn delete_project_document(
     _db_path: PathBuf,
-    input: DeletePromptDocument,
+    input: DeleteProjectDocument,
 ) -> anyhow::Result<()> {
-    run_prompt_io(move || {
-        let (path, _project_id) = resolve_prompt_path(input.tool, input.scope, input.project_id)?;
-        let existing = read_prompt_file(&path)?.ok_or(StorageError::PromptDocumentNotFound)?;
+    run_project_io(move || {
+        let (path, _project_id) =
+            resolve_project_document_path(input.tool, input.scope, input.project_id)?;
+        let existing =
+            read_project_document(&path)?.ok_or(StorageError::ProjectDocumentNotFound)?;
         ensure_document_version(Some(existing.updated_at_ms), input.expected_updated_at_ms)?;
 
-        fs::remove_file(&path)
-            .with_context(|| format!("删除提示词文件失败：{}", path.display()))?;
+        fs::remove_file(&path).with_context(|| format!("删除项目文档失败：{}", path.display()))?;
         Ok(())
     })
     .await
 }
 
-pub async fn delete_prompt_project(
+pub async fn delete_project(
     _db_path: PathBuf,
     tool: CliToolId,
     project_id: String,
 ) -> anyhow::Result<()> {
-    run_prompt_io(move || {
+    run_project_io(move || {
         let target_root = resolve_project_root(tool, &project_id)?;
 
         match tool {
@@ -730,7 +735,7 @@ mod tests {
 
     fn temp_dir(name: &str) -> PathBuf {
         let path =
-            std::env::temp_dir().join(format!("cliswitch-prompt-{}-{}", name, std::process::id()));
+            std::env::temp_dir().join(format!("cliswitch-project-{}-{}", name, std::process::id()));
         let _ = fs::remove_dir_all(&path);
         fs::create_dir_all(&path).unwrap();
         path
@@ -901,19 +906,19 @@ mod tests {
     }
 
     #[test]
-    fn save_prompt_document_rejects_oversized_content() {
+    fn save_project_document_rejects_oversized_content() {
         let dir = temp_dir("too-large");
 
         {
             let _env = ScopedEnvVar::set_path("CODEX_HOME", &dir);
             run_async_test(async {
-                let err = save_prompt_document(
+                let err = save_project_document(
                     PathBuf::new(),
-                    SavePromptDocument {
+                    SaveProjectDocument {
                         tool: CliToolId::Codex,
-                        scope: PromptScope::Global,
+                        scope: ProjectScope::Global,
                         project_id: None,
-                        content_md: "a".repeat(PROMPT_DOCUMENT_MAX_BYTES + 1),
+                        content_md: "a".repeat(PROJECT_DOCUMENT_MAX_BYTES + 1),
                         expected_updated_at_ms: None,
                     },
                 )
@@ -922,7 +927,7 @@ mod tests {
 
                 assert!(matches!(
                     err.downcast_ref::<StorageError>(),
-                    Some(StorageError::PromptDocumentTooLarge { .. })
+                    Some(StorageError::ProjectDocumentTooLarge { .. })
                 ));
             });
         }
@@ -931,17 +936,17 @@ mod tests {
     }
 
     #[test]
-    fn prompt_document_uses_optimistic_lock_and_can_delete() {
+    fn project_document_uses_optimistic_lock_and_can_delete() {
         let dir = temp_dir("optimistic-lock");
 
         {
             let _env = ScopedEnvVar::set_path("CODEX_HOME", &dir);
             run_async_test(async {
-                let first = save_prompt_document(
+                let first = save_project_document(
                     PathBuf::new(),
-                    SavePromptDocument {
+                    SaveProjectDocument {
                         tool: CliToolId::Codex,
-                        scope: PromptScope::Global,
+                        scope: ProjectScope::Global,
                         project_id: None,
                         content_md: "hello".to_string(),
                         expected_updated_at_ms: None,
@@ -953,11 +958,11 @@ mod tests {
                 // Give the filesystem mtime enough room to advance before the next write.
                 std::thread::sleep(std::time::Duration::from_millis(10));
 
-                let second = save_prompt_document(
+                let second = save_project_document(
                     PathBuf::new(),
-                    SavePromptDocument {
+                    SaveProjectDocument {
                         tool: CliToolId::Codex,
-                        scope: PromptScope::Global,
+                        scope: ProjectScope::Global,
                         project_id: None,
                         content_md: "world".to_string(),
                         expected_updated_at_ms: first.updated_at_ms,
@@ -968,11 +973,11 @@ mod tests {
 
                 assert_ne!(first.updated_at_ms, second.updated_at_ms);
 
-                let err = save_prompt_document(
+                let err = save_project_document(
                     PathBuf::new(),
-                    SavePromptDocument {
+                    SaveProjectDocument {
                         tool: CliToolId::Codex,
-                        scope: PromptScope::Global,
+                        scope: ProjectScope::Global,
                         project_id: None,
                         content_md: "stale".to_string(),
                         expected_updated_at_ms: first.updated_at_ms,
@@ -983,14 +988,14 @@ mod tests {
 
                 assert!(matches!(
                     err.downcast_ref::<StorageError>(),
-                    Some(StorageError::PromptDocumentVersionConflict { .. })
+                    Some(StorageError::ProjectDocumentVersionConflict { .. })
                 ));
 
-                delete_prompt_document(
+                delete_project_document(
                     PathBuf::new(),
-                    DeletePromptDocument {
+                    DeleteProjectDocument {
                         tool: CliToolId::Codex,
-                        scope: PromptScope::Global,
+                        scope: ProjectScope::Global,
                         project_id: None,
                         expected_updated_at_ms: second.updated_at_ms,
                     },
@@ -998,10 +1003,10 @@ mod tests {
                 .await
                 .unwrap();
 
-                let doc = get_prompt_document(
+                let doc = get_project_document(
                     PathBuf::new(),
                     CliToolId::Codex,
-                    PromptScope::Global,
+                    ProjectScope::Global,
                     None,
                 )
                 .await
@@ -1015,7 +1020,7 @@ mod tests {
     }
 
     #[test]
-    fn delete_prompt_project_removes_codex_sessions_only() {
+    fn delete_project_removes_codex_sessions_only() {
         let dir = temp_dir("delete-codex-project");
         let repo_root = dir.join("repo");
         let nested = repo_root.join("packages/app");
@@ -1027,7 +1032,7 @@ mod tests {
         fs::create_dir_all(&sessions_root).unwrap();
         fs::write(repo_root.join(".git"), "gitdir: /tmp/worktree").unwrap();
         fs::write(other_root.join(".git"), "gitdir: /tmp/worktree").unwrap();
-        fs::write(repo_root.join("AGENTS.md"), "# prompt").unwrap();
+        fs::write(repo_root.join("AGENTS.md"), "# project").unwrap();
 
         let target_session = sessions_root.join("target.jsonl");
         let other_session = sessions_root.join("other.jsonl");
@@ -1056,11 +1061,11 @@ mod tests {
                     .to_string_lossy()
                     .to_string();
 
-                delete_prompt_project(PathBuf::new(), CliToolId::Codex, project_id)
+                delete_project(PathBuf::new(), CliToolId::Codex, project_id)
                     .await
                     .unwrap();
 
-                let projects = list_prompt_projects(PathBuf::new(), CliToolId::Codex)
+                let projects = list_projects(PathBuf::new(), CliToolId::Codex)
                     .await
                     .unwrap();
                 assert_eq!(projects.len(), 1);
@@ -1079,7 +1084,7 @@ mod tests {
     }
 
     #[test]
-    fn delete_prompt_project_removes_claude_sessions_only() {
+    fn delete_project_removes_claude_sessions_only() {
         let dir = temp_dir("delete-claude-project");
         let repo_root = dir.join("repo");
         let nested = repo_root.join("packages/app");
@@ -1091,7 +1096,7 @@ mod tests {
         fs::create_dir_all(&projects_root).unwrap();
         fs::write(repo_root.join(".git"), "gitdir: /tmp/worktree").unwrap();
         fs::write(other_root.join(".git"), "gitdir: /tmp/worktree").unwrap();
-        fs::write(repo_root.join("CLAUDE.md"), "# prompt").unwrap();
+        fs::write(repo_root.join("CLAUDE.md"), "# project").unwrap();
 
         let target_session = projects_root.join("target.jsonl");
         let other_session = projects_root.join("other.jsonl");
@@ -1120,11 +1125,11 @@ mod tests {
                     .to_string_lossy()
                     .to_string();
 
-                delete_prompt_project(PathBuf::new(), CliToolId::Claude, project_id)
+                delete_project(PathBuf::new(), CliToolId::Claude, project_id)
                     .await
                     .unwrap();
 
-                let projects = list_prompt_projects(PathBuf::new(), CliToolId::Claude)
+                let projects = list_projects(PathBuf::new(), CliToolId::Claude)
                     .await
                     .unwrap();
                 assert_eq!(projects.len(), 1);
@@ -1143,7 +1148,7 @@ mod tests {
     }
 
     #[test]
-    fn delete_prompt_project_removes_gemini_discovery_entries() {
+    fn delete_project_removes_gemini_discovery_entries() {
         let dir = temp_dir("delete-gemini-project");
         let home = dir.join("home");
         let gemini_root = home.join(".gemini");
@@ -1186,11 +1191,11 @@ mod tests {
                     .to_string_lossy()
                     .to_string();
 
-                delete_prompt_project(PathBuf::new(), CliToolId::Gemini, project_id)
+                delete_project(PathBuf::new(), CliToolId::Gemini, project_id)
                     .await
                     .unwrap();
 
-                let projects = list_prompt_projects(PathBuf::new(), CliToolId::Gemini)
+                let projects = list_projects(PathBuf::new(), CliToolId::Gemini)
                     .await
                     .unwrap();
                 assert_eq!(projects.len(), 1);
