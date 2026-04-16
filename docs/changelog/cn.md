@@ -1,3 +1,7 @@
+## [0.59.0](https://github.com/koumoe/cli-switch/compare/v0.58.0...v0.59.0) (2026-04-16)
+
+### 功能
+* 将 prompts 重构为 projects (#195) ([#195](https://github.com/koumoe/cli-switch/issues/195)) ([d247baa](https://github.com/koumoe/cli-switch/commit/d247baa401d3ac8f0ddebf5e48be7539f6a04ffc))
 ## [0.58.0](https://github.com/koumoe/cli-switch/compare/v0.57.3...v0.58.0) (2026-04-11)
 
 ### 功能
