@@ -45,8 +45,8 @@ use crate::chat_bridge::weixin::{
     logout_by_clearing_auth_state as logout_weixin_by_clearing_auth_state, run_weixin_bridge,
 };
 use crate::chat_bridge::whatsapp_web::{
-    WhatsAppBridgeCommand, WhatsAppWebControl, WhatsAppWebState, WhatsAppWebStatus,
-    logout_by_clearing_auth_state, run_whatsapp_web_bridge,
+    WhatsAppBridgeCommand, WhatsAppBridgeExit, WhatsAppWebControl, WhatsAppWebState,
+    WhatsAppWebStatus, logout_by_clearing_auth_state, run_whatsapp_web_bridge,
 };
 use crate::cli_tools::{
     CLI_TOOLS, CliExecEnv, CliToolId, detect_cli_tool, normalize_version_string,
@@ -92,6 +92,13 @@ struct ManagedBridgeTask {
     token: Option<String>,
     started_at: Option<Instant>,
     handle: Option<tokio::task::JoinHandle<()>>,
+    restart_failures: u32,
+}
+
+struct ManagedWhatsAppTask {
+    token: Option<String>,
+    started_at: Option<Instant>,
+    handle: Option<tokio::task::JoinHandle<WhatsAppBridgeExit>>,
     restart_failures: u32,
 }
 
@@ -192,9 +199,127 @@ impl ManagedBridgeTask {
         .await;
     }
 
+    fn abort_and_clear(&mut self) {
+        if let Some(handle) = self.handle.take() {
+            handle.abort();
+        }
+        self.token = None;
+        self.started_at = None;
+        self.restart_failures = 0;
+    }
+
+    async fn abort_and_join(&mut self) {
+        if let Some(handle) = self.handle.take() {
+            handle.abort();
+            let _ = handle.await;
+        }
+        self.token = None;
+        self.started_at = None;
+    }
+}
+
+impl ManagedWhatsAppTask {
+    fn new() -> Self {
+        Self {
+            token: None,
+            started_at: None,
+            handle: None,
+            restart_failures: 0,
+        }
+    }
+
+    fn is_running(&self) -> bool {
+        self.handle.is_some()
+    }
+
+    fn sync_token(&mut self, desired: Option<&str>) {
+        match (desired, self.token.as_deref()) {
+            (Some(desired), Some(running)) if desired == running => {}
+            (_, Some(_)) => self.abort_and_clear(),
+            _ => {}
+        }
+    }
+
+    fn spawn_if_needed(
+        &mut self,
+        desired_token: Option<String>,
+        spawn: impl FnOnce(String) -> tokio::task::JoinHandle<WhatsAppBridgeExit>,
+    ) {
+        if self.handle.is_some() {
+            return;
+        }
+        let Some(token) = desired_token else {
+            return;
+        };
+        let handle = spawn(token.clone());
+        self.token = Some(token);
+        self.started_at = Some(Instant::now());
+        self.handle = Some(handle);
+    }
+
+    async fn wait_for_exit(
+        &mut self,
+    ) -> Option<(Duration, Result<WhatsAppBridgeExit, tokio::task::JoinError>)> {
+        let started_at = self.started_at?;
+        let result = match self.handle.as_mut() {
+            Some(handle) => handle.await,
+            None => return None,
+        };
+        Some((started_at.elapsed(), result))
+    }
+
+    async fn handle_exit(
+        &mut self,
+        exit: Option<(Duration, Result<WhatsAppBridgeExit, tokio::task::JoinError>)>,
+    ) -> WhatsAppBridgeExitAction {
+        let Some((uptime, result)) = exit else {
+            return WhatsAppBridgeExitAction::Continue;
+        };
+
+        self.handle = None;
+        self.started_at = None;
+        self.token = None;
+
+        match result {
+            Ok(WhatsAppBridgeExit::AuthInvalid | WhatsAppBridgeExit::Terminal) => {
+                self.restart_failures = 0;
+                WhatsAppBridgeExitAction::PauseUntilLogin
+            }
+            Ok(WhatsAppBridgeExit::LogoutCompleted) => {
+                self.restart_failures = 0;
+                WhatsAppBridgeExitAction::Continue
+            }
+            Ok(WhatsAppBridgeExit::Retryable) => {
+                self.restart_failures = next_restart_failure_count(self.restart_failures, uptime);
+                tokio::time::sleep(exponential_backoff_delay(
+                    self.restart_failures,
+                    CHAT_BRIDGE_RESTART_POLICY.base_delay,
+                    CHAT_BRIDGE_RESTART_POLICY.max_delay,
+                ))
+                .await;
+                WhatsAppBridgeExitAction::Continue
+            }
+            Err(err) => {
+                tracing::warn!(
+                    platform = "whatsapp",
+                    err = %err,
+                    "chat bridge task exited unexpectedly"
+                );
+                self.restart_failures = next_restart_failure_count(self.restart_failures, uptime);
+                tokio::time::sleep(exponential_backoff_delay(
+                    self.restart_failures,
+                    CHAT_BRIDGE_RESTART_POLICY.base_delay,
+                    CHAT_BRIDGE_RESTART_POLICY.max_delay,
+                ))
+                .await;
+                WhatsAppBridgeExitAction::Continue
+            }
+        }
+    }
+
     fn handle_expected_exit(
         &mut self,
-        exit: Option<(Duration, Result<(), tokio::task::JoinError>)>,
+        exit: Option<(Duration, Result<WhatsAppBridgeExit, tokio::task::JoinError>)>,
     ) {
         let Some((_, result)) = exit else {
             return;
@@ -202,7 +327,7 @@ impl ManagedBridgeTask {
 
         if let Err(err) = result {
             tracing::warn!(
-                platform = self.platform_name,
+                platform = "whatsapp",
                 err = %err,
                 "chat bridge task exited during expected shutdown"
             );
@@ -233,6 +358,20 @@ impl ManagedBridgeTask {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum WhatsAppBridgeExitAction {
+    Continue,
+    PauseUntilLogin,
+}
+
+fn next_restart_failure_count(previous: u32, uptime: Duration) -> u32 {
+    if uptime >= CHAT_BRIDGE_RESTART_POLICY.reset_after {
+        1
+    } else {
+        previous.saturating_add(1)
+    }
+}
+
 pub async fn run_supervisor(
     db_path: PathBuf,
     http_client: reqwest::Client,
@@ -260,19 +399,24 @@ pub async fn run_supervisor(
 
     let mut telegram_task = ManagedBridgeTask::new("telegram");
     let mut discord_task = ManagedBridgeTask::new("discord");
-    let mut whatsapp_task = ManagedBridgeTask::new("whatsapp");
+    let mut whatsapp_task = ManagedWhatsAppTask::new();
     let mut weixin_task = ManagedBridgeTask::new("weixin");
     let mut whatsapp_nonce: u64 = 0;
     let mut weixin_nonce: u64 = 0;
     let mut whatsapp_bridge_control_tx: Option<mpsc::UnboundedSender<WhatsAppBridgeCommand>> = None;
     let mut whatsapp_skip_restart_backoff = false;
+    let mut whatsapp_paused_until_login = false;
 
     loop {
         let telegram_token = desired_telegram_token(settings_rx.borrow().as_ref());
         let discord_token = desired_discord_token(settings_rx.borrow().as_ref());
         let whatsapp_enabled = desired_whatsapp_enabled(settings_rx.borrow().as_ref());
         let weixin_enabled = desired_weixin_enabled(settings_rx.borrow().as_ref());
-        let whatsapp_key = whatsapp_enabled.then_some(format!("whatsapp-web:{whatsapp_nonce}"));
+        let whatsapp_key = desired_whatsapp_task_key(
+            whatsapp_enabled,
+            whatsapp_paused_until_login,
+            whatsapp_nonce,
+        );
         let weixin_key = weixin_enabled.then_some(format!("weixin:{weixin_nonce}"));
 
         telegram_task.sync_token(telegram_token.as_deref());
@@ -312,12 +456,11 @@ pub async fn run_supervisor(
                 whatsapp_bridge_control_tx = Some(bridge_control_tx);
                 whatsapp_task.spawn_if_needed(Some(key), move |_token| {
                     tokio::spawn(async move {
-                        run_whatsapp_web_bridge(runtime, client, status_tx, bridge_control_rx)
-                            .await;
+                        run_whatsapp_web_bridge(runtime, client, status_tx, bridge_control_rx).await
                     })
                 });
             }
-        } else {
+        } else if !whatsapp_enabled {
             whatsapp_bridge_control_tx = None;
             let _ = whatsapp_status_tx.send(WhatsAppWebStatus::disabled());
         }
@@ -353,6 +496,7 @@ pub async fn run_supervisor(
                 match cmd {
                     WhatsAppWebControl::StartLogin => {
                         if whatsapp_enabled {
+                            whatsapp_paused_until_login = false;
                             whatsapp_nonce = whatsapp_nonce.wrapping_add(1);
                         }
                     }
@@ -373,6 +517,7 @@ pub async fn run_supervisor(
                             if let Err(err) = logout_by_clearing_auth_state(&runtime.data_dir()) {
                                 tracing::warn!(err = %err, "clear whatsapp auth state failed");
                             }
+                            whatsapp_paused_until_login = false;
                             whatsapp_nonce = whatsapp_nonce.wrapping_add(1);
                         }
                     }
@@ -407,8 +552,11 @@ pub async fn run_supervisor(
                 if whatsapp_skip_restart_backoff {
                     whatsapp_skip_restart_backoff = false;
                     whatsapp_task.handle_expected_exit(exit);
-                } else {
-                    whatsapp_task.handle_exit(exit).await;
+                } else if matches!(
+                    whatsapp_task.handle_exit(exit).await,
+                    WhatsAppBridgeExitAction::PauseUntilLogin
+                ) {
+                    whatsapp_paused_until_login = true;
                 }
             }
             exit = weixin_task.wait_for_exit(), if weixin_running => {
@@ -2120,6 +2268,14 @@ fn desired_whatsapp_enabled(settings: &storage::AppSettings) -> bool {
     settings.chat_bridge_enabled && settings.chat_bridge_whatsapp_enabled
 }
 
+fn desired_whatsapp_task_key(
+    enabled: bool,
+    paused_until_login: bool,
+    nonce: u64,
+) -> Option<String> {
+    (enabled && !paused_until_login).then_some(format!("whatsapp-web:{nonce}"))
+}
+
 fn desired_weixin_enabled(settings: &storage::AppSettings) -> bool {
     settings.chat_bridge_enabled && settings.chat_bridge_weixin_enabled
 }
@@ -2377,6 +2533,16 @@ mod tests {
 "#;
 
         assert_eq!(extract_display_text(raw, true), "Gemini final answer");
+    }
+
+    #[test]
+    fn desired_whatsapp_task_key_pauses_until_login() {
+        assert_eq!(
+            desired_whatsapp_task_key(true, false, 7).as_deref(),
+            Some("whatsapp-web:7")
+        );
+        assert_eq!(desired_whatsapp_task_key(true, true, 7), None);
+        assert_eq!(desired_whatsapp_task_key(false, false, 7), None);
     }
 
     #[test]

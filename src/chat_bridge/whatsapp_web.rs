@@ -119,6 +119,20 @@ pub enum WhatsAppBridgeCommand {
     Logout,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum WhatsAppBridgeExit {
+    Retryable,
+    AuthInvalid,
+    Terminal,
+    LogoutCompleted,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RuntimeEventAction {
+    Continue,
+    Stop(WhatsAppBridgeExit),
+}
+
 #[derive(Debug, Clone)]
 struct CachedMessage {
     info: MessageInfo,
@@ -526,13 +540,13 @@ pub(super) async fn run_whatsapp_web_bridge(
     http_client: reqwest::Client,
     status_tx: watch::Sender<WhatsAppWebStatus>,
     mut control_rx: mpsc::UnboundedReceiver<WhatsAppBridgeCommand>,
-) {
+) -> WhatsAppBridgeExit {
     let _ = status_tx.send(WhatsAppWebStatus::starting());
 
     let data_dir = runtime.data_dir();
     if let Err(err) = apply_pending_logout(&data_dir) {
         let _ = status_tx.send(WhatsAppWebStatus::error(err.to_string()));
-        return;
+        return WhatsAppBridgeExit::Retryable;
     }
 
     let base_dir = whatsapp_base_dir(&data_dir);
@@ -540,7 +554,7 @@ pub(super) async fn run_whatsapp_web_bridge(
         let _ = status_tx.send(WhatsAppWebStatus::error(format!(
             "create whatsapp base dir failed: {err}"
         )));
-        return;
+        return WhatsAppBridgeExit::Retryable;
     }
 
     let store_path = whatsapp_store_path(&data_dir);
@@ -550,7 +564,7 @@ pub(super) async fn run_whatsapp_web_bridge(
             let _ = status_tx.send(WhatsAppWebStatus::error(format!(
                 "open whatsapp sqlite store failed: {err}"
             )));
-            return;
+            return WhatsAppBridgeExit::Retryable;
         }
     };
 
@@ -558,7 +572,7 @@ pub(super) async fn run_whatsapp_web_bridge(
         Ok(client) => client,
         Err(err) => {
             let _ = status_tx.send(WhatsAppWebStatus::error(err.to_string()));
-            return;
+            return WhatsAppBridgeExit::Retryable;
         }
     };
 
@@ -589,7 +603,7 @@ pub(super) async fn run_whatsapp_web_bridge(
             let _ = status_tx.send(WhatsAppWebStatus::error(format!(
                 "build whatsapp runtime failed: {err}"
             )));
-            return;
+            return WhatsAppBridgeExit::Retryable;
         }
     };
 
@@ -602,7 +616,7 @@ pub(super) async fn run_whatsapp_web_bridge(
             let _ = status_tx.send(WhatsAppWebStatus::error(format!(
                 "start whatsapp runtime failed: {err}"
             )));
-            return;
+            return WhatsAppBridgeExit::Retryable;
         }
     };
     tokio::pin!(bot_handle);
@@ -614,7 +628,21 @@ pub(super) async fn run_whatsapp_web_bridge(
                 let Some(event) = maybe_event else {
                     break;
                 };
-                handle_runtime_event(event, &runtime, &adapter, &client, &status_tx).await;
+                if let RuntimeEventAction::Stop(exit) =
+                    handle_runtime_event(event, &runtime, &adapter, &client, &status_tx).await
+                {
+                    if matches!(exit, WhatsAppBridgeExit::AuthInvalid)
+                        && let Err(err) = logout_by_clearing_auth_state(&data_dir)
+                    {
+                        tracing::warn!(err = %err, "mark whatsapp auth cleanup pending failed");
+                    }
+                    client.disconnect().await;
+                    bot_handle.as_ref().get_ref().abort();
+                    if let Err(err) = (&mut bot_handle).await {
+                        tracing::debug!(err = %err, "whatsapp runtime task stopped after terminal event");
+                    }
+                    return exit;
+                }
             }
             cmd = control_rx.recv() => {
                 let Some(cmd) = cmd else {
@@ -650,10 +678,11 @@ pub(super) async fn run_whatsapp_web_bridge(
             }
             let _ = status_tx.send(WhatsAppWebStatus::error(err.to_string()));
         }
-        return;
+        return WhatsAppBridgeExit::LogoutCompleted;
     }
 
     let _ = status_tx.send(WhatsAppWebStatus::error("whatsapp bridge stopped"));
+    WhatsAppBridgeExit::Retryable
 }
 
 async fn handle_runtime_event(
@@ -662,7 +691,7 @@ async fn handle_runtime_event(
     adapter: &Arc<WhatsAppWebAdapter>,
     client: &Arc<Client>,
     status_tx: &watch::Sender<WhatsAppWebStatus>,
-) {
+) -> RuntimeEventAction {
     match event {
         Event::PairingQrCode { code, .. } => {
             let _ = status_tx.send(WhatsAppWebStatus {
@@ -673,6 +702,7 @@ async fn handle_runtime_event(
                 qr: Some(code),
                 last_error: None,
             });
+            RuntimeEventAction::Continue
         }
         Event::Connected(_) => {
             let _ = status_tx.send(WhatsAppWebStatus {
@@ -683,6 +713,7 @@ async fn handle_runtime_event(
                 qr_image: None,
                 last_error: None,
             });
+            RuntimeEventAction::Continue
         }
         Event::Disconnected(_) => {
             let mut current = status_tx.borrow().clone();
@@ -693,12 +724,14 @@ async fn handle_runtime_event(
             current.qr_image = None;
             current.last_error = None;
             let _ = status_tx.send(current);
+            RuntimeEventAction::Continue
         }
         Event::LoggedOut(info) => {
             let _ = status_tx.send(WhatsAppWebStatus::warn(format!(
                 "logged out: {}",
                 connect_failure_reason_label(info.reason)
             )));
+            RuntimeEventAction::Stop(WhatsAppBridgeExit::AuthInvalid)
         }
         Event::ConnectFailure(failure) => {
             let _ = status_tx.send(WhatsAppWebStatus::warn(format!(
@@ -706,19 +739,39 @@ async fn handle_runtime_event(
                 failure.message,
                 connect_failure_reason_label(failure.reason)
             )));
+            if failure.reason.is_logged_out() {
+                RuntimeEventAction::Stop(WhatsAppBridgeExit::AuthInvalid)
+            } else if failure.reason.should_reconnect() {
+                RuntimeEventAction::Continue
+            } else {
+                RuntimeEventAction::Stop(WhatsAppBridgeExit::Terminal)
+            }
         }
         Event::ClientOutdated(_) => {
             let _ = status_tx.send(WhatsAppWebStatus::warn("client outdated"));
+            RuntimeEventAction::Stop(WhatsAppBridgeExit::Terminal)
+        }
+        Event::StreamReplaced(_) => {
+            let _ = status_tx.send(WhatsAppWebStatus::warn("stream replaced"));
+            RuntimeEventAction::Stop(WhatsAppBridgeExit::Terminal)
+        }
+        Event::TemporaryBan(ban) => {
+            let _ = status_tx.send(WhatsAppWebStatus::warn(format!(
+                "temporary ban: {}",
+                ban.code
+            )));
+            RuntimeEventAction::Stop(WhatsAppBridgeExit::Terminal)
         }
         Event::StreamError(err) => {
             let _ = status_tx.send(WhatsAppWebStatus::warn(format!(
                 "stream error: {}",
                 err.code
             )));
+            RuntimeEventAction::Continue
         }
         Event::Message(message, info) => {
             if adapter.take_sent_message_id(&info.id).await {
-                return;
+                return RuntimeEventAction::Continue;
             }
 
             let self_chat = if info.source.is_from_me {
@@ -738,13 +791,13 @@ async fn handle_runtime_event(
                     sender_id = %info.source.sender.to_non_ad(),
                     "ignore whatsapp from_me message outside self-chat"
                 );
-                return;
+                return RuntimeEventAction::Continue;
             }
 
             if (info.source.chat.server == "broadcast" && info.source.chat.user == "status")
                 || info.source.chat.server == "newsletter"
             {
-                return;
+                return RuntimeEventAction::Continue;
             }
 
             if self_chat {
@@ -776,8 +829,9 @@ async fn handle_runtime_event(
             tokio::spawn(async move {
                 runtime.handle_message(sender, incoming).await;
             });
+            RuntimeEventAction::Continue
         }
-        _ => {}
+        _ => RuntimeEventAction::Continue,
     }
 }
 
