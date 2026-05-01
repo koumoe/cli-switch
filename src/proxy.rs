@@ -241,8 +241,7 @@ pub async fn forward_with_config(
             {
                 Ok(r) => r,
                 Err(e) => {
-                    let auto_disabled = if !is_count_tokens {
-                        let auto_disabled = attempt_ctx.record_failure().await;
+                    if !is_count_tokens {
                         tracing::warn!(
                             protocol = protocol.as_str(),
                             channel_id = %channel.id,
@@ -272,14 +271,11 @@ pub async fn forward_with_config(
                             }),
                             db_path.clone(),
                         );
-                        auto_disabled
-                    } else {
-                        false
-                    };
+                    }
 
                     let err = ProxyError::Upstream(e.to_string());
                     last_err = Some(err);
-                    if auto_disabled || !has_more_attempts_on_channel {
+                    if !has_more_attempts_on_channel {
                         if has_more_channels {
                             continue 'channel_loop;
                         }

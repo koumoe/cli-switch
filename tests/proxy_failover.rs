@@ -109,6 +109,15 @@ async fn spawn_upstream_sequence(
     (format!("http://127.0.0.1:{}", addr.port()), calls)
 }
 
+async fn unused_local_base_url() -> String {
+    let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+        .await
+        .expect("bind");
+    let addr = listener.local_addr().expect("local_addr");
+    drop(listener);
+    format!("http://127.0.0.1:{}", addr.port())
+}
+
 async fn create_openai_channel(
     db_path: std::path::PathBuf,
     name: &str,
@@ -722,6 +731,53 @@ async fn channel_retry_stops_after_channel_protection_triggers() {
         .find(|channel| channel.name == "c1")
         .expect("c1");
     assert!(c1.auto_disabled_until_ms > 0);
+}
+
+#[tokio::test]
+async fn request_transport_error_does_not_auto_disable_channel() {
+    let base = unused_local_base_url().await;
+
+    let db_path = temp_db_path();
+    storage::init_db(&db_path).expect("init_db");
+    storage::update_app_settings(
+        db_path.clone(),
+        storage::AppSettingsPatch {
+            auto_disable_enabled: Some(true),
+            auto_disable_window_minutes: Some(3),
+            auto_disable_failure_times: Some(1),
+            auto_disable_disable_minutes: Some(30),
+            ..Default::default()
+        },
+    )
+    .await
+    .expect("update settings");
+
+    create_openai_channel(db_path.clone(), "c1", format!("{base}/v1"), 20, 1, false).await;
+
+    let client = reqwest::Client::builder().build().expect("client");
+    let req = Request::builder()
+        .method("POST")
+        .uri("/v1/responses")
+        .header(axum::http::header::CONTENT_TYPE, "application/json")
+        .body(Body::from(r#"{"model":"gpt-test"}"#))
+        .expect("req");
+
+    let err = proxy::forward(
+        &client,
+        db_path.clone(),
+        storage::Protocol::Openai,
+        "/v1",
+        req,
+    )
+    .await
+    .expect_err("request should fail");
+    assert!(matches!(err, proxy::ProxyError::Upstream(_)));
+
+    let channels = storage::list_channels(db_path.clone())
+        .await
+        .expect("list channels");
+    assert_eq!(channels.len(), 1);
+    assert_eq!(channels[0].auto_disabled_until_ms, 0);
 }
 
 #[tokio::test]
