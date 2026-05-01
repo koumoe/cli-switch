@@ -1,3 +1,8 @@
+## [0.59.1](https://github.com/koumoe/cli-switch/compare/v0.59.0...v0.59.1) (2026-05-01)
+
+### Bug Fixes
+
+* stop whatsapp bridge restart loop (#196) ([#196](https://github.com/koumoe/cli-switch/issues/196)) ([22535be](https://github.com/koumoe/cli-switch/commit/22535bee4075011908c00918961c64f7a8f1d5d7))
 ## [0.59.0](https://github.com/koumoe/cli-switch/compare/v0.58.0...v0.59.0) (2026-04-16)
 
 ### Features
