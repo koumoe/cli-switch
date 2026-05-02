@@ -82,9 +82,6 @@ const CHAT_BRIDGE_RESTART_POLICY: RestartPolicy = RestartPolicy {
     reset_after: Duration::from_secs(60),
 };
 
-const WHATSAPP_RETRYABLE_EXIT_PAUSE_THRESHOLD: u32 = 10;
-const WHATSAPP_RETRYABLE_EXIT_PAUSE_WINDOW: Duration = Duration::from_secs(30 * 60);
-
 const CHAT_BRIDGE_POLL_ERROR_POLICY: BackoffPolicy = BackoffPolicy {
     base_delay: Duration::from_secs(3),
     max_delay: Duration::from_secs(30),
@@ -103,8 +100,6 @@ struct ManagedWhatsAppTask {
     started_at: Option<Instant>,
     handle: Option<tokio::task::JoinHandle<WhatsAppBridgeExit>>,
     restart_failures: u32,
-    retryable_exit_window_start: Option<Instant>,
-    retryable_exit_count: u32,
 }
 
 #[derive(Clone)]
@@ -230,8 +225,6 @@ impl ManagedWhatsAppTask {
             started_at: None,
             handle: None,
             restart_failures: 0,
-            retryable_exit_window_start: None,
-            retryable_exit_count: 0,
         }
     }
 
@@ -264,27 +257,6 @@ impl ManagedWhatsAppTask {
         self.handle = Some(handle);
     }
 
-    fn reset_retryable_exits(&mut self) {
-        self.retryable_exit_window_start = None;
-        self.retryable_exit_count = 0;
-    }
-
-    fn retryable_exit_reached_pause_threshold(&mut self, now: Instant) -> bool {
-        match self.retryable_exit_window_start {
-            Some(started_at)
-                if now.duration_since(started_at) <= WHATSAPP_RETRYABLE_EXIT_PAUSE_WINDOW =>
-            {
-                self.retryable_exit_count = self.retryable_exit_count.saturating_add(1);
-            }
-            _ => {
-                self.retryable_exit_window_start = Some(now);
-                self.retryable_exit_count = 1;
-            }
-        }
-
-        self.retryable_exit_count >= WHATSAPP_RETRYABLE_EXIT_PAUSE_THRESHOLD
-    }
-
     async fn wait_for_exit(
         &mut self,
     ) -> Option<(Duration, Result<WhatsAppBridgeExit, tokio::task::JoinError>)> {
@@ -311,26 +283,13 @@ impl ManagedWhatsAppTask {
         match result {
             Ok(WhatsAppBridgeExit::AuthInvalid | WhatsAppBridgeExit::Terminal) => {
                 self.restart_failures = 0;
-                self.reset_retryable_exits();
                 WhatsAppBridgeExitAction::PauseUntilLogin
             }
             Ok(WhatsAppBridgeExit::LogoutCompleted) => {
                 self.restart_failures = 0;
-                self.reset_retryable_exits();
                 WhatsAppBridgeExitAction::Continue
             }
             Ok(WhatsAppBridgeExit::Retryable) => {
-                if self.retryable_exit_reached_pause_threshold(Instant::now()) {
-                    tracing::warn!(
-                        platform = "whatsapp",
-                        retryable_exit_count = self.retryable_exit_count,
-                        window_secs = WHATSAPP_RETRYABLE_EXIT_PAUSE_WINDOW.as_secs(),
-                        "pausing whatsapp bridge after repeated retryable exits"
-                    );
-                    self.restart_failures = 0;
-                    self.reset_retryable_exits();
-                    return WhatsAppBridgeExitAction::PauseUntilLogin;
-                }
                 self.restart_failures = next_restart_failure_count(self.restart_failures, uptime);
                 tokio::time::sleep(exponential_backoff_delay(
                     self.restart_failures,
@@ -346,17 +305,6 @@ impl ManagedWhatsAppTask {
                     err = %err,
                     "chat bridge task exited unexpectedly"
                 );
-                if self.retryable_exit_reached_pause_threshold(Instant::now()) {
-                    tracing::warn!(
-                        platform = "whatsapp",
-                        retryable_exit_count = self.retryable_exit_count,
-                        window_secs = WHATSAPP_RETRYABLE_EXIT_PAUSE_WINDOW.as_secs(),
-                        "pausing whatsapp bridge after repeated task failures"
-                    );
-                    self.restart_failures = 0;
-                    self.reset_retryable_exits();
-                    return WhatsAppBridgeExitAction::PauseUntilLogin;
-                }
                 self.restart_failures = next_restart_failure_count(self.restart_failures, uptime);
                 tokio::time::sleep(exponential_backoff_delay(
                     self.restart_failures,
@@ -389,7 +337,6 @@ impl ManagedWhatsAppTask {
         self.started_at = None;
         self.token = None;
         self.restart_failures = 0;
-        self.reset_retryable_exits();
     }
 
     fn abort_and_clear(&mut self) {
@@ -399,7 +346,6 @@ impl ManagedWhatsAppTask {
         self.token = None;
         self.started_at = None;
         self.restart_failures = 0;
-        self.reset_retryable_exits();
     }
 
     async fn abort_and_join(&mut self) {
@@ -409,7 +355,6 @@ impl ManagedWhatsAppTask {
         }
         self.token = None;
         self.started_at = None;
-        self.reset_retryable_exits();
     }
 }
 
@@ -551,7 +496,6 @@ pub async fn run_supervisor(
                 match cmd {
                     WhatsAppWebControl::StartLogin => {
                         if whatsapp_enabled {
-                            whatsapp_task.reset_retryable_exits();
                             whatsapp_paused_until_login = false;
                             whatsapp_nonce = whatsapp_nonce.wrapping_add(1);
                         }
@@ -2599,35 +2543,6 @@ mod tests {
         );
         assert_eq!(desired_whatsapp_task_key(true, true, 7), None);
         assert_eq!(desired_whatsapp_task_key(false, false, 7), None);
-    }
-
-    #[test]
-    fn whatsapp_retryable_exit_threshold_pauses_within_window() {
-        let mut task = ManagedWhatsAppTask::new();
-        let started_at = Instant::now();
-
-        for index in 0..WHATSAPP_RETRYABLE_EXIT_PAUSE_THRESHOLD - 1 {
-            let now = started_at + Duration::from_secs(u64::from(index));
-            assert!(!task.retryable_exit_reached_pause_threshold(now));
-        }
-
-        let now = started_at + Duration::from_secs(60);
-        assert!(task.retryable_exit_reached_pause_threshold(now));
-    }
-
-    #[test]
-    fn whatsapp_retryable_exit_threshold_resets_after_window() {
-        let mut task = ManagedWhatsAppTask::new();
-        let started_at = Instant::now();
-
-        for index in 0..WHATSAPP_RETRYABLE_EXIT_PAUSE_THRESHOLD - 1 {
-            let now = started_at + Duration::from_secs(u64::from(index));
-            assert!(!task.retryable_exit_reached_pause_threshold(now));
-        }
-
-        let now = started_at + WHATSAPP_RETRYABLE_EXIT_PAUSE_WINDOW + Duration::from_secs(1);
-        assert!(!task.retryable_exit_reached_pause_threshold(now));
-        assert_eq!(task.retryable_exit_count, 1);
     }
 
     #[test]
