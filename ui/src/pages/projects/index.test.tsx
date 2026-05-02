@@ -4,7 +4,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ProjectDocument, ProjectRecord } from "@/types/api";
 import { renderWithProviders } from "@/test/render";
-import { setMdxEditorMockScenario } from "@/test/mocks/mdxeditor";
 
 import { ProjectsPage } from "./index";
 
@@ -26,7 +25,7 @@ vi.mock("@/api", () => ({
 
 vi.mock("@mdxeditor/editor", async () => {
   const { createMdxEditorMock } = await import("@/test/mocks/mdxeditor");
-  return createMdxEditorMock();
+  return createMdxEditorMock("project-page");
 });
 
 const project: ProjectRecord = {
@@ -49,7 +48,6 @@ const document: ProjectDocument = {
 
 describe("ProjectsPage", () => {
   beforeEach(() => {
-    setMdxEditorMockScenario("project-page");
     apiMocks.listProjects.mockImplementation((tool: string) =>
       Promise.resolve(tool === "codex" ? [project] : [])
     );
