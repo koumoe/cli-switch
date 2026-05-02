@@ -14,7 +14,7 @@ use super::adapter::{
 };
 use wacore_binary::jid::SERVER_JID;
 use wacore_binary::node::NodeContent;
-use whatsapp_rust::bot::Bot;
+use whatsapp_rust::bot::{Bot, BotHandle};
 use whatsapp_rust::download::{Downloadable, MediaType};
 use whatsapp_rust::proto_helpers::{self, MessageExt as _};
 use whatsapp_rust::request::InfoQuery;
@@ -31,6 +31,7 @@ const LOGOUT_MARKER_FILE_NAME: &str = "pending-logout";
 const MAX_ATTACHMENT_BYTES: u64 = 20 * 1024 * 1024;
 const RECENT_LIMIT: usize = 256;
 const PUBLIC_RUNTIME_ERROR_CODE: &str = "runtime_unavailable";
+const RUNTIME_SHUTDOWN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -468,6 +469,47 @@ impl whatsapp_rust::http::HttpClient for ReqwestHttpClient {
     }
 }
 
+async fn disconnect_runtime_client(client: &Arc<Client>, context: &'static str) {
+    match tokio::time::timeout(RUNTIME_SHUTDOWN_TIMEOUT, client.disconnect()).await {
+        Ok(()) => {}
+        Err(_) => {
+            tracing::warn!(
+                context,
+                timeout_secs = RUNTIME_SHUTDOWN_TIMEOUT.as_secs(),
+                "whatsapp client disconnect timed out"
+            );
+        }
+    }
+}
+
+async fn wait_for_runtime_shutdown(
+    bot_handle: &mut std::pin::Pin<&mut BotHandle>,
+    context: &'static str,
+) {
+    match tokio::time::timeout(RUNTIME_SHUTDOWN_TIMEOUT, &mut *bot_handle).await {
+        Ok(Ok(())) => {}
+        Ok(Err(err)) => {
+            tracing::debug!(context, err = %err, "whatsapp runtime task stopped");
+        }
+        Err(_) => {
+            tracing::warn!(
+                context,
+                timeout_secs = RUNTIME_SHUTDOWN_TIMEOUT.as_secs(),
+                "whatsapp runtime shutdown timed out; aborting"
+            );
+            bot_handle.as_ref().get_ref().abort();
+            if let Err(err) = (&mut *bot_handle).await {
+                tracing::debug!(context, err = %err, "whatsapp runtime task stopped after abort");
+            }
+        }
+    }
+}
+
+async fn abort_runtime(bot_handle: &mut std::pin::Pin<&mut BotHandle>, context: &'static str) {
+    bot_handle.as_ref().get_ref().abort();
+    wait_for_runtime_shutdown(bot_handle, context).await;
+}
+
 fn logout_target_jid(pn: Option<Jid>, lid: Option<Jid>) -> Option<Jid> {
     pn.filter(|jid| jid.device != 0)
         .or_else(|| lid.filter(|jid| jid.device != 0))
@@ -557,6 +599,14 @@ pub(super) async fn run_whatsapp_web_bridge(
         return WhatsAppBridgeExit::Retryable;
     }
 
+    let http_client = match ReqwestHttpClient::new(http_client) {
+        Ok(client) => client,
+        Err(err) => {
+            let _ = status_tx.send(WhatsAppWebStatus::error(err.to_string()));
+            return WhatsAppBridgeExit::Retryable;
+        }
+    };
+
     let store_path = whatsapp_store_path(&data_dir);
     let store = match SqliteStore::new(store_path.to_string_lossy().as_ref()).await {
         Ok(store) => Arc::new(store),
@@ -564,14 +614,6 @@ pub(super) async fn run_whatsapp_web_bridge(
             let _ = status_tx.send(WhatsAppWebStatus::error(format!(
                 "open whatsapp sqlite store failed: {err}"
             )));
-            return WhatsAppBridgeExit::Retryable;
-        }
-    };
-
-    let http_client = match ReqwestHttpClient::new(http_client) {
-        Ok(client) => client,
-        Err(err) => {
-            let _ = status_tx.send(WhatsAppWebStatus::error(err.to_string()));
             return WhatsAppBridgeExit::Retryable;
         }
     };
@@ -621,6 +663,7 @@ pub(super) async fn run_whatsapp_web_bridge(
     };
     tokio::pin!(bot_handle);
     let mut logout_requested = false;
+    let mut runtime_handle_done = false;
 
     loop {
         tokio::select! {
@@ -636,11 +679,8 @@ pub(super) async fn run_whatsapp_web_bridge(
                     {
                         tracing::warn!(err = %err, "mark whatsapp auth cleanup pending failed");
                     }
-                    client.disconnect().await;
-                    bot_handle.as_ref().get_ref().abort();
-                    if let Err(err) = (&mut bot_handle).await {
-                        tracing::debug!(err = %err, "whatsapp runtime task stopped after terminal event");
-                    }
+                    disconnect_runtime_client(&client, "terminal event").await;
+                    abort_runtime(&mut bot_handle, "terminal event").await;
                     return exit;
                 }
             }
@@ -654,10 +694,9 @@ pub(super) async fn run_whatsapp_web_bridge(
                         if let Err(err) = logout_active_session(&client).await {
                             tracing::warn!(err = %err, "whatsapp active logout failed");
                         }
-                        client.disconnect().await;
-                        if let Err(err) = (&mut bot_handle).await {
-                            tracing::warn!(err = %err, "whatsapp runtime task failed during logout");
-                        }
+                        disconnect_runtime_client(&client, "logout").await;
+                        wait_for_runtime_shutdown(&mut bot_handle, "logout").await;
+                        runtime_handle_done = true;
                         break;
                     }
                 }
@@ -666,6 +705,7 @@ pub(super) async fn run_whatsapp_web_bridge(
                 if let Err(err) = result {
                     tracing::warn!(err = %err, "whatsapp runtime task failed");
                 }
+                runtime_handle_done = true;
                 break;
             }
         }
@@ -679,6 +719,13 @@ pub(super) async fn run_whatsapp_web_bridge(
             let _ = status_tx.send(WhatsAppWebStatus::error(err.to_string()));
         }
         return WhatsAppBridgeExit::LogoutCompleted;
+    }
+
+    if runtime_handle_done {
+        disconnect_runtime_client(&client, "runtime ended").await;
+    } else {
+        disconnect_runtime_client(&client, "bridge loop stopped").await;
+        wait_for_runtime_shutdown(&mut bot_handle, "bridge loop stopped").await;
     }
 
     let _ = status_tx.send(WhatsAppWebStatus::error("whatsapp bridge stopped"));
