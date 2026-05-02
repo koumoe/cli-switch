@@ -135,8 +135,8 @@ export function ProjectMarkdownEditor({
   }, [value]);
 
   const handleChange = useCallback(
-    (next: string) => {
-      if (syncingRef.current) return;
+    (next: string, initialMarkdownNormalize = false) => {
+      if (syncingRef.current || initialMarkdownNormalize) return;
       onChange(next);
     },
     [onChange]
