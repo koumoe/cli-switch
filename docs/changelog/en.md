@@ -1,3 +1,8 @@
+## [0.59.3](https://github.com/koumoe/cli-switch/compare/v0.59.2...v0.59.3) (2026-05-02)
+
+### Bug Fixes
+
+* ignore MDXEditor normalization on close (#200) ([#200](https://github.com/koumoe/cli-switch/issues/200)) ([6220a8f](https://github.com/koumoe/cli-switch/commit/6220a8f3809820aa54bdb37a692bd8747d07eb23))
 ## [0.59.2](https://github.com/koumoe/cli-switch/compare/v0.59.1...v0.59.2) (2026-05-02)
 
 ### Bug Fixes
