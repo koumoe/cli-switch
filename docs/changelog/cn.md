@@ -1,3 +1,7 @@
+## [0.59.2](https://github.com/koumoe/cli-switch/compare/v0.59.1...v0.59.2) (2026-05-02)
+
+### 修复
+* 防止 WhatsApp 桥接文件描述符泄漏 (#199) ([#199](https://github.com/koumoe/cli-switch/issues/199)) ([dcde269](https://github.com/koumoe/cli-switch/commit/dcde2697b33b87d25d527ee09bd13c40dd3e9865))
 ## [0.59.1](https://github.com/koumoe/cli-switch/compare/v0.59.0...v0.59.1) (2026-05-01)
 
 ### 修复
