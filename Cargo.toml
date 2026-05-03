@@ -57,6 +57,9 @@ whatsapp-rust-tokio-transport = "0.5.0"
 wacore = { version = "0.5.0", default-features = false }
 wacore-binary = { version = "0.5.0", default-features = false }
 
+[patch.crates-io]
+whatsapp-rust = { path = "vendor/whatsapp-rust" }
+
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
 
