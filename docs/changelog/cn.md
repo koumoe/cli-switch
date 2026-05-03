@@ -1,3 +1,7 @@
+## [0.59.4](https://github.com/koumoe/cli-switch/compare/v0.59.3...v0.59.4) (2026-05-03)
+
+### 修复
+* 修复 WhatsApp 客户端事件处理器引用环 (#201) ([#201](https://github.com/koumoe/cli-switch/issues/201)) ([e35c34e](https://github.com/koumoe/cli-switch/commit/e35c34e9ec529a2a517de34d002a7af9f2e8fc0b))
 ## [0.59.3](https://github.com/koumoe/cli-switch/compare/v0.59.2...v0.59.3) (2026-05-02)
 
 ### 修复
