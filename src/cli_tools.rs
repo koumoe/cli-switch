@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::ffi::{OsStr, OsString};
 use std::path::Path;
 use std::path::PathBuf;
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 const CMD_VERSION_TIMEOUT: Duration = Duration::from_secs(5);
@@ -15,6 +16,9 @@ const GEO_IPINFO_TIMEOUT: Duration = Duration::from_millis(1200);
 
 pub const NPM_REGISTRY_OFFICIAL: &str = "https://registry.npmjs.org";
 pub const NPM_REGISTRY_NPMMIRROR: &str = "https://registry.npmmirror.com";
+
+const CLAUDE_CODE_NPM_PACKAGE: &str = "@anthropic-ai/claude-code";
+static NPM_INSTALL_LOCK: Mutex<()> = Mutex::new(());
 
 use crate::shell_env;
 
@@ -55,7 +59,7 @@ pub const CLI_TOOLS: &[CliToolDef] = &[
         id: CliToolId::Claude,
         name: "Claude Code",
         bin: "claude",
-        npm_package: "@anthropic-ai/claude-code",
+        npm_package: CLAUDE_CODE_NPM_PACKAGE,
     },
     CliToolDef {
         id: CliToolId::Codex,
@@ -83,6 +87,49 @@ pub struct CmdOutput {
     pub status: std::process::ExitStatus,
     pub stdout: String,
     pub stderr: String,
+}
+
+fn npm_install_args(pkg: &str) -> Vec<String> {
+    let mut args = vec![
+        "install".to_string(),
+        "-g".to_string(),
+        pkg.to_string(),
+        "--no-fund".to_string(),
+        "--no-audit".to_string(),
+    ];
+
+    // npm 12 blocks install-time lifecycle scripts unless they are explicitly allowed.
+    // Claude Code's wrapper package needs its postinstall script to replace the placeholder
+    // launcher with the downloaded platform-native binary. Keep the allowlist package-specific.
+    if pkg
+        .strip_prefix(CLAUDE_CODE_NPM_PACKAGE)
+        .is_some_and(|suffix| suffix.is_empty() || suffix.starts_with('@'))
+    {
+        args.push(format!("--allow-scripts={CLAUDE_CODE_NPM_PACKAGE}"));
+    }
+
+    args
+}
+
+fn run_npm_install_command(
+    cmd: &mut std::process::Command,
+    pkg: &str,
+) -> anyhow::Result<CmdOutput> {
+    cmd.args(npm_install_args(pkg));
+
+    // npm's global reify operation is not safe when multiple installs mutate the same prefix.
+    // Manual installs and the auto-updater can overlap, so serialize npm installs process-wide.
+    let _guard = NPM_INSTALL_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let out = crate::process::command_output_with_timeout(cmd, NPM_INSTALL_TIMEOUT)
+        .with_context(|| format!("run npm install -g {pkg} failed"))?;
+
+    Ok(CmdOutput {
+        status: out.status,
+        stdout: String::from_utf8_lossy(&out.stdout).to_string(),
+        stderr: String::from_utf8_lossy(&out.stderr).to_string(),
+    })
 }
 
 pub fn os_name() -> &'static str {
@@ -502,20 +549,12 @@ pub fn npm_install_global(pkg: &str) -> anyhow::Result<CmdOutput> {
         .ok_or_else(|| anyhow::anyhow!("npm path has no parent dir: {}", npm.display()))?;
 
     let mut cmd = std::process::Command::new(npm);
-    cmd.args(["install", "-g", pkg, "--no-fund", "--no-audit"]);
     shell_env::apply_to_command(&mut cmd);
     if let Some(path) = joined_child_path_for_dirs(&[npm_dir]) {
         cmd.env("PATH", path);
     }
     crate::process::command_silent(&mut cmd);
-    let out = crate::process::command_output_with_timeout(&mut cmd, NPM_INSTALL_TIMEOUT)
-        .with_context(|| format!("run npm install -g {pkg} failed"))?;
-
-    Ok(CmdOutput {
-        status: out.status,
-        stdout: String::from_utf8_lossy(&out.stdout).to_string(),
-        stderr: String::from_utf8_lossy(&out.stderr).to_string(),
-    })
+    run_npm_install_command(&mut cmd, pkg)
 }
 
 #[derive(Debug, Clone)]
@@ -893,15 +932,7 @@ impl CliExecEnv {
             .ok_or_else(|| anyhow::anyhow!("npm not found"))?;
 
         let mut cmd = self.cmd(npm);
-        cmd.args(["install", "-g", pkg, "--no-fund", "--no-audit"]);
-        let out = crate::process::command_output_with_timeout(&mut cmd, NPM_INSTALL_TIMEOUT)
-            .with_context(|| format!("run npm install -g {pkg} failed"))?;
-
-        Ok(CmdOutput {
-            status: out.status,
-            stdout: String::from_utf8_lossy(&out.stdout).to_string(),
-            stderr: String::from_utf8_lossy(&out.stderr).to_string(),
-        })
+        run_npm_install_command(&mut cmd, pkg)
     }
 
     pub fn npm_install_global_with_registry(
@@ -921,15 +952,7 @@ impl CliExecEnv {
         {
             cmd.env("npm_config_registry", registry);
         }
-        cmd.args(["install", "-g", pkg, "--no-fund", "--no-audit"]);
-        let out = crate::process::command_output_with_timeout(&mut cmd, NPM_INSTALL_TIMEOUT)
-            .with_context(|| format!("run npm install -g {pkg} failed"))?;
-
-        Ok(CmdOutput {
-            status: out.status,
-            stdout: String::from_utf8_lossy(&out.stdout).to_string(),
-            stderr: String::from_utf8_lossy(&out.stderr).to_string(),
-        })
+        run_npm_install_command(&mut cmd, pkg)
     }
 
     pub fn npm_global_has_package(&self, pkg: &str) -> bool {
@@ -963,15 +986,7 @@ impl CliExecEnv {
             cmd.env("npm_config_registry", registry);
         }
 
-        cmd.args(["install", "-g", pkg, "--no-fund", "--no-audit"]);
-        let out = crate::process::command_output_with_timeout(&mut cmd, NPM_INSTALL_TIMEOUT)
-            .with_context(|| format!("run npm install -g {pkg} failed"))?;
-
-        Ok(CmdOutput {
-            status: out.status,
-            stdout: String::from_utf8_lossy(&out.stdout).to_string(),
-            stderr: String::from_utf8_lossy(&out.stderr).to_string(),
-        })
+        run_npm_install_command(&mut cmd, pkg)
     }
 }
 
@@ -1061,7 +1076,9 @@ pub fn detect_cli_tool(env: &CliExecEnv, data_dir: &Path, def: &CliToolDef) -> D
         .and_then(|p| env.try_get_cmd_version_by_path(p))
         .map(|v| normalize_version_string(&v));
 
-    let installed = install_path.is_some();
+    // A package-manager shim can exist even when its lifecycle installation failed. Treat the
+    // tool as installed only when the executable itself can report a version successfully.
+    let installed = version.is_some();
     DetectedCliTool {
         installed,
         version,
@@ -1149,11 +1166,55 @@ mod path_tests {
         let shared_count = dirs.iter().filter(|item| **item == shared_dir).count();
         assert_eq!(shared_count, 1);
     }
+
+    #[test]
+    fn npm_install_args_allow_claude_code_postinstall_only() {
+        let args = npm_install_args(CLAUDE_CODE_NPM_PACKAGE);
+        assert!(
+            args.iter()
+                .any(|arg| arg == "--allow-scripts=@anthropic-ai/claude-code")
+        );
+
+        let versioned_args = npm_install_args("@anthropic-ai/claude-code@2.1.211");
+        assert!(
+            versioned_args
+                .iter()
+                .any(|arg| arg == "--allow-scripts=@anthropic-ai/claude-code")
+        );
+
+        let codex_args = npm_install_args("@openai/codex");
+        assert!(
+            !codex_args
+                .iter()
+                .any(|arg| arg.starts_with("--allow-scripts="))
+        );
+    }
 }
 
 #[cfg(test)]
 mod detect_tests {
     use super::*;
+
+    fn write_version_tool(path: &Path, version: &str) {
+        #[cfg(windows)]
+        std::fs::write(path, format!("@echo {version}\r\n")).expect("write version tool");
+
+        #[cfg(not(windows))]
+        {
+            use std::os::unix::fs::PermissionsExt as _;
+
+            std::fs::write(
+                path,
+                format!("#!/usr/bin/env sh\nprintf '%s\\n' '{version}'\n"),
+            )
+            .expect("write version tool");
+            let mut permissions = std::fs::metadata(path)
+                .expect("read version tool metadata")
+                .permissions();
+            permissions.set_mode(0o755);
+            std::fs::set_permissions(path, permissions).expect("make version tool executable");
+        }
+    }
 
     fn tmp_dir(name: &str) -> PathBuf {
         std::env::temp_dir().join(format!(
@@ -1179,7 +1240,7 @@ mod detect_tests {
         let tool_file = bin.to_string();
 
         let tool_path = bin_dir.join(&tool_file);
-        std::fs::write(&tool_path, b"").expect("write dummy tool file");
+        write_version_tool(&tool_path, "1.2.3");
 
         let env = CliExecEnv::new(None, None);
         let def = CliToolDef {
@@ -1191,6 +1252,58 @@ mod detect_tests {
 
         let detected = detect_cli_tool(&env, &data_dir, &def);
         assert!(detected.installed);
+        assert_eq!(detected.version.as_deref(), Some("1.2.3"));
+        assert_eq!(
+            detected.install_method,
+            CliToolInstallMethod::ManagedNpmPrefix
+        );
+        assert_eq!(detected.install_path.as_deref(), Some(tool_path.as_path()));
+
+        let _ = std::fs::remove_dir_all(&data_dir);
+    }
+
+    #[test]
+    fn detect_cli_tool_rejects_broken_managed_launcher() {
+        let data_dir = tmp_dir("broken-data");
+        let prefix_dir = cli_tools_npm_prefix_dir(&data_dir);
+        let bin_dir = cli_tools_npm_prefix_bin_dir(&prefix_dir);
+        std::fs::create_dir_all(&bin_dir).expect("create managed bin dir");
+
+        let bin = "cliswitch-test-broken-tool-bin";
+
+        #[cfg(windows)]
+        let tool_file = format!("{bin}.cmd");
+        #[cfg(not(windows))]
+        let tool_file = bin.to_string();
+
+        let tool_path = bin_dir.join(&tool_file);
+
+        #[cfg(windows)]
+        std::fs::write(&tool_path, b"@exit /b 1\r\n").expect("write broken tool");
+
+        #[cfg(not(windows))]
+        {
+            use std::os::unix::fs::PermissionsExt as _;
+
+            std::fs::write(&tool_path, b"#!/usr/bin/env sh\nexit 1\n").expect("write broken tool");
+            let mut permissions = std::fs::metadata(&tool_path)
+                .expect("read broken tool metadata")
+                .permissions();
+            permissions.set_mode(0o755);
+            std::fs::set_permissions(&tool_path, permissions).expect("make broken tool executable");
+        }
+
+        let env = CliExecEnv::new(None, None);
+        let def = CliToolDef {
+            id: CliToolId::Claude,
+            name: "Broken Tool",
+            bin,
+            npm_package: "cliswitch-test-broken-tool-pkg",
+        };
+
+        let detected = detect_cli_tool(&env, &data_dir, &def);
+        assert!(!detected.installed);
+        assert!(detected.version.is_none());
         assert_eq!(
             detected.install_method,
             CliToolInstallMethod::ManagedNpmPrefix
