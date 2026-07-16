@@ -230,7 +230,26 @@ pub(in crate::server) async fn install_cli_tool(
 
         // Re-detect after install/update so we can report the latest version/method/path.
         let detected = crate::cli_tools::detect_cli_tool(&env, &data_dir, def);
-        let tool_path = detected.install_path.clone();
+        let install_verified = detected.installed && detected.version.is_some();
+        let tool_path = if install_verified {
+            detected.install_path.clone()
+        } else {
+            None
+        };
+
+        let command_ok = out.status.success();
+        let exit_code = out.status.code();
+        let stdout = out.stdout;
+        let mut stderr = out.stderr;
+        if command_ok && !install_verified {
+            if !stderr.is_empty() && !stderr.ends_with('\n') {
+                stderr.push('\n');
+            }
+            stderr.push_str(&format!(
+                "{} installation completed, but `{} --version` failed; the executable is unusable.",
+                def.name, def.bin
+            ));
+        }
 
         let (terminal_shim_ok, terminal_shim_dir, terminal_shim_detail) =
             if let Some(tool_path) = tool_path.as_ref() {
@@ -259,6 +278,9 @@ pub(in crate::server) async fn install_cli_tool(
                     ),
                 }
             } else {
+                // Do not leave a generated shim pointing at a package-manager placeholder or
+                // otherwise unusable executable.
+                let _ = crate::terminal::remove_cli_tool_shim(def.bin);
                 (
                     false,
                     crate::terminal::cli_tools_shim_dir()
@@ -275,10 +297,10 @@ pub(in crate::server) async fn install_cli_tool(
         });
 
         Ok(InstallCliToolResponse {
-            ok: out.status.success(),
-            exit_code: out.status.code(),
-            stdout: out.stdout,
-            stderr: out.stderr,
+            ok: command_ok && install_verified,
+            exit_code,
+            stdout,
+            stderr,
             tool: CliToolStatus {
                 id: def.id,
                 name: def.name,
