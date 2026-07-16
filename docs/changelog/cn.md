@@ -1,3 +1,7 @@
+## [0.59.5](https://github.com/koumoe/cli-switch/compare/v0.59.4...v0.59.5) (2026-07-16)
+
+### 修复
+* 修复 npm 12 下 Claude Code 安装 (#202) ([#202](https://github.com/koumoe/cli-switch/issues/202)) ([4deb848](https://github.com/koumoe/cli-switch/commit/4deb84877fb4165ee4e91092cc3d3b13303db1d2))
 ## [0.59.4](https://github.com/koumoe/cli-switch/compare/v0.59.3...v0.59.4) (2026-05-03)
 
 ### 修复
