@@ -238,14 +238,6 @@ export function AccountsPage() {
     }
   }
 
-  async function onOpenBrowser(item: RemoteAccount) {
-    try {
-      await openInBrowser(item.base_url);
-    } catch (e) {
-      toast.error(t("accounts.toast.actionFail"), { description: humanizeApiError(e, t) });
-    }
-  }
-
   async function onSystemCheckin(item: RemoteAccount) {
     if (!isNewApiAccount(item)) return;
     setSystemChecking((current) => ({ ...current, [item.id]: true }));
@@ -471,7 +463,6 @@ export function AccountsPage() {
             setAccounts={setAccounts}
             persistOrder={persistOrder}
             onRefreshAccount={onRefreshAccount}
-            onOpenBrowser={onOpenBrowser}
             onSystemCheckin={onSystemCheckin}
             onOpenManualCheckinPrompt={openManualCheckinPrompt}
             onOpenCreateManagedChannelDialog={openCreateManagedChannelDialog}
