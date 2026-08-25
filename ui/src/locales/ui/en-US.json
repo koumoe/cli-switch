@@ -280,7 +280,6 @@
       "sub2api": "sub2api"
     },
     "table": {
-      "name": "Name",
       "baseUrl": "Base URL",
       "provider": "Provider",
       "balance": "Balance",

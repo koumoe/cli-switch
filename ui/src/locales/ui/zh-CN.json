@@ -280,7 +280,6 @@
       "sub2api": "sub2api"
     },
     "table": {
-      "name": "名称",
       "baseUrl": "Base URL",
       "provider": "账号体系",
       "balance": "余额",
