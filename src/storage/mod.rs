@@ -11,6 +11,7 @@ mod chat_bridge;
 mod checkin;
 mod error;
 mod newapi;
+mod official_codex;
 mod pricing;
 mod project;
 mod protocol;
@@ -56,6 +57,10 @@ pub use newapi::{
     list_channels_by_newapi_account, list_newapi_accounts, list_newapi_accounts_with_secret,
     reorder_newapi_accounts, set_newapi_account_balance_alert_notified, update_newapi_account,
     update_newapi_account_remote_snapshot,
+};
+pub use official_codex::{
+    OfficialCodexAccount, delete_official_codex_account, get_official_codex_account_secret,
+    list_official_codex_accounts, update_official_codex_tokens, upsert_official_codex_account,
 };
 pub use pricing::{
     PricingModel, PricingStatus, UpsertPricingModel, pricing_status, search_pricing_models,

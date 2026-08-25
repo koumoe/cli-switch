@@ -43,6 +43,8 @@ import type {
   ProjectRecord,
   Protocol,
   RemoteAccount,
+  OfficialCodexAccount,
+  OfficialCodexLoginStart,
   RemoteAccountCheckinsToday,
   RemoteAccountDetection,
   RemoteAccountSystemCheckinResult,
@@ -341,6 +343,22 @@ export function completeChannelCheckinToday(id: string): Promise<void> {
 
 export function listRemoteAccounts(): Promise<RemoteAccount[]> {
   return http<RemoteAccount[]>("GET", "/api/remote/accounts");
+}
+
+export function listOfficialCodexAccounts(): Promise<OfficialCodexAccount[]> {
+  return http<OfficialCodexAccount[]>("GET", "/api/official/codex/accounts");
+}
+
+export function startOfficialCodexLogin(): Promise<OfficialCodexLoginStart> {
+  return http<OfficialCodexLoginStart>("POST", "/api/official/codex/login", {});
+}
+
+export function deleteOfficialCodexAccount(id: string): Promise<void> {
+  return http<void>("DELETE", `/api/official/codex/accounts/${encodeURIComponent(id)}`);
+}
+
+export function refreshOfficialCodexAccount(id: string): Promise<void> {
+  return http<void>("POST", `/api/official/codex/accounts/${encodeURIComponent(id)}/refresh`, {});
 }
 
 export function detectRemoteAccount(baseUrl: string): Promise<RemoteAccountDetection> {

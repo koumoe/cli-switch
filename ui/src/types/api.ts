@@ -290,6 +290,23 @@ export type RechargeCurrency = "USD" | "CNY";
 
 export type RemoteAccountProvider = "newapi" | "sub2api";
 
+export type OfficialCodexAccount = {
+  id: string;
+  account_id: string;
+  email: string | null;
+  token_configured: boolean;
+  expires_at_ms: number;
+  enabled: boolean;
+  last_error: string | null;
+  created_at_ms: number;
+  updated_at_ms: number;
+};
+
+export type OfficialCodexLoginStart = {
+  authorization_url: string;
+  state: string;
+};
+
 export type RemoteAccountCheckinMode = "disabled" | "system_api" | "page_open";
 
 export type RemoteAccountBase = {

@@ -1,7 +1,9 @@
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 
+use std::collections::HashMap;
 use tokio::sync::{mpsc, watch};
 
 use crate::chat_bridge::weixin::{WeixinControl, WeixinStatus};
@@ -25,6 +27,12 @@ pub struct AppState {
     pub whatsapp_status_rx: watch::Receiver<WhatsAppWebStatus>,
     pub weixin_control_tx: mpsc::Sender<WeixinControl>,
     pub weixin_status_rx: watch::Receiver<WeixinStatus>,
+    pub codex_oauth_sessions: Arc<
+        tokio::sync::Mutex<
+            HashMap<String, crate::server::handlers::official_codex::CodexOAuthSession>,
+        >,
+    >,
+    pub codex_callback_available: Arc<AtomicBool>,
 }
 
 impl AppState {
