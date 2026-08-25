@@ -86,13 +86,16 @@ CREATE INDEX IF NOT EXISTS idx_channel_checkins_date ON channel_checkins(date, c
 
 CREATE TABLE IF NOT EXISTS remote_accounts (
   id TEXT PRIMARY KEY,
-  provider TEXT NOT NULL CHECK(provider IN ('newapi','sub2api')),
+  provider TEXT NOT NULL CHECK(provider IN ('newapi','sub2api','chatgpt')),
   base_url TEXT NOT NULL,
   api_url TEXT NULL,
   user_id TEXT NOT NULL DEFAULT '',
   user_token TEXT NOT NULL DEFAULT '',
   access_token TEXT NOT NULL DEFAULT '',
   refresh_token TEXT NOT NULL DEFAULT '',
+  id_token TEXT NOT NULL DEFAULT '',
+  email TEXT NULL,
+  expires_at_ms INTEGER NOT NULL DEFAULT 0,
   page_checkin_url TEXT NULL,
   checkin_mode TEXT NOT NULL DEFAULT 'disabled' CHECK(checkin_mode IN ('disabled','system_api','page_open')),
   auto_checkin_enabled INTEGER NOT NULL DEFAULT 0,
@@ -126,20 +129,6 @@ CREATE TABLE IF NOT EXISTS remote_accounts (
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_remote_accounts_provider_base_user
 ON remote_accounts(provider, base_url, user_id);
-
-CREATE TABLE IF NOT EXISTS official_codex_accounts (
-  id TEXT PRIMARY KEY,
-  account_id TEXT NOT NULL UNIQUE,
-  email TEXT NULL,
-  access_token TEXT NOT NULL,
-  refresh_token TEXT NOT NULL,
-  id_token TEXT NOT NULL DEFAULT '',
-  expires_at_ms INTEGER NOT NULL,
-  enabled INTEGER NOT NULL DEFAULT 1,
-  last_error TEXT NULL,
-  created_at_ms INTEGER NOT NULL,
-  updated_at_ms INTEGER NOT NULL
-);
 
 CREATE TABLE IF NOT EXISTS remote_account_checkins (
   account_id TEXT NOT NULL,

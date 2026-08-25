@@ -179,6 +179,7 @@ export function AccountWizardDialog({
     setSaving(true);
     try {
       await createRemoteAccount({
+        name: values.name.trim() || null,
         provider: values.provider,
         base_url: values.base_url.trim(),
         api_url: values.api_url.trim() || null,
@@ -259,6 +260,9 @@ export function AccountWizardDialog({
 
                 {step === 1 ? (
                   <div className="space-y-4">
+                    <FormField control={form.control} name="name" render={({ field }) => (
+                      <FormItem><FormLabel>名称</FormLabel><FormControl><Input {...field} placeholder="自定义账号名称" /></FormControl><FormMessage /></FormItem>
+                    )} />
                     <FormField
                       control={form.control}
                       name="base_url"

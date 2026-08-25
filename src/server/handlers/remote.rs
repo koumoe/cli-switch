@@ -134,6 +134,7 @@ pub(in crate::server) struct ReorderRemoteAccountsInput {
 
 #[derive(Debug, Deserialize)]
 pub(in crate::server) struct CreateRemoteAccountInput {
+    name: Option<String>,
     provider: RemoteAccountProvider,
     base_url: String,
     api_url: Option<String>,
@@ -150,6 +151,7 @@ pub(in crate::server) struct CreateRemoteAccountInput {
 
 #[derive(Debug, Deserialize, Default)]
 pub(in crate::server) struct UpdateRemoteAccountInput {
+    name: Option<String>,
     provider: Option<RemoteAccountProvider>,
     base_url: Option<String>,
     api_url: Option<String>,
@@ -1005,6 +1007,7 @@ async fn create_sub2api_remote_account_impl(
     let account = storage::create_remote_account(
         state.db_path(),
         storage::CreateRemoteAccount {
+            name: input.name,
             provider: storage::RemoteAccountProvider::Sub2Api,
             base_url,
             api_url: input.api_url,
@@ -1122,6 +1125,7 @@ async fn update_sub2api_remote_account_impl(
         state.db_path(),
         account_id,
         storage::UpdateRemoteAccount {
+            name: input.name,
             base_url: Some(effective_base_url),
             api_url: input.api_url,
             access_token: Some(session.access_token.clone()),

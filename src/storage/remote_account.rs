@@ -115,6 +115,7 @@ pub struct RemoteAccount {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct CreateRemoteAccount {
+    pub name: Option<String>,
     pub provider: RemoteAccountProvider,
     pub base_url: String,
     pub api_url: Option<String>,
@@ -129,6 +130,7 @@ pub struct CreateRemoteAccount {
 
 #[derive(Debug, Clone, Deserialize, Default)]
 pub struct UpdateRemoteAccount {
+    pub name: Option<String>,
     pub base_url: Option<String>,
     pub api_url: Option<String>,
     pub access_token: Option<String>,
@@ -361,6 +363,7 @@ pub async fn create_remote_account(
         let ts = now_ms();
         let id = Uuid::new_v4().to_string();
         let provider = input.provider;
+        let custom_name = normalize_optional_text(input.name);
         let base_url = normalize_base_url(&input.base_url);
         let api_url = normalize_optional_base_url(input.api_url);
         let access_token = normalize_optional_bearer_token(Some(input.access_token));
@@ -380,10 +383,10 @@ pub async fn create_remote_account(
             r#"
             INSERT INTO remote_accounts (
                 id, provider, base_url, api_url, access_token, refresh_token, page_checkin_url, checkin_mode,
-                auto_checkin_time, low_balance_alert_threshold, recharge_currency, sort_order,
+                auto_checkin_time, low_balance_alert_threshold, recharge_currency, remote_display_name, sort_order,
                 created_at_ms, updated_at_ms
             )
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
             "#,
             params![
                 id,
@@ -397,6 +400,7 @@ pub async fn create_remote_account(
                 auto_checkin_time,
                 low_balance_alert_threshold,
                 recharge_currency.as_str(),
+                custom_name,
                 sort_order,
                 ts,
                 ts,
@@ -474,6 +478,9 @@ pub async fn update_remote_account(
         if let Some(value) = input.recharge_currency {
             account.recharge_currency = value;
         }
+        if input.name.is_some() {
+            account.remote_display_name = normalize_optional_text(input.name);
+        }
 
         ensure_unique_account(conn, account.provider, &account.base_url, Some(&account.id))?;
 
@@ -482,7 +489,7 @@ pub async fn update_remote_account(
             UPDATE remote_accounts
             SET base_url = ?2, api_url = ?3, access_token = ?4, refresh_token = ?5,
                 page_checkin_url = ?6, checkin_mode = ?7, auto_checkin_time = ?8,
-                low_balance_alert_threshold = ?9, recharge_currency = ?10, updated_at_ms = ?11
+                low_balance_alert_threshold = ?9, recharge_currency = ?10, remote_display_name = ?11, updated_at_ms = ?12
             WHERE id = ?1
             "#,
             params![
@@ -496,6 +503,7 @@ pub async fn update_remote_account(
                 account.auto_checkin_time,
                 account.low_balance_alert_threshold,
                 account.recharge_currency.as_str(),
+                account.remote_display_name,
                 ts,
             ],
         )?;

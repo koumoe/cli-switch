@@ -13,6 +13,7 @@ import type {
 export type AccountCheckinModeOption = RemoteAccountCheckinMode;
 
 export type AccountDraft = {
+  name: string;
   provider: RemoteAccountProvider;
   base_url: string;
   api_url: string;
@@ -41,6 +42,7 @@ export type ManagedChannelDraft = {
 
 export function emptyAccountDraft(rechargeCurrency: RechargeCurrency = "CNY"): AccountDraft {
   return {
+    name: "",
     provider: "newapi",
     base_url: "",
     api_url: "",
@@ -60,6 +62,7 @@ export function emptyAccountFormValues(
   rechargeCurrency: RechargeCurrency = "CNY",
 ): AccountFormValues {
   return {
+    name: account.remote_display_name ?? "",
     ...emptyAccountDraft(rechargeCurrency),
     stored_token_configured: false,
   };
