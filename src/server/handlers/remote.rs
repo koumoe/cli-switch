@@ -32,6 +32,7 @@ pub(in crate::server) enum RemoteAccountCheckinMode {
 
 #[derive(Debug, Clone, Serialize)]
 pub(in crate::server) struct RemoteAccountCommonResponse {
+    pub name: String,
     pub id: String,
     pub base_url: String,
     pub api_url: Option<String>,
@@ -45,7 +46,6 @@ pub(in crate::server) struct RemoteAccountCommonResponse {
     pub low_balance_alert_threshold: f64,
     pub recharge_currency: RechargeCurrency,
     pub remote_username: Option<String>,
-    pub remote_display_name: Option<String>,
     pub last_balance_amount: Option<f64>,
     pub last_sync_error: Option<String>,
     pub last_synced_at_ms: Option<i64>,
@@ -134,6 +134,7 @@ pub(in crate::server) struct ReorderRemoteAccountsInput {
 
 #[derive(Debug, Deserialize)]
 pub(in crate::server) struct CreateRemoteAccountInput {
+    name: Option<String>,
     provider: RemoteAccountProvider,
     base_url: String,
     api_url: Option<String>,
@@ -150,6 +151,7 @@ pub(in crate::server) struct CreateRemoteAccountInput {
 
 #[derive(Debug, Deserialize, Default)]
 pub(in crate::server) struct UpdateRemoteAccountInput {
+    name: Option<String>,
     provider: Option<RemoteAccountProvider>,
     base_url: Option<String>,
     api_url: Option<String>,
@@ -574,6 +576,7 @@ fn resolve_newapi_checkin_mode(account: &storage::NewApiAccount) -> RemoteAccoun
 
 fn map_newapi_common(account: &storage::NewApiAccount) -> RemoteAccountCommonResponse {
     RemoteAccountCommonResponse {
+        name: account.name.clone(),
         id: account.id.clone(),
         base_url: account.base_url.clone(),
         api_url: account.api_url.clone(),
@@ -587,7 +590,6 @@ fn map_newapi_common(account: &storage::NewApiAccount) -> RemoteAccountCommonRes
         low_balance_alert_threshold: account.low_balance_alert_threshold,
         recharge_currency: account.recharge_currency,
         remote_username: account.remote_username.clone(),
-        remote_display_name: account.remote_display_name.clone(),
         last_balance_amount: account.last_balance_amount,
         last_sync_error: account.last_sync_error.clone(),
         last_synced_at_ms: account.last_synced_at_ms,
@@ -624,6 +626,7 @@ impl From<storage::NewApiAccount> for RemoteAccountResponse {
 impl From<storage::RemoteAccount> for RemoteAccountResponse {
     fn from(account: storage::RemoteAccount) -> Self {
         let common = RemoteAccountCommonResponse {
+            name: account.name.clone(),
             id: account.id,
             base_url: account.base_url,
             api_url: account.api_url,
@@ -637,7 +640,6 @@ impl From<storage::RemoteAccount> for RemoteAccountResponse {
             low_balance_alert_threshold: account.low_balance_alert_threshold,
             recharge_currency: account.recharge_currency,
             remote_username: account.remote_username,
-            remote_display_name: account.remote_display_name,
             last_balance_amount: account.last_balance_amount,
             last_sync_error: account.last_sync_error,
             last_synced_at_ms: account.last_synced_at_ms,
@@ -941,6 +943,7 @@ async fn create_newapi_remote_account_impl(
     let (request_checkin_mode, auto_checkin_enabled) =
         normalize_newapi_create_checkin_mode(input.checkin_mode);
     let create_input = storage::CreateNewApiAccount {
+        name: input.name.unwrap_or_default(),
         base_url: input.base_url,
         api_url: input.api_url,
         user_id,
@@ -1005,6 +1008,7 @@ async fn create_sub2api_remote_account_impl(
     let account = storage::create_remote_account(
         state.db_path(),
         storage::CreateRemoteAccount {
+            name: input.name.unwrap_or_default(),
             provider: storage::RemoteAccountProvider::Sub2Api,
             base_url,
             api_url: input.api_url,
@@ -1033,6 +1037,7 @@ async fn update_newapi_remote_account_impl(
     let (request_checkin_mode, auto_checkin_enabled) =
         normalize_newapi_update_checkin_mode(input.checkin_mode);
     let update_input = storage::UpdateNewApiAccount {
+        name: input.name,
         base_url: input.base_url,
         api_url: input.api_url,
         user_id: input.user_id,
@@ -1122,6 +1127,7 @@ async fn update_sub2api_remote_account_impl(
         state.db_path(),
         account_id,
         storage::UpdateRemoteAccount {
+            name: input.name,
             base_url: Some(effective_base_url),
             api_url: input.api_url,
             access_token: Some(session.access_token.clone()),
@@ -1213,7 +1219,6 @@ fn build_sub2api_snapshot(
         remote_user_id: Some(overview.remote_user_id.to_string()),
         remote_role: overview.remote_role.clone(),
         remote_username: overview.remote_username.clone(),
-        remote_display_name: overview.remote_display_name.clone(),
         last_balance_amount: overview.balance,
         last_synced_at_ms: Some(synced_at_ms),
     }
@@ -1227,7 +1232,6 @@ fn apply_sub2api_overview_to_account(
     account.remote_user_id = Some(overview.remote_user_id.to_string());
     account.remote_role = overview.remote_role.clone();
     account.remote_username = overview.remote_username.clone();
-    account.remote_display_name = overview.remote_display_name.clone();
     account.last_balance_amount = overview.balance;
     account.last_sync_error = None;
     account.reauth_required = false;
@@ -2488,6 +2492,7 @@ mod tests {
         let response = create_remote_account(
             State(state),
             Json(CreateRemoteAccountInput {
+                name: Some("Local Account".to_string()),
                 provider: RemoteAccountProvider::Sub2Api,
                 base_url: base_url.clone(),
                 api_url: None,
@@ -2515,10 +2520,7 @@ mod tests {
         assert_eq!(accounts.len(), 1);
         assert_eq!(accounts[0].remote_user_id.as_deref(), Some("42"));
         assert_eq!(accounts[0].remote_username.as_deref(), Some("demo-user"));
-        assert_eq!(
-            accounts[0].remote_display_name.as_deref(),
-            Some("demo@example.com")
-        );
+        assert_eq!(accounts[0].name, "Local Account");
         assert_eq!(accounts[0].last_balance_amount, Some(12.5));
         assert_eq!(accounts[0].last_sync_error, None);
 
@@ -2536,6 +2538,7 @@ mod tests {
         let account = storage::create_remote_account(
             db_path.clone(),
             storage::CreateRemoteAccount {
+                name: "Local Account".to_string(),
                 provider: storage::RemoteAccountProvider::Sub2Api,
                 base_url: base_url.clone(),
                 api_url: None,
@@ -2572,10 +2575,7 @@ mod tests {
         assert_eq!(updated.low_balance_alert_threshold, 5.0);
         assert_eq!(updated.remote_user_id.as_deref(), Some("42"));
         assert_eq!(updated.remote_username.as_deref(), Some("demo-user"));
-        assert_eq!(
-            updated.remote_display_name.as_deref(),
-            Some("demo@example.com")
-        );
+        assert_eq!(updated.name, "Local Account");
         assert_eq!(updated.last_balance_amount, Some(12.5));
         assert_eq!(updated.last_sync_error, None);
 
@@ -2593,6 +2593,7 @@ mod tests {
         let account = storage::create_remote_account(
             db_path.clone(),
             storage::CreateRemoteAccount {
+                name: "Local Account".to_string(),
                 provider: storage::RemoteAccountProvider::Sub2Api,
                 base_url,
                 api_url: None,
@@ -2654,6 +2655,7 @@ mod tests {
         let account = storage::create_remote_account(
             db_path.clone(),
             storage::CreateRemoteAccount {
+                name: "Local Account".to_string(),
                 provider: storage::RemoteAccountProvider::Sub2Api,
                 base_url,
                 api_url: None,
@@ -2713,6 +2715,7 @@ mod tests {
         let account = storage::create_newapi_account(
             db_path.clone(),
             storage::CreateNewApiAccount {
+                name: "Local Account".to_string(),
                 base_url,
                 api_url: None,
                 user_id: "demo-user-id".to_string(),
@@ -2761,7 +2764,7 @@ mod tests {
                 .await
                 .expect("reload newapi account");
         assert_eq!(updated.remote_username.as_deref(), Some("demo-user"));
-        assert_eq!(updated.remote_display_name.as_deref(), Some("Demo User"));
+        assert_eq!(updated.name, "Local Account");
         assert_eq!(updated.last_sync_error, None);
 
         let checkins = storage::get_newapi_accounts_checkins_today(db_path.clone())
@@ -2782,6 +2785,7 @@ mod tests {
         let account = storage::create_remote_account(
             db_path.clone(),
             storage::CreateRemoteAccount {
+                name: "Local Account".to_string(),
                 provider: storage::RemoteAccountProvider::Sub2Api,
                 base_url: "http://127.0.0.1:65535".to_string(),
                 api_url: None,

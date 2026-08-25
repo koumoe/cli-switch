@@ -311,6 +311,7 @@ export type RemoteAccountCheckinMode = "disabled" | "system_api" | "page_open";
 
 export type RemoteAccountBase = {
   id: string;
+  name: string;
   base_url: string;
   api_url: string | null;
   user_id: string;
@@ -323,7 +324,6 @@ export type RemoteAccountBase = {
   low_balance_alert_threshold: number;
   recharge_currency: RechargeCurrency;
   remote_username: string | null;
-  remote_display_name: string | null;
   last_balance_amount: number | null;
   last_sync_error: string | null;
   last_synced_at_ms: number | null;
@@ -365,6 +365,7 @@ export type RemoteAccountDetection = {
 };
 
 export type CreateRemoteAccountInput = {
+  name?: string | null;
   provider: RemoteAccountProvider;
   base_url: string;
   api_url?: string | null;
@@ -380,6 +381,7 @@ export type CreateRemoteAccountInput = {
 };
 
 export type UpdateRemoteAccountInput = Partial<{
+  name: string | null;
   provider: RemoteAccountProvider;
   base_url: string;
   api_url: string | null;

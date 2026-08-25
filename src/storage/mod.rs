@@ -116,8 +116,30 @@ pub fn init_db(db_path: &Path) -> anyhow::Result<()> {
     let migration = include_str!("../../migrations/001_init.sql");
     conn.execute_batch(migration)
         .with_context(|| "执行 migrations/001_init.sql 失败")?;
+    ensure_column(&conn, "remote_accounts", "name", "TEXT NOT NULL DEFAULT ''")?;
     channel::ensure_channel_schema(&conn)?;
 
+    Ok(())
+}
+
+fn ensure_column(
+    conn: &Connection,
+    table: &str,
+    column: &str,
+    definition: &str,
+) -> anyhow::Result<()> {
+    let mut stmt = conn.prepare(&format!("PRAGMA table_info({table})"))?;
+    let exists = stmt
+        .query_map([], |row| row.get::<_, String>(1))?
+        .collect::<rusqlite::Result<Vec<_>>>()?
+        .iter()
+        .any(|name| name == column);
+    if !exists {
+        conn.execute(
+            &format!("ALTER TABLE {table} ADD COLUMN {column} {definition}"),
+            [],
+        )?;
+    }
     Ok(())
 }
 
@@ -147,7 +169,7 @@ const UNIFIED_REMOTE_ACCOUNT_SELECT_COLUMNS: &str = r#"
     id, provider, base_url, api_url, user_id, user_token, access_token, refresh_token,
     page_checkin_url, checkin_mode, auto_checkin_enabled, auto_checkin_time,
     low_balance_alert_threshold, recharge_currency, remote_user_id, remote_role,
-    remote_username, remote_display_name, remote_group, quota_display_type, quota_per_unit,
+    remote_username, name, remote_group, quota_display_type, quota_per_unit,
     usd_exchange_rate, custom_currency_symbol, custom_currency_exchange_rate,
     remote_checkin_enabled, remote_turnstile_check_enabled, last_quota, last_used_quota,
     last_balance_amount, last_sync_error, reauth_required, last_synced_at_ms,
@@ -173,7 +195,7 @@ struct UnifiedRemoteAccountRow {
     remote_user_id: Option<String>,
     remote_role: Value,
     remote_username: Option<String>,
-    remote_display_name: Option<String>,
+    name: Option<String>,
     remote_group: Option<String>,
     quota_display_type: String,
     quota_per_unit: f64,
@@ -215,7 +237,7 @@ impl UnifiedRemoteAccountRow {
             remote_user_id: row.get(14)?,
             remote_role: row.get(15)?,
             remote_username: row.get(16)?,
-            remote_display_name: row.get(17)?,
+            name: row.get(17)?,
             remote_group: row.get(18)?,
             quota_display_type: row.get(19)?,
             quota_per_unit: row.get(20)?,
@@ -256,6 +278,7 @@ impl UnifiedRemoteAccountRow {
             .filter(|value| token_configured(value));
         Ok(NewApiAccount {
             id: self.id,
+            name: self.name.unwrap_or_default(),
             base_url: self.base_url,
             api_url: self.api_url,
             user_id: self.user_id,
@@ -269,7 +292,6 @@ impl UnifiedRemoteAccountRow {
             recharge_currency: self.recharge_currency,
             remote_role: decode_newapi_remote_role(self.remote_role)?,
             remote_username: self.remote_username,
-            remote_display_name: self.remote_display_name,
             remote_group: self.remote_group,
             quota_display_type: self.quota_display_type,
             quota_per_unit: self.quota_per_unit,
@@ -302,6 +324,7 @@ impl UnifiedRemoteAccountRow {
             .filter(|value| token_configured(value));
         Ok(RemoteAccount {
             id: self.id,
+            name: self.name.unwrap_or_default(),
             provider: RemoteAccountProvider::Sub2Api,
             base_url: self.base_url,
             api_url: self.api_url,
@@ -316,7 +339,6 @@ impl UnifiedRemoteAccountRow {
             remote_user_id: self.remote_user_id,
             remote_role: decode_sub2api_remote_role(self.remote_role)?,
             remote_username: self.remote_username,
-            remote_display_name: self.remote_display_name,
             last_balance_amount: self.last_balance_amount,
             last_sync_error: self.last_sync_error,
             reauth_required: self.reauth_required,
@@ -577,6 +599,7 @@ mod tests {
         let newapi = create_newapi_account(
             db_path.clone(),
             CreateNewApiAccount {
+                name: "Local Account".to_string(),
                 base_url: "https://newapi.example.com".to_string(),
                 api_url: None,
                 user_id: "demo-user".to_string(),
@@ -597,7 +620,6 @@ mod tests {
             NewApiAccountRemoteSnapshot {
                 remote_role: Some(100),
                 remote_username: Some("newapi-user".to_string()),
-                remote_display_name: Some("NewAPI User".to_string()),
                 remote_group: Some("default".to_string()),
                 last_balance_amount: Some(12.5),
                 last_synced_at_ms: Some(111),
@@ -610,6 +632,7 @@ mod tests {
         let remote = create_remote_account(
             db_path.clone(),
             CreateRemoteAccount {
+                name: "Local Account".to_string(),
                 provider: RemoteAccountProvider::Sub2Api,
                 base_url: "https://sub2api.example.com".to_string(),
                 api_url: Some("https://sub2api.example.com/v1".to_string()),
@@ -631,7 +654,6 @@ mod tests {
                 remote_user_id: Some("42".to_string()),
                 remote_role: Some("admin".to_string()),
                 remote_username: Some("sub2api-user".to_string()),
-                remote_display_name: Some("Sub2API User".to_string()),
                 last_balance_amount: Some(6.5),
                 last_synced_at_ms: Some(222),
             },

@@ -60,7 +60,6 @@ pub struct Sub2ApiTokenPair {
 pub struct Sub2ApiAccountOverview {
     pub remote_user_id: i64,
     pub remote_username: Option<String>,
-    pub remote_display_name: Option<String>,
     pub remote_role: Option<String>,
     pub balance: Option<f64>,
 }
@@ -114,7 +113,6 @@ struct PublicSettingsData {
 #[derive(Debug, Deserialize)]
 struct AuthMeData {
     id: i64,
-    email: Option<String>,
     username: Option<String>,
     role: Option<String>,
     balance: Option<f64>,
@@ -409,11 +407,7 @@ pub async fn fetch_account_overview(
     let remote_username = data.username.filter(|value| !value.trim().is_empty());
     Ok(Sub2ApiAccountOverview {
         remote_user_id: data.id,
-        remote_username: remote_username.clone(),
-        remote_display_name: data
-            .email
-            .filter(|value| !value.trim().is_empty())
-            .or(remote_username),
+        remote_username,
         remote_role: data.role.filter(|value| !value.trim().is_empty()),
         balance: subscription_balance.or(data.balance),
     })

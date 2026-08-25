@@ -208,6 +208,7 @@ export function AccountsPage() {
         }
 
         await updateRemoteAccount(editingId, {
+          name: values.name.trim(),
           provider: "newapi",
           base_url: baseUrl,
           api_url: apiUrl || null,
@@ -227,6 +228,7 @@ export function AccountsPage() {
           return;
         }
         await updateRemoteAccount(editingId, {
+          name: values.name.trim(),
           provider: "sub2api",
           base_url: baseUrl,
           api_url: apiUrl || null,

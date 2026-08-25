@@ -11,7 +11,6 @@ const NEW_API_USER_HEADER: &str = "New-Api-User";
 pub struct NewApiAccountOverview {
     pub remote_role: Option<i64>,
     pub remote_username: Option<String>,
-    pub remote_display_name: Option<String>,
     pub remote_group: Option<String>,
     pub quota_display_type: String,
     pub quota_per_unit: f64,
@@ -41,7 +40,6 @@ pub fn build_remote_snapshot(overview: &NewApiAccountOverview) -> NewApiAccountR
         replace_remote_state: true,
         remote_role: overview.remote_role,
         remote_username: overview.remote_username.clone(),
-        remote_display_name: overview.remote_display_name.clone(),
         remote_group: overview.remote_group.clone(),
         quota_display_type: Some(overview.quota_display_type.clone()),
         quota_per_unit: Some(overview.quota_per_unit),
@@ -112,7 +110,6 @@ struct StatusData {
 struct SelfData {
     role: Option<i64>,
     username: Option<String>,
-    display_name: Option<String>,
     group: Option<String>,
     quota: Option<i64>,
     used_quota: Option<i64>,
@@ -329,7 +326,6 @@ pub async fn fetch_account_overview(
     Ok(NewApiAccountOverview {
         remote_role: user.role,
         remote_username: user.username.filter(|value| !value.trim().is_empty()),
-        remote_display_name: user.display_name.filter(|value| !value.trim().is_empty()),
         remote_group: user.group.filter(|value| !value.trim().is_empty()),
         quota_display_type,
         quota_per_unit,

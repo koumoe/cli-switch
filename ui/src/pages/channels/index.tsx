@@ -504,7 +504,7 @@ export function ChannelsPage() {
             row.original.managed_remote_account_id ?? "",
           );
           const name =
-            account?.remote_display_name?.trim() ||
+            account?.name.trim() ||
             account?.remote_username?.trim() ||
             account?.base_url ||
             "—";

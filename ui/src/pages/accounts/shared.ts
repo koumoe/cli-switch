@@ -13,6 +13,7 @@ import type {
 export type AccountCheckinModeOption = RemoteAccountCheckinMode;
 
 export type AccountDraft = {
+  name: string;
   provider: RemoteAccountProvider;
   base_url: string;
   api_url: string;
@@ -41,6 +42,7 @@ export type ManagedChannelDraft = {
 
 export function emptyAccountDraft(rechargeCurrency: RechargeCurrency = "CNY"): AccountDraft {
   return {
+    name: "",
     provider: "newapi",
     base_url: "",
     api_url: "",
@@ -60,6 +62,7 @@ export function emptyAccountFormValues(
   rechargeCurrency: RechargeCurrency = "CNY",
 ): AccountFormValues {
   return {
+    name: account.name,
     ...emptyAccountDraft(rechargeCurrency),
     stored_token_configured: false,
   };
@@ -157,14 +160,6 @@ export function isSub2ApiAccount(account: RemoteAccount): account is Sub2ApiRemo
   return account.provider === "sub2api";
 }
 
-export function resolveAccountDisplayName(
-  account: Pick<RemoteAccountBase, "base_url" | "remote_display_name" | "remote_username" | "user_id">
-): string {
-  const displayName = account.remote_display_name?.trim() ?? "";
-  if (displayName && !displayName.toLowerCase().endsWith(".invalid")) {
-    return displayName;
-  }
-  return account.remote_username?.trim()
-    || account.user_id.trim()
-    || account.base_url;
+export function resolveAccountDisplayName(account: Pick<RemoteAccountBase, "name">): string {
+  return account.name;
 }

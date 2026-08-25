@@ -85,6 +85,7 @@ impl rusqlite::types::FromSql for RemoteAccountCheckinMode {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RemoteAccount {
     pub id: String,
+    pub name: String,
     pub provider: RemoteAccountProvider,
     pub base_url: String,
     pub api_url: Option<String>,
@@ -101,7 +102,6 @@ pub struct RemoteAccount {
     pub remote_user_id: Option<String>,
     pub remote_role: Option<String>,
     pub remote_username: Option<String>,
-    pub remote_display_name: Option<String>,
     pub last_balance_amount: Option<f64>,
     pub last_sync_error: Option<String>,
     pub reauth_required: bool,
@@ -115,6 +115,7 @@ pub struct RemoteAccount {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct CreateRemoteAccount {
+    pub name: String,
     pub provider: RemoteAccountProvider,
     pub base_url: String,
     pub api_url: Option<String>,
@@ -129,6 +130,7 @@ pub struct CreateRemoteAccount {
 
 #[derive(Debug, Clone, Deserialize, Default)]
 pub struct UpdateRemoteAccount {
+    pub name: Option<String>,
     pub base_url: Option<String>,
     pub api_url: Option<String>,
     pub access_token: Option<String>,
@@ -145,7 +147,6 @@ pub struct RemoteAccountRemoteSnapshot {
     pub remote_user_id: Option<String>,
     pub remote_role: Option<String>,
     pub remote_username: Option<String>,
-    pub remote_display_name: Option<String>,
     pub last_balance_amount: Option<f64>,
     pub last_synced_at_ms: Option<i64>,
 }
@@ -207,6 +208,7 @@ fn remote_account_from_row(
     };
     Ok(RemoteAccount {
         id: row.get(0)?,
+        name: row.get(14)?,
         provider: row.get(1)?,
         base_url: row.get(2)?,
         api_url: row.get(3)?,
@@ -221,7 +223,6 @@ fn remote_account_from_row(
         remote_user_id: row.get(11)?,
         remote_role: row.get(12)?,
         remote_username: row.get(13)?,
-        remote_display_name: row.get(14)?,
         last_balance_amount: row.get(15)?,
         last_sync_error: row.get(16)?,
         reauth_required: row.get::<_, i64>(17)? != 0,
@@ -253,7 +254,7 @@ async fn list_remote_accounts_impl(
             r#"
             SELECT id, provider, base_url, api_url, access_token, refresh_token, page_checkin_url, checkin_mode,
                    auto_checkin_time, low_balance_alert_threshold, recharge_currency, remote_user_id,
-                   remote_role, remote_username, remote_display_name, last_balance_amount,
+                   remote_role, remote_username, name, last_balance_amount,
                    last_sync_error, reauth_required, last_synced_at_ms, low_balance_alert_notified,
                    last_balance_alert_at_ms, sort_order, created_at_ms, updated_at_ms
             FROM remote_accounts
@@ -310,7 +311,7 @@ async fn get_remote_account_impl(
             r#"
             SELECT id, provider, base_url, api_url, access_token, refresh_token, page_checkin_url, checkin_mode,
                    auto_checkin_time, low_balance_alert_threshold, recharge_currency, remote_user_id,
-                   remote_role, remote_username, remote_display_name, last_balance_amount,
+                   remote_role, remote_username, name, last_balance_amount,
                    last_sync_error, reauth_required, last_synced_at_ms, low_balance_alert_notified,
                    last_balance_alert_at_ms, sort_order, created_at_ms, updated_at_ms
             FROM remote_accounts
@@ -360,6 +361,7 @@ pub async fn create_remote_account(
     with_conn(db_path, move |conn| {
         let ts = now_ms();
         let id = Uuid::new_v4().to_string();
+        let name = input.name.trim().to_string();
         let provider = input.provider;
         let base_url = normalize_base_url(&input.base_url);
         let api_url = normalize_optional_base_url(input.api_url);
@@ -380,10 +382,10 @@ pub async fn create_remote_account(
             r#"
             INSERT INTO remote_accounts (
                 id, provider, base_url, api_url, access_token, refresh_token, page_checkin_url, checkin_mode,
-                auto_checkin_time, low_balance_alert_threshold, recharge_currency, sort_order,
+                auto_checkin_time, low_balance_alert_threshold, recharge_currency, name, sort_order,
                 created_at_ms, updated_at_ms
             )
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
             "#,
             params![
                 id,
@@ -397,6 +399,7 @@ pub async fn create_remote_account(
                 auto_checkin_time,
                 low_balance_alert_threshold,
                 recharge_currency.as_str(),
+                name,
                 sort_order,
                 ts,
                 ts,
@@ -405,6 +408,7 @@ pub async fn create_remote_account(
 
         Ok(RemoteAccount {
             id,
+            name,
             provider,
             base_url,
             api_url,
@@ -419,7 +423,6 @@ pub async fn create_remote_account(
             remote_user_id: None,
             remote_role: None,
             remote_username: None,
-            remote_display_name: None,
             last_balance_amount: None,
             last_sync_error: None,
             reauth_required: false,
@@ -448,6 +451,9 @@ pub async fn update_remote_account(
 
         if let Some(value) = input.base_url.as_deref() {
             account.base_url = normalize_base_url(value);
+        }
+        if let Some(value) = input.name {
+            account.name = value.trim().to_string();
         }
         if input.api_url.is_some() {
             account.api_url = normalize_optional_base_url(input.api_url);
@@ -482,7 +488,8 @@ pub async fn update_remote_account(
             UPDATE remote_accounts
             SET base_url = ?2, api_url = ?3, access_token = ?4, refresh_token = ?5,
                 page_checkin_url = ?6, checkin_mode = ?7, auto_checkin_time = ?8,
-                low_balance_alert_threshold = ?9, recharge_currency = ?10, updated_at_ms = ?11
+                low_balance_alert_threshold = ?9, recharge_currency = ?10, name = ?11,
+                updated_at_ms = ?12
             WHERE id = ?1
             "#,
             params![
@@ -496,6 +503,7 @@ pub async fn update_remote_account(
                 account.auto_checkin_time,
                 account.low_balance_alert_threshold,
                 account.recharge_currency.as_str(),
+                account.name,
                 ts,
             ],
         )?;
@@ -514,7 +522,7 @@ fn get_remote_account_impl_sync(
         r#"
         SELECT id, provider, base_url, api_url, access_token, refresh_token, page_checkin_url, checkin_mode,
                auto_checkin_time, low_balance_alert_threshold, recharge_currency, remote_user_id,
-               remote_role, remote_username, remote_display_name, last_balance_amount,
+               remote_role, remote_username, name, last_balance_amount,
                last_sync_error, reauth_required, last_synced_at_ms, low_balance_alert_notified,
                last_balance_alert_at_ms, sort_order, created_at_ms, updated_at_ms
         FROM remote_accounts
@@ -539,9 +547,9 @@ pub async fn apply_remote_account_sync_success(
         let changed = conn.execute(
             r#"
             UPDATE remote_accounts
-            SET remote_user_id = ?2, remote_role = ?3, remote_username = ?4, remote_display_name = ?5,
-                last_balance_amount = ?6, last_sync_error = ?7, reauth_required = 0,
-                last_synced_at_ms = ?8, updated_at_ms = ?9
+            SET remote_user_id = ?2, remote_role = ?3, remote_username = ?4,
+                last_balance_amount = ?5, last_sync_error = ?6, reauth_required = 0,
+                last_synced_at_ms = ?7, updated_at_ms = ?8
             WHERE provider = 'sub2api' AND id = ?1
             "#,
             params![
@@ -549,7 +557,6 @@ pub async fn apply_remote_account_sync_success(
                 snapshot.remote_user_id,
                 snapshot.remote_role,
                 snapshot.remote_username,
-                snapshot.remote_display_name,
                 snapshot.last_balance_amount,
                 Option::<String>::None,
                 synced_at_ms,

@@ -98,6 +98,7 @@ pub(super) fn build_candidate_from_create(
         && matches!(checkin_mode, storage::NewApiAccountCheckinMode::SystemApi);
     let account = storage::NewApiAccount {
         id: "<candidate>".to_string(),
+        name: input.name.clone(),
         base_url: validate_http_url(&input.base_url, "newapi_base_url_required")?,
         api_url,
         user_id: input.user_id.trim().to_string(),
@@ -114,7 +115,6 @@ pub(super) fn build_candidate_from_create(
         recharge_currency: input.recharge_currency.unwrap_or(RechargeCurrency::Cny),
         remote_role: None,
         remote_username: None,
-        remote_display_name: None,
         remote_group: None,
         quota_display_type: "USD".to_string(),
         quota_per_unit: 500_000.0,

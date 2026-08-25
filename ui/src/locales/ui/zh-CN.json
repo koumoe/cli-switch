@@ -336,6 +336,9 @@
       "editTitle": "编辑账号",
       "description": "修改远端账号信息、签到策略和余额告警设置",
       "providerLocked": "账号体系在创建后固定，编辑时不可切换。",
+      "name": "本地名称",
+      "namePlaceholder": "输入本地识别名称",
+      "nameHint": "仅保存在 CliSwitch，用于识别账号。",
       "baseUrl": "Base URL",
       "apiUrl": "API 地址",
       "apiUrlHint": "留空则创建渠道时回退到 Base URL",
@@ -386,6 +389,7 @@
     },
     "toast": {
       "loadFail": "加载账号失败",
+      "nameRequired": "请输入本地名称",
       "actionFail": "操作失败",
       "baseUrlRequired": "Base URL 不能为空",
       "baseUrlInvalid": "Base URL 必须是 http/https 地址",

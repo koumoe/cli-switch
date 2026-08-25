@@ -88,7 +88,7 @@ export function AccountsTable({
         header: t("accounts.table.name"),
         cell: ({ row }) => {
           const name =
-            row.original.remote_display_name?.trim() ||
+            row.original.name.trim() ||
             row.original.remote_username?.trim() ||
             "—";
           return (

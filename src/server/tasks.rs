@@ -778,7 +778,6 @@ async fn persist_sub2api_overview(
             remote_user_id: Some(overview.remote_user_id.to_string()),
             remote_role: overview.remote_role.clone(),
             remote_username: overview.remote_username.clone(),
-            remote_display_name: overview.remote_display_name.clone(),
             last_balance_amount: overview.balance,
             last_synced_at_ms: Some(storage::now_ms()),
         },
@@ -833,7 +832,6 @@ async fn run_newapi_account_maintenance(
             {
                 tracing::warn!(account_id = %account.id, err = %err, "persist newapi overview failed");
             }
-            account.remote_display_name = overview.remote_display_name.clone();
             account.remote_username = overview.remote_username.clone();
             account.custom_currency_symbol = overview.custom_currency_symbol.clone();
             account.quota_display_type = overview.quota_display_type.clone();
@@ -1114,7 +1112,6 @@ async fn run_sub2api_account_maintenance(
             {
                 tracing::warn!(account_id = %account.id, err = %err, "persist sub2api overview failed");
             }
-            account.remote_display_name = overview.remote_display_name.clone();
             account.remote_username = overview.remote_username.clone();
             account.remote_role = overview.remote_role.clone();
             Some(overview)

@@ -336,6 +336,9 @@
       "editTitle": "Edit Account",
       "description": "Update remote account settings, check-in policy, and low-balance alerts",
       "providerLocked": "The provider is fixed after creation and cannot be changed during editing.",
+      "name": "Local name",
+      "namePlaceholder": "Enter a local account name",
+      "nameHint": "Stored only in CliSwitch for local identification.",
       "baseUrl": "Base URL",
       "apiUrl": "API URL",
       "apiUrlHint": "Leave empty to fall back to Base URL when creating channels",
@@ -386,6 +389,7 @@
     },
     "toast": {
       "loadFail": "Failed to load accounts",
+      "nameRequired": "Enter a local name",
       "actionFail": "Operation failed",
       "baseUrlRequired": "Base URL is required",
       "baseUrlInvalid": "Base URL must be an http/https URL",

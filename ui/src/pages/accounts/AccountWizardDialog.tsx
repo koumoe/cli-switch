@@ -179,6 +179,7 @@ export function AccountWizardDialog({
     setSaving(true);
     try {
       await createRemoteAccount({
+        name: values.name.trim(),
         provider: values.provider,
         base_url: values.base_url.trim(),
         api_url: values.api_url.trim() || null,
@@ -259,6 +260,18 @@ export function AccountWizardDialog({
 
                 {step === 1 ? (
                   <div className="space-y-4">
+                    <FormField
+                      control={form.control}
+                      name="name"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>{t("accounts.editor.name")}</FormLabel>
+                          <FormControl><Input {...field} /></FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
                     <FormField
                       control={form.control}
                       name="base_url"

@@ -49,6 +49,7 @@ impl rusqlite::types::FromSql for NewApiAccountCheckinMode {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NewApiAccount {
     pub id: String,
+    pub name: String,
     pub base_url: String,
     pub api_url: Option<String>,
     pub user_id: String,
@@ -63,7 +64,6 @@ pub struct NewApiAccount {
     pub recharge_currency: RechargeCurrency,
     pub remote_role: Option<i64>,
     pub remote_username: Option<String>,
-    pub remote_display_name: Option<String>,
     pub remote_group: Option<String>,
     pub quota_display_type: String,
     pub quota_per_unit: f64,
@@ -86,6 +86,7 @@ pub struct NewApiAccount {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct CreateNewApiAccount {
+    pub name: String,
     pub base_url: String,
     pub api_url: Option<String>,
     pub user_id: String,
@@ -100,6 +101,7 @@ pub struct CreateNewApiAccount {
 
 #[derive(Debug, Clone, Deserialize, Default)]
 pub struct UpdateNewApiAccount {
+    pub name: Option<String>,
     pub base_url: Option<String>,
     pub api_url: Option<String>,
     pub user_id: Option<String>,
@@ -117,7 +119,6 @@ pub struct NewApiAccountRemoteSnapshot {
     pub replace_remote_state: bool,
     pub remote_role: Option<i64>,
     pub remote_username: Option<String>,
-    pub remote_display_name: Option<String>,
     pub remote_group: Option<String>,
     pub quota_display_type: Option<String>,
     pub quota_per_unit: Option<f64>,
@@ -183,6 +184,7 @@ fn account_from_row(
     };
     Ok(NewApiAccount {
         id: row.get(0)?,
+        name: row.get(13)?,
         base_url: row.get(1)?,
         api_url: row.get(2)?,
         user_id: row.get(3)?,
@@ -196,7 +198,6 @@ fn account_from_row(
         recharge_currency: row.get(10)?,
         remote_role: row.get(11)?,
         remote_username: row.get(12)?,
-        remote_display_name: row.get(13)?,
         remote_group: row.get(14)?,
         quota_display_type: row.get(15)?,
         quota_per_unit: row.get(16)?,
@@ -243,7 +244,7 @@ async fn list_newapi_accounts_impl(
         let mut stmt = conn.prepare(
             r#"
             SELECT id, base_url, api_url, user_id, user_token, page_checkin_url, checkin_mode, auto_checkin_enabled, auto_checkin_time,
-                   low_balance_alert_threshold, recharge_currency, remote_role, remote_username, remote_display_name, remote_group,
+                   low_balance_alert_threshold, recharge_currency, remote_role, remote_username, name, remote_group,
                    quota_display_type, quota_per_unit, usd_exchange_rate, custom_currency_symbol, custom_currency_exchange_rate,
                    remote_checkin_enabled, remote_turnstile_check_enabled, last_quota, last_used_quota, last_balance_amount,
                    last_sync_error, last_synced_at_ms, low_balance_alert_notified, last_balance_alert_at_ms, sort_order, created_at_ms, updated_at_ms
@@ -321,7 +322,7 @@ async fn get_newapi_account_impl(
         let mut stmt = conn.prepare(
             r#"
             SELECT id, base_url, api_url, user_id, user_token, page_checkin_url, checkin_mode, auto_checkin_enabled, auto_checkin_time,
-                   low_balance_alert_threshold, recharge_currency, remote_role, remote_username, remote_display_name, remote_group,
+                   low_balance_alert_threshold, recharge_currency, remote_role, remote_username, name, remote_group,
                    quota_display_type, quota_per_unit, usd_exchange_rate, custom_currency_symbol, custom_currency_exchange_rate,
                    remote_checkin_enabled, remote_turnstile_check_enabled, last_quota, last_used_quota, last_balance_amount,
                    last_sync_error, last_synced_at_ms, low_balance_alert_notified, last_balance_alert_at_ms, sort_order, created_at_ms, updated_at_ms
@@ -343,6 +344,7 @@ pub async fn create_newapi_account(
     with_conn(db_path, move |conn| {
         let ts = now_ms();
         let id = Uuid::new_v4().to_string();
+        let name = input.name.trim().to_string();
         let base_url = normalize_newapi_base_url(&input.base_url);
         let api_url = normalize_optional_newapi_base_url(input.api_url);
         let user_id = input.user_id.trim().to_string();
@@ -363,9 +365,9 @@ pub async fn create_newapi_account(
             INSERT INTO remote_accounts (
                 id, provider, base_url, api_url, user_id, user_token, access_token, page_checkin_url,
                 checkin_mode, auto_checkin_enabled, auto_checkin_time, low_balance_alert_threshold,
-                recharge_currency, sort_order, created_at_ms, updated_at_ms
+                recharge_currency, name, sort_order, created_at_ms, updated_at_ms
             )
-            VALUES (?1, 'newapi', ?2, ?3, ?4, ?5, '', ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
+            VALUES (?1, 'newapi', ?2, ?3, ?4, ?5, '', ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
             "#,
             params![
                 id,
@@ -379,6 +381,7 @@ pub async fn create_newapi_account(
                 auto_checkin_time,
                 low_balance_alert_threshold,
                 recharge_currency.as_str(),
+                name,
                 sort_order,
                 ts,
                 ts,
@@ -387,6 +390,7 @@ pub async fn create_newapi_account(
 
         Ok(NewApiAccount {
             id,
+            name,
             base_url,
             api_url,
             user_id,
@@ -400,7 +404,6 @@ pub async fn create_newapi_account(
             recharge_currency,
             remote_role: None,
             remote_username: None,
-            remote_display_name: None,
             remote_group: None,
             quota_display_type: "USD".to_string(),
             quota_per_unit: 500_000.0,
@@ -438,6 +441,9 @@ pub async fn update_newapi_account(
 
         if let Some(value) = input.base_url {
             account.base_url = normalize_newapi_base_url(&value);
+        }
+        if let Some(value) = input.name {
+            account.name = value.trim().to_string();
         }
         if input.api_url.is_some() {
             account.api_url = normalize_optional_newapi_base_url(input.api_url);
@@ -480,7 +486,8 @@ pub async fn update_newapi_account(
             r#"
             UPDATE remote_accounts
             SET base_url = ?2, api_url = ?3, user_id = ?4, user_token = ?5, page_checkin_url = ?6, checkin_mode = ?7,
-                auto_checkin_enabled = ?8, auto_checkin_time = ?9, low_balance_alert_threshold = ?10, recharge_currency = ?11, updated_at_ms = ?12
+                auto_checkin_enabled = ?8, auto_checkin_time = ?9, low_balance_alert_threshold = ?10, recharge_currency = ?11,
+                name = ?12, updated_at_ms = ?13
             WHERE provider = 'newapi' AND id = ?1
             "#,
             params![
@@ -495,6 +502,7 @@ pub async fn update_newapi_account(
                 account.auto_checkin_time,
                 account.low_balance_alert_threshold,
                 account.recharge_currency.as_str(),
+                account.name,
                 ts,
             ],
         )?;
@@ -544,7 +552,7 @@ fn get_account_row(
     let mut stmt = conn.prepare(
             r#"
         SELECT id, base_url, api_url, user_id, user_token, page_checkin_url, checkin_mode, auto_checkin_enabled, auto_checkin_time,
-               low_balance_alert_threshold, recharge_currency, remote_role, remote_username, remote_display_name, remote_group,
+               low_balance_alert_threshold, recharge_currency, remote_role, remote_username, name, remote_group,
                quota_display_type, quota_per_unit, usd_exchange_rate, custom_currency_symbol, custom_currency_exchange_rate,
                remote_checkin_enabled, remote_turnstile_check_enabled, last_quota, last_used_quota, last_balance_amount,
                last_sync_error, last_synced_at_ms, low_balance_alert_notified, last_balance_alert_at_ms, sort_order, created_at_ms, updated_at_ms
@@ -649,11 +657,6 @@ pub async fn update_newapi_account_remote_snapshot(
         } else {
             snapshot.remote_username.or(current.remote_username)
         };
-        let remote_display_name = if snapshot.replace_remote_state {
-            snapshot.remote_display_name
-        } else {
-            snapshot.remote_display_name.or(current.remote_display_name)
-        };
         let remote_group = if snapshot.replace_remote_state {
             snapshot.remote_group
         } else {
@@ -740,28 +743,26 @@ pub async fn update_newapi_account_remote_snapshot(
             UPDATE remote_accounts
             SET remote_role = ?2,
                 remote_username = ?3,
-                remote_display_name = ?4,
-                remote_group = ?5,
-                quota_display_type = ?6,
-                quota_per_unit = ?7,
-                usd_exchange_rate = ?8,
-                custom_currency_symbol = ?9,
-                custom_currency_exchange_rate = ?10,
-                remote_checkin_enabled = ?11,
-                remote_turnstile_check_enabled = ?12,
-                last_quota = ?13,
-                last_used_quota = ?14,
-                last_balance_amount = ?15,
-                last_sync_error = ?16,
-                last_synced_at_ms = ?17,
-                updated_at_ms = ?18
+                remote_group = ?4,
+                quota_display_type = ?5,
+                quota_per_unit = ?6,
+                usd_exchange_rate = ?7,
+                custom_currency_symbol = ?8,
+                custom_currency_exchange_rate = ?9,
+                remote_checkin_enabled = ?10,
+                remote_turnstile_check_enabled = ?11,
+                last_quota = ?12,
+                last_used_quota = ?13,
+                last_balance_amount = ?14,
+                last_sync_error = ?15,
+                last_synced_at_ms = ?16,
+                updated_at_ms = ?17
             WHERE provider = 'newapi' AND id = ?1
             "#,
             params![
                 account_id,
                 remote_role,
                 remote_username,
-                remote_display_name,
                 remote_group,
                 quota_display_type,
                 quota_per_unit,
