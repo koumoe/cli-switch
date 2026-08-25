@@ -127,20 +127,6 @@ CREATE TABLE IF NOT EXISTS remote_accounts (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_remote_accounts_provider_base_user
 ON remote_accounts(provider, base_url, user_id);
 
-CREATE TABLE IF NOT EXISTS official_codex_accounts (
-  id TEXT PRIMARY KEY,
-  account_id TEXT NOT NULL UNIQUE,
-  email TEXT NULL,
-  access_token TEXT NOT NULL,
-  refresh_token TEXT NOT NULL,
-  id_token TEXT NOT NULL DEFAULT '',
-  expires_at_ms INTEGER NOT NULL,
-  enabled INTEGER NOT NULL DEFAULT 1,
-  last_error TEXT NULL,
-  created_at_ms INTEGER NOT NULL,
-  updated_at_ms INTEGER NOT NULL
-);
-
 CREATE TABLE IF NOT EXISTS remote_account_checkins (
   account_id TEXT NOT NULL,
   date TEXT NOT NULL,

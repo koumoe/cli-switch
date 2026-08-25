@@ -5,7 +5,6 @@ pub(super) mod chat_bridge_whatsapp;
 pub(super) mod health;
 pub(super) mod maintenance;
 pub(super) mod newapi;
-pub(super) mod official_codex;
 pub(super) mod pricing;
 pub(super) mod project;
 pub(super) mod proxy;
@@ -32,10 +31,6 @@ pub(super) use chat_bridge_whatsapp::{
 };
 pub(super) use health::health;
 pub(super) use maintenance::{db_size, frontend_log_ingest, logs_clear, logs_size, records_clear};
-pub(super) use official_codex::{
-    delete_official_codex_account, list_official_codex_accounts, official_codex_callback,
-    refresh_official_codex_account, start_official_codex_login,
-};
 pub(super) use pricing::{pricing_models, pricing_status, pricing_sync};
 pub(super) use project::{
     delete_project, delete_project_document, get_project_document, list_projects,

@@ -2,16 +2,12 @@ import React, { useEffect, useState } from "react";
 import { Plus, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
-import type { OfficialCodexAccount, RemoteAccount, RemoteGroupOption } from "@/types/api";
+import type { RemoteAccount, RemoteGroupOption } from "@/types/api";
 import {
   createRemoteManagedChannel,
   deleteRemoteAccount,
   listRemoteAccountGroups,
   listRemoteAccounts,
-  listOfficialCodexAccounts,
-  startOfficialCodexLogin,
-  deleteOfficialCodexAccount,
-  refreshOfficialCodexAccount,
   openInBrowser,
   refreshRemoteAccount,
   remoteAccountSystemCheckin,
@@ -48,8 +44,6 @@ export function AccountsPage() {
   const { t } = useI18n();
   const { currency } = useCurrency();
   const [accounts, setAccounts] = useState<RemoteAccount[]>([]);
-  const [officialCodexAccounts, setOfficialCodexAccounts] = useState<OfficialCodexAccount[]>([]);
-  const [codexLoginOpening, setCodexLoginOpening] = useState(false);
   const [loading, setLoading] = useState(false);
   const [reordering, setReordering] = useState(false);
   const [checkinsDate, setCheckinsDate] = useState<string | null>(null);
@@ -99,7 +93,6 @@ export function AccountsPage() {
         remoteAccountCheckinsToday().catch(() => null),
       ]);
       setAccounts(items);
-      setOfficialCodexAccounts(await listOfficialCodexAccounts());
       if (checkins) {
         setCheckinsDate(checkins.date);
         const next: Record<string, boolean> = {};
@@ -113,27 +106,6 @@ export function AccountsPage() {
       toast.error(t("accounts.toast.loadFail"), { description: humanizeApiError(e, t) });
     } finally {
       setLoading(false);
-    }
-  }
-
-  async function handleOfficialCodexLogin() {
-    setCodexLoginOpening(true);
-    try {
-      const result = await startOfficialCodexLogin();
-      await openInBrowser(result.authorization_url);
-      toast.success("已打开官方 Codex 登录页面，登录完成后账号会自动加入列表");
-      const started = Date.now();
-      const timer = window.setInterval(() => {
-        void listOfficialCodexAccounts().then((items) => {
-          setOfficialCodexAccounts(items);
-          if (items.some((item) => item.updated_at_ms >= started)) window.clearInterval(timer);
-        });
-      }, 1500);
-      window.setTimeout(() => window.clearInterval(timer), 5 * 60 * 1000);
-    } catch (e) {
-      toast.error("无法启动官方 Codex 登录", { description: humanizeApiError(e, t) });
-    } finally {
-      setCodexLoginOpening(false);
     }
   }
 
@@ -486,26 +458,6 @@ export function AccountsPage() {
       />
       <div className="flex-1 overflow-y-auto">
         <PageBody className="flex h-full min-h-0 flex-col gap-3">
-          <div className="rounded-lg border bg-card p-4">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <div className="text-sm font-medium">官方 Codex 账号</div>
-                <div className="text-xs text-muted-foreground">账号凭据仅保存在 CliSwitch 数据库，不读取或修改 ~/.codex/auth.json</div>
-              </div>
-              <Button type="button" variant="outline" disabled={codexLoginOpening} onClick={() => void handleOfficialCodexLogin()}>
-                {codexLoginOpening ? "正在打开…" : "登录官方账号"}
-              </Button>
-            </div>
-            {officialCodexAccounts.length > 0 && <div className="mt-3 divide-y rounded-md border">
-              {officialCodexAccounts.map((account) => <div key={account.id} className="flex items-center justify-between gap-3 p-3 text-sm">
-                <div><div>{account.email || account.account_id}</div><div className="text-xs text-muted-foreground">{account.account_id}</div></div>
-                <div className="flex items-center gap-1">
-                  <Button type="button" variant="ghost" onClick={() => void refreshOfficialCodexAccount(account.id).then(() => toast.success("Codex 凭据有效"))}>验证</Button>
-                  <Button type="button" variant="ghost" onClick={() => void deleteOfficialCodexAccount(account.id).then(() => setOfficialCodexAccounts((items) => items.filter((item) => item.id !== account.id)))}>删除</Button>
-                </div>
-              </div>)}
-            </div>}
-          </div>
           <AccountsTable
             accounts={accounts}
             loading={loading}
