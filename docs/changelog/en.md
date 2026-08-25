@@ -1,3 +1,8 @@
+## [0.61.0](https://github.com/koumoe/cli-switch/compare/v0.60.0...v0.61.0) (2026-08-25)
+
+### Features
+
+* support official Codex account OAuth ([249823d](https://github.com/koumoe/cli-switch/commit/249823df4e147d4fd18ffee7c76b6d46f647806e))
 ## [0.60.0](https://github.com/koumoe/cli-switch/compare/v0.59.5...v0.60.0) (2026-08-25)
 
 ### Features
