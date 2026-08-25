@@ -65,8 +65,10 @@ function restoreBilingualFromGit(markdown, commitMap) {
       const bullet = m[1];
       const rest = m[2];
 
-      // Extract commit hash from markdown link: ([hash](url))
-      const hashMatch = /\(\[([a-f0-9]{7,})\]\([^)]+\)\)\s*$/.exec(rest);
+      // Extract commit hash from markdown link: ([hash](url)).
+      // The link is not necessarily at the end of the line: conventional-changelog
+      // appends issue references such as ", closes [#203](...)" after it.
+      const hashMatch = /\(\[([a-f0-9]{7,})\]\([^)]+\)\)/.exec(rest);
       if (!hashMatch) return line;
 
       const hash = hashMatch[1];
@@ -89,8 +91,10 @@ function restoreBilingualFromGit(markdown, commitMap) {
       if (!/[\u4E00-\u9FFF]/.test(rightPart)) return line;
 
       // Current subject in changelog (before the link)
-      const linkStart = rest.indexOf(" ([");
-      if (linkStart === -1) return line;
+      const linkStart =
+        hashMatch.index > 0 && rest[hashMatch.index - 1] === " "
+          ? hashMatch.index - 1
+          : hashMatch.index;
       const suffix = rest.slice(linkStart);
 
       // Replace with full bilingual subject
