@@ -62,7 +62,6 @@ export function emptyAccountFormValues(
   rechargeCurrency: RechargeCurrency = "CNY",
 ): AccountFormValues {
   return {
-    name: account.remote_display_name ?? "",
     ...emptyAccountDraft(rechargeCurrency),
     stored_token_configured: false,
   };
@@ -70,6 +69,7 @@ export function emptyAccountFormValues(
 
 export function accountToFormValues(account: RemoteAccount): AccountFormValues {
   return {
+    name: account.remote_display_name ?? "",
     provider: account.provider,
     base_url: account.base_url ?? "",
     api_url: account.api_url ?? "",

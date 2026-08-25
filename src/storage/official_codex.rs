@@ -5,11 +5,93 @@ use std::path::PathBuf;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize)]
-pub struct OfficialCodexAccount { pub id:String, pub account_id:String, pub email:Option<String>, #[serde(skip_serializing)] pub access_token:String, #[serde(skip_serializing)] pub refresh_token:String, #[serde(skip_serializing)] pub id_token:String, pub token_configured:bool, pub expires_at_ms:i64, pub enabled:bool, pub last_error:Option<String>, pub created_at_ms:i64, pub updated_at_ms:i64 }
-fn row(r:&rusqlite::Row<'_>, secrets:bool)->rusqlite::Result<OfficialCodexAccount>{ let a:String=r.get(5)?; let b:String=r.get(6)?; let c:String=r.get(7)?; Ok(OfficialCodexAccount{id:r.get(0)?,account_id:r.get(2)?,email:r.get(3)?,token_configured:!a.is_empty()&&!b.is_empty(),access_token:if secrets{a}else{String::new()},refresh_token:if secrets{b}else{String::new()},id_token:if secrets{c}else{String::new()},expires_at_ms:r.get(8)?,enabled:r.get::<_,i64>(9)?!=0,last_error:r.get(10)?,created_at_ms:r.get(11)?,updated_at_ms:r.get(12)?}) }
-const S:&str="SELECT id,provider,user_id,email,remote_display_name,access_token,refresh_token,id_token,expires_at_ms,reauth_required,last_sync_error,created_at_ms,updated_at_ms FROM remote_accounts WHERE provider='chatgpt'";
-pub async fn list_official_codex_accounts(db:PathBuf)->anyhow::Result<Vec<OfficialCodexAccount>>{with_conn(db,|c|{let mut s=c.prepare(&format!("{S} ORDER BY created_at_ms"))?;Ok(s.query_map([],|r|row(r,false))?.collect::<Result<Vec<_>,_>>()?) }).await}
-pub async fn get_official_codex_account_secret(db:PathBuf,id:String)->anyhow::Result<Option<OfficialCodexAccount>>{with_conn(db,move|c|Ok(c.query_row(&format!("{S} AND id=?1"),[id],|r|row(r,true)).optional()?)).await}
-pub async fn upsert_official_codex_account(db:PathBuf,account_id:String,email:Option<String>,access:String,refresh:String,id_token:String,expires_at_ms:i64)->anyhow::Result<OfficialCodexAccount>{with_conn(db,move|c|{let now=now_ms();let id:Option<String>=c.query_row("SELECT id FROM remote_accounts WHERE provider='chatgpt' AND user_id=?1",[&account_id],|r|r.get(0)).optional()?;let id=id.unwrap_or_else(||Uuid::new_v4().to_string());c.execute("INSERT INTO remote_accounts(id,provider,base_url,user_id,access_token,refresh_token,id_token,email,remote_display_name,expires_at_ms,created_at_ms,updated_at_ms) VALUES(?1,'chatgpt','',?2,?3,?4,?5,?6,?6,?7,?8,?8) ON CONFLICT(id) DO UPDATE SET access_token=excluded.access_token,refresh_token=excluded.refresh_token,id_token=excluded.id_token,email=excluded.email,remote_display_name=excluded.remote_display_name,expires_at_ms=excluded.expires_at_ms,updated_at_ms=excluded.updated_at_ms",params![id,account_id,access,refresh,id_token,email,expires_at_ms,now])?;c.query_row(&format!("{S} AND id=?1"),[id],|r|row(r,false)).map_err(Into::into)}).await}
-pub async fn delete_official_codex_account(db:PathBuf,id:String)->anyhow::Result<()> {with_conn(db,move|c|{c.execute("DELETE FROM remote_accounts WHERE provider='chatgpt' AND id=?1",[id])?;Ok(())}).await}
-pub async fn update_official_codex_tokens(db:PathBuf,id:String,access:String,refresh:String,id_token:String,expires_at_ms:i64)->anyhow::Result<()> {with_conn(db,move|c|{c.execute("UPDATE remote_accounts SET access_token=?2,refresh_token=?3,id_token=?4,expires_at_ms=?5,updated_at_ms=?6 WHERE provider='chatgpt' AND id=?1",params![id,access,refresh,id_token,expires_at_ms,now_ms()])?;Ok(())}).await}
+pub struct OfficialCodexAccount {
+    pub id: String,
+    pub account_id: String,
+    pub email: Option<String>,
+    #[serde(skip_serializing)]
+    pub access_token: String,
+    #[serde(skip_serializing)]
+    pub refresh_token: String,
+    #[serde(skip_serializing)]
+    pub id_token: String,
+    pub token_configured: bool,
+    pub expires_at_ms: i64,
+    pub enabled: bool,
+    pub last_error: Option<String>,
+    pub created_at_ms: i64,
+    pub updated_at_ms: i64,
+}
+fn row(r: &rusqlite::Row<'_>, secrets: bool) -> rusqlite::Result<OfficialCodexAccount> {
+    let a: String = r.get(5)?;
+    let b: String = r.get(6)?;
+    let c: String = r.get(7)?;
+    Ok(OfficialCodexAccount {
+        id: r.get(0)?,
+        account_id: r.get(2)?,
+        email: r.get(3)?,
+        token_configured: !a.is_empty() && !b.is_empty(),
+        access_token: if secrets { a } else { String::new() },
+        refresh_token: if secrets { b } else { String::new() },
+        id_token: if secrets { c } else { String::new() },
+        expires_at_ms: r.get(8)?,
+        enabled: r.get::<_, i64>(9)? != 0,
+        last_error: r.get(10)?,
+        created_at_ms: r.get(11)?,
+        updated_at_ms: r.get(12)?,
+    })
+}
+const S: &str = "SELECT id,provider,user_id,email,remote_display_name,access_token,refresh_token,id_token,expires_at_ms,reauth_required,last_sync_error,created_at_ms,updated_at_ms FROM remote_accounts WHERE provider='chatgpt'";
+pub async fn list_official_codex_accounts(
+    db: PathBuf,
+) -> anyhow::Result<Vec<OfficialCodexAccount>> {
+    with_conn(db, |c| {
+        let mut s = c.prepare(&format!("{S} ORDER BY created_at_ms"))?;
+        Ok(s.query_map([], |r| row(r, false))?
+            .collect::<Result<Vec<_>, _>>()?)
+    })
+    .await
+}
+pub async fn get_official_codex_account_secret(
+    db: PathBuf,
+    id: String,
+) -> anyhow::Result<Option<OfficialCodexAccount>> {
+    with_conn(db, move |c| {
+        Ok(
+            c.query_row(&format!("{S} AND id=?1"), [id], |r| row(r, true))
+                .optional()?,
+        )
+    })
+    .await
+}
+pub async fn upsert_official_codex_account(
+    db: PathBuf,
+    account_id: String,
+    email: Option<String>,
+    access: String,
+    refresh: String,
+    id_token: String,
+    expires_at_ms: i64,
+) -> anyhow::Result<OfficialCodexAccount> {
+    with_conn(db,move|c|{let now=now_ms();let id:Option<String>=c.query_row("SELECT id FROM remote_accounts WHERE provider='chatgpt' AND user_id=?1",[&account_id],|r|r.get(0)).optional()?;let id=id.unwrap_or_else(||Uuid::new_v4().to_string());c.execute("INSERT INTO remote_accounts(id,provider,base_url,user_id,access_token,refresh_token,id_token,email,remote_display_name,expires_at_ms,created_at_ms,updated_at_ms) VALUES(?1,'chatgpt','',?2,?3,?4,?5,?6,?6,?7,?8,?8) ON CONFLICT(id) DO UPDATE SET access_token=excluded.access_token,refresh_token=excluded.refresh_token,id_token=excluded.id_token,email=excluded.email,remote_display_name=excluded.remote_display_name,expires_at_ms=excluded.expires_at_ms,updated_at_ms=excluded.updated_at_ms",params![id,account_id,access,refresh,id_token,email,expires_at_ms,now])?;c.query_row(&format!("{S} AND id=?1"),[id],|r|row(r,false)).map_err(Into::into)}).await
+}
+pub async fn delete_official_codex_account(db: PathBuf, id: String) -> anyhow::Result<()> {
+    with_conn(db, move |c| {
+        c.execute(
+            "DELETE FROM remote_accounts WHERE provider='chatgpt' AND id=?1",
+            [id],
+        )?;
+        Ok(())
+    })
+    .await
+}
+pub async fn update_official_codex_tokens(
+    db: PathBuf,
+    id: String,
+    access: String,
+    refresh: String,
+    id_token: String,
+    expires_at_ms: i64,
+) -> anyhow::Result<()> {
+    with_conn(db,move|c|{c.execute("UPDATE remote_accounts SET access_token=?2,refresh_token=?3,id_token=?4,expires_at_ms=?5,updated_at_ms=?6 WHERE provider='chatgpt' AND id=?1",params![id,access,refresh,id_token,expires_at_ms,now_ms()])?;Ok(())}).await
+}

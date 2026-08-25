@@ -117,7 +117,34 @@ pub fn init_db(db_path: &Path) -> anyhow::Result<()> {
     conn.execute_batch(migration)
         .with_context(|| "执行 migrations/001_init.sql 失败")?;
     channel::ensure_channel_schema(&conn)?;
+    ensure_remote_account_schema(&conn)?;
 
+    Ok(())
+}
+
+fn ensure_remote_account_schema(conn: &Connection) -> anyhow::Result<()> {
+    conn.execute_batch("PRAGMA writable_schema=ON; UPDATE sqlite_master SET sql=replace(sql, \"CHECK(provider IN ('newapi','sub2api'))\", \"CHECK(provider IN ('newapi','sub2api','chatgpt'))\") WHERE type='table' AND name='remote_accounts'; PRAGMA writable_schema=OFF;")?;
+    for (name, definition) in [
+        ("id_token", "TEXT NOT NULL DEFAULT ''"),
+        ("email", "TEXT NULL"),
+        ("expires_at_ms", "INTEGER NOT NULL DEFAULT 0"),
+        ("custom_name", "TEXT NULL"),
+    ] {
+        let exists: bool = conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM pragma_table_info('remote_accounts') WHERE name=?1)",
+            [name],
+            |r| r.get(0),
+        )?;
+        if !exists {
+            conn.execute_batch(&format!(
+                "ALTER TABLE remote_accounts ADD COLUMN {name} {definition}"
+            ))?;
+        }
+    }
+    let legacy_exists: bool = conn.query_row("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='official_codex_accounts')", [], |r| r.get(0))?;
+    if legacy_exists {
+        conn.execute_batch("INSERT OR IGNORE INTO remote_accounts(id,provider,base_url,user_id,access_token,refresh_token,id_token,email,remote_display_name,expires_at_ms,created_at_ms,updated_at_ms) SELECT id,'chatgpt','',account_id,access_token,refresh_token,id_token,email,email,expires_at_ms,created_at_ms,updated_at_ms FROM official_codex_accounts; DROP TABLE official_codex_accounts;")?;
+    }
     Ok(())
 }
 
