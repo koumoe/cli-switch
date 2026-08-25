@@ -1,5 +1,6 @@
 {
   "errors": {
+    "codex_callback_unavailable": "Codex OAuth callback port 1455 is unavailable. Close the program using it and try again",
     "internal_error": "Internal error",
     "proxy_no_enabled_channel": "No enabled channel configured",
     "proxy_no_available_channel": "No available channel (may be auto-disabled)",

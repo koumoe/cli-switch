@@ -2,9 +2,11 @@ use axum::Router;
 use axum::middleware::from_fn_with_state;
 use axum::routing::{any, delete, get, post, put};
 use http::Method;
+use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::sync::{mpsc, watch};
 
 #[cfg(not(feature = "embed-ui"))]
@@ -86,6 +88,8 @@ fn request_endpoint_template(method: &Method, path: &str) -> Option<&'static str
         ("GET", "/api/channels/checkins/today") => Some("/api/channels/checkins/today"),
         ("GET", "/api/remote/accounts") => Some("/api/remote/accounts"),
         ("POST", "/api/remote/accounts") => Some("/api/remote/accounts"),
+        ("GET", "/api/official/codex/accounts") => Some("/api/official/codex/accounts"),
+        ("POST", "/api/official/codex/login") => Some("/api/official/codex/login"),
         ("POST", "/api/remote/accounts/detect") => Some("/api/remote/accounts/detect"),
         ("POST", "/api/remote/accounts/reorder") => Some("/api/remote/accounts/reorder"),
         ("GET", "/api/remote/accounts/checkins/today") => {
@@ -197,6 +201,8 @@ fn request_purpose(method: &Method, path: &str) -> &'static str {
         ("GET", "/api/channels/checkins/today") => "handlers::channel_checkins_today",
         ("GET", "/api/remote/accounts") => "handlers::list_remote_accounts",
         ("POST", "/api/remote/accounts") => "handlers::create_remote_account",
+        ("GET", "/api/official/codex/accounts") => "handlers::list_official_codex_accounts",
+        ("POST", "/api/official/codex/login") => "handlers::start_official_codex_login",
         ("POST", "/api/remote/accounts/detect") => "handlers::detect_remote_account",
         ("POST", "/api/remote/accounts/reorder") => "handlers::reorder_remote_accounts",
         ("GET", "/api/remote/accounts/checkins/today") => "handlers::remote_account_checkins_today",
@@ -386,6 +392,22 @@ fn build_app(state: AppState) -> Router {
             get(handlers::list_remote_accounts).post(handlers::create_remote_account),
         )
         .route(
+            "/api/official/codex/accounts",
+            get(handlers::list_official_codex_accounts),
+        )
+        .route(
+            "/api/official/codex/accounts/{id}",
+            delete(handlers::delete_official_codex_account),
+        )
+        .route(
+            "/api/official/codex/accounts/{id}/refresh",
+            post(handlers::refresh_official_codex_account),
+        )
+        .route(
+            "/api/official/codex/login",
+            post(handlers::start_official_codex_login),
+        )
+        .route(
             "/api/remote/accounts/detect",
             post(handlers::detect_remote_account),
         )
@@ -518,15 +540,34 @@ pub async fn serve_with_listener(
         whatsapp_status_rx,
         weixin_control_tx,
         weixin_status_rx,
+        codex_oauth_sessions: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
+        codex_callback_available: Arc::new(AtomicBool::new(false)),
     };
 
     tracing::info!(addr = %addr, open_browser, "backend server starting");
 
     let chat_bridge_settings_rx = state.settings_cache_rx.clone();
     let chat_bridge_channels_cache = state.channels_cache.clone();
+    let callback_state = state.clone();
     let app = build_app(state);
 
     let mut bg = tokio::task::JoinSet::<()>::new();
+
+    bg.spawn(async move {
+        let callback_ready = callback_state.codex_callback_available.clone();
+        let callback_app = Router::new()
+            .route("/auth/callback", get(handlers::official_codex_callback))
+            .with_state(callback_state);
+        match tokio::net::TcpListener::bind(("127.0.0.1", 1455)).await {
+            Ok(listener) => {
+                callback_ready.store(true, Ordering::Release);
+                if let Err(err) = axum::serve(listener, callback_app).await {
+                    tracing::warn!(%err,"codex oauth callback server stopped");
+                }
+            }
+            Err(err) => tracing::warn!(%err,"cannot bind codex oauth callback port 1455"),
+        }
+    });
 
     {
         let db_path = (*db_path).clone();

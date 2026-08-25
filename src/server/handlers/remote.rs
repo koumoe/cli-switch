@@ -2051,6 +2051,12 @@ mod tests {
             whatsapp_status_rx,
             weixin_control_tx,
             weixin_status_rx,
+            codex_oauth_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
+                std::collections::HashMap::new(),
+            )),
+            codex_callback_available: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(
+                false,
+            )),
         }
     }
 
