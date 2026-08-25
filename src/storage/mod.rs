@@ -112,6 +112,18 @@ pub fn init_db(db_path: &Path) -> anyhow::Result<()> {
     conn.execute_batch(migration)
         .with_context(|| "执行 migrations/001_init.sql 失败")?;
     channel::ensure_channel_schema(&conn)?;
+    let has_account_name = conn
+        .prepare("PRAGMA table_info(remote_accounts)")?
+        .query_map([], |row| row.get::<_, String>(1))?
+        .collect::<rusqlite::Result<Vec<_>>>()?
+        .iter()
+        .any(|column| column == "name");
+    if !has_account_name {
+        conn.execute(
+            "ALTER TABLE remote_accounts ADD COLUMN name TEXT NOT NULL DEFAULT ''",
+            [],
+        )?;
+    }
 
     Ok(())
 }
@@ -146,12 +158,13 @@ const UNIFIED_REMOTE_ACCOUNT_SELECT_COLUMNS: &str = r#"
     usd_exchange_rate, custom_currency_symbol, custom_currency_exchange_rate,
     remote_checkin_enabled, remote_turnstile_check_enabled, last_quota, last_used_quota,
     last_balance_amount, last_sync_error, reauth_required, last_synced_at_ms,
-    low_balance_alert_notified, last_balance_alert_at_ms, sort_order, created_at_ms, updated_at_ms
+    low_balance_alert_notified, last_balance_alert_at_ms, sort_order, created_at_ms, updated_at_ms, name
 "#;
 
 #[derive(Debug, Clone)]
 struct UnifiedRemoteAccountRow {
     id: String,
+    name: String,
     provider: ManagedRemoteProvider,
     base_url: String,
     api_url: Option<String>,
@@ -194,6 +207,7 @@ impl UnifiedRemoteAccountRow {
     fn from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Self> {
         Ok(Self {
             id: row.get(0)?,
+            name: row.get(37).unwrap_or_default(),
             provider: row.get(1)?,
             base_url: row.get(2)?,
             api_url: row.get(3)?,
@@ -251,6 +265,7 @@ impl UnifiedRemoteAccountRow {
             .filter(|value| token_configured(value));
         Ok(NewApiAccount {
             id: self.id,
+            name: self.name,
             base_url: self.base_url,
             api_url: self.api_url,
             user_id: self.user_id,
@@ -297,6 +312,7 @@ impl UnifiedRemoteAccountRow {
             .filter(|value| token_configured(value));
         Ok(RemoteAccount {
             id: self.id,
+            name: self.name,
             provider: RemoteAccountProvider::Sub2Api,
             base_url: self.base_url,
             api_url: self.api_url,
@@ -572,6 +588,7 @@ mod tests {
         let newapi = create_newapi_account(
             db_path.clone(),
             CreateNewApiAccount {
+                name: None,
                 base_url: "https://newapi.example.com".to_string(),
                 api_url: None,
                 user_id: "demo-user".to_string(),
@@ -605,6 +622,7 @@ mod tests {
         let remote = create_remote_account(
             db_path.clone(),
             CreateRemoteAccount {
+                name: None,
                 provider: RemoteAccountProvider::Sub2Api,
                 base_url: "https://sub2api.example.com".to_string(),
                 api_url: Some("https://sub2api.example.com/v1".to_string()),

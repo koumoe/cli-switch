@@ -33,6 +33,7 @@ pub(in crate::server) enum RemoteAccountCheckinMode {
 #[derive(Debug, Clone, Serialize)]
 pub(in crate::server) struct RemoteAccountCommonResponse {
     pub id: String,
+    pub name: String,
     pub base_url: String,
     pub api_url: Option<String>,
     pub user_id: String,
@@ -134,6 +135,7 @@ pub(in crate::server) struct ReorderRemoteAccountsInput {
 
 #[derive(Debug, Deserialize)]
 pub(in crate::server) struct CreateRemoteAccountInput {
+    name: String,
     provider: RemoteAccountProvider,
     base_url: String,
     api_url: Option<String>,
@@ -150,6 +152,7 @@ pub(in crate::server) struct CreateRemoteAccountInput {
 
 #[derive(Debug, Deserialize, Default)]
 pub(in crate::server) struct UpdateRemoteAccountInput {
+    name: Option<String>,
     provider: Option<RemoteAccountProvider>,
     base_url: Option<String>,
     api_url: Option<String>,
@@ -575,6 +578,7 @@ fn resolve_newapi_checkin_mode(account: &storage::NewApiAccount) -> RemoteAccoun
 fn map_newapi_common(account: &storage::NewApiAccount) -> RemoteAccountCommonResponse {
     RemoteAccountCommonResponse {
         id: account.id.clone(),
+        name: account.name.clone(),
         base_url: account.base_url.clone(),
         api_url: account.api_url.clone(),
         user_id: account.user_id.clone(),
@@ -625,6 +629,7 @@ impl From<storage::RemoteAccount> for RemoteAccountResponse {
     fn from(account: storage::RemoteAccount) -> Self {
         let common = RemoteAccountCommonResponse {
             id: account.id,
+            name: account.name,
             base_url: account.base_url,
             api_url: account.api_url,
             user_id: account.remote_user_id.unwrap_or_default(),
@@ -941,6 +946,7 @@ async fn create_newapi_remote_account_impl(
     let (request_checkin_mode, auto_checkin_enabled) =
         normalize_newapi_create_checkin_mode(input.checkin_mode);
     let create_input = storage::CreateNewApiAccount {
+        name: Some(input.name.clone()),
         base_url: input.base_url,
         api_url: input.api_url,
         user_id,
@@ -1005,6 +1011,7 @@ async fn create_sub2api_remote_account_impl(
     let account = storage::create_remote_account(
         state.db_path(),
         storage::CreateRemoteAccount {
+            name: Some(input.name.clone()),
             provider: storage::RemoteAccountProvider::Sub2Api,
             base_url,
             api_url: input.api_url,
@@ -1033,6 +1040,7 @@ async fn update_newapi_remote_account_impl(
     let (request_checkin_mode, auto_checkin_enabled) =
         normalize_newapi_update_checkin_mode(input.checkin_mode);
     let update_input = storage::UpdateNewApiAccount {
+        name: input.name.clone(),
         base_url: input.base_url,
         api_url: input.api_url,
         user_id: input.user_id,
@@ -1122,6 +1130,7 @@ async fn update_sub2api_remote_account_impl(
         state.db_path(),
         account_id,
         storage::UpdateRemoteAccount {
+            name: input.name.clone(),
             base_url: Some(effective_base_url),
             api_url: input.api_url,
             access_token: Some(session.access_token.clone()),
@@ -2482,6 +2491,7 @@ mod tests {
         let response = create_remote_account(
             State(state),
             Json(CreateRemoteAccountInput {
+                name: "Test account".to_string(),
                 provider: RemoteAccountProvider::Sub2Api,
                 base_url: base_url.clone(),
                 api_url: None,
@@ -2530,6 +2540,7 @@ mod tests {
         let account = storage::create_remote_account(
             db_path.clone(),
             storage::CreateRemoteAccount {
+                name: None,
                 provider: storage::RemoteAccountProvider::Sub2Api,
                 base_url: base_url.clone(),
                 api_url: None,
@@ -2587,6 +2598,7 @@ mod tests {
         let account = storage::create_remote_account(
             db_path.clone(),
             storage::CreateRemoteAccount {
+                name: None,
                 provider: storage::RemoteAccountProvider::Sub2Api,
                 base_url,
                 api_url: None,
@@ -2648,6 +2660,7 @@ mod tests {
         let account = storage::create_remote_account(
             db_path.clone(),
             storage::CreateRemoteAccount {
+                name: None,
                 provider: storage::RemoteAccountProvider::Sub2Api,
                 base_url,
                 api_url: None,
@@ -2707,6 +2720,7 @@ mod tests {
         let account = storage::create_newapi_account(
             db_path.clone(),
             storage::CreateNewApiAccount {
+                name: None,
                 base_url,
                 api_url: None,
                 user_id: "demo-user-id".to_string(),
@@ -2776,6 +2790,7 @@ mod tests {
         let account = storage::create_remote_account(
             db_path.clone(),
             storage::CreateRemoteAccount {
+                name: None,
                 provider: storage::RemoteAccountProvider::Sub2Api,
                 base_url: "http://127.0.0.1:65535".to_string(),
                 api_url: None,

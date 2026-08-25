@@ -70,6 +70,7 @@ import {
   testChannel,
   reorderChannels,
   getSettings,
+  listRemoteAccounts,
 } from "@/api";
 import type {
   AppSettings,
@@ -195,6 +196,7 @@ export function ChannelsPage() {
   const [loading, setLoading] = useState(false);
   const [reordering, setReordering] = useState(false);
   const [nowMs, setNowMs] = useState(() => Date.now());
+  const [accountNames, setAccountNames] = useState<Record<string, string>>({});
 
   const [modalOpen, setModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<"create" | "edit">("create");
@@ -216,10 +218,12 @@ export function ChannelsPage() {
   async function refresh() {
     setLoading(true);
     try {
-      const [cs, settings] = await Promise.all([
+      const [cs, settings, accounts] = await Promise.all([
         listChannels(),
         getSettings().catch(() => null),
+        listRemoteAccounts().catch(() => []),
       ]);
+      setAccountNames(Object.fromEntries(accounts.map((a) => [a.id, a.name?.trim() || a.base_url])));
       const by: Record<Protocol, Channel[]> = {
         openai: [],
         anthropic: [],
@@ -489,6 +493,16 @@ export function ChannelsPage() {
           cellClassName: "text-center",
           skeletonClassName: "w-4 mx-auto",
         },
+      },
+      {
+        id: "account",
+        header: t("accounts.title"),
+        cell: ({ row }) => (
+          <div className="mx-auto max-w-[160px] truncate text-center" title={row.original.managed_remote_account_id ? accountNames[row.original.managed_remote_account_id] : "-"}>
+            {row.original.managed_remote_account_id ? (accountNames[row.original.managed_remote_account_id] ?? "-") : "-"}
+          </div>
+        ),
+        meta: { headerClassName: "w-36", skeletonClassName: "w-20 mx-auto" },
       },
       {
         accessorKey: "name",

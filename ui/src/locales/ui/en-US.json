@@ -280,6 +280,7 @@
       "sub2api": "sub2api"
     },
     "table": {
+      "name": "Name",
       "baseUrl": "Base URL",
       "provider": "Provider",
       "balance": "Balance",
@@ -330,6 +331,8 @@
       "creating": "Creating..."
     },
     "editor": {
+      "name": "Name",
+      "namePlaceholder": "Custom account name",
       "editTitle": "Edit Account",
       "description": "Update remote account settings, check-in policy, and low-balance alerts",
       "providerLocked": "The provider is fixed after creation and cannot be changed during editing.",

@@ -280,6 +280,7 @@
       "sub2api": "sub2api"
     },
     "table": {
+      "name": "名称",
       "baseUrl": "Base URL",
       "provider": "账号体系",
       "balance": "余额",
@@ -330,6 +331,8 @@
       "creating": "添加中..."
     },
     "editor": {
+      "name": "名称",
+      "namePlaceholder": "自定义账号名称",
       "editTitle": "编辑账号",
       "description": "修改远端账号信息、签到策略和余额告警设置",
       "providerLocked": "账号体系在创建后固定，编辑时不可切换。",

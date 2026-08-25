@@ -49,6 +49,7 @@ impl rusqlite::types::FromSql for NewApiAccountCheckinMode {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NewApiAccount {
     pub id: String,
+    pub name: String,
     pub base_url: String,
     pub api_url: Option<String>,
     pub user_id: String,
@@ -86,6 +87,7 @@ pub struct NewApiAccount {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct CreateNewApiAccount {
+    pub name: Option<String>,
     pub base_url: String,
     pub api_url: Option<String>,
     pub user_id: String,
@@ -100,6 +102,7 @@ pub struct CreateNewApiAccount {
 
 #[derive(Debug, Clone, Deserialize, Default)]
 pub struct UpdateNewApiAccount {
+    pub name: Option<String>,
     pub base_url: Option<String>,
     pub api_url: Option<String>,
     pub user_id: Option<String>,
@@ -183,6 +186,7 @@ fn account_from_row(
     };
     Ok(NewApiAccount {
         id: row.get(0)?,
+        name: row.get(24).unwrap_or_default(),
         base_url: row.get(1)?,
         api_url: row.get(2)?,
         user_id: row.get(3)?,
@@ -385,8 +389,9 @@ pub async fn create_newapi_account(
             ],
         )?;
 
-        Ok(NewApiAccount {
-            id,
+    Ok(NewApiAccount {
+        id,
+        name: String::new(),
             base_url,
             api_url,
             user_id,
@@ -445,6 +450,9 @@ pub async fn update_newapi_account(
         if let Some(value) = input.user_id {
             account.user_id = value.trim().to_string();
         }
+        if let Some(value) = input.name {
+            account.name = value.trim().to_string();
+        }
         if let Some(value) = input.user_token {
             account.user_token = normalize_optional_text(Some(value));
         }
@@ -480,7 +488,7 @@ pub async fn update_newapi_account(
             r#"
             UPDATE remote_accounts
             SET base_url = ?2, api_url = ?3, user_id = ?4, user_token = ?5, page_checkin_url = ?6, checkin_mode = ?7,
-                auto_checkin_enabled = ?8, auto_checkin_time = ?9, low_balance_alert_threshold = ?10, recharge_currency = ?11, updated_at_ms = ?12
+                auto_checkin_enabled = ?8, auto_checkin_time = ?9, low_balance_alert_threshold = ?10, recharge_currency = ?11, name = ?12, updated_at_ms = ?13
             WHERE provider = 'newapi' AND id = ?1
             "#,
             params![
@@ -495,6 +503,7 @@ pub async fn update_newapi_account(
                 account.auto_checkin_time,
                 account.low_balance_alert_threshold,
                 account.recharge_currency.as_str(),
+                account.name,
                 ts,
             ],
         )?;
