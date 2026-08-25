@@ -159,7 +159,6 @@
       "gemini": "Gemini"
     },
     "table": {
-      "account": "账号",
       "name": "名称",
       "priority": "优先级",
       "realMultiplier": "实际倍率",
@@ -281,7 +280,6 @@
       "sub2api": "sub2api"
     },
     "table": {
-      "name": "名称",
       "baseUrl": "Base URL",
       "provider": "账号体系",
       "balance": "余额",
@@ -304,7 +302,6 @@
       }
     },
     "actions": {
-      "openDomain": "打开域名",
       "drag": "拖拽排序",
       "refresh": "刷新余额",
       "systemCheckin": "系统签到",
