@@ -70,10 +70,12 @@ import {
   testChannel,
   reorderChannels,
   getSettings,
+  listRemoteAccounts,
 } from "@/api";
 import type {
   AppSettings,
   Channel,
+  RemoteAccount,
   CreateChannelInput,
   Protocol,
 } from "@/types/api";
@@ -192,6 +194,7 @@ export function ChannelsPage() {
     Record<Protocol, Channel[]>
   >({ openai: [], anthropic: [], gemini: [] });
   const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
+  const [accounts, setAccounts] = useState<RemoteAccount[]>([]);
   const [loading, setLoading] = useState(false);
   const [reordering, setReordering] = useState(false);
   const [nowMs, setNowMs] = useState(() => Date.now());
@@ -216,9 +219,10 @@ export function ChannelsPage() {
   async function refresh() {
     setLoading(true);
     try {
-      const [cs, settings] = await Promise.all([
+      const [cs, settings, remoteAccounts] = await Promise.all([
         listChannels(),
         getSettings().catch(() => null),
+        listRemoteAccounts().catch(() => []),
       ]);
       const by: Record<Protocol, Channel[]> = {
         openai: [],
@@ -227,6 +231,7 @@ export function ChannelsPage() {
       };
       for (const c of cs) by[c.protocol].push(c);
       setChannelsByProtocol(by);
+      setAccounts(remoteAccounts);
       if (settings) {
         setAppSettings(settings);
       }
@@ -472,6 +477,7 @@ export function ChannelsPage() {
 
   function renderTable(protocol: Protocol) {
     const tabChannels = channelsByProtocol[protocol];
+    const accountsById = new Map(accounts.map((account) => [account.id, account]));
     const columns: Array<ColumnDef<Channel>> = [
       {
         id: "drag",
@@ -488,6 +494,33 @@ export function ChannelsPage() {
           headerClassName: "w-10",
           cellClassName: "text-center",
           skeletonClassName: "w-4 mx-auto",
+        },
+      },
+      {
+        id: "account",
+        header: t("channels.table.account"),
+        cell: ({ row }) => {
+          const account = accountsById.get(
+            row.original.managed_remote_account_id ?? "",
+          );
+          const name =
+            account?.remote_display_name?.trim() ||
+            account?.remote_username?.trim() ||
+            account?.base_url ||
+            "—";
+          return (
+            <div
+              className="mx-auto max-w-[160px] truncate text-center"
+              title={name}
+            >
+              {name}
+            </div>
+          );
+        },
+        meta: {
+          headerClassName: "w-36",
+          cellClassName: "text-center align-middle",
+          skeletonClassName: "w-24 mx-auto",
         },
       },
       {
