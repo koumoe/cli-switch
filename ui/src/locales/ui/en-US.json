@@ -159,6 +159,7 @@
       "gemini": "Gemini"
     },
     "table": {
+      "account": "Account",
       "name": "Name",
       "priority": "Priority",
       "realMultiplier": "Multiplier",
@@ -280,6 +281,7 @@
       "sub2api": "sub2api"
     },
     "table": {
+      "name": "Name",
       "baseUrl": "Base URL",
       "provider": "Provider",
       "balance": "Balance",
@@ -302,6 +304,7 @@
       }
     },
     "actions": {
+      "openDomain": "Open domain",
       "drag": "Drag to reorder",
       "refresh": "Refresh",
       "systemCheckin": "System check-in",

@@ -1,6 +1,6 @@
 import React from "react";
 import type { ColumnDef } from "@tanstack/react-table";
-import { GripVertical, Link2, Pencil, RefreshCw, Trash2 } from "lucide-react";
+import { ExternalLink, GripVertical, Link2, Pencil, RefreshCw, Trash2 } from "lucide-react";
 
 import type { RemoteAccount } from "@/types/api";
 import { Badge, Card, CardContent } from "@/components/ui";
@@ -33,6 +33,7 @@ type AccountsTableProps = {
   setAccounts: (next: RemoteAccount[]) => void;
   persistOrder: (next: RemoteAccount[]) => Promise<void>;
   onRefreshAccount: (item: RemoteAccount) => void | Promise<void>;
+  onOpenBrowser: (item: RemoteAccount) => void | Promise<void>;
   onSystemCheckin: (item: RemoteAccount) => void | Promise<void>;
   onOpenManualCheckinPrompt: (item: RemoteAccount) => void | Promise<void>;
   onOpenCreateManagedChannelDialog: (
@@ -55,6 +56,7 @@ export function AccountsTable({
   setAccounts,
   persistOrder,
   onRefreshAccount,
+  onOpenBrowser,
   onSystemCheckin,
   onOpenManualCheckinPrompt,
   onOpenCreateManagedChannelDialog,
@@ -64,6 +66,12 @@ export function AccountsTable({
   const { t } = useI18n();
   const columns = React.useMemo<Array<ColumnDef<RemoteAccount>>>(
     () => [
+      {
+        id: "account_name",
+        header: t("accounts.table.name"),
+        cell: ({ row }) => <div className="max-w-[180px] truncate font-medium" title={row.original.remote_display_name ?? undefined}>{row.original.remote_display_name?.trim() || row.original.remote_username?.trim() || "—"}</div>,
+        meta: { skeletonClassName: "w-24 mx-auto" },
+      },
       {
         id: "drag",
         header: "",
@@ -201,6 +209,12 @@ export function AccountsTable({
           return (
             <TableActionGroup>
               <TableIconButton
+                onClick={() => void onOpenBrowser(item)}
+                title={t("accounts.actions.openDomain")}
+              >
+                <ExternalLink className="h-4 w-4" />
+              </TableIconButton>
+              <TableIconButton
                 onClick={() => void onRefreshAccount(item)}
                 disabled={!!refreshing[item.id]}
                 title={t("accounts.actions.refresh")}
@@ -240,6 +254,7 @@ export function AccountsTable({
       checkinDoneMap,
       checkinsDate,
       onOpenCreateManagedChannelDialog,
+      onOpenBrowser,
       onOpenDeleteDialog,
       onOpenEdit,
       onOpenManualCheckinPrompt,

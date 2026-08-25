@@ -70,10 +70,12 @@ import {
   testChannel,
   reorderChannels,
   getSettings,
+  listRemoteAccounts,
 } from "@/api";
 import type {
   AppSettings,
   Channel,
+  RemoteAccount,
   CreateChannelInput,
   Protocol,
 } from "@/types/api";
@@ -192,6 +194,7 @@ export function ChannelsPage() {
     Record<Protocol, Channel[]>
   >({ openai: [], anthropic: [], gemini: [] });
   const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
+  const [accounts, setAccounts] = useState<RemoteAccount[]>([]);
   const [loading, setLoading] = useState(false);
   const [reordering, setReordering] = useState(false);
   const [nowMs, setNowMs] = useState(() => Date.now());
@@ -216,9 +219,10 @@ export function ChannelsPage() {
   async function refresh() {
     setLoading(true);
     try {
-      const [cs, settings] = await Promise.all([
+      const [cs, settings, remoteAccounts] = await Promise.all([
         listChannels(),
         getSettings().catch(() => null),
+        listRemoteAccounts().catch(() => []),
       ]);
       const by: Record<Protocol, Channel[]> = {
         openai: [],
@@ -227,6 +231,7 @@ export function ChannelsPage() {
       };
       for (const c of cs) by[c.protocol].push(c);
       setChannelsByProtocol(by);
+      setAccounts(remoteAccounts);
       if (settings) {
         setAppSettings(settings);
       }
@@ -473,6 +478,15 @@ export function ChannelsPage() {
   function renderTable(protocol: Protocol) {
     const tabChannels = channelsByProtocol[protocol];
     const columns: Array<ColumnDef<Channel>> = [
+      {
+        id: "account",
+        header: t("channels.table.account"),
+        cell: ({ row }) => {
+          const account = accounts.find((item) => item.id === row.original.managed_remote_account_id);
+          return <div className="max-w-[160px] truncate text-center" title={account?.base_url}>{account?.remote_display_name?.trim() || account?.remote_username?.trim() || (account ? account.base_url : "—")}</div>;
+        },
+        meta: { headerClassName: "w-36", skeletonClassName: "w-24 mx-auto" },
+      },
       {
         id: "drag",
         header: "",
