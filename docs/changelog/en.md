@@ -1,3 +1,10 @@
+## [0.61.1](https://github.com/koumoe/cli-switch/compare/v0.61.0...v0.61.1) (2026-08-25)
+
+### Bug Fixes
+
+* restore bilingual changelog bullets with issue refs ([a365b10](https://github.com/koumoe/cli-switch/commit/a365b10e864163030a90290b7f3b605d3b536604)), closes [#203](https://github.com/koumoe/cli-switch/issues/203)
+* revert account names and domain links ([448345c](https://github.com/koumoe/cli-switch/commit/448345c80e104bcc1b14fb6e34d855bc797be3ca)), closes [#203](https://github.com/koumoe/cli-switch/issues/203)
+* revert official Codex account OAuth ([1958ef8](https://github.com/koumoe/cli-switch/commit/1958ef81126fc33877b666387d3cffa66e84a5be)), closes [#204](https://github.com/koumoe/cli-switch/issues/204)
 ## [0.61.0](https://github.com/koumoe/cli-switch/compare/v0.60.0...v0.61.0) (2026-08-25)
 
 ### Features
@@ -7,37 +14,37 @@
 
 ### Features
 
-* add account names and domain links (#203) ([#203](https://github.com/koumoe/cli-switch/issues/203)) ([bb27194](https://github.com/koumoe/cli-switch/commit/bb271940f0de188597d125f512a8fa0073a55824))
+* add account names and domain links (#203) ([bb27194](https://github.com/koumoe/cli-switch/commit/bb271940f0de188597d125f512a8fa0073a55824))
 ## [0.59.5](https://github.com/koumoe/cli-switch/compare/v0.59.4...v0.59.5) (2026-07-16)
 
 ### Bug Fixes
 
-* support Claude Code installation with npm 12 (#202) ([#202](https://github.com/koumoe/cli-switch/issues/202)) ([4deb848](https://github.com/koumoe/cli-switch/commit/4deb84877fb4165ee4e91092cc3d3b13303db1d2))
+* support Claude Code installation with npm 12 (#202) ([4deb848](https://github.com/koumoe/cli-switch/commit/4deb84877fb4165ee4e91092cc3d3b13303db1d2))
 ## [0.59.4](https://github.com/koumoe/cli-switch/compare/v0.59.3...v0.59.4) (2026-05-03)
 
 ### Bug Fixes
 
-* break WhatsApp client event handler cycle (#201) ([#201](https://github.com/koumoe/cli-switch/issues/201)) ([e35c34e](https://github.com/koumoe/cli-switch/commit/e35c34e9ec529a2a517de34d002a7af9f2e8fc0b))
+* break WhatsApp client event handler cycle (#201) ([e35c34e](https://github.com/koumoe/cli-switch/commit/e35c34e9ec529a2a517de34d002a7af9f2e8fc0b))
 ## [0.59.3](https://github.com/koumoe/cli-switch/compare/v0.59.2...v0.59.3) (2026-05-02)
 
 ### Bug Fixes
 
-* ignore MDXEditor normalization on close (#200) ([#200](https://github.com/koumoe/cli-switch/issues/200)) ([6220a8f](https://github.com/koumoe/cli-switch/commit/6220a8f3809820aa54bdb37a692bd8747d07eb23))
+* ignore MDXEditor normalization on close (#200) ([6220a8f](https://github.com/koumoe/cli-switch/commit/6220a8f3809820aa54bdb37a692bd8747d07eb23))
 ## [0.59.2](https://github.com/koumoe/cli-switch/compare/v0.59.1...v0.59.2) (2026-05-02)
 
 ### Bug Fixes
 
-* prevent WhatsApp bridge fd leak (#199) ([#199](https://github.com/koumoe/cli-switch/issues/199)) ([dcde269](https://github.com/koumoe/cli-switch/commit/dcde2697b33b87d25d527ee09bd13c40dd3e9865))
+* prevent WhatsApp bridge fd leak (#199) ([dcde269](https://github.com/koumoe/cli-switch/commit/dcde2697b33b87d25d527ee09bd13c40dd3e9865))
 ## [0.59.1](https://github.com/koumoe/cli-switch/compare/v0.59.0...v0.59.1) (2026-05-01)
 
 ### Bug Fixes
 
-* stop whatsapp bridge restart loop (#196) ([#196](https://github.com/koumoe/cli-switch/issues/196)) ([22535be](https://github.com/koumoe/cli-switch/commit/22535bee4075011908c00918961c64f7a8f1d5d7))
+* stop whatsapp bridge restart loop (#196) ([22535be](https://github.com/koumoe/cli-switch/commit/22535bee4075011908c00918961c64f7a8f1d5d7))
 ## [0.59.0](https://github.com/koumoe/cli-switch/compare/v0.58.0...v0.59.0) (2026-04-16)
 
 ### Features
 
-* refactor prompts into projects (#195) ([#195](https://github.com/koumoe/cli-switch/issues/195)) ([d247baa](https://github.com/koumoe/cli-switch/commit/d247baa401d3ac8f0ddebf5e48be7539f6a04ffc))
+* refactor prompts into projects (#195) ([d247baa](https://github.com/koumoe/cli-switch/commit/d247baa401d3ac8f0ddebf5e48be7539f6a04ffc))
 ## [0.58.0](https://github.com/koumoe/cli-switch/compare/v0.57.3...v0.58.0) (2026-04-11)
 
 ### Features
@@ -57,13 +64,13 @@
 
 ### Bug Fixes
 
-* avoid redundant autostart rewrites (#192) ([#192](https://github.com/koumoe/cli-switch/issues/192)) ([0eaf996](https://github.com/koumoe/cli-switch/commit/0eaf996b95d028f9bc36504ebcb6a1efb64bb733))
+* avoid redundant autostart rewrites (#192) ([0eaf996](https://github.com/koumoe/cli-switch/commit/0eaf996b95d028f9bc36504ebcb6a1efb64bb733))
 ## [0.57.2](https://github.com/koumoe/cli-switch/compare/v0.57.1...v0.57.2) (2026-04-04)
 ## [0.57.1](https://github.com/koumoe/cli-switch/compare/v0.57.0...v0.57.1) (2026-04-03)
 
 ### Bug Fixes
 
-* reset stale sub2api auth state before relogin (#190) ([#190](https://github.com/koumoe/cli-switch/issues/190)) ([7b2d884](https://github.com/koumoe/cli-switch/commit/7b2d884da5cc9868eddf666ef431258f0865daba))
+* reset stale sub2api auth state before relogin (#190) ([7b2d884](https://github.com/koumoe/cli-switch/commit/7b2d884da5cc9868eddf666ef431258f0865daba))
 ## [0.57.0](https://github.com/koumoe/cli-switch/compare/v0.56.7...v0.57.0) (2026-04-03)
 
 ### Features
@@ -75,7 +82,7 @@
 
 ### Bug Fixes
 
-* normalize overview official credit prefix (#187) ([#187](https://github.com/koumoe/cli-switch/issues/187)) ([ed1f19e](https://github.com/koumoe/cli-switch/commit/ed1f19ee0d8cac9a2ba93bd6a3c17d5b93d34eef))
+* normalize overview official credit prefix (#187) ([ed1f19e](https://github.com/koumoe/cli-switch/commit/ed1f19ee0d8cac9a2ba93bd6a3c17d5b93d34eef))
 ## [0.56.6](https://github.com/koumoe/cli-switch/compare/v0.56.5...v0.56.6) (2026-04-02)
 
 ### Bug Fixes
@@ -91,8 +98,8 @@
 
 ### Bug Fixes
 
-* add remote delete option to managed missing prompt (#183) ([#183](https://github.com/koumoe/cli-switch/issues/183)) ([2797ee0](https://github.com/koumoe/cli-switch/commit/2797ee0c94c1ef5f0d4c39986b2b19cec92543bb))
-* refresh sub2api auth session (#184) ([#184](https://github.com/koumoe/cli-switch/issues/184)) ([3307acd](https://github.com/koumoe/cli-switch/commit/3307acdfa04b44473d8805fcfb67a2564c88574b))
+* add remote delete option to managed missing prompt (#183) ([2797ee0](https://github.com/koumoe/cli-switch/commit/2797ee0c94c1ef5f0d4c39986b2b19cec92543bb))
+* refresh sub2api auth session (#184) ([3307acd](https://github.com/koumoe/cli-switch/commit/3307acdfa04b44473d8805fcfb67a2564c88574b))
 ## [0.56.3](https://github.com/koumoe/cli-switch/compare/v0.56.2...v0.56.3) (2026-03-31)
 
 ### Bug Fixes
@@ -102,7 +109,7 @@
 
 ### Bug Fixes
 
-* refine sub2api account display and balance (#179) ([#179](https://github.com/koumoe/cli-switch/issues/179)) ([1b639b2](https://github.com/koumoe/cli-switch/commit/1b639b2f2736c7bf0d96124cd7f430081e24e28d))
+* refine sub2api account display and balance (#179) ([1b639b2](https://github.com/koumoe/cli-switch/commit/1b639b2f2736c7bf0d96124cd7f430081e24e28d))
 ## [0.56.1](https://github.com/koumoe/cli-switch/compare/v0.56.0...v0.56.1) (2026-03-31)
 
 ### Bug Fixes
@@ -132,12 +139,12 @@
 
 ### Features
 
-* add system notification switches (#175) ([#175](https://github.com/koumoe/cli-switch/issues/175)) ([27cfccd](https://github.com/koumoe/cli-switch/commit/27cfccdd9e2331685212d0221f1474539fae2301))
+* add system notification switches (#175) ([27cfccd](https://github.com/koumoe/cli-switch/commit/27cfccdd9e2331685212d0221f1474539fae2301))
 ## [0.53.0](https://github.com/koumoe/cli-switch/compare/v0.52.0...v0.53.0) (2026-03-28)
 
 ### Features
 
-* use native system notifications (#174) ([#174](https://github.com/koumoe/cli-switch/issues/174)) ([b4e103a](https://github.com/koumoe/cli-switch/commit/b4e103a9ff43cf8b4772ce9604fd4ccaaaa6112e))
+* use native system notifications (#174) ([b4e103a](https://github.com/koumoe/cli-switch/commit/b4e103a9ff43cf8b4772ce9604fd4ccaaaa6112e))
 ## [0.52.0](https://github.com/koumoe/cli-switch/compare/v0.51.0...v0.52.0) (2026-03-28)
 
 ### Features
@@ -194,7 +201,7 @@
 
 ### Bug Fixes
 
-* improve select dropdown layout and add recharge currency (#160) ([#160](https://github.com/koumoe/cli-switch/issues/160)) ([16aa012](https://github.com/koumoe/cli-switch/commit/16aa0120231b124e6925c8ac9fa920cb7ab83e1e))
+* improve select dropdown layout and add recharge currency (#160) ([16aa012](https://github.com/koumoe/cli-switch/commit/16aa0120231b124e6925c8ac9fa920cb7ab83e1e))
 ## [0.48.0](https://github.com/koumoe/cli-switch/compare/v0.47.0...v0.48.0) (2026-03-26)
 
 ### Features
@@ -252,21 +259,21 @@
 
 ### Features
 
-* improve chat help presentation (#144) ([#144](https://github.com/koumoe/cli-switch/issues/144)) ([16ea9af](https://github.com/koumoe/cli-switch/commit/16ea9afef37895c5408a8a1e3f397e0e0c44ad30))
+* improve chat help presentation (#144) ([16ea9af](https://github.com/koumoe/cli-switch/commit/16ea9afef37895c5408a8a1e3f397e0e0c44ad30))
 ## [0.44.0](https://github.com/koumoe/cli-switch/compare/v0.43.0...v0.44.0) (2026-03-24)
 
 ### Features
 
-* bundle Rust WhatsApp bridge (#143) ([#143](https://github.com/koumoe/cli-switch/issues/143)) ([7550868](https://github.com/koumoe/cli-switch/commit/75508684b7941e47595b503c507beb09ffdf78f5))
+* bundle Rust WhatsApp bridge (#143) ([7550868](https://github.com/koumoe/cli-switch/commit/75508684b7941e47595b503c507beb09ffdf78f5))
 ## [0.43.0](https://github.com/koumoe/cli-switch/compare/v0.42.0...v0.43.0) (2026-03-24)
 
 ### Features
 
-* add weixin chat bridge support (#142) ([#142](https://github.com/koumoe/cli-switch/issues/142)) ([e567782](https://github.com/koumoe/cli-switch/commit/e567782efb48ae1ef6faac77fdf5b76b0487d850))
+* add weixin chat bridge support (#142) ([e567782](https://github.com/koumoe/cli-switch/commit/e567782efb48ae1ef6faac77fdf5b76b0487d850))
 
 ### Bug Fixes
 
-* fill overview distribution card height (#140) ([#140](https://github.com/koumoe/cli-switch/issues/140)) ([709c5df](https://github.com/koumoe/cli-switch/commit/709c5df72ab9f040b242d9d3d9638f8885bc0aa4))
+* fill overview distribution card height (#140) ([709c5df](https://github.com/koumoe/cli-switch/commit/709c5df72ab9f040b242d9d3d9638f8885bc0aa4))
 ## [0.42.0](https://github.com/koumoe/cli-switch/compare/v0.41.1...v0.42.0) (2026-03-23)
 
 ### Features
@@ -288,7 +295,7 @@
 
 ### Features
 
-* switch WhatsApp to WhatsApp Web QR login (#134) ([#134](https://github.com/koumoe/cli-switch/issues/134)) ([612989d](https://github.com/koumoe/cli-switch/commit/612989d8692fee704b2e6d089ad1cf7539e719de))
+* switch WhatsApp to WhatsApp Web QR login (#134) ([612989d](https://github.com/koumoe/cli-switch/commit/612989d8692fee704b2e6d089ad1cf7539e719de))
 ## [0.40.0](https://github.com/koumoe/cli-switch/compare/v0.39.2...v0.40.0) (2026-03-22)
 
 ### Features

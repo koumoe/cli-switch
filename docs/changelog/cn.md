@@ -1,3 +1,9 @@
+## [0.61.1](https://github.com/koumoe/cli-switch/compare/v0.61.0...v0.61.1) (2026-08-25)
+
+### 修复
+* 修复带 issue 引用的 changelog 双语还原 ([a365b10](https://github.com/koumoe/cli-switch/commit/a365b10e864163030a90290b7f3b605d3b536604)), closes [#203](https://github.com/koumoe/cli-switch/issues/203)
+* 回退账号名称与域名快捷入口 ([448345c](https://github.com/koumoe/cli-switch/commit/448345c80e104bcc1b14fb6e34d855bc797be3ca)), closes [#203](https://github.com/koumoe/cli-switch/issues/203)
+* 回退官方 Codex 账号 OAuth ([1958ef8](https://github.com/koumoe/cli-switch/commit/1958ef81126fc33877b666387d3cffa66e84a5be)), closes [#204](https://github.com/koumoe/cli-switch/issues/204)
 ## [0.61.0](https://github.com/koumoe/cli-switch/compare/v0.60.0...v0.61.0) (2026-08-25)
 
 ### 功能
