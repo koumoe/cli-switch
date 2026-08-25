@@ -1,3 +1,7 @@
+## [0.60.0](https://github.com/koumoe/cli-switch/compare/v0.59.5...v0.60.0) (2026-08-25)
+
+### 功能
+* 增加账号名称与域名快捷入口 (#203) ([#203](https://github.com/koumoe/cli-switch/issues/203)) ([bb27194](https://github.com/koumoe/cli-switch/commit/bb271940f0de188597d125f512a8fa0073a55824))
 ## [0.59.5](https://github.com/koumoe/cli-switch/compare/v0.59.4...v0.59.5) (2026-07-16)
 
 ### 修复
