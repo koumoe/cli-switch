@@ -403,6 +403,7 @@ async fn list_all_remote_accounts_impl(
             r#"
             SELECT {UNIFIED_REMOTE_ACCOUNT_SELECT_COLUMNS}
             FROM remote_accounts
+            WHERE provider != 'chatgpt'
             ORDER BY sort_order ASC, created_at_ms ASC
             "#
         ))?;
@@ -426,7 +427,7 @@ async fn get_unified_remote_account_optional_impl(
                     r#"
                     SELECT {UNIFIED_REMOTE_ACCOUNT_SELECT_COLUMNS}
                     FROM remote_accounts
-                    WHERE id = ?1
+                    WHERE id = ?1 AND provider != 'chatgpt'
                     "#
                 ),
                 [&account_id],

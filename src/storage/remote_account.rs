@@ -383,10 +383,10 @@ pub async fn create_remote_account(
             r#"
             INSERT INTO remote_accounts (
                 id, provider, base_url, api_url, access_token, refresh_token, page_checkin_url, checkin_mode,
-                auto_checkin_time, low_balance_alert_threshold, recharge_currency, remote_display_name, sort_order,
+                auto_checkin_time, low_balance_alert_threshold, recharge_currency, custom_name, remote_display_name, sort_order,
                 created_at_ms, updated_at_ms
             )
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?14, ?15)
             "#,
             params![
                 id,
@@ -489,7 +489,7 @@ pub async fn update_remote_account(
             UPDATE remote_accounts
             SET base_url = ?2, api_url = ?3, access_token = ?4, refresh_token = ?5,
                 page_checkin_url = ?6, checkin_mode = ?7, auto_checkin_time = ?8,
-                low_balance_alert_threshold = ?9, recharge_currency = ?10, remote_display_name = ?11, updated_at_ms = ?12
+                low_balance_alert_threshold = ?9, recharge_currency = ?10, custom_name = ?11, remote_display_name = ?11, updated_at_ms = ?12
             WHERE id = ?1
             "#,
             params![
@@ -547,7 +547,7 @@ pub async fn apply_remote_account_sync_success(
         let changed = conn.execute(
             r#"
             UPDATE remote_accounts
-            SET remote_user_id = ?2, remote_role = ?3, remote_username = ?4, remote_display_name = ?5,
+            SET remote_user_id = ?2, remote_role = ?3, remote_username = ?4, remote_display_name = CASE WHEN custom_name IS NULL THEN ?5 ELSE remote_display_name END,
                 last_balance_amount = ?6, last_sync_error = ?7, reauth_required = 0,
                 last_synced_at_ms = ?8, updated_at_ms = ?9
             WHERE provider = 'sub2api' AND id = ?1
