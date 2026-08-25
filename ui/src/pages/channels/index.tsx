@@ -477,16 +477,8 @@ export function ChannelsPage() {
 
   function renderTable(protocol: Protocol) {
     const tabChannels = channelsByProtocol[protocol];
+    const accountsById = new Map(accounts.map((account) => [account.id, account]));
     const columns: Array<ColumnDef<Channel>> = [
-      {
-        id: "account",
-        header: t("channels.table.account"),
-        cell: ({ row }) => {
-          const account = accounts.find((item) => item.id === row.original.managed_remote_account_id);
-          return <div className="max-w-[160px] truncate text-center" title={account?.base_url}>{account?.remote_display_name?.trim() || account?.remote_username?.trim() || (account ? account.base_url : "—")}</div>;
-        },
-        meta: { headerClassName: "w-36", skeletonClassName: "w-24 mx-auto" },
-      },
       {
         id: "drag",
         header: "",
@@ -502,6 +494,33 @@ export function ChannelsPage() {
           headerClassName: "w-10",
           cellClassName: "text-center",
           skeletonClassName: "w-4 mx-auto",
+        },
+      },
+      {
+        id: "account",
+        header: t("channels.table.account"),
+        cell: ({ row }) => {
+          const account = accountsById.get(
+            row.original.managed_remote_account_id ?? "",
+          );
+          const name =
+            account?.remote_display_name?.trim() ||
+            account?.remote_username?.trim() ||
+            account?.base_url ||
+            "—";
+          return (
+            <div
+              className="mx-auto max-w-[160px] truncate text-center"
+              title={name}
+            >
+              {name}
+            </div>
+          );
+        },
+        meta: {
+          headerClassName: "w-36",
+          cellClassName: "text-center align-middle",
+          skeletonClassName: "w-24 mx-auto",
         },
       },
       {
