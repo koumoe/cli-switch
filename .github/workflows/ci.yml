@@ -48,6 +48,10 @@ jobs:
         working-directory: ui
         run: npm run build
 
+      - name: Type-check UI
+        working-directory: ui
+        run: ./node_modules/.bin/tsc --noEmit
+
       - name: Upload UI dist
         uses: actions/upload-artifact@v7
         with:
