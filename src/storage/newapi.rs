@@ -347,6 +347,7 @@ pub async fn create_newapi_account(
     with_conn(db_path, move |conn| {
         let ts = now_ms();
         let id = Uuid::new_v4().to_string();
+        let name = input.name.unwrap_or_default().trim().to_string();
         let base_url = normalize_newapi_base_url(&input.base_url);
         let api_url = normalize_optional_newapi_base_url(input.api_url);
         let user_id = input.user_id.trim().to_string();
@@ -365,14 +366,15 @@ pub async fn create_newapi_account(
         conn.execute(
             r#"
             INSERT INTO remote_accounts (
-                id, provider, base_url, api_url, user_id, user_token, access_token, page_checkin_url,
+                id, provider, name, base_url, api_url, user_id, user_token, access_token, page_checkin_url,
                 checkin_mode, auto_checkin_enabled, auto_checkin_time, low_balance_alert_threshold,
                 recharge_currency, sort_order, created_at_ms, updated_at_ms
             )
-            VALUES (?1, 'newapi', ?2, ?3, ?4, ?5, '', ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
+            VALUES (?1, 'newapi', ?2, ?3, ?4, ?5, ?6, '', ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
             "#,
             params![
                 id,
+                name,
                 base_url,
                 api_url,
                 user_id,
@@ -389,9 +391,9 @@ pub async fn create_newapi_account(
             ],
         )?;
 
-    Ok(NewApiAccount {
-        id,
-        name: String::new(),
+        Ok(NewApiAccount {
+            id,
+            name,
             base_url,
             api_url,
             user_id,
