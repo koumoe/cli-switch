@@ -320,8 +320,6 @@
       "provider": "账号类型",
       "providerHints": {
         "auto": "自动识别面板或订阅账号",
-        "newapi": "面板账号",
-        "sub2api": "订阅账号",
         "openai": "原生账号"
       },
       "steps": {

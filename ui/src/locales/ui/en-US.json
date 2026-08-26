@@ -320,8 +320,6 @@
       "provider": "Account provider",
       "providerHints": {
         "auto": "Detect panel or subscription account",
-        "newapi": "Panel account",
-        "sub2api": "Subscription account",
         "openai": "Native account"
       },
       "steps": {

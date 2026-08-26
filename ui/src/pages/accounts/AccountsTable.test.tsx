@@ -51,7 +51,7 @@ const openAiAccount: OpenAiRemoteAccount = {
 };
 
 describe("AccountsTable OpenAI accounts", () => {
-  it("shows native identity, quota windows, and unsupported check-in", () => {
+  it("shows native identity, quota windows, and no check-in", () => {
     const noop = vi.fn();
     renderWithProviders(
       <AccountsTable

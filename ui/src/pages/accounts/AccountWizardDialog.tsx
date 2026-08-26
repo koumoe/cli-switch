@@ -342,21 +342,24 @@ export function AccountWizardDialog({
                     <div className="space-y-2">
                       <div className="text-sm font-medium">{t("accounts.wizard.provider")}</div>
                       <div className="grid grid-cols-2 gap-2">
-                        {(["auto", "openai"] as const).map((item) => (
-                          <Button
+                        {(["auto", "openai"] as const).map((item) => {
+                            const isOpenAi = item === "openai";
+                            return (
+                              <Button
                             key={item}
                             type="button"
-                            variant={(item === "auto" ? provider !== "openai" : provider === "openai") ? "default" : "outline"}
+                            variant={(isOpenAi ? provider === "openai" : provider !== "openai") ? "default" : "outline"}
                             className="h-auto min-h-16 flex-col gap-1"
                             onClick={() => selectProvider(item === "auto" ? "newapi" : item)}
                             disabled={oauthStatus !== "idle"}
                           >
-                            <span>{t(item === "auto" ? "accounts.providers.auto" : `accounts.providers.${item}`)}</span>
+                            <span>{t(isOpenAi ? "accounts.providers.openai" : "accounts.providers.auto")}</span>
                             <span className="text-xs font-normal opacity-80">
-                              {t(item === "auto" ? "accounts.wizard.providerHints.auto" : `accounts.wizard.providerHints.${item}`)}
+                              {t(isOpenAi ? "accounts.wizard.providerHints.openai" : "accounts.wizard.providerHints.auto")}
                             </span>
-                          </Button>
-                        ))}
+                              </Button>
+                            );
+                        })}
                       </div>
                     </div>
             <FormField

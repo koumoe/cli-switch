@@ -101,11 +101,11 @@ export function AccountsTable({
         },
       },
       {
-        accessorKey: "base_url",
+        id: "name",
         header: t("accounts.table.name"),
         cell: ({ row }) => {
           const item = row.original;
-          const primary = item.name?.trim() || resolveAccountDisplayName(item);
+          const primary = item.name.trim() || resolveAccountDisplayName(item);
           const secondary = item.base_url;
           return (
           <div className="mx-auto max-w-[360px] text-center">
