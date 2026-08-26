@@ -281,9 +281,9 @@
       "openai": "OpenAI"
     },
     "table": {
-      "account": "Account",
+      "name": "Name",
       "provider": "Provider",
-      "quota": "Quota / Balance",
+      "quota": "Quota",
       "checkin": "Check-in",
       "reauthRequired": "Session expired. Sign in again.",
       "empty": "No accounts yet. Click 'New Account' to add one."
@@ -295,7 +295,7 @@
       "done": "Checked in",
       "todo": "Not checked in",
       "none": "No check-in",
-      "unsupported": "Not supported",
+      "unsupported": "No check-in",
       "dialog": {
         "title": "Check-in Confirmation",
         "description": "Opened the check-in page for {{name}}. Is check-in completed?",

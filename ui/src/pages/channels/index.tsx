@@ -496,7 +496,7 @@ export function ChannelsPage() {
       },
       {
         id: "account",
-        header: t("accounts.title"),
+        header: t("accounts.table.name"),
         cell: ({ row }) => (
           <div className="mx-auto max-w-[160px] truncate text-center" title={row.original.managed_remote_account_id ? accountNames[row.original.managed_remote_account_id] : "-"}>
             {row.original.managed_remote_account_id ? (accountNames[row.original.managed_remote_account_id] ?? "-") : "-"}

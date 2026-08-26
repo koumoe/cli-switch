@@ -281,9 +281,9 @@
       "openai": "OpenAI"
     },
     "table": {
-      "account": "账号",
+      "name": "名称",
       "provider": "账号体系",
-      "quota": "额度 / 余额",
+      "quota": "额度",
       "checkin": "签到",
       "reauthRequired": "登录状态已失效，请重新登录",
       "empty": "暂无账号，点击「新增账号」添加"
@@ -295,7 +295,7 @@
       "done": "已签到",
       "todo": "未签到",
       "none": "无签到",
-      "unsupported": "不支持签到",
+      "unsupported": "无签到",
       "dialog": {
         "title": "签到确认",
         "description": "已打开 {{name}} 的签到页面，是否已完成签到？",

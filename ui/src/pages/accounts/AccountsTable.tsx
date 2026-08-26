@@ -102,15 +102,11 @@ export function AccountsTable({
       },
       {
         accessorKey: "base_url",
-        header: t("accounts.table.account"),
+        header: t("accounts.table.name"),
         cell: ({ row }) => {
           const item = row.original;
-          const primary = item.provider === "openai"
-            ? resolveAccountDisplayName(item)
-            : item.base_url;
-          const secondary = item.provider === "openai"
-            ? [item.plan_type, item.remote_username].filter(Boolean).join(" · ")
-            : "";
+          const primary = item.name?.trim() || resolveAccountDisplayName(item);
+          const secondary = item.base_url;
           return (
           <div className="mx-auto max-w-[360px] text-center">
             <div className="truncate font-medium" title={primary}>
@@ -193,7 +189,7 @@ export function AccountsTable({
         cell: ({ row }) => {
           const item = row.original;
           if (item.provider === "openai") {
-            return <Badge variant="secondary">{t("accounts.checkin.unsupported")}</Badge>;
+            return <Badge variant="secondary">{t("accounts.checkin.none")}</Badge>;
           }
           const logicalCheckinMode = resolveCheckinMode(item);
           const done = !!checkinDoneMap[item.id] && checkinsDate === today;
