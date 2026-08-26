@@ -365,6 +365,7 @@ export type CreateRemoteAccountInput = {
 };
 
 export type UpdateRemoteAccountInput = Partial<{
+  name: string;
   provider: RemoteAccountProvider;
   base_url: string;
   api_url: string | null;

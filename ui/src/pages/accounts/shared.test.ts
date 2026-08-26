@@ -26,7 +26,7 @@ describe("account form values", () => {
       low_balance_alert_threshold: 0,
       recharge_currency: "CNY",
       user_token_configured: true,
-    } as RemoteAccount;
+    } as unknown as RemoteAccount;
 
     expect(accountToFormValues(account)).toMatchObject({
       name: "Primary account",
