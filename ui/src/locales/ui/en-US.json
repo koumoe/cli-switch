@@ -296,7 +296,6 @@
       "done": "Checked in",
       "todo": "Not checked in",
       "none": "No check-in",
-      "unsupported": "No check-in",
       "dialog": {
         "title": "Check-in Confirmation",
         "description": "Opened the check-in page for {{name}}. Is check-in completed?",

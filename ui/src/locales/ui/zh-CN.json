@@ -296,7 +296,6 @@
       "done": "已签到",
       "todo": "未签到",
       "none": "无签到",
-      "unsupported": "无签到",
       "dialog": {
         "title": "签到确认",
         "description": "已打开 {{name}} 的签到页面，是否已完成签到？",
