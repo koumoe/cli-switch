@@ -1,3 +1,12 @@
+## [0.62.0](https://github.com/koumoe/cli-switch/compare/v0.61.1...v0.62.0) (2026-08-26)
+
+### 功能
+* 支持从账号列表打开网站 ([20c1f39](https://github.com/koumoe/cli-switch/commit/20c1f39544b2f57abc04089f50c8511a84a0ab5b))
+* 支持自定义账号名称 ([2e8d71d](https://github.com/koumoe/cli-switch/commit/2e8d71dfb93da21aafa46f9879b01613f4c3d8b5))
+
+### 修复
+* 修复 NewAPI 账号名称保存 ([b812f6d](https://github.com/koumoe/cli-switch/commit/b812f6d3b0a07ef47e538efdef9054b9cb0cd2e3))
+* 移除未使用的账号翻译键 ([3749247](https://github.com/koumoe/cli-switch/commit/3749247a685142aa6093a8f91435c3cc19b51c24))
 ## [0.61.1](https://github.com/koumoe/cli-switch/compare/v0.61.0...v0.61.1) (2026-08-25)
 
 ### 修复
