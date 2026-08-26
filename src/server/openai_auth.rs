@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{OnceLock, RwLock};
 use std::time::Duration;
-use tokio::sync::OnceCell;
+use tokio::sync::{Mutex, OnceCell};
 use uuid::Uuid;
 
 use crate::storage;
@@ -24,9 +24,30 @@ const SESSION_TTL: Duration = Duration::from_secs(5 * 60);
 
 static CALLBACK_SERVER: OnceCell<()> = OnceCell::const_new();
 static SESSIONS: OnceLock<RwLock<HashMap<String, OAuthSession>>> = OnceLock::new();
+static REFRESH_LOCKS: OnceLock<RwLock<HashMap<String, std::sync::Arc<Mutex<()>>>>> =
+    OnceLock::new();
 
 fn sessions() -> &'static RwLock<HashMap<String, OAuthSession>> {
     SESSIONS.get_or_init(|| RwLock::new(HashMap::new()))
+}
+
+fn refresh_lock(account_id: &str) -> anyhow::Result<std::sync::Arc<Mutex<()>>> {
+    let locks = REFRESH_LOCKS.get_or_init(|| RwLock::new(HashMap::new()));
+    if let Some(lock) = locks
+        .read()
+        .map_err(|_| anyhow::anyhow!("OpenAI refresh lock map poisoned"))?
+        .get(account_id)
+        .cloned()
+    {
+        return Ok(lock);
+    }
+    let mut locks = locks
+        .write()
+        .map_err(|_| anyhow::anyhow!("OpenAI refresh lock map poisoned"))?;
+    Ok(locks
+        .entry(account_id.to_string())
+        .or_insert_with(|| std::sync::Arc::new(Mutex::new(())))
+        .clone())
 }
 
 #[derive(Debug, Clone)]
@@ -417,6 +438,7 @@ async fn exchange_code(
 ) -> anyhow::Result<TokenResponse> {
     post_token_form(
         client,
+        TOKEN_URL,
         &[
             ("grant_type", "authorization_code"),
             ("client_id", CLIENT_ID),
@@ -430,10 +452,11 @@ async fn exchange_code(
 
 async fn post_token_form(
     client: &reqwest::Client,
+    token_url: &str,
     form: &[(&str, &str)],
 ) -> anyhow::Result<TokenResponse> {
     let response = client
-        .post(TOKEN_URL)
+        .post(token_url)
         .header(reqwest::header::ACCEPT, "application/json")
         .form(form)
         .send()
@@ -502,12 +525,14 @@ fn token_response_to_storage(
     })
 }
 
-pub(crate) async fn refresh_tokens(
+async fn refresh_tokens_at(
     client: &reqwest::Client,
+    token_url: &str,
     refresh_token: &str,
 ) -> anyhow::Result<RefreshedOpenAiTokens> {
     let response = post_token_form(
         client,
+        token_url,
         &[
             ("client_id", CLIENT_ID),
             ("grant_type", "refresh_token"),
@@ -536,14 +561,57 @@ pub(crate) async fn refresh_persisted_account(
     db_path: PathBuf,
     account_id: String,
 ) -> anyhow::Result<storage::OpenAiAccount> {
+    let expected_access_token =
+        storage::get_openai_account_with_secret(db_path.clone(), account_id.clone())
+            .await?
+            .access_token;
+    refresh_persisted_account_if_current(
+        client,
+        db_path,
+        account_id,
+        expected_access_token.as_deref(),
+    )
+    .await
+}
+
+pub(crate) async fn refresh_persisted_account_if_current(
+    client: &reqwest::Client,
+    db_path: PathBuf,
+    account_id: String,
+    expected_access_token: Option<&str>,
+) -> anyhow::Result<storage::OpenAiAccount> {
+    refresh_persisted_account_if_current_at(
+        client,
+        TOKEN_URL,
+        db_path,
+        account_id,
+        expected_access_token,
+    )
+    .await
+}
+
+async fn refresh_persisted_account_if_current_at(
+    client: &reqwest::Client,
+    token_url: &str,
+    db_path: PathBuf,
+    account_id: String,
+    expected_access_token: Option<&str>,
+) -> anyhow::Result<storage::OpenAiAccount> {
+    let lock = refresh_lock(&account_id)?;
+    let _guard = lock.lock().await;
     let account =
         storage::get_openai_account_with_secret(db_path.clone(), account_id.clone()).await?;
+    if let Some(expected) = expected_access_token
+        && account.access_token.as_deref() != Some(expected)
+    {
+        return Ok(account);
+    }
     let refresh_token = account
         .refresh_token
         .as_deref()
         .filter(|value| !value.trim().is_empty())
         .ok_or_else(|| anyhow::anyhow!("OpenAI refresh token is missing"))?;
-    match refresh_tokens(client, refresh_token).await {
+    match refresh_tokens_at(client, token_url, refresh_token).await {
         Ok(refreshed) => {
             if let Some(refreshed_account_id) = refreshed
                 .account_id
@@ -563,7 +631,10 @@ pub(crate) async fn refresh_persisted_account(
                 display_name: refreshed.display_name.or(account.remote_display_name),
                 plan_type: refreshed.plan_type.or(account.plan_type),
             };
-            storage::upsert_openai_account_tokens(db_path, Some(account.name), tokens).await
+            let updated =
+                storage::upsert_openai_account_tokens(db_path.clone(), Some(account.name), tokens)
+                    .await?;
+            storage::get_openai_account_with_secret(db_path, updated.id).await
         }
         Err(error) => {
             let message = error.to_string();
@@ -585,7 +656,12 @@ pub(crate) async fn refresh_persisted_account(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axum::{Json, Router, routing::post};
     use serde_json::json;
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
 
     fn jwt(payload: serde_json::Value) -> String {
         format!(
@@ -647,5 +723,76 @@ mod tests {
         assert_eq!(tokens.account_id, "acct-1");
         assert_eq!(tokens.email.as_deref(), Some("user@example.com"));
         assert_eq!(tokens.plan_type.as_deref(), Some("plus"));
+    }
+
+    #[tokio::test]
+    async fn concurrent_refresh_is_singleflight_per_account() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let handler_calls = calls.clone();
+        let app = Router::new().route(
+            "/token",
+            post(move || {
+                let calls = handler_calls.clone();
+                async move {
+                    calls.fetch_add(1, Ordering::SeqCst);
+                    tokio::time::sleep(Duration::from_millis(30)).await;
+                    Json(json!({
+                        "access_token": "new-access",
+                        "refresh_token": "new-refresh",
+                        "expires_in": 3600
+                    }))
+                }
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+            .await
+            .unwrap();
+        let address = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let _ = axum::serve(listener, app).await;
+        });
+
+        let db_path = std::env::temp_dir().join(format!(
+            "cliswitch-openai-refresh-singleflight-{}.db",
+            Uuid::new_v4()
+        ));
+        storage::init_db(&db_path).unwrap();
+        let account = storage::upsert_openai_account_tokens(
+            db_path.clone(),
+            None,
+            storage::OpenAiAccountTokens {
+                access_token: "old-access".to_string(),
+                refresh_token: Some("old-refresh".to_string()),
+                id_token: None,
+                token_expires_at_ms: Some(0),
+                account_id: "account-1".to_string(),
+                email: None,
+                display_name: None,
+                plan_type: None,
+            },
+        )
+        .await
+        .unwrap();
+        let token_url = format!("http://{address}/token");
+        let client = reqwest::Client::new();
+        let first = refresh_persisted_account_if_current_at(
+            &client,
+            &token_url,
+            db_path.clone(),
+            account.id.clone(),
+            Some("old-access"),
+        );
+        let second = refresh_persisted_account_if_current_at(
+            &client,
+            &token_url,
+            db_path.clone(),
+            account.id,
+            Some("old-access"),
+        );
+        let (first, second) = tokio::join!(first, second);
+        assert_eq!(first.unwrap().access_token.as_deref(), Some("new-access"));
+        assert_eq!(second.unwrap().access_token.as_deref(), Some("new-access"));
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        let _ = std::fs::remove_file(db_path);
     }
 }

@@ -291,6 +291,59 @@ async fn managed_openai_account_forwards_responses_with_dynamic_oauth_credential
     panic!("OpenAI quota headers were not persisted");
 }
 
+#[tokio::test]
+async fn managed_openai_account_load_failure_fails_over_to_next_channel() {
+    let (fallback_url, fallback_calls) =
+        spawn_upstream_counted(StatusCode::OK, r#"{"ok":true}"#).await;
+    let db_path = temp_db_path();
+    storage::init_db(&db_path).unwrap();
+    storage::create_channel(
+        db_path.clone(),
+        storage::CreateChannel {
+            name: "broken OpenAI account".to_string(),
+            protocol: storage::Protocol::Openai,
+            base_url: "https://chatgpt.com/backend-api/codex".to_string(),
+            auth_type: Some("managed_account".to_string()),
+            auth_ref: String::new(),
+            checkin_url: None,
+            priority: 20,
+            retry_times: 1,
+            ignore_channel_protection: false,
+            recharge_currency: None,
+            real_multiplier: None,
+            enabled: true,
+            managed_by_remote: Some(true),
+            managed_remote_provider: Some(storage::ManagedRemoteProvider::Openai),
+            managed_remote_account_id: Some("missing-account".to_string()),
+            managed_remote_resource_id: None,
+            managed_remote_resource_name: None,
+            managed_remote_group_name: None,
+            managed_remote_group_id: None,
+        },
+    )
+    .await
+    .unwrap();
+    create_openai_channel(db_path.clone(), "fallback", fallback_url, 10, 1, false).await;
+
+    let request = Request::builder()
+        .method("POST")
+        .uri("/v1/responses")
+        .header(axum::http::header::CONTENT_TYPE, "application/json")
+        .body(Body::from(r#"{"model":"gpt-test","input":"hello"}"#))
+        .unwrap();
+    let response = proxy::forward(
+        &reqwest::Client::new(),
+        db_path,
+        storage::Protocol::Openai,
+        "/v1",
+        request,
+    )
+    .await
+    .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(fallback_calls.load(Ordering::Relaxed), 1);
+}
+
 async fn spawn_upstream_stream_error() -> String {
     // Use a raw TCP server that sends a truncated chunked response so reqwest can
     // successfully receive response headers, but fail while reading the body stream.
