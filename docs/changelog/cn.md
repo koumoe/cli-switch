@@ -1,3 +1,8 @@
+## [0.62.1](https://github.com/koumoe/cli-switch/compare/v0.62.0...v0.62.1) (2026-08-26)
+
+### 修复
+* 完善 UI 账号表单类型 ([4656094](https://github.com/koumoe/cli-switch/commit/465609439aae738e5cc2638b7bb2b5e5d5cf2107))
+* 修复表单初始化时账号变量未定义 ([29b23af](https://github.com/koumoe/cli-switch/commit/29b23affb6ffd926abbd1a70b5d6a8a14b48da1b))
 ## [0.62.0](https://github.com/koumoe/cli-switch/compare/v0.61.1...v0.62.0) (2026-08-26)
 
 ### 功能

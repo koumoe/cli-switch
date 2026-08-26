@@ -1,3 +1,9 @@
+## [0.62.1](https://github.com/koumoe/cli-switch/compare/v0.62.0...v0.62.1) (2026-08-26)
+
+### Bug Fixes
+
+* complete UI account form types ([4656094](https://github.com/koumoe/cli-switch/commit/465609439aae738e5cc2638b7bb2b5e5d5cf2107))
+* resolve undefined account variable in form initialization ([29b23af](https://github.com/koumoe/cli-switch/commit/29b23affb6ffd926abbd1a70b5d6a8a14b48da1b))
 ## [0.62.0](https://github.com/koumoe/cli-switch/compare/v0.61.1...v0.62.0) (2026-08-26)
 
 ### Features
