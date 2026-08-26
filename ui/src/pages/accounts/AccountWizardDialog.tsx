@@ -341,19 +341,19 @@ export function AccountWizardDialog({
                   <div className="space-y-4">
                     <div className="space-y-2">
                       <div className="text-sm font-medium">{t("accounts.wizard.provider")}</div>
-                      <div className="grid grid-cols-3 gap-2">
-                        {(["newapi", "sub2api", "openai"] as const).map((item) => (
+                      <div className="grid grid-cols-2 gap-2">
+                        {(["auto", "openai"] as const).map((item) => (
                           <Button
                             key={item}
                             type="button"
-                            variant={provider === item ? "default" : "outline"}
+                            variant={(item === "auto" ? provider !== "openai" : provider === "openai") ? "default" : "outline"}
                             className="h-auto min-h-16 flex-col gap-1"
-                            onClick={() => selectProvider(item)}
+                            onClick={() => selectProvider(item === "auto" ? "newapi" : item)}
                             disabled={oauthStatus !== "idle"}
                           >
-                            <span>{t(`accounts.providers.${item}`)}</span>
+                            <span>{t(item === "auto" ? "accounts.providers.auto" : `accounts.providers.${item}`)}</span>
                             <span className="text-xs font-normal opacity-80">
-                              {t(`accounts.wizard.providerHints.${item}`)}
+                              {t(item === "auto" ? "accounts.wizard.providerHints.auto" : `accounts.wizard.providerHints.${item}`)}
                             </span>
                           </Button>
                         ))}

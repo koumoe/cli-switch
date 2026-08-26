@@ -276,6 +276,7 @@
     "title": "Account Management",
     "new": "New Account",
     "providers": {
+      "auto": "Auto-detect",
       "newapi": "newapi",
       "sub2api": "sub2api",
       "openai": "OpenAI"
@@ -319,6 +320,7 @@
       "description": "Choose an account provider and complete its login or authentication flow.",
       "provider": "Account provider",
       "providerHints": {
+        "auto": "Detect panel or subscription account",
         "newapi": "Panel account",
         "sub2api": "Subscription account",
         "openai": "Native account"

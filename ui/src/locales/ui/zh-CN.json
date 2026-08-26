@@ -276,6 +276,7 @@
     "title": "账号管理",
     "new": "新增账号",
     "providers": {
+      "auto": "自动探测",
       "newapi": "newapi",
       "sub2api": "sub2api",
       "openai": "OpenAI"
@@ -319,6 +320,7 @@
       "description": "选择账号类型并完成对应的登录或认证配置",
       "provider": "账号类型",
       "providerHints": {
+        "auto": "自动识别面板或订阅账号",
         "newapi": "面板账号",
         "sub2api": "订阅账号",
         "openai": "原生账号"
