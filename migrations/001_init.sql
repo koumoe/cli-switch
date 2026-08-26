@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS channels (
   recharge_currency TEXT NOT NULL DEFAULT 'CNY' CHECK(recharge_currency IN ('CNY','USD')),
   real_multiplier REAL NOT NULL DEFAULT 1.0,
   managed_by_remote INTEGER NOT NULL DEFAULT 0,
-  managed_remote_provider TEXT NULL CHECK(managed_remote_provider IN ('newapi','sub2api')),
+  managed_remote_provider TEXT NULL CHECK(managed_remote_provider IN ('newapi','sub2api','openai')),
   managed_remote_account_id TEXT NULL,
   managed_remote_resource_id TEXT NULL,
   managed_remote_resource_name TEXT NULL,
@@ -87,13 +87,16 @@ CREATE INDEX IF NOT EXISTS idx_channel_checkins_date ON channel_checkins(date, c
 CREATE TABLE IF NOT EXISTS remote_accounts (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL DEFAULT '',
-  provider TEXT NOT NULL CHECK(provider IN ('newapi','sub2api')),
+  provider TEXT NOT NULL CHECK(provider IN ('newapi','sub2api','openai')),
   base_url TEXT NOT NULL,
   api_url TEXT NULL,
   user_id TEXT NOT NULL DEFAULT '',
   user_token TEXT NOT NULL DEFAULT '',
   access_token TEXT NOT NULL DEFAULT '',
   refresh_token TEXT NOT NULL DEFAULT '',
+  id_token TEXT NOT NULL DEFAULT '',
+  token_expires_at_ms INTEGER NULL,
+  last_refresh_at_ms INTEGER NULL,
   page_checkin_url TEXT NULL,
   checkin_mode TEXT NOT NULL DEFAULT 'disabled' CHECK(checkin_mode IN ('disabled','system_api','page_open')),
   auto_checkin_enabled INTEGER NOT NULL DEFAULT 0,
@@ -115,6 +118,12 @@ CREATE TABLE IF NOT EXISTS remote_accounts (
   last_quota INTEGER NULL,
   last_used_quota INTEGER NULL,
   last_balance_amount REAL NULL,
+  primary_quota_used_percent REAL NULL,
+  primary_quota_window_minutes INTEGER NULL,
+  primary_quota_resets_at_ms INTEGER NULL,
+  secondary_quota_used_percent REAL NULL,
+  secondary_quota_window_minutes INTEGER NULL,
+  secondary_quota_resets_at_ms INTEGER NULL,
   last_sync_error TEXT NULL,
   reauth_required INTEGER NOT NULL DEFAULT 0,
   last_synced_at_ms INTEGER NULL,
@@ -125,8 +134,15 @@ CREATE TABLE IF NOT EXISTS remote_accounts (
   updated_at_ms INTEGER NOT NULL
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_remote_accounts_provider_base_user
-ON remote_accounts(provider, base_url, user_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_remote_accounts_newapi_identity
+ON remote_accounts(base_url, user_id) WHERE provider = 'newapi';
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_remote_accounts_sub2api_identity
+ON remote_accounts(base_url) WHERE provider = 'sub2api';
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_remote_accounts_openai_identity
+ON remote_accounts(remote_user_id)
+WHERE provider = 'openai' AND remote_user_id IS NOT NULL AND remote_user_id <> '';
 
 CREATE TABLE IF NOT EXISTS remote_account_checkins (
   account_id TEXT NOT NULL,

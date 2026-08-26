@@ -58,6 +58,7 @@ pub enum ManagedRemoteProvider {
     Newapi,
     #[serde(rename = "sub2api")]
     Sub2Api,
+    Openai,
 }
 
 impl ManagedRemoteProvider {
@@ -65,6 +66,7 @@ impl ManagedRemoteProvider {
         match self {
             ManagedRemoteProvider::Newapi => "newapi",
             ManagedRemoteProvider::Sub2Api => "sub2api",
+            ManagedRemoteProvider::Openai => "openai",
         }
     }
 }
@@ -76,6 +78,7 @@ impl std::str::FromStr for ManagedRemoteProvider {
         match s {
             "newapi" => Ok(Self::Newapi),
             "sub2api" => Ok(Self::Sub2Api),
+            "openai" => Ok(Self::Openai),
             other => Err(anyhow::anyhow!("未知 managed remote provider：{other}")),
         }
     }
@@ -258,6 +261,56 @@ pub(crate) fn ensure_channel_schema(conn: &rusqlite::Connection) -> anyhow::Resu
         "ignore_channel_protection",
         "INTEGER NOT NULL DEFAULT 0",
     )?;
+    let table_sql = conn.query_row(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'channels'",
+        [],
+        |row| row.get::<_, String>(0),
+    )?;
+    if !table_sql.contains("'newapi','sub2api','openai'") {
+        let tx = conn.unchecked_transaction()?;
+        tx.execute_batch(
+            r#"
+            DROP INDEX IF EXISTS idx_channels_managed_remote_account;
+            ALTER TABLE channels RENAME TO channels_legacy_provider;
+            CREATE TABLE channels (
+              id TEXT PRIMARY KEY, name TEXT NOT NULL,
+              protocol TEXT NOT NULL CHECK(protocol IN ('openai','anthropic','gemini')),
+              base_url TEXT NOT NULL, auth_type TEXT NOT NULL, auth_ref TEXT NOT NULL,
+              checkin_url TEXT NULL, priority INTEGER NOT NULL DEFAULT 0,
+              retry_times INTEGER NOT NULL DEFAULT 1,
+              ignore_channel_protection INTEGER NOT NULL DEFAULT 0,
+              recharge_currency TEXT NOT NULL DEFAULT 'CNY' CHECK(recharge_currency IN ('CNY','USD')),
+              real_multiplier REAL NOT NULL DEFAULT 1.0,
+              managed_by_remote INTEGER NOT NULL DEFAULT 0,
+              managed_remote_provider TEXT NULL CHECK(managed_remote_provider IN ('newapi','sub2api','openai')),
+              managed_remote_account_id TEXT NULL, managed_remote_resource_id TEXT NULL,
+              managed_remote_resource_name TEXT NULL, managed_remote_group_name TEXT NULL,
+              managed_remote_group_id INTEGER NULL, enabled INTEGER NOT NULL,
+              auto_disabled_until_ms INTEGER NOT NULL DEFAULT 0,
+              created_at_ms INTEGER NOT NULL, updated_at_ms INTEGER NOT NULL
+            );
+            INSERT INTO channels (
+              id, name, protocol, base_url, auth_type, auth_ref, checkin_url, priority,
+              retry_times, ignore_channel_protection, recharge_currency, real_multiplier,
+              managed_by_remote, managed_remote_provider, managed_remote_account_id,
+              managed_remote_resource_id, managed_remote_resource_name,
+              managed_remote_group_name, managed_remote_group_id, enabled,
+              auto_disabled_until_ms, created_at_ms, updated_at_ms
+            ) SELECT
+              id, name, protocol, base_url, auth_type, auth_ref, checkin_url, priority,
+              retry_times, ignore_channel_protection, recharge_currency, real_multiplier,
+              managed_by_remote, managed_remote_provider, managed_remote_account_id,
+              managed_remote_resource_id, managed_remote_resource_name,
+              managed_remote_group_name, managed_remote_group_id, enabled,
+              auto_disabled_until_ms, created_at_ms, updated_at_ms
+            FROM channels_legacy_provider;
+            DROP TABLE channels_legacy_provider;
+            CREATE INDEX idx_channels_managed_remote_account
+              ON channels(managed_remote_provider, managed_remote_account_id);
+            "#,
+        )?;
+        tx.commit()?;
+    }
     Ok(())
 }
 
@@ -843,29 +896,19 @@ pub async fn list_channel_ids_by_managed_account(
     account_id: String,
 ) -> anyhow::Result<Vec<String>> {
     with_conn(db_path, move |conn| {
-        let mut stmt = match provider {
-            ManagedRemoteProvider::Newapi => conn.prepare(
-                r#"
+        let mut stmt = conn.prepare(
+            r#"
                 SELECT id
                 FROM channels
                 WHERE managed_by_remote = 1
-                  AND managed_remote_provider = 'newapi'
-                  AND managed_remote_account_id = ?1
+                  AND managed_remote_provider = ?1
+                  AND managed_remote_account_id = ?2
                 ORDER BY created_at_ms ASC
-                "#,
-            )?,
-            ManagedRemoteProvider::Sub2Api => conn.prepare(
-                r#"
-                SELECT id
-                FROM channels
-                WHERE managed_by_remote = 1
-                  AND managed_remote_provider = 'sub2api'
-                  AND managed_remote_account_id = ?1
-                ORDER BY created_at_ms ASC
-                "#,
-            )?,
-        };
-        let rows = stmt.query_map([account_id], |row| row.get::<_, String>(0))?;
+            "#,
+        )?;
+        let rows = stmt.query_map(params![provider.as_str(), account_id], |row| {
+            row.get::<_, String>(0)
+        })?;
         rows.collect::<rusqlite::Result<Vec<_>>>()
             .map_err(Into::into)
     })
@@ -884,46 +927,23 @@ pub async fn detach_channels_from_managed_account(
     }
     with_conn(db_path, move |conn| {
         let ts = now_ms();
-        match provider {
-            ManagedRemoteProvider::Newapi => {
-                conn.execute(
-                    r#"
-                    UPDATE channels
-                    SET managed_by_remote = 0,
-                        managed_remote_provider = NULL,
-                        managed_remote_account_id = NULL,
-                        managed_remote_resource_id = NULL,
-                        managed_remote_resource_name = NULL,
-                        managed_remote_group_name = NULL,
-                        managed_remote_group_id = NULL,
-                        updated_at_ms = ?2
-                    WHERE managed_by_remote = 1
-                      AND managed_remote_provider = 'newapi'
-                      AND managed_remote_account_id = ?1
-                    "#,
-                    params![account_id, ts],
-                )?;
-            }
-            ManagedRemoteProvider::Sub2Api => {
-                conn.execute(
-                    r#"
-                    UPDATE channels
-                    SET managed_by_remote = 0,
-                        managed_remote_provider = NULL,
-                        managed_remote_account_id = NULL,
-                        managed_remote_resource_id = NULL,
-                        managed_remote_resource_name = NULL,
-                        managed_remote_group_name = NULL,
-                        managed_remote_group_id = NULL,
-                        updated_at_ms = ?2
-                    WHERE managed_by_remote = 1
-                      AND managed_remote_provider = 'sub2api'
-                      AND managed_remote_account_id = ?1
-                    "#,
-                    params![account_id, ts],
-                )?;
-            }
-        }
+        conn.execute(
+            r#"
+            UPDATE channels
+            SET managed_by_remote = 0,
+                managed_remote_provider = NULL,
+                managed_remote_account_id = NULL,
+                managed_remote_resource_id = NULL,
+                managed_remote_resource_name = NULL,
+                managed_remote_group_name = NULL,
+                managed_remote_group_id = NULL,
+                updated_at_ms = ?3
+            WHERE managed_by_remote = 1
+              AND managed_remote_provider = ?1
+              AND managed_remote_account_id = ?2
+            "#,
+            params![provider.as_str(), account_id, ts],
+        )?;
         Ok(ids)
     })
     .await

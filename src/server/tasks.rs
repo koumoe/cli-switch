@@ -1485,6 +1485,23 @@ pub(crate) async fn remote_accounts_maintenance_loop(
                     )
                     .await;
                 }
+                storage::UnifiedRemoteAccount::Openai(account) => {
+                    let should_refresh = account.reauth_required == false
+                        && account.refresh_token_configured
+                        && account
+                            .token_expires_at_ms
+                            .is_some_and(|expires_at| expires_at <= storage::now_ms() + 300_000);
+                    if should_refresh
+                        && let Err(err) = super::openai_auth::refresh_persisted_account(
+                            &http_client,
+                            db_path.clone(),
+                            account.id.clone(),
+                        )
+                        .await
+                    {
+                        tracing::warn!(account_id = %account.id, err = %err, "refresh OpenAI OAuth account failed");
+                    }
+                }
             }
         }
 

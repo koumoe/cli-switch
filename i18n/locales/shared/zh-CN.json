@@ -87,6 +87,8 @@
     "remote_provider_detect_failed": "无法根据 Base URL 识别账号体系",
     "remote_provider_detect_ambiguous": "Base URL 同时匹配多个账号体系，请手动确认",
     "remote_provider_mismatch": "账号体系与当前记录不匹配",
+    "openai_oauth_required": "OpenAI 账号必须通过 OAuth 登录添加",
+    "openai_oauth_session_not_found": "未找到 OpenAI OAuth 登录会话",
     "remote_protocol_required": "协议不能为空",
     "remote_relogin_required": "sub2api 登录状态已失效，请重新登录",
     "remote_sync_failed": "同步远端账号信息失败",

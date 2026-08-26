@@ -21,6 +21,7 @@ use crate::{chat_bridge, events, storage};
 
 mod error;
 mod handlers;
+pub(crate) mod openai_auth;
 mod scheduler;
 mod state;
 mod sub2api_auth;
@@ -88,6 +89,7 @@ fn request_endpoint_template(method: &Method, path: &str) -> Option<&'static str
         ("POST", "/api/remote/accounts") => Some("/api/remote/accounts"),
         ("POST", "/api/remote/accounts/detect") => Some("/api/remote/accounts/detect"),
         ("POST", "/api/remote/accounts/reorder") => Some("/api/remote/accounts/reorder"),
+        ("POST", "/api/openai/oauth/start") => Some("/api/openai/oauth/start"),
         ("GET", "/api/remote/accounts/checkins/today") => {
             Some("/api/remote/accounts/checkins/today")
         }
@@ -127,6 +129,12 @@ fn request_endpoint_template(method: &Method, path: &str) -> Option<&'static str
                 }
                 ["api", "remote", "accounts", _, "refresh"] if method == Method::POST => {
                     Some("/api/remote/accounts/{id}/refresh")
+                }
+                ["api", "openai", "oauth", "sessions", _] if method == Method::GET => {
+                    Some("/api/openai/oauth/sessions/{request_id}")
+                }
+                ["api", "openai", "accounts", _, "refresh"] if method == Method::POST => {
+                    Some("/api/openai/accounts/{id}/refresh")
                 }
                 ["api", "remote", "accounts", _, "groups"] if method == Method::GET => {
                     Some("/api/remote/accounts/{id}/groups")
@@ -199,6 +207,7 @@ fn request_purpose(method: &Method, path: &str) -> &'static str {
         ("POST", "/api/remote/accounts") => "handlers::create_remote_account",
         ("POST", "/api/remote/accounts/detect") => "handlers::detect_remote_account",
         ("POST", "/api/remote/accounts/reorder") => "handlers::reorder_remote_accounts",
+        ("POST", "/api/openai/oauth/start") => "handlers::start_openai_oauth",
         ("GET", "/api/remote/accounts/checkins/today") => "handlers::remote_account_checkins_today",
         ("POST", "/api/remote/accounts/{id}/managed_channel") => {
             "handlers::create_remote_managed_channel"
@@ -236,6 +245,12 @@ fn request_purpose(method: &Method, path: &str) -> &'static str {
                 }
                 ["api", "remote", "accounts", _, "refresh"] if method == Method::POST => {
                     "handlers::refresh_remote_account"
+                }
+                ["api", "openai", "oauth", "sessions", _] if method == Method::GET => {
+                    "handlers::get_openai_oauth_status"
+                }
+                ["api", "openai", "accounts", _, "refresh"] if method == Method::POST => {
+                    "handlers::refresh_openai_account"
                 }
                 ["api", "remote", "accounts", _, "groups"] if method == Method::GET => {
                     "handlers::list_remote_account_groups"
@@ -392,6 +407,18 @@ fn build_app(state: AppState) -> Router {
         .route(
             "/api/remote/accounts/reorder",
             post(handlers::reorder_remote_accounts),
+        )
+        .route(
+            "/api/openai/oauth/start",
+            post(handlers::start_openai_oauth),
+        )
+        .route(
+            "/api/openai/oauth/sessions/{request_id}",
+            get(handlers::get_openai_oauth_status),
+        )
+        .route(
+            "/api/openai/accounts/{id}/refresh",
+            post(handlers::refresh_openai_account),
         )
         .route(
             "/api/remote/accounts/checkins/today",

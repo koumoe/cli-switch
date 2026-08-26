@@ -5,6 +5,7 @@ pub(super) mod chat_bridge_whatsapp;
 pub(super) mod health;
 pub(super) mod maintenance;
 pub(super) mod newapi;
+pub(super) mod openai;
 pub(super) mod pricing;
 pub(super) mod project;
 pub(super) mod proxy;
@@ -31,6 +32,7 @@ pub(super) use chat_bridge_whatsapp::{
 };
 pub(super) use health::health;
 pub(super) use maintenance::{db_size, frontend_log_ingest, logs_clear, logs_size, records_clear};
+pub(super) use openai::{get_openai_oauth_status, refresh_openai_account, start_openai_oauth};
 pub(super) use pricing::{pricing_models, pricing_status, pricing_sync};
 pub(super) use project::{
     delete_project, delete_project_document, get_project_document, list_projects,
