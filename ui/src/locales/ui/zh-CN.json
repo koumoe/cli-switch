@@ -304,6 +304,7 @@
     "actions": {
       "drag": "拖拽排序",
       "refresh": "刷新余额",
+      "openBaseUrl": "打开账号网站",
       "systemCheckin": "系统签到",
       "manualCheckin": "手动签到",
       "createManaged": "创建 key 与渠道",
@@ -330,6 +331,8 @@
       "creating": "添加中..."
     },
     "editor": {
+      "name": "名称",
+      "namePlaceholder": "自定义账号名称",
       "editTitle": "编辑账号",
       "description": "修改远端账号信息、签到策略和余额告警设置",
       "providerLocked": "账号体系在创建后固定，编辑时不可切换。",

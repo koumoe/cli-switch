@@ -85,6 +85,7 @@ impl rusqlite::types::FromSql for RemoteAccountCheckinMode {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RemoteAccount {
     pub id: String,
+    pub name: String,
     pub provider: RemoteAccountProvider,
     pub base_url: String,
     pub api_url: Option<String>,
@@ -115,6 +116,7 @@ pub struct RemoteAccount {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct CreateRemoteAccount {
+    pub name: Option<String>,
     pub provider: RemoteAccountProvider,
     pub base_url: String,
     pub api_url: Option<String>,
@@ -129,6 +131,7 @@ pub struct CreateRemoteAccount {
 
 #[derive(Debug, Clone, Deserialize, Default)]
 pub struct UpdateRemoteAccount {
+    pub name: Option<String>,
     pub base_url: Option<String>,
     pub api_url: Option<String>,
     pub access_token: Option<String>,
@@ -231,6 +234,7 @@ fn remote_account_from_row(
         sort_order: row.get(21)?,
         created_at_ms: row.get(22)?,
         updated_at_ms: row.get(23)?,
+        name: row.get(24).unwrap_or_default(),
     })
 }
 
@@ -255,7 +259,7 @@ async fn list_remote_accounts_impl(
                    auto_checkin_time, low_balance_alert_threshold, recharge_currency, remote_user_id,
                    remote_role, remote_username, remote_display_name, last_balance_amount,
                    last_sync_error, reauth_required, last_synced_at_ms, low_balance_alert_notified,
-                   last_balance_alert_at_ms, sort_order, created_at_ms, updated_at_ms
+                   last_balance_alert_at_ms, sort_order, created_at_ms, updated_at_ms, name
             FROM remote_accounts
             WHERE provider = 'sub2api'
             ORDER BY sort_order ASC, created_at_ms ASC
@@ -312,7 +316,7 @@ async fn get_remote_account_impl(
                    auto_checkin_time, low_balance_alert_threshold, recharge_currency, remote_user_id,
                    remote_role, remote_username, remote_display_name, last_balance_amount,
                    last_sync_error, reauth_required, last_synced_at_ms, low_balance_alert_notified,
-                   last_balance_alert_at_ms, sort_order, created_at_ms, updated_at_ms
+                   last_balance_alert_at_ms, sort_order, created_at_ms, updated_at_ms, name
             FROM remote_accounts
             WHERE provider = 'sub2api' AND id = ?1
             "#,
@@ -379,11 +383,11 @@ pub async fn create_remote_account(
         conn.execute(
             r#"
             INSERT INTO remote_accounts (
-                id, provider, base_url, api_url, access_token, refresh_token, page_checkin_url, checkin_mode,
+                id, provider, base_url, api_url, access_token, refresh_token, page_checkin_url, checkin_mode, name,
                 auto_checkin_time, low_balance_alert_threshold, recharge_currency, sort_order,
                 created_at_ms, updated_at_ms
             )
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
             "#,
             params![
                 id,
@@ -394,6 +398,7 @@ pub async fn create_remote_account(
                 refresh_token.as_deref().unwrap_or(""),
                 page_checkin_url,
                 checkin_mode.as_str(),
+                input.name.as_deref().unwrap_or("").trim(),
                 auto_checkin_time,
                 low_balance_alert_threshold,
                 recharge_currency.as_str(),
@@ -405,6 +410,7 @@ pub async fn create_remote_account(
 
         Ok(RemoteAccount {
             id,
+            name: input.name.unwrap_or_default().trim().to_string(),
             provider,
             base_url,
             api_url,
@@ -449,6 +455,9 @@ pub async fn update_remote_account(
         if let Some(value) = input.base_url.as_deref() {
             account.base_url = normalize_base_url(value);
         }
+        if let Some(value) = input.name {
+            account.name = value.trim().to_string();
+        }
         if input.api_url.is_some() {
             account.api_url = normalize_optional_base_url(input.api_url);
         }
@@ -482,7 +491,7 @@ pub async fn update_remote_account(
             UPDATE remote_accounts
             SET base_url = ?2, api_url = ?3, access_token = ?4, refresh_token = ?5,
                 page_checkin_url = ?6, checkin_mode = ?7, auto_checkin_time = ?8,
-                low_balance_alert_threshold = ?9, recharge_currency = ?10, updated_at_ms = ?11
+                low_balance_alert_threshold = ?9, recharge_currency = ?10, name = ?11, updated_at_ms = ?12
             WHERE id = ?1
             "#,
             params![
@@ -496,6 +505,7 @@ pub async fn update_remote_account(
                 account.auto_checkin_time,
                 account.low_balance_alert_threshold,
                 account.recharge_currency.as_str(),
+                account.name,
                 ts,
             ],
         )?;
@@ -516,7 +526,7 @@ fn get_remote_account_impl_sync(
                auto_checkin_time, low_balance_alert_threshold, recharge_currency, remote_user_id,
                remote_role, remote_username, remote_display_name, last_balance_amount,
                last_sync_error, reauth_required, last_synced_at_ms, low_balance_alert_notified,
-               last_balance_alert_at_ms, sort_order, created_at_ms, updated_at_ms
+               last_balance_alert_at_ms, sort_order, created_at_ms, updated_at_ms, name
         FROM remote_accounts
         WHERE provider = 'sub2api' AND id = ?1
         "#,

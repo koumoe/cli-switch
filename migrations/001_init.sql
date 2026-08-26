@@ -86,6 +86,7 @@ CREATE INDEX IF NOT EXISTS idx_channel_checkins_date ON channel_checkins(date, c
 
 CREATE TABLE IF NOT EXISTS remote_accounts (
   id TEXT PRIMARY KEY,
+  name TEXT NOT NULL DEFAULT '',
   provider TEXT NOT NULL CHECK(provider IN ('newapi','sub2api')),
   base_url TEXT NOT NULL,
   api_url TEXT NULL,

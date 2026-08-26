@@ -97,6 +97,7 @@ pub(super) fn build_candidate_from_create(
     let auto_checkin_enabled = input.auto_checkin_enabled.unwrap_or(false)
         && matches!(checkin_mode, storage::NewApiAccountCheckinMode::SystemApi);
     let account = storage::NewApiAccount {
+        name: input.name.clone().unwrap_or_default(),
         id: "<candidate>".to_string(),
         base_url: validate_http_url(&input.base_url, "newapi_base_url_required")?,
         api_url,

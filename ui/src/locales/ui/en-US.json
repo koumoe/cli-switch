@@ -304,6 +304,7 @@
     "actions": {
       "drag": "Drag to reorder",
       "refresh": "Refresh",
+      "openBaseUrl": "Open account website",
       "systemCheckin": "System check-in",
       "manualCheckin": "Manual check-in",
       "createManaged": "Create key and channel",
@@ -330,6 +331,8 @@
       "creating": "Creating..."
     },
     "editor": {
+      "name": "Name",
+      "namePlaceholder": "Custom account name",
       "editTitle": "Edit Account",
       "description": "Update remote account settings, check-in policy, and low-balance alerts",
       "providerLocked": "The provider is fixed after creation and cannot be changed during editing.",

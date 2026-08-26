@@ -172,9 +172,20 @@ export function AccountEditorDialog({
                   </div>
                 ) : null}
 
-                <FormField
-                  control={form.control}
-                  name="base_url"
+            <FormField
+              control={form.control}
+              name="name"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t("accounts.editor.name")}</FormLabel>
+                  <FormControl><Input placeholder={t("accounts.editor.namePlaceholder")} {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="base_url"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>{t("accounts.editor.baseUrl")}</FormLabel>

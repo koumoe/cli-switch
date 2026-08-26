@@ -294,6 +294,7 @@ export type RemoteAccountCheckinMode = "disabled" | "system_api" | "page_open";
 
 export type RemoteAccountBase = {
   id: string;
+  name: string;
   base_url: string;
   api_url: string | null;
   user_id: string;
@@ -348,6 +349,7 @@ export type RemoteAccountDetection = {
 };
 
 export type CreateRemoteAccountInput = {
+  name?: string;
   provider: RemoteAccountProvider;
   base_url: string;
   api_url?: string | null;

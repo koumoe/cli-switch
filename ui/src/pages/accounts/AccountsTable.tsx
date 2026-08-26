@@ -1,6 +1,6 @@
 import React from "react";
 import type { ColumnDef } from "@tanstack/react-table";
-import { GripVertical, Link2, Pencil, RefreshCw, Trash2 } from "lucide-react";
+import { ExternalLink, GripVertical, Link2, Pencil, RefreshCw, Trash2 } from "lucide-react";
 
 import type { RemoteAccount } from "@/types/api";
 import { Badge, Card, CardContent } from "@/components/ui";
@@ -33,6 +33,7 @@ type AccountsTableProps = {
   setAccounts: (next: RemoteAccount[]) => void;
   persistOrder: (next: RemoteAccount[]) => Promise<void>;
   onRefreshAccount: (item: RemoteAccount) => void | Promise<void>;
+  onOpenBaseUrl: (item: RemoteAccount) => void | Promise<void>;
   onSystemCheckin: (item: RemoteAccount) => void | Promise<void>;
   onOpenManualCheckinPrompt: (item: RemoteAccount) => void | Promise<void>;
   onOpenCreateManagedChannelDialog: (
@@ -55,6 +56,7 @@ export function AccountsTable({
   setAccounts,
   persistOrder,
   onRefreshAccount,
+  onOpenBaseUrl,
   onSystemCheckin,
   onOpenManualCheckinPrompt,
   onOpenCreateManagedChannelDialog,
@@ -201,6 +203,12 @@ export function AccountsTable({
           return (
             <TableActionGroup>
               <TableIconButton
+                onClick={() => void onOpenBaseUrl(item)}
+                title={t("accounts.actions.openBaseUrl")}
+              >
+                <ExternalLink className="h-4 w-4" />
+              </TableIconButton>
+              <TableIconButton
                 onClick={() => void onRefreshAccount(item)}
                 disabled={!!refreshing[item.id]}
                 title={t("accounts.actions.refresh")}
@@ -243,6 +251,7 @@ export function AccountsTable({
       onOpenDeleteDialog,
       onOpenEdit,
       onOpenManualCheckinPrompt,
+      onOpenBaseUrl,
       onRefreshAccount,
       onSystemCheckin,
       pageOpening,

@@ -180,6 +180,7 @@ export function AccountsPage() {
         }
 
         await updateRemoteAccount(editingId, {
+          name: values.name.trim(),
           provider: "newapi",
           base_url: baseUrl,
           api_url: apiUrl || null,
@@ -199,6 +200,7 @@ export function AccountsPage() {
           return;
         }
         await updateRemoteAccount(editingId, {
+          name: values.name.trim(),
           provider: "sub2api",
           base_url: baseUrl,
           api_url: apiUrl || null,
@@ -268,6 +270,14 @@ export function AccountsPage() {
       toast.error(t("accounts.toast.actionFail"), { description: humanizeApiError(e, t) });
     } finally {
       setPageOpening((current) => ({ ...current, [item.id]: false }));
+    }
+  }
+
+  async function openAccountBaseUrl(item: RemoteAccount) {
+    try {
+      await openInBrowser(item.base_url);
+    } catch (e) {
+      toast.error(t("accounts.toast.actionFail"), { description: humanizeApiError(e, t) });
     }
   }
 
@@ -463,6 +473,7 @@ export function AccountsPage() {
             setAccounts={setAccounts}
             persistOrder={persistOrder}
             onRefreshAccount={onRefreshAccount}
+            onOpenBaseUrl={openAccountBaseUrl}
             onSystemCheckin={onSystemCheckin}
             onOpenManualCheckinPrompt={openManualCheckinPrompt}
             onOpenCreateManagedChannelDialog={openCreateManagedChannelDialog}
