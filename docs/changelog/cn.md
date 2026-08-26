@@ -1,3 +1,13 @@
+## [0.63.0](https://github.com/koumoe/cli-switch/compare/v0.62.1...v0.63.0) (2026-08-26)
+
+### 功能
+* 添加 OpenAI 账号管理界面 ([3358fb7](https://github.com/koumoe/cli-switch/commit/3358fb7b660dc9224547937fda94c49b776c46ac))
+* 添加 OpenAI OAuth 渠道 ([fe08e7a](https://github.com/koumoe/cli-switch/commit/fe08e7afb20f1f4e17214e31fdfa86e8d49dab8a))
+
+### 修复
+* 保持 OpenAI 渠道故障转移 ([cf5e9f7](https://github.com/koumoe/cli-switch/commit/cf5e9f77e54e4acd1137a80bb7737322918f49b5))
+* 删除未使用的账号文案 ([eb2ee66](https://github.com/koumoe/cli-switch/commit/eb2ee665f0e53de487e55a72ee36f91baac7c099))
+* 修复 OpenAI CI 检查 ([631b523](https://github.com/koumoe/cli-switch/commit/631b5230de4aa5c8602624987455d1671a0877bf))
 ## [0.62.1](https://github.com/koumoe/cli-switch/compare/v0.62.0...v0.62.1) (2026-08-26)
 
 ### 修复

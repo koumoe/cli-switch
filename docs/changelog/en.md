@@ -1,3 +1,15 @@
+## [0.63.0](https://github.com/koumoe/cli-switch/compare/v0.62.1...v0.63.0) (2026-08-26)
+
+### Features
+
+* add OpenAI account management UI ([3358fb7](https://github.com/koumoe/cli-switch/commit/3358fb7b660dc9224547937fda94c49b776c46ac))
+* add OpenAI OAuth channels ([fe08e7a](https://github.com/koumoe/cli-switch/commit/fe08e7afb20f1f4e17214e31fdfa86e8d49dab8a))
+
+### Bug Fixes
+
+* preserve OpenAI channel failover ([cf5e9f7](https://github.com/koumoe/cli-switch/commit/cf5e9f77e54e4acd1137a80bb7737322918f49b5))
+* remove unused account locale keys ([eb2ee66](https://github.com/koumoe/cli-switch/commit/eb2ee665f0e53de487e55a72ee36f91baac7c099))
+* satisfy OpenAI CI lint ([631b523](https://github.com/koumoe/cli-switch/commit/631b5230de4aa5c8602624987455d1671a0877bf))
 ## [0.62.1](https://github.com/koumoe/cli-switch/compare/v0.62.0...v0.62.1) (2026-08-26)
 
 ### Bug Fixes
