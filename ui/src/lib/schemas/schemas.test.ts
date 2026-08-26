@@ -12,6 +12,7 @@ const t = (key: string) => key;
 describe("schema validation", () => {
   it("requires page check-in url when page_open is selected", () => {
     const result = createAccountFormSchema(t).safeParse({
+      name: "",
       provider: "newapi",
       base_url: "https://api.example.com",
       api_url: "",
