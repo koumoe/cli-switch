@@ -304,6 +304,7 @@
     "actions": {
       "drag": "Drag to reorder",
       "refresh": "Refresh",
+      "openBaseUrl": "Open account website",
       "systemCheckin": "System check-in",
       "manualCheckin": "Manual check-in",
       "createManaged": "Create key and channel",

@@ -273,6 +273,14 @@ export function AccountsPage() {
     }
   }
 
+  async function openAccountBaseUrl(item: RemoteAccount) {
+    try {
+      await openInBrowser(item.base_url);
+    } catch (e) {
+      toast.error(t("accounts.toast.actionFail"), { description: humanizeApiError(e, t) });
+    }
+  }
+
   async function confirmManualCheckin() {
     if (!manualPromptTarget) return;
     setManualCompleting(true);
@@ -465,6 +473,7 @@ export function AccountsPage() {
             setAccounts={setAccounts}
             persistOrder={persistOrder}
             onRefreshAccount={onRefreshAccount}
+            onOpenBaseUrl={openAccountBaseUrl}
             onSystemCheckin={onSystemCheckin}
             onOpenManualCheckinPrompt={openManualCheckinPrompt}
             onOpenCreateManagedChannelDialog={openCreateManagedChannelDialog}
