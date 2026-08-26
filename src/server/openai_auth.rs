@@ -225,12 +225,12 @@ pub(crate) async fn oauth_status(request_id: &str) -> anyhow::Result<Option<OAut
             OAuthSessionState::Pending | OAuthSessionState::Exchanging
         );
     if expired {
-        if let Ok(mut all) = sessions().write() {
-            if let Some(stored) = all.get_mut(request_id) {
-                stored.status = OAuthSessionState::Failed {
-                    error: "OpenAI OAuth login timed out".to_string(),
-                };
-            }
+        if let Ok(mut all) = sessions().write()
+            && let Some(stored) = all.get_mut(request_id)
+        {
+            stored.status = OAuthSessionState::Failed {
+                error: "OpenAI OAuth login timed out".to_string(),
+            };
         }
         return Ok(Some(OAuthStatusResponse {
             request_id: session.request_id,
@@ -368,12 +368,12 @@ async fn callback(Query(query): Query<OAuthCallbackQuery>) -> Response {
                 )
                 .await;
             }
-            if let Ok(mut all) = sessions().write() {
-                if let Some(stored) = all.get_mut(&session.request_id) {
-                    stored.status = OAuthSessionState::Completed {
-                        account_id: account.id,
-                    };
-                }
+            if let Ok(mut all) = sessions().write()
+                && let Some(stored) = all.get_mut(&session.request_id)
+            {
+                stored.status = OAuthSessionState::Completed {
+                    account_id: account.id,
+                };
             }
             (
                 StatusCode::OK,
@@ -383,12 +383,12 @@ async fn callback(Query(query): Query<OAuthCallbackQuery>) -> Response {
         }
         Err(error) => {
             tracing::warn!(%error, "OpenAI OAuth token exchange failed");
-            if let Ok(mut all) = sessions().write() {
-                if let Some(stored) = all.get_mut(&session.request_id) {
-                    stored.status = OAuthSessionState::Failed {
-                        error: "Failed to exchange OpenAI OAuth code".to_string(),
-                    };
-                }
+            if let Ok(mut all) = sessions().write()
+                && let Some(stored) = all.get_mut(&session.request_id)
+            {
+                stored.status = OAuthSessionState::Failed {
+                    error: "Failed to exchange OpenAI OAuth code".to_string(),
+                };
             }
             (
                 StatusCode::BAD_GATEWAY,

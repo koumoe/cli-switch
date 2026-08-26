@@ -1486,7 +1486,7 @@ pub(crate) async fn remote_accounts_maintenance_loop(
                     .await;
                 }
                 storage::UnifiedRemoteAccount::Openai(account) => {
-                    let should_refresh = account.reauth_required == false
+                    let should_refresh = !account.reauth_required
                         && account.refresh_token_configured
                         && account
                             .token_expires_at_ms
