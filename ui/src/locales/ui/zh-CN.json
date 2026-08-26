@@ -277,12 +277,15 @@
     "new": "新增账号",
     "providers": {
       "newapi": "newapi",
-      "sub2api": "sub2api"
+      "sub2api": "sub2api",
+      "openai": "OpenAI"
     },
     "table": {
+      "account": "账号",
       "baseUrl": "Base URL",
       "provider": "账号体系",
       "balance": "余额",
+      "quota": "额度 / 余额",
       "checkin": "签到",
       "reauthRequired": "登录状态已失效，请重新登录",
       "empty": "暂无账号，点击「新增账号」添加"
@@ -294,6 +297,7 @@
       "done": "已签到",
       "todo": "未签到",
       "none": "无签到",
+      "unsupported": "不支持签到",
       "dialog": {
         "title": "签到确认",
         "description": "已打开 {{name}} 的签到页面，是否已完成签到？",
@@ -308,19 +312,32 @@
       "systemCheckin": "系统签到",
       "manualCheckin": "手动签到",
       "createManaged": "创建 key 与渠道",
+      "createOpenAiManaged": "创建 OpenAI 渠道",
       "edit": "编辑账号",
       "delete": "删除账号"
     },
     "wizard": {
       "title": "新增账号",
-      "description": "按步骤接入远端账号：探测账号类型、填写认证信息、补充配置",
+      "description": "选择账号类型并完成对应的登录或认证配置",
+      "provider": "账号类型",
+      "providerHints": {
+        "newapi": "面板账号",
+        "sub2api": "订阅账号",
+        "openai": "原生账号"
+      },
       "steps": {
         "detect": "探测账号体系",
         "auth": "填写认证",
-        "options": "补充配置"
+        "options": "补充配置",
+        "openai": "OpenAI OAuth 登录"
       },
       "stepLabel": "第 {{step}} 步",
       "baseUrlHint": "输入平台首页地址，例如 new-api 面板地址或 sub2api 站点地址。",
+      "openaiTitle": "使用 OpenAI 原生账号登录",
+      "openaiHint": "将使用系统浏览器完成 OpenAI OAuth 授权，访问令牌和刷新令牌由 CliSwitch 保存，不读取本地 auth.json。",
+      "openaiLogin": "登录 OpenAI",
+      "openaiOpening": "正在打开浏览器...",
+      "openaiWaiting": "等待 OpenAI 授权...",
       "newapiAuthHint": "如果只是页面签到或只做基础记录，这一步可以暂时留空。",
       "detect": "探测并继续",
       "detecting": "探测中...",
@@ -349,6 +366,8 @@
       "bearerTokenMissing": "尚未获取登录会话，请先完成登录。",
       "reauthRequiredTitle": "当前账号需要重新登录",
       "reauthRequiredHint": "登录状态已失效，请重新登录",
+      "openaiIdentity": "OpenAI 账号：{{value}}",
+      "openaiPlan": "套餐：{{value}}",
       "openLoginPage": "登录并获取授权",
       "openLoginPageOpening": "正在打开登录窗口...",
       "rechargeCurrency": "默认充值货币",
@@ -364,7 +383,10 @@
     },
     "managed": {
       "title": "创建 key 与渠道",
+      "openaiTitle": "创建 OpenAI 渠道",
       "description": "为 {{name}} 创建 new-api token 并同步本地渠道",
+      "openaiDescription": "为 OpenAI 账号 {{name}} 创建本地托管渠道",
+      "openaiHint": "渠道会直接关联此 OpenAI 账号，并始终使用数据库中最新的 OAuth 令牌。OpenAI 原生渠道固定使用 OpenAI 协议，无需远端分组或 API Key。",
       "name": "名称",
       "protocol": "协议",
       "protocolPlaceholder": "请选择协议",
@@ -373,7 +395,8 @@
       "groupPlaceholder": "请选择分组",
       "baseUrlOverride": "独立 Base URL",
       "baseUrlOverrideHint": "不填则优先使用账号 API 地址，否则使用账号 Base URL",
-      "create": "创建并同步"
+      "create": "创建并同步",
+      "openaiCreate": "创建渠道"
     },
     "deleteDialog": {
       "title": "删除账号",
@@ -391,6 +414,9 @@
       "baseUrlInvalid": "Base URL 必须是 http/https 地址",
       "apiUrlInvalid": "API 地址必须是 http/https 地址",
       "bearerTokenRequired": "sub2api 账号需要先通过登录窗口获取 Authorization",
+      "openaiAuthOk": "OpenAI 账号登录成功",
+      "openaiAuthFailed": "OpenAI 登录失败",
+      "openaiAuthExpired": "OpenAI 登录已超时，请重新发起授权",
       "thresholdInvalid": "低余额阈值必须是 >= 0 的数字",
       "autoCheckinTimeInvalid": "自动签到时间必须是 HH:MM:SS 格式",
       "createOk": "账号创建成功",
@@ -406,6 +432,7 @@
       "deleteFail": "删除账号失败",
       "loadGroupsFail": "加载分组失败",
       "managedRequired": "请填写名称、选择协议并选择分组",
+      "openaiManagedRequired": "请填写名称并选择协议",
       "credentialsRequiredForSystem": "newapi 自动签到需要同时填写 User ID 和 User Token",
       "credentialsRequiredForManaged": "创建 key 需要同时填写 User ID 和 User Token",
       "credentialsRequiredForKey": "创建 key 需要先获取 sub2api Authorization",
@@ -416,6 +443,14 @@
       "createManagedFail": "创建渠道失败",
       "reorderOk": "排序已保存",
       "reorderFail": "保存排序失败"
+    },
+    "quota": {
+      "weekly": "周限额",
+      "days": "{{count}} 天限额",
+      "hours": "{{count}} 小时限额",
+      "window": "限额",
+      "resetAt": "{{time}} 重置",
+      "unavailable": "暂不可用"
     }
   },
   "monitor": {

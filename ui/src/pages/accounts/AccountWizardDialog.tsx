@@ -1,10 +1,17 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import { ArrowLeft, ArrowRight, ExternalLink, Search } from "lucide-react";
+import { ArrowLeft, ArrowRight, ExternalLink, LoaderCircle, LogIn, Search } from "lucide-react";
 import { toast } from "sonner";
 
-import { createRemoteAccount, detectRemoteAccount } from "@/api";
+import {
+  createRemoteAccount,
+  detectRemoteAccount,
+  getOpenAiOAuthSession,
+  openInBrowser,
+  startOpenAiOAuth,
+  updateRemoteAccount,
+} from "@/api";
 import {
   Badge,
   Button,
@@ -34,7 +41,12 @@ import { humanizeApiError } from "@/lib/error";
 import { requestSub2ApiDesktopAuth } from "@/lib/ipc";
 import { createAccountFormSchema } from "@/lib/schemas/account";
 import { cn } from "@/lib/utils";
-import type { RechargeCurrency, RemoteAccountCheckinMode, RemoteAccountDetection } from "@/types/api";
+import type {
+  RechargeCurrency,
+  RemoteAccountCheckinMode,
+  RemoteAccountDetection,
+  RemoteAccountProvider,
+} from "@/types/api";
 
 import {
   emptyAccountFormValues,
@@ -64,6 +76,8 @@ export function AccountWizardDialog({
   const [detecting, setDetecting] = useState(false);
   const [saving, setSaving] = useState(false);
   const [openingLogin, setOpeningLogin] = useState(false);
+  const [oauthStatus, setOauthStatus] = useState<"idle" | "opening" | "pending">("idle");
+  const oauthRunRef = useRef(0);
   const schema = useMemo(() => createAccountFormSchema(t), [t]);
 
   const form = useForm<AccountFormValues>({
@@ -72,13 +86,18 @@ export function AccountWizardDialog({
   });
 
   useEffect(() => {
-    if (!open) return;
+    oauthRunRef.current += 1;
+    if (!open) {
+      setOauthStatus("idle");
+      return;
+    }
 
     setStep(1);
     setDetection(null);
     setDetecting(false);
     setSaving(false);
     setOpeningLogin(false);
+    setOauthStatus("idle");
     form.reset(emptyAccountFormValues(defaultRechargeCurrency));
   }, [defaultRechargeCurrency, form, open]);
 
@@ -91,6 +110,59 @@ export function AccountWizardDialog({
     [detection, provider],
   );
   const showSystemTime = providerSupportsSystemCheckin(provider) && checkinMode === "system_api";
+
+  function selectProvider(next: RemoteAccountProvider) {
+    form.setValue("provider", next, { shouldDirty: true });
+    setDetection(null);
+    if (next === "openai") {
+      form.setValue("base_url", "https://chatgpt.com", { shouldDirty: true });
+      form.setValue("checkin_mode", "disabled", { shouldDirty: true });
+    } else if (form.getValues("base_url") === "https://chatgpt.com") {
+      form.setValue("base_url", "", { shouldDirty: true });
+    }
+  }
+
+  async function handleOpenAiLogin() {
+    const runId = oauthRunRef.current + 1;
+    oauthRunRef.current = runId;
+    setOauthStatus("opening");
+    try {
+      const session = await startOpenAiOAuth();
+      if (oauthRunRef.current !== runId) return;
+      await openInBrowser(session.authorization_url);
+      if (oauthRunRef.current !== runId) return;
+      setOauthStatus("pending");
+
+      while (oauthRunRef.current === runId) {
+        const result = await getOpenAiOAuthSession(session.request_id);
+        if (oauthRunRef.current !== runId) return;
+        if (result.status === "completed") {
+          const name = form.getValues("name").trim();
+          if (name && result.account) {
+            await updateRemoteAccount(result.account.id, { name });
+          }
+          toast.success(t("accounts.toast.openaiAuthOk"));
+          await onCreated();
+          onOpenChange(false);
+          return;
+        }
+        if (result.status === "failed") {
+          throw new Error(result.error || t("accounts.toast.openaiAuthFailed"));
+        }
+        if (result.status === "expired" || Date.now() >= session.expires_at_ms) {
+          throw new Error(t("accounts.toast.openaiAuthExpired"));
+        }
+        await new Promise((resolve) => window.setTimeout(resolve, 1000));
+      }
+    } catch (e) {
+      if (oauthRunRef.current !== runId) return;
+      toast.error(t("accounts.toast.openaiAuthFailed"), {
+        description: humanizeApiError(e, t),
+      });
+    } finally {
+      if (oauthRunRef.current === runId) setOauthStatus("idle");
+    }
+  }
 
   async function handleDetect() {
     const valid = await form.trigger("base_url");
@@ -227,6 +299,12 @@ export function AccountWizardDialog({
 
             <DialogBody className="flex-1 min-h-0 overflow-y-auto">
               <div className="space-y-4">
+                {provider === "openai" ? (
+                  <div className="rounded-lg border border-primary bg-primary/5 px-3 py-2 text-sm">
+                    <div className="text-xs text-muted-foreground">OpenAI</div>
+                    <div className="font-medium">{t("accounts.wizard.steps.openai")}</div>
+                  </div>
+                ) : (
                 <div className="grid grid-cols-3 gap-2">
                   {steps.map((item) => {
                     const active = step === item.id;
@@ -246,6 +324,7 @@ export function AccountWizardDialog({
                     );
                   })}
                 </div>
+                )}
 
                 {step > 1 && detection ? (
                   <div className="space-y-2 rounded-lg border bg-muted/20 px-4 py-3">
@@ -260,6 +339,26 @@ export function AccountWizardDialog({
 
                 {step === 1 ? (
                   <div className="space-y-4">
+                    <div className="space-y-2">
+                      <div className="text-sm font-medium">{t("accounts.wizard.provider")}</div>
+                      <div className="grid grid-cols-3 gap-2">
+                        {(["newapi", "sub2api", "openai"] as const).map((item) => (
+                          <Button
+                            key={item}
+                            type="button"
+                            variant={provider === item ? "default" : "outline"}
+                            className="h-auto min-h-16 flex-col gap-1"
+                            onClick={() => selectProvider(item)}
+                            disabled={oauthStatus !== "idle"}
+                          >
+                            <span>{t(`accounts.providers.${item}`)}</span>
+                            <span className="text-xs font-normal opacity-80">
+                              {t(`accounts.wizard.providerHints.${item}`)}
+                            </span>
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
             <FormField
               control={form.control}
               name="name"
@@ -271,6 +370,7 @@ export function AccountWizardDialog({
                 </FormItem>
               )}
             />
+            {provider !== "openai" ? (
             <FormField
               control={form.control}
               name="base_url"
@@ -285,6 +385,14 @@ export function AccountWizardDialog({
                         </FormItem>
                       )}
                     />
+            ) : (
+              <div className="rounded-lg border bg-muted/20 px-4 py-4">
+                <div className="font-medium">{t("accounts.wizard.openaiTitle")}</div>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {t("accounts.wizard.openaiHint")}
+                </p>
+              </div>
+            )}
                   </div>
                 ) : null}
 
@@ -499,7 +607,20 @@ export function AccountWizardDialog({
                 </Button>
               ) : null}
 
-              {step < 3 ? (
+              {step === 1 && provider === "openai" ? (
+                <Button
+                  type="button"
+                  onClick={() => void handleOpenAiLogin()}
+                  disabled={oauthStatus !== "idle"}
+                >
+                  {oauthStatus === "idle" ? <LogIn className="mr-2 h-4 w-4" /> : <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />}
+                  {oauthStatus === "opening"
+                    ? t("accounts.wizard.openaiOpening")
+                    : oauthStatus === "pending"
+                      ? t("accounts.wizard.openaiWaiting")
+                      : t("accounts.wizard.openaiLogin")}
+                </Button>
+              ) : step < 3 ? (
                 <Button
                   type="button"
                   onClick={() => {

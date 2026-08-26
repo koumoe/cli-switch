@@ -165,7 +165,7 @@ export function AccountEditorDialog({
                   <span className="text-sm text-muted-foreground">{t("accounts.editor.providerLocked")}</span>
                 </div>
 
-                {account?.provider === "sub2api" && account.reauth_required ? (
+                {account?.reauth_required ? (
                   <div className="rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">
                     <div className="font-medium">{t("accounts.editor.reauthRequiredTitle")}</div>
                     <div>{t("accounts.editor.reauthRequiredHint")}</div>
@@ -183,6 +183,16 @@ export function AccountEditorDialog({
                 </FormItem>
               )}
             />
+                {provider === "openai" && account?.provider === "openai" ? (
+                  <div className="rounded-lg border bg-muted/20 px-3 py-2 text-sm">
+                    <div>{t("accounts.editor.openaiIdentity", { value: account.remote_username || account.account_id })}</div>
+                    <div className="mt-1 text-muted-foreground">
+                      {t("accounts.editor.openaiPlan", { value: account.plan_type || "-" })}
+                    </div>
+                  </div>
+                ) : null}
+                {provider !== "openai" ? (
+                  <>
             <FormField
               control={form.control}
               name="base_url"
@@ -384,6 +394,8 @@ export function AccountEditorDialog({
                     </FormItem>
                   )}
                 />
+                  </>
+                ) : null}
               </div>
             </DialogBody>
 

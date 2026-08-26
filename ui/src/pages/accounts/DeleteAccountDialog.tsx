@@ -57,6 +57,7 @@ export function DeleteAccountDialog({
         {canDeleteManaged ? (
           <DialogBody>
             <div className="space-y-3">
+              {target?.provider !== "openai" ? (
               <div className="flex items-center justify-between rounded-md border p-3">
                 <div className="space-y-1">
                   <div className="text-sm font-medium">{t("accounts.deleteDialog.deleteManagedChannels")}</div>
@@ -64,6 +65,7 @@ export function DeleteAccountDialog({
                 </div>
                 <Switch checked={deleteManagedChannels} onCheckedChange={onDeleteManagedChannelsChange} />
               </div>
+              ) : null}
               <div className="flex items-center justify-between rounded-md border p-3">
                 <div className="space-y-1">
                   <div className="text-sm font-medium">{t("accounts.deleteDialog.syncDeleteRemote")}</div>

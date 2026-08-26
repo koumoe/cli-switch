@@ -13,7 +13,7 @@ export function createAccountFormSchema(t: Translate) {
   return z
     .object({
       name: z.string().trim(),
-      provider: z.enum(["newapi", "sub2api"]),
+      provider: z.enum(["newapi", "sub2api", "openai"]),
       base_url: requiredHttpUrlSchema(
         t("accounts.toast.baseUrlRequired"),
         t("accounts.toast.baseUrlInvalid"),

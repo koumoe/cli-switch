@@ -277,12 +277,15 @@
     "new": "New Account",
     "providers": {
       "newapi": "newapi",
-      "sub2api": "sub2api"
+      "sub2api": "sub2api",
+      "openai": "OpenAI"
     },
     "table": {
+      "account": "Account",
       "baseUrl": "Base URL",
       "provider": "Provider",
       "balance": "Balance",
+      "quota": "Quota / Balance",
       "checkin": "Check-in",
       "reauthRequired": "Session expired. Sign in again.",
       "empty": "No accounts yet. Click 'New Account' to add one."
@@ -294,6 +297,7 @@
       "done": "Checked in",
       "todo": "Not checked in",
       "none": "No check-in",
+      "unsupported": "Not supported",
       "dialog": {
         "title": "Check-in Confirmation",
         "description": "Opened the check-in page for {{name}}. Is check-in completed?",
@@ -308,19 +312,32 @@
       "systemCheckin": "System check-in",
       "manualCheckin": "Manual check-in",
       "createManaged": "Create key and channel",
+      "createOpenAiManaged": "Create OpenAI channel",
       "edit": "Edit account",
       "delete": "Delete account"
     },
     "wizard": {
       "title": "New Account",
-      "description": "Connect a remote account step by step: detect the provider, fill in credentials, and configure options.",
+      "description": "Choose an account provider and complete its login or authentication flow.",
+      "provider": "Account provider",
+      "providerHints": {
+        "newapi": "Panel account",
+        "sub2api": "Subscription account",
+        "openai": "Native account"
+      },
       "steps": {
         "detect": "Detect provider",
         "auth": "Authentication",
-        "options": "Additional settings"
+        "options": "Additional settings",
+        "openai": "OpenAI OAuth sign-in"
       },
       "stepLabel": "Step {{step}}",
       "baseUrlHint": "Enter the site homepage, such as a new-api panel URL or a sub2api site URL.",
+      "openaiTitle": "Sign in with a native OpenAI account",
+      "openaiHint": "OpenAI OAuth opens in your system browser. CliSwitch stores the access and refresh tokens in its database and does not read local auth.json data.",
+      "openaiLogin": "Sign in to OpenAI",
+      "openaiOpening": "Opening browser...",
+      "openaiWaiting": "Waiting for OpenAI authorization...",
       "newapiAuthHint": "You can leave this empty for now if you only need page check-in or basic local records.",
       "detect": "Detect and continue",
       "detecting": "Detecting...",
@@ -349,6 +366,8 @@
       "bearerTokenMissing": "No login session has been captured yet. Complete login first.",
       "reauthRequiredTitle": "This account must sign in again",
       "reauthRequiredHint": "The login session has expired. Please sign in again.",
+      "openaiIdentity": "OpenAI account: {{value}}",
+      "openaiPlan": "Plan: {{value}}",
       "openLoginPage": "Sign in and capture auth",
       "openLoginPageOpening": "Opening login window...",
       "rechargeCurrency": "Default recharge currency",
@@ -364,7 +383,10 @@
     },
     "managed": {
       "title": "Create Key and Channel",
+      "openaiTitle": "Create OpenAI Channel",
       "description": "Create a new-api token for {{name}} and sync the local channel",
+      "openaiDescription": "Create a local managed channel for OpenAI account {{name}}",
+      "openaiHint": "The channel links directly to this OpenAI account and always uses the latest OAuth token stored in the database. Native OpenAI channels use the OpenAI protocol and need no remote group or API key.",
       "name": "Name",
       "protocol": "Protocol",
       "protocolPlaceholder": "Select a protocol",
@@ -373,7 +395,8 @@
       "groupPlaceholder": "Select a group",
       "baseUrlOverride": "Dedicated Base URL",
       "baseUrlOverrideHint": "Leave empty to prefer the account API URL, then fall back to the account Base URL",
-      "create": "Create and sync"
+      "create": "Create and sync",
+      "openaiCreate": "Create channel"
     },
     "deleteDialog": {
       "title": "Delete Account",
@@ -391,6 +414,9 @@
       "baseUrlInvalid": "Base URL must be an http/https URL",
       "apiUrlInvalid": "API URL must be an http/https URL",
       "bearerTokenRequired": "Sign in first to capture Authorization for sub2api",
+      "openaiAuthOk": "OpenAI account signed in",
+      "openaiAuthFailed": "OpenAI sign-in failed",
+      "openaiAuthExpired": "OpenAI sign-in timed out. Start authorization again.",
       "thresholdInvalid": "Threshold must be a finite number >= 0",
       "autoCheckinTimeInvalid": "Auto check-in time must use HH:MM:SS",
       "createOk": "Account created",
@@ -406,6 +432,7 @@
       "deleteFail": "Failed to delete account",
       "loadGroupsFail": "Failed to load groups",
       "managedRequired": "Name, protocol, and group are required",
+      "openaiManagedRequired": "Name and protocol are required",
       "credentialsRequiredForSystem": "User ID and User Token are required for New API auto check-in",
       "credentialsRequiredForManaged": "User ID and User Token are required to create a key",
       "credentialsRequiredForKey": "Authorization must be captured before creating a key",
@@ -416,6 +443,14 @@
       "createManagedFail": "Failed to create channel",
       "reorderOk": "Order saved",
       "reorderFail": "Failed to save order"
+    },
+    "quota": {
+      "weekly": "Weekly quota",
+      "days": "{{count}}-day quota",
+      "hours": "{{count}}-hour quota",
+      "window": "Quota",
+      "resetAt": "resets {{time}}",
+      "unavailable": "Unavailable"
     }
   },
   "monitor": {
