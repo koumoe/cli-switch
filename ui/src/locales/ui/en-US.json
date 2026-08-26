@@ -282,9 +282,7 @@
     },
     "table": {
       "account": "Account",
-      "baseUrl": "Base URL",
       "provider": "Provider",
-      "balance": "Balance",
       "quota": "Quota / Balance",
       "checkin": "Check-in",
       "reauthRequired": "Session expired. Sign in again.",

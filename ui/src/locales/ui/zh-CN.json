@@ -282,9 +282,7 @@
     },
     "table": {
       "account": "账号",
-      "baseUrl": "Base URL",
       "provider": "账号体系",
-      "balance": "余额",
       "quota": "额度 / 余额",
       "checkin": "签到",
       "reauthRequired": "登录状态已失效，请重新登录",
