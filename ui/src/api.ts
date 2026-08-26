@@ -34,6 +34,8 @@ import type {
   Health,
   InstallCliToolResponse,
   LogsSize,
+  OpenAiOAuthSessionResponse,
+  OpenAiOAuthStartResponse,
   PickFolderInput,
   PickFolderResponse,
   PricingModel,
@@ -420,6 +422,17 @@ export function createRemoteManagedChannel(
 
 export function openInBrowser(url: string): Promise<void> {
   return http<void>("POST", "/api/system/open", { url });
+}
+
+export function startOpenAiOAuth(): Promise<OpenAiOAuthStartResponse> {
+  return http<OpenAiOAuthStartResponse>("POST", "/api/openai/oauth/start", {});
+}
+
+export function getOpenAiOAuthSession(requestId: string): Promise<OpenAiOAuthSessionResponse> {
+  return http<OpenAiOAuthSessionResponse>(
+    "GET",
+    `/api/openai/oauth/sessions/${encodeURIComponent(requestId)}`,
+  );
 }
 
 export function openDataDir(): Promise<void> {

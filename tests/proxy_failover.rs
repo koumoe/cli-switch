@@ -9,7 +9,7 @@ use cliswitch::{proxy, storage};
 use futures_util::StreamExt as _;
 use futures_util::stream;
 use std::sync::{
-    Arc,
+    Arc, Mutex,
     atomic::{AtomicUsize, Ordering},
 };
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -143,6 +143,205 @@ async fn create_openai_channel(
     )
     .await
     .expect("create channel");
+}
+
+#[tokio::test]
+async fn managed_openai_account_forwards_responses_with_dynamic_oauth_credentials() {
+    #[derive(Clone, Default)]
+    struct Captured {
+        authorization: String,
+        account_id: String,
+        path: String,
+        body: serde_json::Value,
+    }
+
+    let captured = Arc::new(Mutex::new(Captured::default()));
+    let captured_handler = captured.clone();
+    let app = Router::new().route(
+        "/codex/responses",
+        any(move |request: Request<Body>| {
+            let captured = captured_handler.clone();
+            async move {
+                let authorization = request
+                    .headers()
+                    .get(axum::http::header::AUTHORIZATION)
+                    .and_then(|value| value.to_str().ok())
+                    .unwrap_or_default()
+                    .to_string();
+                let account_id = request
+                    .headers()
+                    .get("chatgpt-account-id")
+                    .and_then(|value| value.to_str().ok())
+                    .unwrap_or_default()
+                    .to_string();
+                let path = request.uri().path().to_string();
+                let body = to_bytes(request.into_body(), 1024 * 1024).await.unwrap();
+                let body = serde_json::from_slice(&body).unwrap();
+                *captured.lock().unwrap() = Captured {
+                    authorization,
+                    account_id,
+                    path,
+                    body,
+                };
+                let mut headers = axum::http::HeaderMap::new();
+                headers.insert(axum::http::header::CONTENT_TYPE, "text/event-stream".parse().unwrap());
+                headers.insert("x-codex-primary-used-percent", "42".parse().unwrap());
+                headers.insert("x-codex-primary-window-minutes", "10080".parse().unwrap());
+                headers.insert("x-codex-primary-reset-after-seconds", "60".parse().unwrap());
+                (
+                    StatusCode::OK,
+                    headers,
+                    "data: {\"type\":\"response.completed\",\"response\":{\"usage\":{\"input_tokens\":1,\"output_tokens\":1,\"total_tokens\":2}}}\n\n",
+                )
+            }
+        }),
+    );
+    let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+        .await
+        .unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        let _ = axum::serve(listener, app).await;
+    });
+
+    let db_path = temp_db_path();
+    storage::init_db(&db_path).unwrap();
+    let account = storage::upsert_openai_account_tokens(
+        db_path.clone(),
+        Some("OpenAI test".to_string()),
+        storage::OpenAiAccountTokens {
+            access_token: "oauth-access-token".to_string(),
+            refresh_token: Some("oauth-refresh-token".to_string()),
+            id_token: Some("id-token".to_string()),
+            token_expires_at_ms: Some(i64::MAX),
+            account_id: "chatgpt-account-1".to_string(),
+            email: Some("user@example.com".to_string()),
+            display_name: None,
+            plan_type: Some("plus".to_string()),
+        },
+    )
+    .await
+    .unwrap();
+    storage::create_channel(
+        db_path.clone(),
+        storage::CreateChannel {
+            name: "OpenAI managed".to_string(),
+            protocol: storage::Protocol::Openai,
+            base_url: format!("http://{addr}/codex"),
+            auth_type: Some("managed_account".to_string()),
+            auth_ref: String::new(),
+            checkin_url: None,
+            priority: 10,
+            retry_times: 1,
+            ignore_channel_protection: false,
+            recharge_currency: None,
+            real_multiplier: None,
+            enabled: true,
+            managed_by_remote: Some(true),
+            managed_remote_provider: Some(storage::ManagedRemoteProvider::Openai),
+            managed_remote_account_id: Some(account.id.clone()),
+            managed_remote_resource_id: Some(account.remote_user_id.clone()),
+            managed_remote_resource_name: None,
+            managed_remote_group_name: None,
+            managed_remote_group_id: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    let request = Request::builder()
+        .method("POST")
+        .uri("/v1/responses")
+        .header(axum::http::header::CONTENT_TYPE, "application/json")
+        .body(Body::from(
+            r#"{"model":"gpt-5-codex","input":"hello","temperature":0.5}"#,
+        ))
+        .unwrap();
+    let response = proxy::forward(
+        &reqwest::Client::new(),
+        db_path.clone(),
+        storage::Protocol::Openai,
+        "/v1",
+        request,
+    )
+    .await
+    .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let _ = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
+
+    let captured = captured.lock().unwrap().clone();
+    assert_eq!(captured.authorization, "Bearer oauth-access-token");
+    assert_eq!(captured.account_id, "chatgpt-account-1");
+    assert_eq!(captured.path, "/codex/responses");
+    assert_eq!(captured.body["stream"], true);
+    assert_eq!(captured.body["store"], false);
+    assert!(captured.body.get("temperature").is_none());
+
+    for _ in 0..20 {
+        let updated =
+            storage::get_openai_account_without_secret(db_path.clone(), account.id.clone())
+                .await
+                .unwrap();
+        if updated.quota.primary.is_some() {
+            assert_eq!(updated.quota.primary.unwrap().used_percent, 42.0);
+            return;
+        }
+        sleep(Duration::from_millis(10)).await;
+    }
+    panic!("OpenAI quota headers were not persisted");
+}
+
+#[tokio::test]
+async fn managed_openai_account_load_failure_fails_over_to_next_channel() {
+    let (fallback_url, fallback_calls) =
+        spawn_upstream_counted(StatusCode::OK, r#"{"ok":true}"#).await;
+    let db_path = temp_db_path();
+    storage::init_db(&db_path).unwrap();
+    storage::create_channel(
+        db_path.clone(),
+        storage::CreateChannel {
+            name: "broken OpenAI account".to_string(),
+            protocol: storage::Protocol::Openai,
+            base_url: "https://chatgpt.com/backend-api/codex".to_string(),
+            auth_type: Some("managed_account".to_string()),
+            auth_ref: String::new(),
+            checkin_url: None,
+            priority: 20,
+            retry_times: 1,
+            ignore_channel_protection: false,
+            recharge_currency: None,
+            real_multiplier: None,
+            enabled: true,
+            managed_by_remote: Some(true),
+            managed_remote_provider: Some(storage::ManagedRemoteProvider::Openai),
+            managed_remote_account_id: Some("missing-account".to_string()),
+            managed_remote_resource_id: None,
+            managed_remote_resource_name: None,
+            managed_remote_group_name: None,
+            managed_remote_group_id: None,
+        },
+    )
+    .await
+    .unwrap();
+    create_openai_channel(db_path.clone(), "fallback", fallback_url, 10, 1, false).await;
+
+    let request = Request::builder()
+        .method("POST")
+        .uri("/v1/responses")
+        .header(axum::http::header::CONTENT_TYPE, "application/json")
+        .body(Body::from(r#"{"model":"gpt-test","input":"hello"}"#))
+        .unwrap();
+    let response = proxy::forward(
+        &reqwest::Client::new(),
+        db_path,
+        storage::Protocol::Openai,
+        "/v1",
+        request,
+    )
+    .await
+    .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(fallback_calls.load(Ordering::Relaxed), 1);
 }
 
 async fn spawn_upstream_stream_error() -> String {

@@ -192,29 +192,126 @@ pub async fn forward_with_config(
                 );
             }
 
-            let mut url = match build_upstream_url(&channel.base_url, &parts.uri, protocol_root) {
-                Ok(v) => v,
-                Err(e) => {
-                    let auto_disabled = if !is_count_tokens {
-                        attempt_ctx
-                            .fail(&e, "proxy attempt failed (build url)")
-                            .await
-                    } else {
-                        false
-                    };
-                    last_err = Some(e);
-                    if auto_disabled || !has_more_attempts_on_channel {
-                        if has_more_channels {
-                            continue 'channel_loop;
-                        }
-                        break 'channel_loop;
+            let is_openai_oauth_channel =
+                channel.managed_provider() == Some(storage::ManagedRemoteProvider::Openai);
+            let mut attempt_body = body_bytes.clone();
+            let mut openai_account = None;
+            if is_openai_oauth_channel {
+                if protocol != Protocol::Openai
+                    || parts.uri.path().trim_end_matches('/') != "/v1/responses"
+                {
+                    last_err = Some(ProxyError::Upstream(
+                        "OpenAI OAuth channel currently supports /v1/responses only".to_string(),
+                    ));
+                    continue 'channel_loop;
+                }
+                let Some(account_id) = channel.managed_account_id() else {
+                    last_err = Some(ProxyError::Upstream(
+                        "OpenAI managed channel is missing account id".to_string(),
+                    ));
+                    continue 'channel_loop;
+                };
+                let mut account = match storage::get_openai_account_with_secret(
+                    db_path.clone(),
+                    account_id.to_string(),
+                )
+                .await
+                {
+                    Ok(account) => account,
+                    Err(error) => {
+                        last_err = Some(ProxyError::Storage(error));
+                        continue 'channel_loop;
                     }
-                    continue;
+                };
+                if account.reauth_required {
+                    last_err = Some(ProxyError::Upstream(
+                        "OpenAI account requires login".to_string(),
+                    ));
+                    continue 'channel_loop;
+                }
+                if account
+                    .token_expires_at_ms
+                    .is_some_and(|expires_at| expires_at <= storage::now_ms() + 300_000)
+                    && account.refresh_token_configured
+                {
+                    let old_access_token = account.access_token.clone();
+                    account =
+                        match crate::server::openai_auth::refresh_persisted_account_if_current(
+                            client,
+                            db_path.clone(),
+                            account.id,
+                            old_access_token.as_deref(),
+                        )
+                        .await
+                        {
+                            Ok(account) => account,
+                            Err(error) => {
+                                last_err = Some(ProxyError::Upstream(error.to_string()));
+                                continue 'channel_loop;
+                            }
+                        };
+                }
+                attempt_body = match crate::codex_upstream::normalize_responses_body(
+                    &attempt_body,
+                    model.as_deref(),
+                ) {
+                    Ok(body) => Bytes::from(body),
+                    Err(error) => {
+                        last_err = Some(ProxyError::Upstream(error.to_string()));
+                        continue 'channel_loop;
+                    }
+                };
+                openai_account = Some(account);
+            }
+
+            let mut url = if is_openai_oauth_channel {
+                match Url::parse(&crate::codex_upstream::responses_url(Some(
+                    &channel.base_url,
+                ))) {
+                    Ok(url) => url,
+                    Err(error) => {
+                        last_err = Some(ProxyError::InvalidBaseUrl(error.to_string()));
+                        continue 'channel_loop;
+                    }
+                }
+            } else {
+                match build_upstream_url(&channel.base_url, &parts.uri, protocol_root) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        let auto_disabled = if !is_count_tokens {
+                            attempt_ctx
+                                .fail(&e, "proxy attempt failed (build url)")
+                                .await
+                        } else {
+                            false
+                        };
+                        last_err = Some(e);
+                        if auto_disabled || !has_more_attempts_on_channel {
+                            if has_more_channels {
+                                continue 'channel_loop;
+                            }
+                            break 'channel_loop;
+                        }
+                        continue;
+                    }
                 }
             };
 
             let mut out_headers = filtered_headers(&parts.headers);
-            if let Err(e) = apply_auth(&channel, protocol, &mut url, &mut out_headers) {
+            let auth_result = if let Some(account) = openai_account.as_ref() {
+                let access_token = account.access_token.as_deref().unwrap_or_default();
+                crate::codex_upstream::apply_headers(
+                    &mut out_headers,
+                    crate::codex_upstream::CodexCredentials {
+                        access_token,
+                        account_id: &account.remote_user_id,
+                    },
+                )
+                .map_err(|error| ProxyError::Upstream(error.to_string()))
+            } else {
+                apply_auth(&channel, protocol, &mut url, &mut out_headers)
+            };
+            if let Err(e) = auth_result {
                 let auto_disabled = if !is_count_tokens {
                     attempt_ctx
                         .fail(&e, "proxy attempt failed (apply auth)")
@@ -232,10 +329,10 @@ pub async fn forward_with_config(
                 continue;
             }
 
-            let upstream = match client
+            let mut upstream = match client
                 .request(method.clone(), url)
                 .headers(out_headers)
-                .body(body_bytes.clone())
+                .body(attempt_body.clone())
                 .send()
                 .await
             {
@@ -289,7 +386,77 @@ pub async fn forward_with_config(
                 }
             };
 
+            if is_openai_oauth_channel && upstream.status() == StatusCode::UNAUTHORIZED {
+                let account = openai_account.as_ref().expect("OpenAI account loaded");
+                let old_access_token = account.access_token.clone();
+                let refreshed = crate::server::openai_auth::refresh_persisted_account_if_current(
+                    client,
+                    db_path.clone(),
+                    account.id.clone(),
+                    old_access_token.as_deref(),
+                )
+                .await;
+                let refreshed = match refreshed {
+                    Ok(account) => account,
+                    Err(error) => {
+                        last_err = Some(ProxyError::Upstream(error.to_string()));
+                        continue 'channel_loop;
+                    }
+                };
+                let mut retry_headers = filtered_headers(&parts.headers);
+                if let Err(error) = crate::codex_upstream::apply_headers(
+                    &mut retry_headers,
+                    crate::codex_upstream::CodexCredentials {
+                        access_token: refreshed.access_token.as_deref().unwrap_or_default(),
+                        account_id: &refreshed.remote_user_id,
+                    },
+                ) {
+                    last_err = Some(ProxyError::Upstream(error.to_string()));
+                    continue 'channel_loop;
+                }
+                upstream = match client
+                    .request(
+                        method.clone(),
+                        crate::codex_upstream::responses_url(Some(&channel.base_url)),
+                    )
+                    .headers(retry_headers)
+                    .body(attempt_body.clone())
+                    .send()
+                    .await
+                {
+                    Ok(response) => response,
+                    Err(error) => {
+                        last_err = Some(ProxyError::Upstream(error.to_string()));
+                        continue 'channel_loop;
+                    }
+                };
+                if upstream.status() == StatusCode::UNAUTHORIZED {
+                    let _ = storage::mark_openai_account_auth_failure(
+                        db_path.clone(),
+                        refreshed.id.clone(),
+                        "OpenAI access token was rejected after refresh".to_string(),
+                        true,
+                    )
+                    .await;
+                }
+                openai_account = Some(refreshed);
+            }
+
             let status = upstream.status();
+            if let Some(account) = openai_account.as_ref()
+                && let Some(quota) =
+                    crate::openai_quota::from_headers(upstream.headers(), storage::now_ms())
+            {
+                let db_path = db_path.clone();
+                let account_id = account.id.clone();
+                tokio::spawn(async move {
+                    if let Err(error) =
+                        storage::update_openai_account_quota(db_path, account_id, quota).await
+                    {
+                        tracing::warn!(%error, "persist OpenAI quota headers failed");
+                    }
+                });
+            }
             if is_count_tokens && !status.is_success() && has_more_channels {
                 // Claude Code relies heavily on this endpoint; some 3P providers don't support it
                 // (404/403). Retry on next channel but don't auto-disable or emit usage events.

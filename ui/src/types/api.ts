@@ -238,7 +238,7 @@ export type Channel = {
   enabled: boolean;
   auto_disabled_until_ms: number;
   managed_by_remote: boolean;
-  managed_remote_provider?: "newapi" | "sub2api" | null;
+  managed_remote_provider?: "newapi" | "sub2api" | "openai" | null;
   managed_remote_account_id?: string | null;
   managed_remote_resource_id?: string | null;
   managed_remote_resource_name?: string | null;
@@ -288,7 +288,7 @@ export type ChannelCheckinsToday = {
 
 export type RechargeCurrency = "USD" | "CNY";
 
-export type RemoteAccountProvider = "newapi" | "sub2api";
+export type RemoteAccountProvider = "newapi" | "sub2api" | "openai";
 
 export type RemoteAccountCheckinMode = "disabled" | "system_api" | "page_open";
 
@@ -338,7 +338,22 @@ export type Sub2ApiRemoteAccount = RemoteAccountBase & {
   remote_role_text: string | null;
 };
 
-export type RemoteAccount = NewapiRemoteAccount | Sub2ApiRemoteAccount;
+export type OpenAiQuotaWindow = {
+  kind: string;
+  used_percent: number;
+  window_minutes: number;
+  resets_at_ms: number | null;
+};
+
+export type OpenAiRemoteAccount = RemoteAccountBase & {
+  provider: "openai";
+  account_id: string;
+  plan_type: string | null;
+  token_expires_at_ms: number | null;
+  quota_windows: OpenAiQuotaWindow[];
+};
+
+export type RemoteAccount = NewapiRemoteAccount | Sub2ApiRemoteAccount | OpenAiRemoteAccount;
 
 export type RemoteAccountDetection = {
   provider: RemoteAccountProvider;
@@ -452,13 +467,27 @@ export type RemoteGroupAddedAlert = {
 export type CreateRemoteManagedChannelInput = {
   name: string;
   protocol: Protocol;
-  group_name: string;
+  group_name?: string | null;
   group_id?: number | null;
   base_url_override?: string | null;
 };
 
 export type CreateRemoteManagedChannelResponse = {
   channel: Channel;
+};
+
+export type OpenAiOAuthStartResponse = {
+  request_id: string;
+  authorization_url: string;
+  expires_at_ms: number;
+};
+
+export type OpenAiOAuthSessionStatus = "pending" | "exchanging" | "completed" | "failed" | "expired";
+
+export type OpenAiOAuthSessionResponse = {
+  status: OpenAiOAuthSessionStatus;
+  account?: OpenAiRemoteAccount | null;
+  error?: string | null;
 };
 
 export type ChannelTestResponse = {

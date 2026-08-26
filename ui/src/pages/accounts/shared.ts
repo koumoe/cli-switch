@@ -1,5 +1,6 @@
 import type {
   NewapiRemoteAccount,
+  OpenAiRemoteAccount,
   Protocol,
   RechargeCurrency,
   RemoteAccount,
@@ -95,6 +96,7 @@ export function ymdLocal(ms: number): string {
 }
 
 export function formatAmount(account: RemoteAccount, v: number | null): string {
+  if (account.provider === "openai") return "-";
   if (v === null || v === undefined || !Number.isFinite(v)) return "-";
   if (account.provider === "sub2api") {
     return `${account.recharge_currency === "CNY" ? "¥" : "$"}${v.toFixed(2)}`;
@@ -119,7 +121,7 @@ export function defaultManagedDraft(account: RemoteAccount): ManagedChannelDraft
     name: defaultManagedName(account, null),
     group_name: account.provider === "newapi" ? (account.remote_group ?? "") : "",
     group_id: null,
-    protocol: null,
+    protocol: account.provider === "openai" ? "openai" : null,
     base_url_override: "",
   };
 }
@@ -138,18 +140,19 @@ export function providerSupportsSystemCheckin(provider: RemoteAccountProvider): 
 }
 
 export function supportedCheckinModes(provider: RemoteAccountProvider): AccountCheckinModeOption[] {
+  if (provider === "openai") return ["disabled"];
   return providerSupportsSystemCheckin(provider)
     ? ["disabled", "system_api", "page_open"]
     : ["disabled", "page_open"];
 }
 
 export function accountHasUserApiCredentials(
-  account: Pick<RemoteAccountBase, "user_id" | "user_token_configured"> & Pick<RemoteAccount, "provider">
+  account: Pick<RemoteAccountBase, "user_id" | "user_token_configured" | "reauth_required"> & Pick<RemoteAccount, "provider">
 ): boolean {
   if (account.provider === "newapi") {
     return !!account.user_id.trim() && !!account.user_token_configured;
   }
-  return !!account.user_token_configured;
+  return !!account.user_token_configured && !account.reauth_required;
 }
 
 export function isNewApiAccount(account: RemoteAccount): account is NewapiRemoteAccount {
@@ -158,6 +161,10 @@ export function isNewApiAccount(account: RemoteAccount): account is NewapiRemote
 
 export function isSub2ApiAccount(account: RemoteAccount): account is Sub2ApiRemoteAccount {
   return account.provider === "sub2api";
+}
+
+export function isOpenAiAccount(account: RemoteAccount): account is OpenAiRemoteAccount {
+  return account.provider === "openai";
 }
 
 export function resolveAccountDisplayName(

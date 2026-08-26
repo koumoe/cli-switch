@@ -441,6 +441,7 @@ fn managed_resource_label(
         (AppLocale::ZhCN, storage::ManagedRemoteProvider::Sub2Api) => "key",
         (AppLocale::EnUS, storage::ManagedRemoteProvider::Newapi) => "token",
         (AppLocale::EnUS, storage::ManagedRemoteProvider::Sub2Api) => "key",
+        (_, storage::ManagedRemoteProvider::Openai) => "account",
     }
 }
 

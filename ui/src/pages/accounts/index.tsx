@@ -162,7 +162,11 @@ export function AccountsPage() {
     const lowBalance = Number(values.low_balance_alert_threshold);
 
     try {
-      if (values.provider === "newapi") {
+      if (values.provider === "openai") {
+        await updateRemoteAccount(editingId, {
+          name: values.name.trim(),
+        });
+      } else if (values.provider === "newapi") {
         const userId = values.user_id.trim();
         const token = values.user_token.trim();
         const editingHasStoredToken = !!editingSource?.user_token_configured;
@@ -302,7 +306,7 @@ export function AccountsPage() {
   function openDeleteDialog(item: RemoteAccount) {
     setDeleteTarget(item);
     setDeleteManagedChannels(true);
-    setDeleteSyncRemote(true);
+    setDeleteSyncRemote(item.provider !== "openai");
     setDeleteOpen(true);
   }
 
@@ -353,6 +357,10 @@ export function AccountsPage() {
     setManagedDraft(defaultManagedDraft(item));
     setManagedGroups([]);
     setManagedOpen(true);
+    if (item.provider === "openai") {
+      setManagedLoadingGroups(false);
+      return;
+    }
     setManagedLoadingGroups(true);
     try {
       const groups = await listRemoteAccountGroups(item.id);
@@ -389,8 +397,14 @@ export function AccountsPage() {
     const selectedGroup = managedDraft.group_id !== null
       ? managedGroups.find((group) => group.id === managedDraft.group_id) ?? null
       : managedGroups.find((group) => group.name === groupName) ?? null;
-    if (!name || !groupName || !protocol) {
-      toast.error(t("accounts.toast.actionFail"), { description: t("accounts.toast.managedRequired") });
+    if (!name || !protocol || (managedTarget.provider !== "openai" && !groupName)) {
+      toast.error(t("accounts.toast.actionFail"), {
+        description: t(
+          managedTarget.provider === "openai"
+            ? "accounts.toast.openaiManagedRequired"
+            : "accounts.toast.managedRequired",
+        ),
+      });
       return;
     }
     setManagedCreating(true);
@@ -398,7 +412,7 @@ export function AccountsPage() {
       await createRemoteManagedChannel(managedTarget.id, {
         name,
         protocol,
-        group_name: groupName,
+        group_name: groupName || null,
         group_id: selectedGroup?.id ?? null,
         base_url_override: baseUrlOverride || null,
       });

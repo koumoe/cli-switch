@@ -17,8 +17,25 @@ import { useI18n } from "@/hooks/use-i18n";
 import {
   accountHasUserApiCredentials,
   formatAmount,
+  isOpenAiAccount,
+  resolveAccountDisplayName,
   resolveCheckinMode,
 } from "./shared";
+
+function quotaWindowLabel(
+  kind: string,
+  windowMinutes: number,
+  t: (key: string, vars?: Record<string, string | number>) => string,
+): string {
+  if (kind === "weekly" || windowMinutes === 10_080) return t("accounts.quota.weekly");
+  if (windowMinutes > 0 && windowMinutes % 1_440 === 0) {
+    return t("accounts.quota.days", { count: windowMinutes / 1_440 });
+  }
+  if (windowMinutes > 0 && windowMinutes % 60 === 0) {
+    return t("accounts.quota.hours", { count: windowMinutes / 60 });
+  }
+  return kind || t("accounts.quota.window");
+}
 
 type AccountsTableProps = {
   accounts: RemoteAccount[];
@@ -63,7 +80,7 @@ export function AccountsTable({
   onOpenEdit,
   onOpenDeleteDialog,
 }: AccountsTableProps) {
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
   const columns = React.useMemo<Array<ColumnDef<RemoteAccount>>>(
     () => [
       {
@@ -85,20 +102,29 @@ export function AccountsTable({
       },
       {
         accessorKey: "base_url",
-        header: t("accounts.table.baseUrl"),
-        cell: ({ row }) => (
+        header: t("accounts.table.account"),
+        cell: ({ row }) => {
+          const item = row.original;
+          const primary = item.provider === "openai"
+            ? resolveAccountDisplayName(item)
+            : item.base_url;
+          const secondary = item.provider === "openai"
+            ? [item.plan_type, item.remote_username].filter(Boolean).join(" · ")
+            : "";
+          return (
           <div className="mx-auto max-w-[360px] text-center">
-            <div className="truncate font-medium" title={row.original.base_url}>
-              {row.original.base_url}
+            <div className="truncate font-medium" title={primary}>
+              {primary}
             </div>
-            {row.original.provider === "sub2api" &&
-            row.original.reauth_required ? (
+            {secondary ? <div className="mt-1 truncate text-xs text-muted-foreground">{secondary}</div> : null}
+            {item.reauth_required ? (
               <div className="mt-1 text-xs text-destructive">
                 {t("accounts.table.reauthRequired")}
               </div>
             ) : null}
           </div>
-        ),
+          );
+        },
         meta: {
           skeletonClassName: "w-56 mx-auto",
         },
@@ -124,12 +150,39 @@ export function AccountsTable({
       },
       {
         id: "balance",
-        header: t("accounts.table.balance"),
-        cell: ({ row }) => (
-          <div className="font-mono">
-            {formatAmount(row.original, row.original.last_balance_amount)}
-          </div>
-        ),
+        header: t("accounts.table.quota"),
+        cell: ({ row }) => {
+          const item = row.original;
+          if (!isOpenAiAccount(item)) {
+            return <div className="font-mono">{formatAmount(item, item.last_balance_amount)}</div>;
+          }
+          const windows = item.quota_windows ?? [];
+          if (windows.length === 0) {
+            return <span className="text-muted-foreground">{t("accounts.quota.unavailable")}</span>;
+          }
+          return (
+            <div className="space-y-1 text-left text-xs">
+              {windows.map((window, index) => {
+                const reset = window.resets_at_ms
+                  ? new Intl.DateTimeFormat(locale, {
+                      month: "numeric",
+                      day: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    }).format(new Date(window.resets_at_ms))
+                  : null;
+                return (
+                  <div key={`${window.kind}-${window.window_minutes}-${index}`} className="whitespace-nowrap">
+                    <span className="font-medium">
+                      {quotaWindowLabel(window.kind, window.window_minutes, t)} {Math.round(window.used_percent)}%
+                    </span>
+                    {reset ? <span className="text-muted-foreground"> · {t("accounts.quota.resetAt", { time: reset })}</span> : null}
+                  </div>
+                );
+              })}
+            </div>
+          );
+        },
         meta: {
           skeletonClassName: "w-18 mx-auto",
         },
@@ -139,6 +192,9 @@ export function AccountsTable({
         header: t("accounts.table.checkin"),
         cell: ({ row }) => {
           const item = row.original;
+          if (item.provider === "openai") {
+            return <Badge variant="secondary">{t("accounts.checkin.unsupported")}</Badge>;
+          }
           const logicalCheckinMode = resolveCheckinMode(item);
           const done = !!checkinDoneMap[item.id] && checkinsDate === today;
           const checkinBadge =
@@ -218,7 +274,11 @@ export function AccountsTable({
               <TableIconButton
                 onClick={() => void onOpenCreateManagedChannelDialog(item)}
                 disabled={!canManageRemote}
-                title={t("accounts.actions.createManaged")}
+                title={t(
+                  item.provider === "openai"
+                    ? "accounts.actions.createOpenAiManaged"
+                    : "accounts.actions.createManaged",
+                )}
               >
                 <Link2 className="h-4 w-4" />
               </TableIconButton>
@@ -259,6 +319,7 @@ export function AccountsTable({
       systemChecking,
       t,
       today,
+      locale,
     ],
   );
 

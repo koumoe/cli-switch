@@ -11,6 +11,7 @@ mod chat_bridge;
 mod checkin;
 mod error;
 mod newapi;
+mod openai_account;
 mod pricing;
 mod project;
 mod protocol;
@@ -56,6 +57,14 @@ pub use newapi::{
     list_channels_by_newapi_account, list_newapi_accounts, list_newapi_accounts_with_secret,
     reorder_newapi_accounts, set_newapi_account_balance_alert_notified, update_newapi_account,
     update_newapi_account_remote_snapshot,
+};
+pub use openai_account::{
+    OpenAiAccount, OpenAiAccountTokens, OpenAiQuotaSnapshot, OpenAiQuotaWindow,
+    assign_openai_account_sort_orders, delete_openai_account, get_openai_account_with_secret,
+    get_openai_account_with_secret_optional, get_openai_account_without_secret,
+    get_openai_account_without_secret_optional, list_openai_accounts,
+    list_openai_accounts_with_secret, mark_openai_account_auth_failure, update_openai_account_name,
+    update_openai_account_quota, upsert_openai_account_tokens,
 };
 pub use pricing::{
     PricingModel, PricingStatus, UpsertPricingModel, pricing_status, search_pricing_models,
@@ -111,7 +120,6 @@ pub fn init_db(db_path: &Path) -> anyhow::Result<()> {
     let migration = include_str!("../../migrations/001_init.sql");
     conn.execute_batch(migration)
         .with_context(|| "执行 migrations/001_init.sql 失败")?;
-    channel::ensure_channel_schema(&conn)?;
     let has_account_name = conn
         .prepare("PRAGMA table_info(remote_accounts)")?
         .query_map([], |row| row.get::<_, String>(1))?
@@ -124,7 +132,147 @@ pub fn init_db(db_path: &Path) -> anyhow::Result<()> {
             [],
         )?;
     }
+    ensure_remote_accounts_schema(&conn)?;
+    channel::ensure_channel_schema(&conn)?;
 
+    Ok(())
+}
+
+fn ensure_remote_accounts_schema(conn: &Connection) -> anyhow::Result<()> {
+    let table_sql = conn
+        .query_row(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'remote_accounts'",
+            [],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()?
+        .unwrap_or_default();
+    let columns = conn
+        .prepare("PRAGMA table_info(remote_accounts)")?
+        .query_map([], |row| row.get::<_, String>(1))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    let required_columns = [
+        "id_token",
+        "token_expires_at_ms",
+        "last_refresh_at_ms",
+        "primary_quota_used_percent",
+        "primary_quota_window_minutes",
+        "primary_quota_resets_at_ms",
+        "secondary_quota_used_percent",
+        "secondary_quota_window_minutes",
+        "secondary_quota_resets_at_ms",
+    ];
+    let schema_current = table_sql.contains("'openai'")
+        && required_columns
+            .iter()
+            .all(|required| columns.iter().any(|column| column == required));
+
+    if schema_current {
+        conn.execute_batch(
+            r#"
+            DROP INDEX IF EXISTS idx_remote_accounts_provider_base_user;
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_remote_accounts_newapi_identity
+              ON remote_accounts(base_url, user_id) WHERE provider = 'newapi';
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_remote_accounts_sub2api_identity
+              ON remote_accounts(base_url) WHERE provider = 'sub2api';
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_remote_accounts_openai_identity
+              ON remote_accounts(remote_user_id)
+              WHERE provider = 'openai' AND remote_user_id IS NOT NULL AND remote_user_id <> '';
+            "#,
+        )?;
+        return Ok(());
+    }
+
+    let tx = conn.unchecked_transaction()?;
+    tx.execute_batch(
+        r#"
+        DROP INDEX IF EXISTS idx_remote_accounts_provider_base_user;
+        DROP INDEX IF EXISTS idx_remote_accounts_newapi_identity;
+        DROP INDEX IF EXISTS idx_remote_accounts_sub2api_identity;
+        DROP INDEX IF EXISTS idx_remote_accounts_openai_identity;
+        ALTER TABLE remote_accounts RENAME TO remote_accounts_legacy;
+        CREATE TABLE remote_accounts (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL DEFAULT '',
+          provider TEXT NOT NULL CHECK(provider IN ('newapi','sub2api','openai')),
+          base_url TEXT NOT NULL,
+          api_url TEXT NULL,
+          user_id TEXT NOT NULL DEFAULT '',
+          user_token TEXT NOT NULL DEFAULT '',
+          access_token TEXT NOT NULL DEFAULT '',
+          refresh_token TEXT NOT NULL DEFAULT '',
+          id_token TEXT NOT NULL DEFAULT '',
+          token_expires_at_ms INTEGER NULL,
+          last_refresh_at_ms INTEGER NULL,
+          page_checkin_url TEXT NULL,
+          checkin_mode TEXT NOT NULL DEFAULT 'disabled' CHECK(checkin_mode IN ('disabled','system_api','page_open')),
+          auto_checkin_enabled INTEGER NOT NULL DEFAULT 0,
+          auto_checkin_time TEXT NOT NULL DEFAULT '00:05:00',
+          low_balance_alert_threshold REAL NOT NULL DEFAULT 0,
+          recharge_currency TEXT NOT NULL DEFAULT 'CNY' CHECK(recharge_currency IN ('CNY','USD')),
+          remote_user_id TEXT NULL,
+          remote_role NULL,
+          remote_username TEXT NULL,
+          remote_display_name TEXT NULL,
+          remote_group TEXT NULL,
+          quota_display_type TEXT NOT NULL DEFAULT 'USD',
+          quota_per_unit REAL NOT NULL DEFAULT 500000,
+          usd_exchange_rate REAL NOT NULL DEFAULT 1,
+          custom_currency_symbol TEXT NULL,
+          custom_currency_exchange_rate REAL NOT NULL DEFAULT 1,
+          remote_checkin_enabled INTEGER NOT NULL DEFAULT 0,
+          remote_turnstile_check_enabled INTEGER NOT NULL DEFAULT 0,
+          last_quota INTEGER NULL,
+          last_used_quota INTEGER NULL,
+          last_balance_amount REAL NULL,
+          primary_quota_used_percent REAL NULL,
+          primary_quota_window_minutes INTEGER NULL,
+          primary_quota_resets_at_ms INTEGER NULL,
+          secondary_quota_used_percent REAL NULL,
+          secondary_quota_window_minutes INTEGER NULL,
+          secondary_quota_resets_at_ms INTEGER NULL,
+          last_sync_error TEXT NULL,
+          reauth_required INTEGER NOT NULL DEFAULT 0,
+          last_synced_at_ms INTEGER NULL,
+          low_balance_alert_notified INTEGER NOT NULL DEFAULT 0,
+          last_balance_alert_at_ms INTEGER NULL,
+          sort_order INTEGER NOT NULL DEFAULT 0,
+          created_at_ms INTEGER NOT NULL,
+          updated_at_ms INTEGER NOT NULL
+        );
+        INSERT INTO remote_accounts (
+          id, name, provider, base_url, api_url, user_id, user_token, access_token,
+          refresh_token, page_checkin_url, checkin_mode, auto_checkin_enabled,
+          auto_checkin_time, low_balance_alert_threshold, recharge_currency,
+          remote_user_id, remote_role, remote_username, remote_display_name, remote_group,
+          quota_display_type, quota_per_unit, usd_exchange_rate, custom_currency_symbol,
+          custom_currency_exchange_rate, remote_checkin_enabled, remote_turnstile_check_enabled,
+          last_quota, last_used_quota, last_balance_amount, last_sync_error, reauth_required,
+          last_synced_at_ms, low_balance_alert_notified, last_balance_alert_at_ms,
+          sort_order, created_at_ms, updated_at_ms
+        )
+        SELECT
+          id, name, provider, base_url, api_url, user_id, user_token, access_token,
+          refresh_token, page_checkin_url, checkin_mode, auto_checkin_enabled,
+          auto_checkin_time, low_balance_alert_threshold, recharge_currency,
+          remote_user_id, remote_role, remote_username, remote_display_name, remote_group,
+          quota_display_type, quota_per_unit, usd_exchange_rate, custom_currency_symbol,
+          custom_currency_exchange_rate, remote_checkin_enabled, remote_turnstile_check_enabled,
+          last_quota, last_used_quota, last_balance_amount, last_sync_error, reauth_required,
+          last_synced_at_ms, low_balance_alert_notified, last_balance_alert_at_ms,
+          sort_order, created_at_ms, updated_at_ms
+        FROM remote_accounts_legacy;
+        DROP TABLE remote_accounts_legacy;
+        CREATE UNIQUE INDEX idx_remote_accounts_newapi_identity
+          ON remote_accounts(base_url, user_id) WHERE provider = 'newapi';
+        CREATE UNIQUE INDEX idx_remote_accounts_sub2api_identity
+          ON remote_accounts(base_url) WHERE provider = 'sub2api';
+        CREATE UNIQUE INDEX idx_remote_accounts_openai_identity
+          ON remote_accounts(remote_user_id)
+          WHERE provider = 'openai' AND remote_user_id IS NOT NULL AND remote_user_id <> '';
+        "#,
+    )?;
+    tx.commit()?;
     Ok(())
 }
 
@@ -132,6 +280,7 @@ pub fn init_db(db_path: &Path) -> anyhow::Result<()> {
 pub enum UnifiedRemoteAccount {
     Newapi(NewApiAccount),
     Sub2Api(RemoteAccount),
+    Openai(OpenAiAccount),
 }
 
 impl UnifiedRemoteAccount {
@@ -139,6 +288,7 @@ impl UnifiedRemoteAccount {
         match self {
             Self::Newapi(account) => &account.id,
             Self::Sub2Api(account) => &account.id,
+            Self::Openai(account) => &account.id,
         }
     }
 
@@ -146,6 +296,7 @@ impl UnifiedRemoteAccount {
         match self {
             Self::Newapi(_) => ManagedRemoteProvider::Newapi,
             Self::Sub2Api(_) => ManagedRemoteProvider::Sub2Api,
+            Self::Openai(_) => ManagedRemoteProvider::Openai,
         }
     }
 }
@@ -158,7 +309,10 @@ const UNIFIED_REMOTE_ACCOUNT_SELECT_COLUMNS: &str = r#"
     usd_exchange_rate, custom_currency_symbol, custom_currency_exchange_rate,
     remote_checkin_enabled, remote_turnstile_check_enabled, last_quota, last_used_quota,
     last_balance_amount, last_sync_error, reauth_required, last_synced_at_ms,
-    low_balance_alert_notified, last_balance_alert_at_ms, sort_order, created_at_ms, updated_at_ms, name
+    low_balance_alert_notified, last_balance_alert_at_ms, sort_order, created_at_ms, updated_at_ms, name,
+    id_token, token_expires_at_ms, last_refresh_at_ms, primary_quota_used_percent,
+    primary_quota_window_minutes, primary_quota_resets_at_ms, secondary_quota_used_percent,
+    secondary_quota_window_minutes, secondary_quota_resets_at_ms
 "#;
 
 #[derive(Debug, Clone)]
@@ -201,6 +355,15 @@ struct UnifiedRemoteAccountRow {
     sort_order: i64,
     created_at_ms: i64,
     updated_at_ms: i64,
+    id_token_raw: String,
+    token_expires_at_ms: Option<i64>,
+    last_refresh_at_ms: Option<i64>,
+    primary_quota_used_percent: Option<f64>,
+    primary_quota_window_minutes: Option<i64>,
+    primary_quota_resets_at_ms: Option<i64>,
+    secondary_quota_used_percent: Option<f64>,
+    secondary_quota_window_minutes: Option<i64>,
+    secondary_quota_resets_at_ms: Option<i64>,
 }
 
 impl UnifiedRemoteAccountRow {
@@ -244,6 +407,15 @@ impl UnifiedRemoteAccountRow {
             sort_order: row.get(34)?,
             created_at_ms: row.get(35)?,
             updated_at_ms: row.get(36)?,
+            id_token_raw: row.get(38)?,
+            token_expires_at_ms: row.get(39)?,
+            last_refresh_at_ms: row.get(40)?,
+            primary_quota_used_percent: row.get(41)?,
+            primary_quota_window_minutes: row.get(42)?,
+            primary_quota_resets_at_ms: row.get(43)?,
+            secondary_quota_used_percent: row.get(44)?,
+            secondary_quota_window_minutes: row.get(45)?,
+            secondary_quota_resets_at_ms: row.get(46)?,
         })
     }
 
@@ -255,6 +427,9 @@ impl UnifiedRemoteAccountRow {
             ManagedRemoteProvider::Sub2Api => self
                 .into_sub2api_account(include_secret)
                 .map(UnifiedRemoteAccount::Sub2Api),
+            ManagedRemoteProvider::Openai => self
+                .into_openai_account(include_secret)
+                .map(UnifiedRemoteAccount::Openai),
         }
     }
 
@@ -334,6 +509,62 @@ impl UnifiedRemoteAccountRow {
             last_synced_at_ms: self.last_synced_at_ms,
             low_balance_alert_notified: self.low_balance_alert_notified,
             last_balance_alert_at_ms: self.last_balance_alert_at_ms,
+            sort_order: self.sort_order,
+            created_at_ms: self.created_at_ms,
+            updated_at_ms: self.updated_at_ms,
+        })
+    }
+
+    fn into_openai_account(self, include_secret: bool) -> anyhow::Result<OpenAiAccount> {
+        let access_token_configured = token_configured(&self.access_token_raw);
+        let refresh_token_configured = token_configured(&self.refresh_token_raw);
+        let remote_user_id = self
+            .remote_user_id
+            .filter(|value| !value.trim().is_empty())
+            .ok_or_else(|| anyhow::anyhow!("openai account {} missing remote_user_id", self.id))?;
+        Ok(OpenAiAccount {
+            id: self.id,
+            name: self.name,
+            base_url: self.base_url,
+            access_token: include_secret
+                .then_some(self.access_token_raw)
+                .filter(|value| token_configured(value)),
+            refresh_token: include_secret
+                .then_some(self.refresh_token_raw)
+                .filter(|value| token_configured(value)),
+            id_token: include_secret
+                .then_some(self.id_token_raw)
+                .filter(|value| token_configured(value)),
+            access_token_configured,
+            refresh_token_configured,
+            remote_user_id,
+            remote_username: self.remote_username,
+            remote_display_name: self.remote_display_name,
+            plan_type: decode_sub2api_remote_role(self.remote_role)?,
+            token_expires_at_ms: self.token_expires_at_ms,
+            last_refresh_at_ms: self.last_refresh_at_ms,
+            quota: OpenAiQuotaSnapshot {
+                primary: self
+                    .primary_quota_used_percent
+                    .zip(self.primary_quota_window_minutes)
+                    .map(|(used_percent, window_minutes)| OpenAiQuotaWindow {
+                        used_percent,
+                        window_minutes,
+                        resets_at_ms: self.primary_quota_resets_at_ms,
+                    }),
+                secondary: self
+                    .secondary_quota_used_percent
+                    .zip(self.secondary_quota_window_minutes)
+                    .map(|(used_percent, window_minutes)| OpenAiQuotaWindow {
+                        used_percent,
+                        window_minutes,
+                        resets_at_ms: self.secondary_quota_resets_at_ms,
+                    }),
+                synced_at_ms: self.last_synced_at_ms,
+            },
+            last_sync_error: self.last_sync_error,
+            reauth_required: self.reauth_required,
+            last_synced_at_ms: self.last_synced_at_ms,
             sort_order: self.sort_order,
             created_at_ms: self.created_at_ms,
             updated_at_ms: self.updated_at_ms,
@@ -579,8 +810,100 @@ mod tests {
         ))
     }
 
+    #[test]
+    fn migrates_legacy_remote_accounts_check_and_preserves_rows() {
+        let db_path = temp_db_path();
+        remove_sqlite_artifacts(&db_path);
+        let current = include_str!("../../migrations/001_init.sql");
+        let legacy_indexes = r#"CREATE UNIQUE INDEX IF NOT EXISTS idx_remote_accounts_provider_base_user
+ON remote_accounts(provider, base_url, user_id);"#;
+        let current_indexes = r#"CREATE UNIQUE INDEX IF NOT EXISTS idx_remote_accounts_newapi_identity
+ON remote_accounts(base_url, user_id) WHERE provider = 'newapi';
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_remote_accounts_sub2api_identity
+ON remote_accounts(base_url) WHERE provider = 'sub2api';
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_remote_accounts_openai_identity
+ON remote_accounts(remote_user_id)
+WHERE provider = 'openai' AND remote_user_id IS NOT NULL AND remote_user_id <> '';"#;
+        let mut legacy = current
+            .replace(
+                "provider TEXT NOT NULL CHECK(provider IN ('newapi','sub2api','openai'))",
+                "provider TEXT NOT NULL CHECK(provider IN ('newapi','sub2api'))",
+            )
+            .replace(current_indexes, legacy_indexes);
+        for line in [
+            "  id_token TEXT NOT NULL DEFAULT '',\n",
+            "  token_expires_at_ms INTEGER NULL,\n",
+            "  last_refresh_at_ms INTEGER NULL,\n",
+            "  primary_quota_used_percent REAL NULL,\n",
+            "  primary_quota_window_minutes INTEGER NULL,\n",
+            "  primary_quota_resets_at_ms INTEGER NULL,\n",
+            "  secondary_quota_used_percent REAL NULL,\n",
+            "  secondary_quota_window_minutes INTEGER NULL,\n",
+            "  secondary_quota_resets_at_ms INTEGER NULL,\n",
+        ] {
+            legacy = legacy.replace(line, "");
+        }
+        let conn = Connection::open(&db_path).unwrap();
+        conn.execute_batch(&legacy).unwrap();
+        conn.execute(
+            r#"
+            INSERT INTO remote_accounts (
+              id, name, provider, base_url, access_token, refresh_token,
+              created_at_ms, updated_at_ms
+            ) VALUES ('legacy-sub2api', 'Legacy', 'sub2api', 'https://legacy.example.com',
+                      'access', 'refresh', 1, 1)
+            "#,
+            [],
+        )
+        .unwrap();
+        drop(conn);
+
+        init_db(&db_path).unwrap();
+        let conn = Connection::open(&db_path).unwrap();
+        let table_sql: String = conn
+            .query_row(
+                "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'remote_accounts'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(table_sql.contains("'openai'"));
+        let legacy_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM remote_accounts WHERE id = 'legacy-sub2api' AND access_token = 'access'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(legacy_count, 1);
+        conn.execute(
+            r#"
+            INSERT INTO remote_accounts (
+              id, provider, base_url, access_token, refresh_token, id_token,
+              remote_user_id, created_at_ms, updated_at_ms
+            ) VALUES ('openai-1', 'openai', 'https://chatgpt.com', 'a1', 'r1', 'i1', 'acct-1', 2, 2)
+            "#,
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            r#"
+            INSERT INTO remote_accounts (
+              id, provider, base_url, access_token, refresh_token, id_token,
+              remote_user_id, created_at_ms, updated_at_ms
+            ) VALUES ('openai-2', 'openai', 'https://chatgpt.com', 'a2', 'r2', 'i2', 'acct-2', 3, 3)
+            "#,
+            [],
+        )
+        .unwrap();
+        drop(conn);
+        remove_sqlite_artifacts(&db_path);
+    }
+
     #[tokio::test]
-    async fn unified_remote_queries_decode_both_provider_shapes_from_single_table() {
+    async fn unified_remote_queries_decode_all_provider_shapes_from_single_table() {
         let db_path = temp_db_path();
         remove_sqlite_artifacts(&db_path);
         init_db(&db_path).unwrap();
@@ -651,6 +974,22 @@ mod tests {
         )
         .await
         .unwrap();
+        let openai = upsert_openai_account_tokens(
+            db_path.clone(),
+            Some("OpenAI User".to_string()),
+            OpenAiAccountTokens {
+                access_token: "openai-access".to_string(),
+                refresh_token: Some("openai-refresh".to_string()),
+                id_token: Some("openai-id".to_string()),
+                token_expires_at_ms: Some(333),
+                account_id: "chatgpt-account".to_string(),
+                email: Some("openai@example.com".to_string()),
+                display_name: Some("OpenAI User".to_string()),
+                plan_type: Some("plus".to_string()),
+            },
+        )
+        .await
+        .unwrap();
 
         complete_newapi_account_checkin_today(db_path.clone(), newapi.id.clone(), "system_api")
             .await
@@ -660,7 +999,7 @@ mod tests {
             .unwrap();
 
         let public_accounts = list_all_remote_accounts(db_path.clone()).await.unwrap();
-        assert_eq!(public_accounts.len(), 2);
+        assert_eq!(public_accounts.len(), 3);
         assert!(
             public_accounts
                 .iter()
@@ -671,11 +1010,16 @@ mod tests {
                 .iter()
                 .any(|account| account.id() == remote.id)
         );
+        assert!(
+            public_accounts
+                .iter()
+                .any(|account| account.id() == openai.id)
+        );
 
         let secret_accounts = list_all_remote_accounts_with_secret(db_path.clone())
             .await
             .unwrap();
-        assert_eq!(secret_accounts.len(), 2);
+        assert_eq!(secret_accounts.len(), 3);
 
         let public_newapi = public_accounts
             .iter()
@@ -700,6 +1044,19 @@ mod tests {
         assert_eq!(public_remote.remote_role.as_deref(), Some("admin"));
         assert_eq!(public_remote.remote_user_id.as_deref(), Some("42"));
 
+        let public_openai = public_accounts
+            .iter()
+            .find_map(|account| match account {
+                UnifiedRemoteAccount::Openai(account) if account.id == openai.id => Some(account),
+                _ => None,
+            })
+            .unwrap();
+        assert!(public_openai.access_token.is_none());
+        assert!(public_openai.refresh_token.is_none());
+        assert!(public_openai.id_token.is_none());
+        assert_eq!(public_openai.remote_user_id, "chatgpt-account");
+        assert_eq!(public_openai.plan_type.as_deref(), Some("plus"));
+
         let secret_newapi = secret_accounts
             .iter()
             .find_map(|account| match account {
@@ -708,6 +1065,19 @@ mod tests {
             })
             .unwrap();
         assert_eq!(secret_newapi.user_token.as_deref(), Some("demo-user-token"));
+        let secret_openai = secret_accounts
+            .iter()
+            .find_map(|account| match account {
+                UnifiedRemoteAccount::Openai(account) if account.id == openai.id => Some(account),
+                _ => None,
+            })
+            .unwrap();
+        assert_eq!(secret_openai.access_token.as_deref(), Some("openai-access"));
+        assert_eq!(
+            secret_openai.refresh_token.as_deref(),
+            Some("openai-refresh")
+        );
+        assert_eq!(secret_openai.id_token.as_deref(), Some("openai-id"));
 
         let secret_remote =
             get_unified_remote_account_with_secret_optional(db_path.clone(), remote.id.clone())
@@ -721,6 +1091,7 @@ mod tests {
                 assert_eq!(account.remote_role.as_deref(), Some("admin"));
             }
             UnifiedRemoteAccount::Newapi(_) => panic!("expected sub2api account"),
+            UnifiedRemoteAccount::Openai(_) => panic!("expected sub2api account"),
         }
 
         let secret_newapi_fetched =
@@ -734,6 +1105,7 @@ mod tests {
                 assert_eq!(account.remote_role, Some(100));
             }
             UnifiedRemoteAccount::Sub2Api(_) => panic!("expected newapi account"),
+            UnifiedRemoteAccount::Openai(_) => panic!("expected newapi account"),
         }
 
         let checkins = get_all_remote_accounts_checkins_today(db_path.clone())

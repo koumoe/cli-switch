@@ -20,6 +20,7 @@ pub(in crate::server) enum RemoteAccountProvider {
     Newapi,
     #[serde(rename = "sub2api")]
     Sub2Api,
+    Openai,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -78,6 +79,23 @@ pub(in crate::server) struct Sub2ApiRemoteAccountResponse {
 }
 
 #[derive(Debug, Clone, Serialize)]
+pub(in crate::server) struct OpenAiQuotaWindowResponse {
+    pub kind: &'static str,
+    pub used_percent: f64,
+    pub window_minutes: i64,
+    pub resets_at_ms: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(in crate::server) struct OpenAiRemoteAccountResponse {
+    pub account_id: String,
+    pub plan_type: Option<String>,
+    pub token_expires_at_ms: Option<i64>,
+    pub refresh_token_configured: bool,
+    pub quota_windows: Vec<OpenAiQuotaWindowResponse>,
+}
+
+#[derive(Debug, Clone, Serialize)]
 #[serde(tag = "provider", rename_all = "snake_case")]
 pub(in crate::server) enum RemoteAccountResponse {
     Newapi {
@@ -92,6 +110,12 @@ pub(in crate::server) enum RemoteAccountResponse {
         common: RemoteAccountCommonResponse,
         #[serde(flatten)]
         sub2api: Sub2ApiRemoteAccountResponse,
+    },
+    Openai {
+        #[serde(flatten)]
+        common: RemoteAccountCommonResponse,
+        #[serde(flatten)]
+        openai: OpenAiRemoteAccountResponse,
     },
 }
 
@@ -177,7 +201,7 @@ pub(in crate::server) struct CreateRemoteKeyInput {
 pub(in crate::server) struct CreateRemoteManagedChannelInput {
     name: String,
     protocol: Option<storage::Protocol>,
-    group_name: String,
+    group_name: Option<String>,
     group_id: Option<i64>,
     base_url_override: Option<String>,
     priority: Option<i64>,
@@ -244,7 +268,7 @@ fn prepare_create_remote_managed_channel_input(
         protocol: input.protocol.ok_or_else(|| {
             ApiError::bad_request("remote_protocol_required", "protocol is required")
         })?,
-        group_name: validate_remote_group_name(&input.group_name)?,
+        group_name: input.group_name.unwrap_or_default().trim().to_string(),
         group_id: input.group_id,
         base_url_override: newapi_handlers::validate_optional_http_url(
             input.base_url_override.as_deref(),
@@ -467,6 +491,7 @@ pub(super) async fn delete_remote_managed_channel_resources(
             )
             .await?;
         }
+        storage::ManagedRemoteProvider::Openai => {}
     }
     Ok(())
 }
@@ -535,6 +560,7 @@ fn detect_recommended_api_url(
     match provider {
         RemoteAccountProvider::Newapi => detected,
         RemoteAccountProvider::Sub2Api => None,
+        RemoteAccountProvider::Openai => None,
     }
 }
 
@@ -547,6 +573,7 @@ fn detect_suggested_page_checkin_url(
             Some(format!("{}/user/checkin", base_url.trim_end_matches('/')))
         }
         RemoteAccountProvider::Sub2Api => None,
+        RemoteAccountProvider::Openai => None,
     }
 }
 
@@ -661,11 +688,69 @@ impl From<storage::RemoteAccount> for RemoteAccountResponse {
     }
 }
 
+impl From<storage::OpenAiAccount> for RemoteAccountResponse {
+    fn from(account: storage::OpenAiAccount) -> Self {
+        let mut quota_windows = Vec::new();
+        if let Some(window) = account.quota.primary {
+            quota_windows.push(OpenAiQuotaWindowResponse {
+                kind: "primary",
+                used_percent: window.used_percent,
+                window_minutes: window.window_minutes,
+                resets_at_ms: window.resets_at_ms,
+            });
+        }
+        if let Some(window) = account.quota.secondary {
+            quota_windows.push(OpenAiQuotaWindowResponse {
+                kind: "secondary",
+                used_percent: window.used_percent,
+                window_minutes: window.window_minutes,
+                resets_at_ms: window.resets_at_ms,
+            });
+        }
+        let common = RemoteAccountCommonResponse {
+            id: account.id,
+            name: account.name,
+            base_url: account.base_url,
+            api_url: None,
+            user_id: account.remote_user_id.clone(),
+            user_token_configured: account.access_token_configured,
+            reauth_required: account.reauth_required,
+            page_checkin_url: None,
+            checkin_mode: RemoteAccountCheckinMode::Disabled,
+            auto_checkin_enabled: false,
+            auto_checkin_time: "00:05:00".to_string(),
+            low_balance_alert_threshold: 0.0,
+            recharge_currency: RechargeCurrency::Usd,
+            remote_username: account.remote_username,
+            remote_display_name: account.remote_display_name,
+            last_balance_amount: None,
+            last_sync_error: account.last_sync_error,
+            last_synced_at_ms: account.last_synced_at_ms,
+            low_balance_alert_notified: false,
+            last_balance_alert_at_ms: None,
+            sort_order: account.sort_order,
+            created_at_ms: account.created_at_ms,
+            updated_at_ms: account.updated_at_ms,
+        };
+        Self::Openai {
+            common,
+            openai: OpenAiRemoteAccountResponse {
+                account_id: account.remote_user_id,
+                plan_type: account.plan_type,
+                token_expires_at_ms: account.token_expires_at_ms,
+                refresh_token_configured: account.refresh_token_configured,
+                quota_windows,
+            },
+        }
+    }
+}
+
 impl From<storage::UnifiedRemoteAccount> for RemoteAccountResponse {
     fn from(account: storage::UnifiedRemoteAccount) -> Self {
         match account {
             storage::UnifiedRemoteAccount::Newapi(account) => account.into(),
             storage::UnifiedRemoteAccount::Sub2Api(account) => account.into(),
+            storage::UnifiedRemoteAccount::Openai(account) => account.into(),
         }
     }
 }
@@ -1457,6 +1542,7 @@ async fn create_newapi_remote_managed_channel_impl(
         priority,
         enabled,
     } = input;
+    let group_name = validate_remote_group_name(&group_name)?;
     let remote = newapi_client::create_managed_channel(
         &state.http_client,
         &account,
@@ -1515,6 +1601,9 @@ async fn create_sub2api_remote_managed_channel_impl(
     input: PreparedCreateRemoteManagedChannelInput,
 ) -> Result<CreateRemoteManagedChannelResponse, ApiError> {
     require_sub2api_access_token(&account)?;
+    if input.group_name.trim().is_empty() {
+        return Err(remote_group_not_found_error());
+    }
     let groups = sub2api_auth::run_with_persisted_session(
         state.db_path(),
         &state.http_client,
@@ -1616,6 +1705,49 @@ async fn create_sub2api_remote_managed_channel_impl(
         &account.base_url,
         &channel,
     );
+    Ok(CreateRemoteManagedChannelResponse { channel })
+}
+
+async fn create_openai_remote_managed_channel_impl(
+    state: &AppState,
+    account: storage::OpenAiAccount,
+    input: PreparedCreateRemoteManagedChannelInput,
+) -> Result<CreateRemoteManagedChannelResponse, ApiError> {
+    if input.protocol != storage::Protocol::Openai {
+        return Err(ApiError::bad_request(
+            "remote_provider_mismatch",
+            "OpenAI OAuth accounts only support the OpenAI protocol",
+        ));
+    }
+    if !account.access_token_configured || account.reauth_required {
+        return Err(remote_credentials_required_error());
+    }
+    let channel = storage::create_channel(
+        state.db_path(),
+        storage::CreateChannel {
+            name: input.name,
+            protocol: storage::Protocol::Openai,
+            base_url: crate::codex_upstream::DEFAULT_BASE_URL.to_string(),
+            auth_type: Some("managed_account".to_string()),
+            auth_ref: String::new(),
+            checkin_url: None,
+            priority: input.priority,
+            retry_times: 1,
+            ignore_channel_protection: false,
+            recharge_currency: Some(RechargeCurrency::Usd),
+            real_multiplier: Some(1.0),
+            enabled: input.enabled,
+            managed_by_remote: Some(true),
+            managed_remote_provider: Some(storage::ManagedRemoteProvider::Openai),
+            managed_remote_account_id: Some(account.id.clone()),
+            managed_remote_resource_id: Some(account.remote_user_id.clone()),
+            managed_remote_resource_name: account.remote_username.clone(),
+            managed_remote_group_name: None,
+            managed_remote_group_id: None,
+        },
+    )
+    .await?;
+    add_channel_to_cache(state, &channel);
     Ok(CreateRemoteManagedChannelResponse { channel })
 }
 
@@ -1825,6 +1957,7 @@ pub(in crate::server) async fn reorder_remote_accounts(
 
     let mut newapi_orders = Vec::new();
     let mut remote_orders = Vec::new();
+    let mut openai_orders = Vec::new();
     for (index, account_id) in input.account_ids.iter().enumerate() {
         let sort_order = index as i64;
         match accounts_by_id.get(account_id).copied() {
@@ -1833,6 +1966,9 @@ pub(in crate::server) async fn reorder_remote_accounts(
             }
             Some(storage::ManagedRemoteProvider::Sub2Api) => {
                 remote_orders.push((account_id.clone(), sort_order));
+            }
+            Some(storage::ManagedRemoteProvider::Openai) => {
+                openai_orders.push((account_id.clone(), sort_order));
             }
             None => {
                 return Err(ApiError::bad_request(
@@ -1848,6 +1984,9 @@ pub(in crate::server) async fn reorder_remote_accounts(
     }
     if !remote_orders.is_empty() {
         storage::assign_remote_account_sort_orders(state.db_path(), remote_orders).await?;
+    }
+    if !openai_orders.is_empty() {
+        storage::assign_openai_account_sort_orders(state.db_path(), openai_orders).await?;
     }
     newapi_handlers::notify_background_tasks(&state);
     Ok(axum::http::StatusCode::NO_CONTENT)
@@ -1867,6 +2006,12 @@ pub(in crate::server) async fn create_remote_account(
     let response = match input.provider {
         RemoteAccountProvider::Newapi => create_newapi_remote_account_impl(&state, input).await?,
         RemoteAccountProvider::Sub2Api => create_sub2api_remote_account_impl(&state, input).await?,
+        RemoteAccountProvider::Openai => {
+            return Err(ApiError::bad_request(
+                "openai_oauth_required",
+                "OpenAI accounts must be added through OAuth",
+            ));
+        }
     };
     Ok((axum::http::StatusCode::CREATED, Json(response)))
 }
@@ -1883,6 +2028,20 @@ pub(in crate::server) async fn update_remote_account(
         storage::UnifiedRemoteAccount::Sub2Api(current) => {
             update_sub2api_remote_account_impl(&state, account_id, current, input).await?
         }
+        storage::UnifiedRemoteAccount::Openai(current) => {
+            if let Some(provider) = input.provider
+                && provider != RemoteAccountProvider::Openai
+            {
+                return Err(remote_provider_mismatch_error());
+            }
+            storage::update_openai_account_name(
+                state.db_path(),
+                account_id,
+                input.name.unwrap_or(current.name),
+            )
+            .await?
+            .into()
+        }
     };
     Ok(Json(response))
 }
@@ -1897,6 +2056,24 @@ pub(in crate::server) async fn refresh_remote_account(
         }
         storage::UnifiedRemoteAccount::Sub2Api(account) => {
             refresh_sub2api_remote_account_impl(&state, account).await?
+        }
+        storage::UnifiedRemoteAccount::Openai(account) => {
+            let refreshed = crate::server::openai_auth::refresh_persisted_account(
+                &state.http_client,
+                state.db_path(),
+                account.id,
+            )
+            .await?;
+            let secret =
+                storage::get_openai_account_with_secret(state.db_path(), refreshed.id.clone())
+                    .await?;
+            if let Ok(quota) = crate::openai_quota::fetch(&state.http_client, &secret).await {
+                storage::update_openai_account_quota(state.db_path(), refreshed.id.clone(), quota)
+                    .await?;
+            }
+            storage::get_openai_account_without_secret(state.db_path(), refreshed.id)
+                .await?
+                .into()
         }
     };
     Ok(Json(response))
@@ -1913,6 +2090,7 @@ pub(in crate::server) async fn list_remote_account_groups(
         storage::UnifiedRemoteAccount::Sub2Api(account) => {
             list_sub2api_remote_account_groups_impl(&state, account).await?
         }
+        storage::UnifiedRemoteAccount::Openai(_) => Vec::new(),
     };
     Ok(Json(groups))
 }
@@ -1928,6 +2106,9 @@ pub(in crate::server) async fn complete_remote_account_checkin_today(
         storage::UnifiedRemoteAccount::Sub2Api(_) => {
             complete_sub2api_remote_account_checkin_today_impl(&state, account_id).await
         }
+        storage::UnifiedRemoteAccount::Openai(_) => {
+            Err(remote_system_checkin_unsupported_provider_error())
+        }
     }
 }
 
@@ -1940,6 +2121,9 @@ pub(in crate::server) async fn perform_remote_account_system_checkin(
             perform_newapi_remote_account_system_checkin_impl(state, account_id).await
         }
         storage::UnifiedRemoteAccount::Sub2Api(_) => {
+            Err(remote_system_checkin_unsupported_provider_error())
+        }
+        storage::UnifiedRemoteAccount::Openai(_) => {
             Err(remote_system_checkin_unsupported_provider_error())
         }
     }
@@ -1956,6 +2140,9 @@ pub(in crate::server) async fn create_remote_account_key(
         }
         storage::UnifiedRemoteAccount::Sub2Api(account) => {
             create_sub2api_remote_account_key_impl(&state, account, input).await?
+        }
+        storage::UnifiedRemoteAccount::Openai(_) => {
+            return Err(remote_key_unsupported_provider_error());
         }
     };
     Ok(Json(response))
@@ -1974,6 +2161,9 @@ pub(in crate::server) async fn create_remote_managed_channel(
         storage::UnifiedRemoteAccount::Sub2Api(account) => {
             create_sub2api_remote_managed_channel_impl(&state, account, input).await?
         }
+        storage::UnifiedRemoteAccount::Openai(account) => {
+            create_openai_remote_managed_channel_impl(&state, account, input).await?
+        }
     };
     Ok((axum::http::StatusCode::CREATED, Json(response)))
 }
@@ -1991,6 +2181,45 @@ pub(in crate::server) async fn delete_remote_account(
         }
         storage::UnifiedRemoteAccount::Sub2Api(_) => {
             delete_sub2api_remote_account_impl(&state, account_id, options).await?
+        }
+        storage::UnifiedRemoteAccount::Openai(_) => {
+            let linked = storage::list_channel_ids_by_managed_account(
+                state.db_path(),
+                storage::ManagedRemoteProvider::Openai,
+                account_id.clone(),
+            )
+            .await?;
+            if options.delete_managed_channels {
+                for channel_id in &linked {
+                    storage::delete_channel(state.db_path(), channel_id.clone()).await?;
+                }
+                remove_channels_from_cache(&state, &linked);
+            } else {
+                storage::detach_channels_from_managed_account(
+                    state.db_path(),
+                    storage::ManagedRemoteProvider::Openai,
+                    account_id.clone(),
+                )
+                .await?;
+                clear_managed_links_in_cache(
+                    &state,
+                    storage::ManagedRemoteProvider::Openai,
+                    &account_id,
+                );
+            }
+            storage::delete_openai_account(state.db_path(), account_id).await?;
+            storage::DeleteNewApiAccountResult {
+                deleted_managed_channel_ids: if options.delete_managed_channels {
+                    linked.clone()
+                } else {
+                    Vec::new()
+                },
+                detached_channel_ids: if options.delete_managed_channels {
+                    Vec::new()
+                } else {
+                    linked
+                },
+            }
         }
     };
     Ok(Json(result).into_response())

@@ -85,6 +85,8 @@
     "remote_provider_detect_failed": "Unable to detect the account provider from Base URL",
     "remote_provider_detect_ambiguous": "The Base URL matches multiple account providers. Please verify it manually",
     "remote_provider_mismatch": "The provider does not match the existing account type",
+    "openai_oauth_required": "OpenAI accounts must be added through OAuth",
+    "openai_oauth_session_not_found": "The OpenAI OAuth session was not found",
     "remote_protocol_required": "Protocol is required",
     "remote_relogin_required": "The sub2api login session expired. Sign in again.",
     "remote_sync_failed": "Failed to sync the remote account",

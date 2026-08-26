@@ -72,9 +72,16 @@ export function ManagedChannelDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[560px] max-h-[85vh] overflow-hidden flex flex-col">
         <DialogHeader>
-          <DialogTitle>{t("accounts.managed.title")}</DialogTitle>
+          <DialogTitle>
+            {t(target?.provider === "openai" ? "accounts.managed.openaiTitle" : "accounts.managed.title")}
+          </DialogTitle>
           <DialogDescription>
-            {t("accounts.managed.description", { name: target?.base_url ?? "" })}
+            {t(
+              target?.provider === "openai"
+                ? "accounts.managed.openaiDescription"
+                : "accounts.managed.description",
+              { name: target?.remote_username || target?.base_url || "" },
+            )}
           </DialogDescription>
         </DialogHeader>
         {draft ? (
@@ -92,6 +99,7 @@ export function ManagedChannelDialog({
                   <label className="text-sm font-medium">{t("accounts.managed.protocol")}</label>
                   <Select
                     value={draft.protocol ?? ""}
+                    disabled={target?.provider === "openai"}
                     onValueChange={(value) => {
                       setDraft((current) => {
                         if (!current) return current;
@@ -108,13 +116,18 @@ export function ManagedChannelDialog({
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="openai">OpenAI</SelectItem>
-                      <SelectItem value="anthropic">Anthropic</SelectItem>
-                      <SelectItem value="gemini">Gemini</SelectItem>
+                      {target?.provider !== "openai" ? (
+                        <>
+                          <SelectItem value="anthropic">Anthropic</SelectItem>
+                          <SelectItem value="gemini">Gemini</SelectItem>
+                        </>
+                      ) : null}
                     </SelectContent>
                   </Select>
                 </div>
               </div>
 
+              {target?.provider !== "openai" ? (
               <div className="space-y-2">
                 <label className="text-sm font-medium">{t("accounts.managed.group")}</label>
                 <Select
@@ -175,6 +188,8 @@ export function ManagedChannelDialog({
                   </SelectContent>
                 </Select>
               </div>
+              ) : null}
+              {target?.provider !== "openai" ? (
               <div className="space-y-2">
                 <label className="text-sm font-medium">{t("accounts.managed.baseUrlOverride")}</label>
                 <Input
@@ -186,6 +201,11 @@ export function ManagedChannelDialog({
                 />
                 <p className="text-xs text-muted-foreground">{t("accounts.managed.baseUrlOverrideHint")}</p>
               </div>
+              ) : (
+                <div className="rounded-lg border bg-muted/20 px-3 py-2 text-sm text-muted-foreground">
+                  {t("accounts.managed.openaiHint")}
+                </div>
+              )}
             </div>
           </DialogBody>
         ) : null}
@@ -194,7 +214,7 @@ export function ManagedChannelDialog({
             {t("common.cancel")}
           </Button>
           <Button onClick={() => void onCreate()} disabled={creating || !draft}>
-            {t("accounts.managed.create")}
+            {t(target?.provider === "openai" ? "accounts.managed.openaiCreate" : "accounts.managed.create")}
           </Button>
         </DialogFooter>
       </DialogContent>
