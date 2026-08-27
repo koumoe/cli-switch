@@ -1,3 +1,7 @@
+## [0.64.2](https://github.com/koumoe/cli-switch/compare/v0.64.1...v0.64.2) (2026-08-27)
+
+### 修复
+* 修复 OpenAI 额度与上游请求 (#214) ([65a5683](https://github.com/koumoe/cli-switch/commit/65a5683eeb3404e9557f433f5255ab6df3d9b1f9))
 ## [0.64.1](https://github.com/koumoe/cli-switch/compare/v0.64.0...v0.64.1) (2026-08-27)
 
 ### 修复
