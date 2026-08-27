@@ -44,31 +44,8 @@ pub(in crate::server) async fn cli_tools_status(
         let tools = CLI_TOOLS
             .iter()
             .map(|d| {
-                let mut detected = crate::cli_tools::detect_cli_tool(&env, &data_dir, d);
-
-                // Prefer reporting the terminal shim if it is executable. The GUI process may not
-                // inherit user's shell PATH, so relying on PATH-only detection is often flaky.
-                if let Ok(shim_path) = crate::terminal::cli_tool_shim_path(d.bin)
-                    && shim_path.is_file()
-                {
-                    let shim_version = crate::cli_tools::try_get_cmd_version_at(&shim_path);
-
-                    // Best-effort cleanup: if the shim can't execute anymore, remove it so it
-                    // doesn't shadow real resolution in user shells.
-                    if shim_version.is_none() {
-                        let _ = crate::terminal::remove_cli_tool_shim(d.bin);
-                    } else {
-                        if !detected.installed {
-                            detected.installed = true;
-                            detected.install_path = Some(shim_path);
-                        }
-                        if detected.version.is_none() {
-                            detected.version = shim_version
-                                .as_deref()
-                                .map(crate::cli_tools::normalize_version_string);
-                        }
-                    }
-                }
+                let detected =
+                    crate::cli_tools::detect_cli_tool_with_terminal_shim(&env, &data_dir, d);
 
                 CliToolStatus {
                     id: d.id,
@@ -125,6 +102,7 @@ pub(in crate::server) async fn install_cli_tool(
     State(state): State<AppState>,
     Json(input): Json<InstallCliToolRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
+    let requested_tool = input.id;
     let def = CLI_TOOLS
         .iter()
         .find(|d| d.id == input.id)
@@ -326,7 +304,14 @@ pub(in crate::server) async fn install_cli_tool(
     .await;
 
     match res {
-        Ok(Ok(v)) => Ok(Json(v)),
+        Ok(Ok(v)) => {
+            if requested_tool == CliToolId::Codex && v.ok {
+                let identity =
+                    crate::codex_upstream::identity_for_version(v.tool.version.as_deref());
+                let _ = state.codex_identity_cache.send(Arc::new(identity));
+            }
+            Ok(Json(v))
+        }
         Ok(Err(e)) => Err(e),
         Err(e) => Err(ApiError::Internal(anyhow::anyhow!(
             "cli tool install task join failed: {e}"

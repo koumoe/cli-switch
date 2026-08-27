@@ -64,7 +64,8 @@ pub use openai_account::{
     get_openai_account_with_secret_optional, get_openai_account_without_secret,
     get_openai_account_without_secret_optional, list_openai_accounts,
     list_openai_accounts_with_secret, mark_openai_account_auth_failure, update_openai_account_name,
-    update_openai_account_quota, upsert_openai_account_tokens,
+    update_openai_account_quota, update_openai_account_quota_from_headers,
+    upsert_openai_account_tokens,
 };
 pub use pricing::{
     PricingModel, PricingStatus, UpsertPricingModel, pricing_status, search_pricing_models,
@@ -151,6 +152,12 @@ fn ensure_remote_accounts_schema(conn: &Connection) -> anyhow::Result<()> {
         .prepare("PRAGMA table_info(remote_accounts)")?
         .query_map([], |row| row.get::<_, String>(1))?
         .collect::<rusqlite::Result<Vec<_>>>()?;
+    if !columns.iter().any(|column| column == "quota_windows_json") {
+        conn.execute(
+            "ALTER TABLE remote_accounts ADD COLUMN quota_windows_json TEXT NULL",
+            [],
+        )?;
+    }
     let required_columns = [
         "id_token",
         "token_expires_at_ms",
@@ -231,6 +238,7 @@ fn ensure_remote_accounts_schema(conn: &Connection) -> anyhow::Result<()> {
           secondary_quota_used_percent REAL NULL,
           secondary_quota_window_minutes INTEGER NULL,
           secondary_quota_resets_at_ms INTEGER NULL,
+          quota_windows_json TEXT NULL,
           last_sync_error TEXT NULL,
           reauth_required INTEGER NOT NULL DEFAULT 0,
           last_synced_at_ms INTEGER NULL,
@@ -312,7 +320,7 @@ const UNIFIED_REMOTE_ACCOUNT_SELECT_COLUMNS: &str = r#"
     low_balance_alert_notified, last_balance_alert_at_ms, sort_order, created_at_ms, updated_at_ms, name,
     id_token, token_expires_at_ms, last_refresh_at_ms, primary_quota_used_percent,
     primary_quota_window_minutes, primary_quota_resets_at_ms, secondary_quota_used_percent,
-    secondary_quota_window_minutes, secondary_quota_resets_at_ms
+    secondary_quota_window_minutes, secondary_quota_resets_at_ms, quota_windows_json
 "#;
 
 #[derive(Debug, Clone)]
@@ -364,6 +372,7 @@ struct UnifiedRemoteAccountRow {
     secondary_quota_used_percent: Option<f64>,
     secondary_quota_window_minutes: Option<i64>,
     secondary_quota_resets_at_ms: Option<i64>,
+    quota_windows_json: Option<String>,
 }
 
 impl UnifiedRemoteAccountRow {
@@ -416,6 +425,7 @@ impl UnifiedRemoteAccountRow {
             secondary_quota_used_percent: row.get(44)?,
             secondary_quota_window_minutes: row.get(45)?,
             secondary_quota_resets_at_ms: row.get(46)?,
+            quota_windows_json: row.get(47)?,
         })
     }
 
@@ -560,6 +570,11 @@ impl UnifiedRemoteAccountRow {
                         window_minutes,
                         resets_at_ms: self.secondary_quota_resets_at_ms,
                     }),
+                additional: self
+                    .quota_windows_json
+                    .as_deref()
+                    .and_then(|value| serde_json::from_str(value).ok())
+                    .unwrap_or_default(),
                 synced_at_ms: self.last_synced_at_ms,
             },
             last_sync_error: self.last_sync_error,

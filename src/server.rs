@@ -14,6 +14,7 @@ use tower_http::trace::{DefaultOnFailure, DefaultOnResponse};
 
 use crate::chat_bridge::weixin::WeixinStatus;
 use crate::chat_bridge::whatsapp_web::WhatsAppWebStatus;
+use crate::codex_upstream;
 use crate::events::AppEvent;
 use crate::i18n::locale_context_middleware;
 use crate::update;
@@ -44,6 +45,19 @@ fn build_proxy_http_client() -> anyhow::Result<reqwest::Client> {
     // - do not inject a default User-Agent
     // - do not auto-negotiate compression when the inbound request omitted it
     reqwest::Client::builder()
+        .no_gzip()
+        .no_brotli()
+        .no_deflate()
+        .build()
+        .map_err(Into::into)
+}
+
+fn build_openai_proxy_http_client() -> anyhow::Result<reqwest::Client> {
+    // ChatGPT's Cloudflare edge can issue load-balancing cookies while
+    // establishing an API route. This is one shared host-scoped cookie jar for
+    // all managed OpenAI requests; cookies are routing state, not credentials.
+    reqwest::Client::builder()
+        .cookie_store(true)
         .no_gzip()
         .no_brotli()
         .no_deflate()
@@ -514,11 +528,35 @@ pub async fn serve_with_listener(
     let (settings_notify, settings_rx) = watch::channel(0u64);
     let http_client = build_http_client()?;
     let proxy_http_client = build_proxy_http_client()?;
+    let openai_proxy_http_client = build_openai_proxy_http_client()?;
     let db_path = Arc::new(db_path);
 
     let settings0 = storage::get_app_settings((*db_path).clone()).await?;
     let initial_update_locale = settings0.ui_locale;
     let channels0 = storage::list_channels((*db_path).clone()).await?;
+    let codex_version = {
+        let npm_path = settings0.cli_tools_npm_path.clone();
+        let node_path = settings0.cli_tools_node_path.clone();
+        let data_dir = state::data_dir_from_db_path(db_path.as_path());
+        tokio::task::spawn_blocking(move || {
+            crate::cli_tools::detect_codex_version(
+                npm_path.as_deref(),
+                node_path.as_deref(),
+                &data_dir,
+            )
+        })
+        .await
+        .unwrap_or(None)
+    };
+    let codex_identity = Arc::new(codex_upstream::identity_for_version(
+        codex_version.as_deref(),
+    ));
+    tracing::info!(
+        version = %codex_identity.version,
+        detected_version = ?codex_version,
+        "cached Codex client identity"
+    );
+    let (codex_identity_cache, codex_identity_cache_rx) = watch::channel(codex_identity);
     let (settings_cache, settings_cache_rx) = watch::channel(Arc::new(settings0));
     let (channels_cache, channels_cache_rx) = watch::channel(Arc::new(channels0));
     let (whatsapp_control_tx, whatsapp_control_rx) = mpsc::channel(32);
@@ -535,6 +573,9 @@ pub async fn serve_with_listener(
         db_path: db_path.clone(),
         http_client: http_client.clone(),
         proxy_http_client,
+        openai_proxy_http_client,
+        codex_identity_cache,
+        codex_identity_cache_rx,
         settings_notify,
         settings_cache,
         settings_cache_rx,
@@ -551,6 +592,7 @@ pub async fn serve_with_listener(
 
     let chat_bridge_settings_rx = state.settings_cache_rx.clone();
     let chat_bridge_channels_cache = state.channels_cache.clone();
+    let codex_identity_cache = state.codex_identity_cache.clone();
     let app = build_app(state);
 
     let mut bg = tokio::task::JoinSet::<()>::new();
@@ -603,6 +645,7 @@ pub async fn serve_with_listener(
     bg.spawn(tasks::cli_tools_auto_update_loop(
         (*db_path).clone(),
         settings_rx4,
+        codex_identity_cache,
     ));
 
     bg.spawn(tasks::logs_retention_cleanup_loop(
@@ -722,10 +765,13 @@ fn open_path(path: &std::path::Path) -> std::io::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::{build_http_client, build_proxy_http_client};
+    use super::{build_http_client, build_openai_proxy_http_client, build_proxy_http_client};
     use axum::Router;
     use axum::extract::State;
-    use axum::http::{HeaderMap, StatusCode, header::ACCEPT_ENCODING, header::USER_AGENT};
+    use axum::http::{
+        HeaderMap, StatusCode,
+        header::{ACCEPT_ENCODING, COOKIE, SET_COOKIE, USER_AGENT},
+    };
     use axum::routing::get;
 
     #[tokio::test]
@@ -801,5 +847,49 @@ mod tests {
 
         assert_eq!(response.status(), StatusCode::OK);
         assert_eq!(response.text().await.expect("read body"), "ua=-;ae=-");
+    }
+
+    #[tokio::test]
+    async fn build_openai_proxy_http_client_keeps_edge_cookies() {
+        async fn set_cookie() -> (HeaderMap, &'static str) {
+            let mut headers = HeaderMap::new();
+            headers.insert(SET_COOKIE, "edge-route=ready; Path=/".parse().unwrap());
+            (headers, "ok")
+        }
+        async fn read_cookie(headers: HeaderMap) -> String {
+            headers
+                .get(COOKIE)
+                .and_then(|value| value.to_str().ok())
+                .unwrap_or_default()
+                .to_string()
+        }
+
+        let app = Router::new()
+            .route("/set", get(set_cookie))
+            .route("/read", get(read_cookie));
+        let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+            .await
+            .expect("bind test server");
+        let addr = listener.local_addr().expect("read local addr");
+        tokio::spawn(async move {
+            let _ = axum::serve(listener, app).await;
+        });
+
+        let client = build_openai_proxy_http_client().expect("build OpenAI proxy client");
+        client
+            .get(format!("http://127.0.0.1:{}/set", addr.port()))
+            .send()
+            .await
+            .expect("set edge cookie");
+        let cookie = client
+            .get(format!("http://127.0.0.1:{}/read", addr.port()))
+            .send()
+            .await
+            .expect("read edge cookie")
+            .text()
+            .await
+            .expect("read response body");
+
+        assert_eq!(cookie, "edge-route=ready");
     }
 }

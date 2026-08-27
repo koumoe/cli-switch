@@ -10,7 +10,7 @@ use crate::events::{
     self, AppEvent, RemoteGroupAddedAlert, RemoteLowBalanceAlert,
     RemoteManagedChannelMissingPrompt, RemoteManagedChannelMultiplierPrompt,
 };
-use crate::{autostart, log_files, newapi, nodejs, storage, sub2api, update};
+use crate::{autostart, codex_upstream, log_files, newapi, nodejs, storage, sub2api, update};
 
 use super::handlers::pricing::run_pricing_sync;
 use super::scheduler::{self, DailyLocalTimeTrigger, IntervalTrigger};
@@ -204,7 +204,11 @@ pub(crate) async fn app_update_auto_loop(
     }
 }
 
-pub(crate) async fn cli_tools_auto_update_loop(db_path: PathBuf, mut notify: watch::Receiver<u64>) {
+pub(crate) async fn cli_tools_auto_update_loop(
+    db_path: PathBuf,
+    mut notify: watch::Receiver<u64>,
+    codex_identity_cache: watch::Sender<Arc<codex_upstream::CodexClientIdentity>>,
+) {
     let interval = Duration::from_secs(24 * 3600);
     let http_client = reqwest::Client::builder()
         .user_agent(format!("CliSwitch/{}", env!("CARGO_PKG_VERSION")))
@@ -253,6 +257,10 @@ pub(crate) async fn cli_tools_auto_update_loop(db_path: PathBuf, mut notify: wat
         };
         let data_dir = data_dir_from_db_path(db_path.as_path());
         let tools_prefix_dir = crate::cli_tools::cli_tools_npm_prefix_dir(&data_dir);
+        let codex_is_selected = to_update
+            .iter()
+            .any(|def| def.id == crate::cli_tools::CliToolId::Codex);
+        let codex_refresh_data_dir = data_dir.clone();
 
         // Keep it fully automatic: if we need npm for enabled tools but it's not available,
         // install our bundled npm env and persist it internally.
@@ -304,6 +312,9 @@ pub(crate) async fn cli_tools_auto_update_loop(db_path: PathBuf, mut notify: wat
                 }
             }
         }
+
+        let codex_refresh_npm_path = npm_path.clone();
+        let codex_refresh_node_path = node_path.clone();
 
         let res = tokio::task::spawn_blocking(move || {
             let env = crate::cli_tools::CliExecEnv::new(npm_path.as_deref(), node_path.as_deref());
@@ -392,10 +403,42 @@ pub(crate) async fn cli_tools_auto_update_loop(db_path: PathBuf, mut notify: wat
             tracing::warn!(err = %e, "cli tool auto update task join failed");
         }
 
+        if codex_is_selected {
+            refresh_codex_identity_cache(
+                codex_identity_cache.clone(),
+                codex_refresh_npm_path,
+                codex_refresh_node_path,
+                codex_refresh_data_dir,
+            )
+            .await;
+        }
+
         if !wait_for_interval_or_shutdown(interval, &mut notify).await {
             break;
         }
     }
+}
+
+async fn refresh_codex_identity_cache(
+    cache: watch::Sender<Arc<codex_upstream::CodexClientIdentity>>,
+    npm_path: Option<String>,
+    node_path: Option<String>,
+    data_dir: PathBuf,
+) {
+    let detected_version = tokio::task::spawn_blocking(move || {
+        crate::cli_tools::detect_codex_version(npm_path.as_deref(), node_path.as_deref(), &data_dir)
+    })
+    .await
+    .unwrap_or(None);
+    let identity = Arc::new(codex_upstream::identity_for_version(
+        detected_version.as_deref(),
+    ));
+    tracing::info!(
+        version = %identity.version,
+        detected_version = ?detected_version,
+        "refreshed cached Codex client identity"
+    );
+    let _ = cache.send(identity);
 }
 
 pub(crate) async fn apply_autostart_setting(db_path: PathBuf) {

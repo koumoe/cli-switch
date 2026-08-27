@@ -1088,6 +1088,43 @@ pub fn detect_cli_tool(env: &CliExecEnv, data_dir: &Path, def: &CliToolDef) -> D
     }
 }
 
+/// Detect a CLI tool using the same terminal-shim precedence as the settings page.
+/// The returned version is suitable for one-time startup/update cache refreshes.
+pub fn detect_cli_tool_with_terminal_shim(
+    env: &CliExecEnv,
+    data_dir: &Path,
+    def: &CliToolDef,
+) -> DetectedCliTool {
+    let mut detected = detect_cli_tool(env, data_dir, def);
+    if let Ok(shim_path) = crate::terminal::cli_tool_shim_path(def.bin)
+        && shim_path.is_file()
+    {
+        let shim_version = try_get_cmd_version_at(&shim_path);
+        if shim_version.is_none() {
+            let _ = crate::terminal::remove_cli_tool_shim(def.bin);
+        } else {
+            if !detected.installed {
+                detected.installed = true;
+                detected.install_path = Some(shim_path);
+            }
+            if detected.version.is_none() {
+                detected.version = shim_version.as_deref().map(normalize_version_string);
+            }
+        }
+    }
+    detected
+}
+
+pub fn detect_codex_version(
+    npm_path: Option<&str>,
+    node_path: Option<&str>,
+    data_dir: &Path,
+) -> Option<String> {
+    let def = CLI_TOOLS.iter().find(|def| def.id == CliToolId::Codex)?;
+    let env = CliExecEnv::new(npm_path, node_path);
+    detect_cli_tool_with_terminal_shim(&env, data_dir, def).version
+}
+
 pub fn brew_upgrade_cli_tool(brew: &Path, tool: CliToolId) -> anyhow::Result<CmdOutput> {
     let mut cmd = std::process::Command::new(brew);
     match tool {

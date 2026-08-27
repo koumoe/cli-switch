@@ -40,13 +40,19 @@ const openAiAccount: OpenAiRemoteAccount = {
       kind: "weekly",
       used_percent: 43,
       window_minutes: 10_080,
-      resets_at_ms: null,
+      resets_at_ms: Date.UTC(2026, 8, 10, 0, 0),
     },
     {
       kind: "primary",
       used_percent: 18,
       window_minutes: 300,
-      resets_at_ms: null,
+      resets_at_ms: Date.UTC(2026, 8, 3, 9, 33),
+    },
+    {
+      kind: "additional",
+      used_percent: 9,
+      window_minutes: 43_200,
+      resets_at_ms: Date.UTC(2026, 8, 30, 0, 0),
     },
   ],
 };
@@ -113,11 +119,14 @@ describe("AccountsTable OpenAI accounts", () => {
 
     const shortestQuota = screen.getByText("18%");
     expect(shortestQuota).toBeInTheDocument();
-    expect(screen.queryByText("周限额 43%")).not.toBeInTheDocument();
+    expect(screen.queryByText(/重置时间/)).not.toBeInTheDocument();
+    expect(screen.queryByText("7日限额 43%")).not.toBeInTheDocument();
 
     await user.hover(shortestQuota);
 
-    expect((await screen.findAllByText("5 小时限额 18%")).length).toBeGreaterThan(0);
-    expect(screen.getAllByText("周限额 43%").length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("5小时限额 18%")).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("7日限额 43%").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("30日限额 9%").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/重置时间/).length).toBeGreaterThanOrEqual(3);
   });
 });

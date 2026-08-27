@@ -124,6 +124,7 @@ CREATE TABLE IF NOT EXISTS remote_accounts (
   secondary_quota_used_percent REAL NULL,
   secondary_quota_window_minutes INTEGER NULL,
   secondary_quota_resets_at_ms INTEGER NULL,
+  quota_windows_json TEXT NULL,
   last_sync_error TEXT NULL,
   reauth_required INTEGER NOT NULL DEFAULT 0,
   last_synced_at_ms INTEGER NULL,

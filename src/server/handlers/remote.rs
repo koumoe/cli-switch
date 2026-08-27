@@ -707,6 +707,14 @@ impl From<storage::OpenAiAccount> for RemoteAccountResponse {
                 resets_at_ms: window.resets_at_ms,
             });
         }
+        quota_windows.extend(account.quota.additional.into_iter().map(|window| {
+            OpenAiQuotaWindowResponse {
+                kind: "additional",
+                used_percent: window.used_percent,
+                window_minutes: window.window_minutes,
+                resets_at_ms: window.resets_at_ms,
+            }
+        }));
         let common = RemoteAccountCommonResponse {
             id: account.id,
             name: account.name,
@@ -2254,6 +2262,8 @@ mod tests {
         let (settings_notify, _) = watch::channel(0_u64);
         let (settings_cache, settings_cache_rx) = watch::channel(settings);
         let (channels_cache, channels_cache_rx) = watch::channel(channels);
+        let (codex_identity_cache, codex_identity_cache_rx) =
+            watch::channel(Arc::new(crate::codex_upstream::default_identity()));
         let (whatsapp_control_tx, _) = mpsc::channel::<WhatsAppWebControl>(1);
         let (_, whatsapp_status_rx) = watch::channel(WhatsAppWebStatus::default());
         let (weixin_control_tx, _) = mpsc::channel::<WeixinControl>(1);
@@ -2264,6 +2274,9 @@ mod tests {
             db_path: Arc::new(db_path),
             http_client: reqwest::Client::new(),
             proxy_http_client: reqwest::Client::new(),
+            openai_proxy_http_client: reqwest::Client::new(),
+            codex_identity_cache,
+            codex_identity_cache_rx,
             settings_notify,
             settings_cache,
             settings_cache_rx,

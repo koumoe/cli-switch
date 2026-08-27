@@ -10,6 +10,7 @@ use std::time::Instant;
 use tokio::sync::watch;
 use uuid::Uuid;
 
+pub use crate::codex_upstream::CodexClientIdentity;
 use crate::storage::{self, Channel, Protocol};
 
 mod limits;
@@ -24,6 +25,7 @@ pub struct ProxyConfigSnapshot {
     pub channels: Arc<Vec<Channel>>,
     /// Optional: allows proxy to best-effort update in-memory channel state (e.g. auto-disable).
     pub channels_cache: Option<watch::Sender<Arc<Vec<Channel>>>>,
+    pub codex_identity: Arc<CodexClientIdentity>,
 }
 
 struct AttemptCtx<'a> {
@@ -93,6 +95,7 @@ pub async fn forward(
 
     forward_with_config(
         client,
+        None,
         db_path,
         protocol,
         protocol_root,
@@ -101,6 +104,7 @@ pub async fn forward(
             settings,
             channels,
             channels_cache: None,
+            codex_identity: Arc::new(crate::codex_upstream::default_identity()),
         },
     )
     .await
@@ -108,6 +112,7 @@ pub async fn forward(
 
 pub async fn forward_with_config(
     client: &reqwest::Client,
+    openai_oauth_client: Option<&reqwest::Client>,
     db_path: std::path::PathBuf,
     protocol: Protocol,
     protocol_root: &'static str,
@@ -121,6 +126,7 @@ pub async fn forward_with_config(
         settings,
         channels: all_channels,
         channels_cache,
+        codex_identity,
     } = cfg;
 
     let (parts, body) = req.into_parts();
@@ -194,6 +200,11 @@ pub async fn forward_with_config(
 
             let is_openai_oauth_channel =
                 channel.managed_provider() == Some(storage::ManagedRemoteProvider::Openai);
+            let upstream_client = if is_openai_oauth_channel {
+                openai_oauth_client.unwrap_or(client)
+            } else {
+                client
+            };
             let mut attempt_body = body_bytes.clone();
             let mut openai_account = None;
             if is_openai_oauth_channel {
@@ -300,12 +311,13 @@ pub async fn forward_with_config(
             let mut out_headers = filtered_headers(&parts.headers);
             let auth_result = if let Some(account) = openai_account.as_ref() {
                 let access_token = account.access_token.as_deref().unwrap_or_default();
-                crate::codex_upstream::apply_headers(
+                crate::codex_upstream::apply_headers_with_identity(
                     &mut out_headers,
                     crate::codex_upstream::CodexCredentials {
                         access_token,
                         account_id: &account.remote_user_id,
                     },
+                    &codex_identity,
                 )
                 .map_err(|error| ProxyError::Upstream(error.to_string()))
             } else {
@@ -329,13 +341,31 @@ pub async fn forward_with_config(
                 continue;
             }
 
-            let mut upstream = match client
+            let retry_url = is_openai_oauth_channel.then(|| url.clone());
+            let first_upstream = upstream_client
                 .request(method.clone(), url)
-                .headers(out_headers)
+                .headers(out_headers.clone())
                 .body(attempt_body.clone())
                 .send()
-                .await
-            {
+                .await;
+            let should_retry_connection = first_upstream.as_ref().err().is_some_and(|error| {
+                is_openai_oauth_channel && should_retry_openai_connection(error)
+            });
+            let upstream_result = if should_retry_connection {
+                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                upstream_client
+                    .request(
+                        method.clone(),
+                        retry_url.expect("OpenAI retry URL is present"),
+                    )
+                    .headers(out_headers.clone())
+                    .body(attempt_body.clone())
+                    .send()
+                    .await
+            } else {
+                first_upstream
+            };
+            let mut upstream = match upstream_result {
                 Ok(r) => r,
                 Err(e) => {
                     let auto_disabled = if !is_count_tokens {
@@ -404,17 +434,18 @@ pub async fn forward_with_config(
                     }
                 };
                 let mut retry_headers = filtered_headers(&parts.headers);
-                if let Err(error) = crate::codex_upstream::apply_headers(
+                if let Err(error) = crate::codex_upstream::apply_headers_with_identity(
                     &mut retry_headers,
                     crate::codex_upstream::CodexCredentials {
                         access_token: refreshed.access_token.as_deref().unwrap_or_default(),
                         account_id: &refreshed.remote_user_id,
                     },
+                    &codex_identity,
                 ) {
                     last_err = Some(ProxyError::Upstream(error.to_string()));
                     continue 'channel_loop;
                 }
-                upstream = match client
+                upstream = match upstream_client
                     .request(
                         method.clone(),
                         crate::codex_upstream::responses_url(Some(&channel.base_url)),
@@ -450,8 +481,10 @@ pub async fn forward_with_config(
                 let db_path = db_path.clone();
                 let account_id = account.id.clone();
                 tokio::spawn(async move {
-                    if let Err(error) =
-                        storage::update_openai_account_quota(db_path, account_id, quota).await
+                    if let Err(error) = storage::update_openai_account_quota_from_headers(
+                        db_path, account_id, quota,
+                    )
+                    .await
                     {
                         tracing::warn!(%error, "persist OpenAI quota headers failed");
                     }
@@ -534,6 +567,15 @@ pub async fn forward_with_config(
     }
 
     Err(last_err.unwrap_or_else(|| ProxyError::Upstream("all channels failed".to_string())))
+}
+
+fn should_retry_openai_connection(error: &reqwest::Error) -> bool {
+    !error.is_timeout()
+        && !error.is_builder()
+        && !error.is_body()
+        && !error.is_decode()
+        && !error.is_redirect()
+        && !error.is_status()
 }
 
 fn build_anthropic_count_tokens_response(input_tokens: i64) -> Response<Body> {
