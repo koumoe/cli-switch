@@ -399,7 +399,6 @@ pub async fn update_openai_account_quota_from_headers(
     quota: OpenAiQuotaSnapshot,
 ) -> anyhow::Result<()> {
     with_conn(db_path, move |conn| {
-        let synced_at = quota.synced_at_ms.unwrap_or_else(now_ms);
         let changed = conn.execute(
             r#"
             UPDATE remote_accounts SET
@@ -409,8 +408,7 @@ pub async fn update_openai_account_quota_from_headers(
               secondary_quota_used_percent = COALESCE(?5, secondary_quota_used_percent),
               secondary_quota_window_minutes = COALESCE(?6, secondary_quota_window_minutes),
               secondary_quota_resets_at_ms = COALESCE(?7, secondary_quota_resets_at_ms),
-              last_synced_at_ms = ?8, last_sync_error = NULL, reauth_required = 0,
-              updated_at_ms = ?9
+              last_sync_error = NULL, reauth_required = 0, updated_at_ms = ?8
             WHERE provider = 'openai' AND id = ?1
             "#,
             params![
@@ -424,7 +422,6 @@ pub async fn update_openai_account_quota_from_headers(
                     .secondary
                     .as_ref()
                     .and_then(|value| value.resets_at_ms),
-                synced_at,
                 now_ms(),
             ],
         )?;
@@ -651,6 +648,7 @@ mod tests {
             .unwrap();
         assert_eq!(after_headers.quota.primary.unwrap().used_percent, 18.0);
         assert_eq!(after_headers.quota.additional.len(), 1);
+        assert_eq!(after_headers.last_synced_at_ms, Some(1_800_000_000_000));
         let _ = std::fs::remove_file(db_path);
     }
 
