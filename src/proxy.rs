@@ -130,6 +130,7 @@ pub async fn forward_with_config(
     } = cfg;
 
     let (parts, body) = req.into_parts();
+    let responses_lite = crate::codex_upstream::is_responses_lite(&parts.headers);
     let is_count_tokens = protocol == Protocol::Anthropic
         && parts.uri.path().trim_end_matches('/') == "/v1/messages/count_tokens";
 
@@ -265,6 +266,7 @@ pub async fn forward_with_config(
                 attempt_body = match crate::codex_upstream::normalize_responses_body(
                     &attempt_body,
                     model.as_deref(),
+                    responses_lite,
                 ) {
                     Ok(body) => Bytes::from(body),
                     Err(error) => {

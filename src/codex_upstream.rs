@@ -10,6 +10,7 @@ pub const DEFAULT_ORIGINATOR: &str = "codex-tui";
 pub const DEFAULT_USER_AGENT: &str =
     "codex-tui/0.150.1 (Mac OS 26.5.0; arm64) iTerm.app/3.6.10 (codex-tui; 0.150.1)";
 pub const MIN_SUPPORTED_VERSION: &str = "0.144.0";
+const RESPONSES_LITE_HEADER: &str = "x-openai-internal-codex-responses-lite";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CodexClientIdentity {
@@ -52,6 +53,13 @@ fn normalize_client_version(version: Option<&str>) -> Option<String> {
 
 pub fn default_identity() -> CodexClientIdentity {
     identity_for_version(Some(DEFAULT_VERSION))
+}
+
+pub fn is_responses_lite(headers: &HeaderMap) -> bool {
+    headers
+        .get(RESPONSES_LITE_HEADER)
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -110,7 +118,11 @@ pub fn apply_headers_with_identity(
 /// Normalize an OpenAI Responses payload to the subset accepted by the Codex
 /// ChatGPT backend. This intentionally does not translate Chat Completions,
 /// Anthropic, or Gemini payloads; those require protocol-aware translators.
-pub fn normalize_responses_body(body: &[u8], model: Option<&str>) -> anyhow::Result<Vec<u8>> {
+pub fn normalize_responses_body(
+    body: &[u8],
+    model: Option<&str>,
+    responses_lite: bool,
+) -> anyhow::Result<Vec<u8>> {
     let mut value: Value = serde_json::from_slice(body)?;
     let object = value
         .as_object_mut()
@@ -121,7 +133,13 @@ pub fn normalize_responses_body(body: &[u8], model: Option<&str>) -> anyhow::Res
     }
     object.insert("stream".to_string(), Value::Bool(true));
     object.insert("store".to_string(), Value::Bool(false));
-    object.insert("parallel_tool_calls".to_string(), Value::Bool(true));
+    if responses_lite {
+        object.insert("parallel_tool_calls".to_string(), Value::Bool(false));
+    } else {
+        object
+            .entry("parallel_tool_calls".to_string())
+            .or_insert(Value::Bool(true));
+    }
     object.insert(
         "include".to_string(),
         json!(["reasoning.encrypted_content"]),
@@ -208,10 +226,24 @@ mod tests {
     }
 
     #[test]
+    fn detects_responses_lite_header_case_insensitively() {
+        let mut headers = HeaderMap::new();
+        headers.insert(RESPONSES_LITE_HEADER, HeaderValue::from_static("TRUE"));
+        assert!(is_responses_lite(&headers));
+
+        headers.insert(RESPONSES_LITE_HEADER, HeaderValue::from_static("false"));
+        assert!(!is_responses_lite(&headers));
+
+        headers.insert(RESPONSES_LITE_HEADER, HeaderValue::from_static("1"));
+        assert!(!is_responses_lite(&headers));
+    }
+
+    #[test]
     fn normalizes_responses_payload_for_codex_backend() {
         let normalized = normalize_responses_body(
             br#"{"model":"old","input":"hello","temperature":0.2,"previous_response_id":"r"}"#,
             Some("gpt-5-codex"),
+            false,
         )
         .unwrap();
         let value: Value = serde_json::from_slice(&normalized).unwrap();
@@ -224,5 +256,32 @@ mod tests {
         assert_eq!(value["include"], json!(["reasoning.encrypted_content"]));
         assert!(value.get("temperature").is_none());
         assert!(value.get("previous_response_id").is_none());
+    }
+
+    #[test]
+    fn preserves_disabled_parallel_tool_calls_for_non_lite_requests() {
+        let normalized = normalize_responses_body(
+            br#"{"input":"hello","parallel_tool_calls":false}"#,
+            None,
+            false,
+        )
+        .unwrap();
+        let value: Value = serde_json::from_slice(&normalized).unwrap();
+
+        assert_eq!(value["parallel_tool_calls"], false);
+    }
+
+    #[test]
+    fn pins_parallel_tool_calls_to_false_for_responses_lite() {
+        for body in [
+            br#"{"input":"hello"}"#.as_slice(),
+            br#"{"input":"hello","parallel_tool_calls":true}"#.as_slice(),
+            br#"{"input":"hello","parallel_tool_calls":false}"#.as_slice(),
+            br#"{"input":"hello","parallel_tool_calls":"false"}"#.as_slice(),
+        ] {
+            let normalized = normalize_responses_body(body, None, true).unwrap();
+            let value: Value = serde_json::from_slice(&normalized).unwrap();
+            assert_eq!(value["parallel_tool_calls"], false);
+        }
     }
 }
