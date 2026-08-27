@@ -1,3 +1,8 @@
+## [0.64.3](https://github.com/koumoe/cli-switch/compare/v0.64.2...v0.64.3) (2026-08-27)
+
+### Bug Fixes
+
+* handle Codex Responses Lite tool calls (#215) ([f284028](https://github.com/koumoe/cli-switch/commit/f284028b48cdd9397e62fea71dd2bd18caea0939))
 ## [0.64.2](https://github.com/koumoe/cli-switch/compare/v0.64.1...v0.64.2) (2026-08-27)
 
 ### Bug Fixes
