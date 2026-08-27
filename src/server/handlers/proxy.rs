@@ -22,6 +22,7 @@ pub(in crate::server) async fn proxy_openai(
             settings: state.settings_snapshot(),
             channels: state.channels_snapshot(),
             channels_cache: Some(state.channels_cache.clone()),
+            codex_identity: state.codex_identity_snapshot(),
         },
     )
     .await
@@ -43,6 +44,7 @@ pub(in crate::server) async fn proxy_anthropic(
             settings: state.settings_snapshot(),
             channels: state.channels_snapshot(),
             channels_cache: Some(state.channels_cache.clone()),
+            codex_identity: state.codex_identity_snapshot(),
         },
     )
     .await
@@ -64,6 +66,7 @@ pub(in crate::server) async fn proxy_gemini(
             settings: state.settings_snapshot(),
             channels: state.channels_snapshot(),
             channels_cache: Some(state.channels_cache.clone()),
+            codex_identity: state.codex_identity_snapshot(),
         },
     )
     .await

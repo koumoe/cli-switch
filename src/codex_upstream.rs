@@ -1,4 +1,5 @@
 use axum::http::{HeaderMap, HeaderValue, header};
+use semver::Version;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
@@ -8,6 +9,50 @@ pub const DEFAULT_VERSION: &str = "0.150.1";
 pub const DEFAULT_ORIGINATOR: &str = "codex-tui";
 pub const DEFAULT_USER_AGENT: &str =
     "codex-tui/0.150.1 (Mac OS 26.5.0; arm64) iTerm.app/3.6.10 (codex-tui; 0.150.1)";
+pub const MIN_SUPPORTED_VERSION: &str = "0.144.0";
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CodexClientIdentity {
+    pub version: String,
+    pub originator: String,
+    pub user_agent: String,
+}
+
+impl CodexClientIdentity {
+    pub fn for_version(version: Option<&str>) -> Self {
+        identity_for_version(version)
+    }
+}
+
+pub fn identity_for_version(version: Option<&str>) -> CodexClientIdentity {
+    let version = normalize_client_version(version).unwrap_or_else(|| DEFAULT_VERSION.to_string());
+    let user_agent = if version == DEFAULT_VERSION {
+        DEFAULT_USER_AGENT.to_string()
+    } else {
+        format!(
+            "{DEFAULT_ORIGINATOR}/{version} (Mac OS 26.5.0; arm64) iTerm.app/3.6.10 (codex-tui; {version})"
+        )
+    };
+    CodexClientIdentity {
+        version: version.clone(),
+        originator: DEFAULT_ORIGINATOR.to_string(),
+        user_agent,
+    }
+}
+
+fn normalize_client_version(version: Option<&str>) -> Option<String> {
+    let version = version?.trim().trim_start_matches('v');
+    if version.is_empty() {
+        return None;
+    }
+    let parsed = Version::parse(version).ok()?;
+    let minimum = Version::parse(MIN_SUPPORTED_VERSION).expect("valid Codex minimum version");
+    (parsed >= minimum).then(|| version.to_string())
+}
+
+pub fn default_identity() -> CodexClientIdentity {
+    identity_for_version(Some(DEFAULT_VERSION))
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CodexCredentials<'a> {
@@ -28,12 +73,16 @@ pub fn responses_url(base_url: Option<&str>) -> String {
 /// ChatGPT validates that `originator`, the User-Agent client name/version,
 /// and the `version` header agree. Stale or mixed identities can be rejected
 /// as an outdated Codex client even when the OAuth token is valid.
-pub fn apply_headers(
+pub fn apply_headers_with_identity(
     headers: &mut HeaderMap,
     credentials: CodexCredentials<'_>,
+    identity: &CodexClientIdentity,
 ) -> anyhow::Result<()> {
     let bearer = HeaderValue::from_str(&format!("Bearer {}", credentials.access_token))?;
     let account_id = HeaderValue::from_str(credentials.account_id)?;
+    let originator = HeaderValue::from_str(&identity.originator)?;
+    let version = HeaderValue::from_str(&identity.version)?;
+    let user_agent = HeaderValue::from_str(&identity.user_agent)?;
 
     headers.insert(header::AUTHORIZATION, bearer);
     headers.insert(
@@ -48,13 +97,10 @@ pub fn apply_headers(
         "openai-beta",
         HeaderValue::from_static("responses=experimental"),
     );
-    headers.insert("originator", HeaderValue::from_static(DEFAULT_ORIGINATOR));
+    headers.insert("originator", originator);
     headers.insert("chatgpt-account-id", account_id);
-    headers.insert("version", HeaderValue::from_static(DEFAULT_VERSION));
-    headers.insert(
-        header::USER_AGENT,
-        HeaderValue::from_static(DEFAULT_USER_AGENT),
-    );
+    headers.insert("version", version);
+    headers.insert(header::USER_AGENT, user_agent);
     headers
         .entry("session_id")
         .or_insert(HeaderValue::from_str(&Uuid::new_v4().to_string())?);
@@ -125,12 +171,13 @@ mod tests {
         );
         headers.insert("version", HeaderValue::from_static("0.21.0"));
         headers.insert("originator", HeaderValue::from_static("codex_cli_rs"));
-        apply_headers(
+        apply_headers_with_identity(
             &mut headers,
             CodexCredentials {
                 access_token: "access-token",
                 account_id: "account-id",
             },
+            &default_identity(),
         )
         .unwrap();
 
@@ -142,6 +189,22 @@ mod tests {
         assert_eq!(headers["version"], DEFAULT_VERSION);
         assert_eq!(headers[header::USER_AGENT], DEFAULT_USER_AGENT);
         assert!(headers.contains_key("session_id"));
+    }
+
+    #[test]
+    fn normalizes_detected_versions_to_the_supported_codex_floor() {
+        let detected = identity_for_version(Some("v0.149.1"));
+        assert_eq!(detected.version, "0.149.1");
+        assert_eq!(detected.originator, "codex-tui");
+        assert!(detected.user_agent.starts_with("codex-tui/0.149.1 "));
+        assert_eq!(
+            identity_for_version(Some("0.140.0")).version,
+            DEFAULT_VERSION
+        );
+        assert_eq!(
+            identity_for_version(Some("not-a-version")).version,
+            DEFAULT_VERSION
+        );
     }
 
     #[test]

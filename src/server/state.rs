@@ -6,6 +6,7 @@ use tokio::sync::{mpsc, watch};
 
 use crate::chat_bridge::weixin::{WeixinControl, WeixinStatus};
 use crate::chat_bridge::whatsapp_web::{WhatsAppWebControl, WhatsAppWebStatus};
+use crate::codex_upstream::CodexClientIdentity;
 use crate::storage;
 use crate::update;
 
@@ -16,6 +17,8 @@ pub struct AppState {
     pub http_client: reqwest::Client,
     pub proxy_http_client: reqwest::Client,
     pub openai_proxy_http_client: reqwest::Client,
+    pub codex_identity_cache: watch::Sender<Arc<CodexClientIdentity>>,
+    pub codex_identity_cache_rx: watch::Receiver<Arc<CodexClientIdentity>>,
     pub settings_notify: watch::Sender<u64>,
     pub settings_cache: watch::Sender<Arc<storage::AppSettings>>,
     pub settings_cache_rx: watch::Receiver<Arc<storage::AppSettings>>,
@@ -43,6 +46,10 @@ impl AppState {
 
     pub(crate) fn channels_snapshot(&self) -> Arc<Vec<storage::Channel>> {
         self.channels_cache_rx.borrow().clone()
+    }
+
+    pub(crate) fn codex_identity_snapshot(&self) -> Arc<CodexClientIdentity> {
+        self.codex_identity_cache_rx.borrow().clone()
     }
 }
 

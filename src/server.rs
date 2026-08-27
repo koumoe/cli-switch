@@ -14,6 +14,7 @@ use tower_http::trace::{DefaultOnFailure, DefaultOnResponse};
 
 use crate::chat_bridge::weixin::WeixinStatus;
 use crate::chat_bridge::whatsapp_web::WhatsAppWebStatus;
+use crate::codex_upstream;
 use crate::events::AppEvent;
 use crate::i18n::locale_context_middleware;
 use crate::update;
@@ -532,6 +533,29 @@ pub async fn serve_with_listener(
     let settings0 = storage::get_app_settings((*db_path).clone()).await?;
     let initial_update_locale = settings0.ui_locale;
     let channels0 = storage::list_channels((*db_path).clone()).await?;
+    let codex_version = {
+        let npm_path = settings0.cli_tools_npm_path.clone();
+        let node_path = settings0.cli_tools_node_path.clone();
+        let data_dir = state::data_dir_from_db_path(db_path.as_path());
+        tokio::task::spawn_blocking(move || {
+            crate::cli_tools::detect_codex_version(
+                npm_path.as_deref(),
+                node_path.as_deref(),
+                &data_dir,
+            )
+        })
+        .await
+        .unwrap_or(None)
+    };
+    let codex_identity = Arc::new(codex_upstream::identity_for_version(
+        codex_version.as_deref(),
+    ));
+    tracing::info!(
+        version = %codex_identity.version,
+        detected_version = ?codex_version,
+        "cached Codex client identity"
+    );
+    let (codex_identity_cache, codex_identity_cache_rx) = watch::channel(codex_identity);
     let (settings_cache, settings_cache_rx) = watch::channel(Arc::new(settings0));
     let (channels_cache, channels_cache_rx) = watch::channel(Arc::new(channels0));
     let (whatsapp_control_tx, whatsapp_control_rx) = mpsc::channel(32);
@@ -549,6 +573,8 @@ pub async fn serve_with_listener(
         http_client: http_client.clone(),
         proxy_http_client,
         openai_proxy_http_client,
+        codex_identity_cache,
+        codex_identity_cache_rx,
         settings_notify,
         settings_cache,
         settings_cache_rx,
@@ -565,6 +591,7 @@ pub async fn serve_with_listener(
 
     let chat_bridge_settings_rx = state.settings_cache_rx.clone();
     let chat_bridge_channels_cache = state.channels_cache.clone();
+    let codex_identity_cache = state.codex_identity_cache.clone();
     let app = build_app(state);
 
     let mut bg = tokio::task::JoinSet::<()>::new();
@@ -617,6 +644,7 @@ pub async fn serve_with_listener(
     bg.spawn(tasks::cli_tools_auto_update_loop(
         (*db_path).clone(),
         settings_rx4,
+        codex_identity_cache,
     ));
 
     bg.spawn(tasks::logs_retention_cleanup_loop(

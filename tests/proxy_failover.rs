@@ -288,12 +288,21 @@ async fn managed_openai_account_forwards_responses_with_dynamic_oauth_credential
             r#"{"model":"gpt-5.6-sol","input":"hello","temperature":0.5}"#,
         ))
         .unwrap();
-    let response = proxy::forward(
+    let settings = Arc::new(storage::get_app_settings(db_path.clone()).await.unwrap());
+    let channels = Arc::new(storage::list_channels(db_path.clone()).await.unwrap());
+    let response = proxy::forward_with_config(
         &reqwest::Client::new(),
+        None,
         db_path.clone(),
         storage::Protocol::Openai,
         "/v1",
         request,
+        proxy::ProxyConfigSnapshot {
+            settings,
+            channels,
+            channels_cache: None,
+            codex_identity: Arc::new(proxy::CodexClientIdentity::for_version(Some("0.149.1"))),
+        },
     )
     .await
     .unwrap();
@@ -304,8 +313,8 @@ async fn managed_openai_account_forwards_responses_with_dynamic_oauth_credential
     assert_eq!(captured.authorization, "Bearer oauth-access-token");
     assert_eq!(captured.account_id, "chatgpt-account-1");
     assert_eq!(captured.originator, "codex-tui");
-    assert_eq!(captured.version, "0.150.1");
-    assert!(captured.user_agent.starts_with("codex-tui/0.150.1 "));
+    assert_eq!(captured.version, "0.149.1");
+    assert!(captured.user_agent.starts_with("codex-tui/0.149.1 "));
     assert_eq!(captured.path, "/codex/responses");
     assert_eq!(captured.body["model"], "gpt-5.6-sol");
     assert_eq!(captured.body["stream"], true);

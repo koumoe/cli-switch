@@ -10,6 +10,7 @@ use std::time::Instant;
 use tokio::sync::watch;
 use uuid::Uuid;
 
+pub use crate::codex_upstream::CodexClientIdentity;
 use crate::storage::{self, Channel, Protocol};
 
 mod limits;
@@ -24,6 +25,7 @@ pub struct ProxyConfigSnapshot {
     pub channels: Arc<Vec<Channel>>,
     /// Optional: allows proxy to best-effort update in-memory channel state (e.g. auto-disable).
     pub channels_cache: Option<watch::Sender<Arc<Vec<Channel>>>>,
+    pub codex_identity: Arc<CodexClientIdentity>,
 }
 
 struct AttemptCtx<'a> {
@@ -102,6 +104,7 @@ pub async fn forward(
             settings,
             channels,
             channels_cache: None,
+            codex_identity: Arc::new(crate::codex_upstream::default_identity()),
         },
     )
     .await
@@ -123,6 +126,7 @@ pub async fn forward_with_config(
         settings,
         channels: all_channels,
         channels_cache,
+        codex_identity,
     } = cfg;
 
     let (parts, body) = req.into_parts();
@@ -307,12 +311,13 @@ pub async fn forward_with_config(
             let mut out_headers = filtered_headers(&parts.headers);
             let auth_result = if let Some(account) = openai_account.as_ref() {
                 let access_token = account.access_token.as_deref().unwrap_or_default();
-                crate::codex_upstream::apply_headers(
+                crate::codex_upstream::apply_headers_with_identity(
                     &mut out_headers,
                     crate::codex_upstream::CodexCredentials {
                         access_token,
                         account_id: &account.remote_user_id,
                     },
+                    &codex_identity,
                 )
                 .map_err(|error| ProxyError::Upstream(error.to_string()))
             } else {
@@ -425,12 +430,13 @@ pub async fn forward_with_config(
                     }
                 };
                 let mut retry_headers = filtered_headers(&parts.headers);
-                if let Err(error) = crate::codex_upstream::apply_headers(
+                if let Err(error) = crate::codex_upstream::apply_headers_with_identity(
                     &mut retry_headers,
                     crate::codex_upstream::CodexCredentials {
                         access_token: refreshed.access_token.as_deref().unwrap_or_default(),
                         account_id: &refreshed.remote_user_id,
                     },
+                    &codex_identity,
                 ) {
                     last_err = Some(ProxyError::Upstream(error.to_string()));
                     continue 'channel_loop;
