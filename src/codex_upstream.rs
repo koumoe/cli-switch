@@ -4,8 +4,10 @@ use uuid::Uuid;
 
 pub const DEFAULT_BASE_URL: &str = "https://chatgpt.com/backend-api/codex";
 pub const RESPONSES_PATH: &str = "/responses";
-pub const DEFAULT_VERSION: &str = "0.21.0";
-pub const DEFAULT_USER_AGENT: &str = "codex_cli_rs/0.50.0";
+pub const DEFAULT_VERSION: &str = "0.150.1";
+pub const DEFAULT_ORIGINATOR: &str = "codex-tui";
+pub const DEFAULT_USER_AGENT: &str =
+    "codex-tui/0.150.1 (Mac OS 26.5.0; arm64) iTerm.app/3.6.10 (codex-tui; 0.150.1)";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CodexCredentials<'a> {
@@ -22,9 +24,10 @@ pub fn responses_url(base_url: Option<&str>) -> String {
     format!("{base_url}{RESPONSES_PATH}")
 }
 
-/// Apply the headers used by CLIProxyAPI's Codex executor for OAuth accounts.
-/// A fresh session id is generated for every upstream request unless the caller
-/// already supplied one.
+/// Apply a self-consistent current Codex identity for OAuth accounts.
+/// ChatGPT validates that `originator`, the User-Agent client name/version,
+/// and the `version` header agree. Stale or mixed identities can be rejected
+/// as an outdated Codex client even when the OAuth token is valid.
 pub fn apply_headers(
     headers: &mut HeaderMap,
     credentials: CodexCredentials<'_>,
@@ -45,14 +48,13 @@ pub fn apply_headers(
         "openai-beta",
         HeaderValue::from_static("responses=experimental"),
     );
-    headers.insert("originator", HeaderValue::from_static("codex_cli_rs"));
+    headers.insert("originator", HeaderValue::from_static(DEFAULT_ORIGINATOR));
     headers.insert("chatgpt-account-id", account_id);
-    headers
-        .entry("version")
-        .or_insert(HeaderValue::from_static(DEFAULT_VERSION));
-    headers
-        .entry(header::USER_AGENT)
-        .or_insert(HeaderValue::from_static(DEFAULT_USER_AGENT));
+    headers.insert("version", HeaderValue::from_static(DEFAULT_VERSION));
+    headers.insert(
+        header::USER_AGENT,
+        HeaderValue::from_static(DEFAULT_USER_AGENT),
+    );
     headers
         .entry("session_id")
         .or_insert(HeaderValue::from_str(&Uuid::new_v4().to_string())?);
@@ -115,12 +117,14 @@ mod tests {
     }
 
     #[test]
-    fn applies_oauth_account_headers_without_overwriting_client_identity() {
+    fn applies_current_self_consistent_oauth_identity() {
         let mut headers = HeaderMap::new();
         headers.insert(
             header::USER_AGENT,
-            HeaderValue::from_static("codex-cli-test"),
+            HeaderValue::from_static("codex_cli_rs/0.21.0"),
         );
+        headers.insert("version", HeaderValue::from_static("0.21.0"));
+        headers.insert("originator", HeaderValue::from_static("codex_cli_rs"));
         apply_headers(
             &mut headers,
             CodexCredentials {
@@ -132,10 +136,11 @@ mod tests {
 
         assert_eq!(headers[header::AUTHORIZATION], "Bearer access-token");
         assert_eq!(headers["chatgpt-account-id"], "account-id");
-        assert_eq!(headers["originator"], "codex_cli_rs");
+        assert_eq!(headers["originator"], DEFAULT_ORIGINATOR);
         assert_eq!(headers["openai-beta"], "responses=experimental");
         assert_eq!(headers[header::ACCEPT], "text/event-stream");
-        assert_eq!(headers[header::USER_AGENT], "codex-cli-test");
+        assert_eq!(headers["version"], DEFAULT_VERSION);
+        assert_eq!(headers[header::USER_AGENT], DEFAULT_USER_AGENT);
         assert!(headers.contains_key("session_id"));
     }
 

@@ -151,6 +151,9 @@ async fn managed_openai_account_forwards_responses_with_dynamic_oauth_credential
     struct Captured {
         authorization: String,
         account_id: String,
+        originator: String,
+        user_agent: String,
+        version: String,
         path: String,
         body: serde_json::Value,
     }
@@ -174,12 +177,33 @@ async fn managed_openai_account_forwards_responses_with_dynamic_oauth_credential
                     .and_then(|value| value.to_str().ok())
                     .unwrap_or_default()
                     .to_string();
+                let originator = request
+                    .headers()
+                    .get("originator")
+                    .and_then(|value| value.to_str().ok())
+                    .unwrap_or_default()
+                    .to_string();
+                let user_agent = request
+                    .headers()
+                    .get(axum::http::header::USER_AGENT)
+                    .and_then(|value| value.to_str().ok())
+                    .unwrap_or_default()
+                    .to_string();
+                let version = request
+                    .headers()
+                    .get("version")
+                    .and_then(|value| value.to_str().ok())
+                    .unwrap_or_default()
+                    .to_string();
                 let path = request.uri().path().to_string();
                 let body = to_bytes(request.into_body(), 1024 * 1024).await.unwrap();
                 let body = serde_json::from_slice(&body).unwrap();
                 *captured.lock().unwrap() = Captured {
                     authorization,
                     account_id,
+                    originator,
+                    user_agent,
+                    version,
                     path,
                     body,
                 };
@@ -257,8 +281,11 @@ async fn managed_openai_account_forwards_responses_with_dynamic_oauth_credential
         .method("POST")
         .uri("/v1/responses")
         .header(axum::http::header::CONTENT_TYPE, "application/json")
+        .header(axum::http::header::USER_AGENT, "codex_cli_rs/0.21.0")
+        .header("originator", "codex_cli_rs")
+        .header("version", "0.21.0")
         .body(Body::from(
-            r#"{"model":"gpt-5-codex","input":"hello","temperature":0.5}"#,
+            r#"{"model":"gpt-5.6-sol","input":"hello","temperature":0.5}"#,
         ))
         .unwrap();
     let response = proxy::forward(
@@ -276,7 +303,11 @@ async fn managed_openai_account_forwards_responses_with_dynamic_oauth_credential
     let captured = captured.lock().unwrap().clone();
     assert_eq!(captured.authorization, "Bearer oauth-access-token");
     assert_eq!(captured.account_id, "chatgpt-account-1");
+    assert_eq!(captured.originator, "codex-tui");
+    assert_eq!(captured.version, "0.150.1");
+    assert!(captured.user_agent.starts_with("codex-tui/0.150.1 "));
     assert_eq!(captured.path, "/codex/responses");
+    assert_eq!(captured.body["model"], "gpt-5.6-sol");
     assert_eq!(captured.body["stream"], true);
     assert_eq!(captured.body["store"], false);
     assert!(captured.body.get("temperature").is_none());
