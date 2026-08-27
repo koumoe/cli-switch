@@ -119,7 +119,7 @@ pub(super) async fn refresh_openai_account_data_at(
                         state.db_path(),
                         account_id.clone(),
                         error.to_string(),
-                        false,
+                        None,
                     )
                     .await;
                     return Err(map_openai_quota_error(error));
@@ -131,7 +131,7 @@ pub(super) async fn refresh_openai_account_data_at(
                 state.db_path(),
                 account_id.clone(),
                 error.to_string(),
-                false,
+                None,
             )
             .await;
             return Err(map_openai_quota_error(error));

@@ -630,9 +630,13 @@ async fn refresh_persisted_account_if_current_at(
         .map(str::to_string);
     let Some(refresh_token) = refresh_token else {
         let error = anyhow::anyhow!("OpenAI refresh token is missing");
-        let _ =
-            storage::mark_openai_account_auth_failure(db_path, account_id, error.to_string(), true)
-                .await;
+        let _ = storage::mark_openai_account_auth_failure(
+            db_path,
+            account_id,
+            error.to_string(),
+            Some(true),
+        )
+        .await;
         return Err(error);
     };
     match refresh_tokens_at(client, token_url, &refresh_token).await {
@@ -667,7 +671,7 @@ async fn refresh_persisted_account_if_current_at(
                 db_path,
                 account_id,
                 message.clone(),
-                reauth_required,
+                reauth_required.then_some(true),
             )
             .await;
             Err(error)

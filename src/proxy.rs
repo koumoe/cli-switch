@@ -435,7 +435,7 @@ pub async fn forward_with_config(
                         db_path.clone(),
                         refreshed.id.clone(),
                         "OpenAI access token was rejected after refresh".to_string(),
-                        true,
+                        Some(true),
                     )
                     .await;
                 }

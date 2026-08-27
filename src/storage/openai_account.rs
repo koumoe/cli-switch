@@ -386,13 +386,13 @@ pub async fn mark_openai_account_auth_failure(
     db_path: PathBuf,
     account_id: String,
     message: String,
-    reauth_required: bool,
+    reauth_required: Option<bool>,
 ) -> anyhow::Result<()> {
     with_conn(db_path, move |conn| {
         let now = now_ms();
         let changed = conn.execute(
-            "UPDATE remote_accounts SET last_sync_error = ?2, reauth_required = ?3, last_synced_at_ms = ?4, updated_at_ms = ?4 WHERE provider = 'openai' AND id = ?1",
-            params![account_id, message, i64::from(reauth_required), now],
+            "UPDATE remote_accounts SET last_sync_error = ?2, reauth_required = COALESCE(?3, reauth_required), last_synced_at_ms = ?4, updated_at_ms = ?4 WHERE provider = 'openai' AND id = ?1",
+            params![account_id, message, reauth_required.map(i64::from), now],
         )?;
         if changed == 0 {
             return Err(StorageError::RemoteAccountNotFound { account_id }.into());
@@ -525,7 +525,7 @@ mod tests {
             db_path.clone(),
             created.id.clone(),
             "expired access token".to_string(),
-            true,
+            Some(true),
         )
         .await
         .unwrap();
@@ -533,6 +533,19 @@ mod tests {
             .await
             .unwrap();
         assert!(marked.reauth_required);
+
+        mark_openai_account_auth_failure(
+            db_path.clone(),
+            created.id.clone(),
+            "temporary usage failure".to_string(),
+            None,
+        )
+        .await
+        .unwrap();
+        let preserved = get_openai_account_without_secret(db_path.clone(), created.id.clone())
+            .await
+            .unwrap();
+        assert!(preserved.reauth_required);
 
         update_openai_account_quota(
             db_path.clone(),
