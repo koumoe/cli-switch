@@ -54,7 +54,8 @@ fn build_proxy_http_client() -> anyhow::Result<reqwest::Client> {
 
 fn build_openai_proxy_http_client() -> anyhow::Result<reqwest::Client> {
     // ChatGPT's Cloudflare edge can issue load-balancing cookies while
-    // establishing an API route. Keep them only for managed OpenAI accounts.
+    // establishing an API route. This is one shared host-scoped cookie jar for
+    // all managed OpenAI requests; cookies are routing state, not credentials.
     reqwest::Client::builder()
         .cookie_store(true)
         .no_gzip()

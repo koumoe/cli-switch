@@ -341,18 +341,22 @@ pub async fn forward_with_config(
                 continue;
             }
 
+            let retry_url = is_openai_oauth_channel.then(|| url.clone());
             let first_upstream = upstream_client
                 .request(method.clone(), url)
                 .headers(out_headers.clone())
                 .body(attempt_body.clone())
                 .send()
                 .await;
-            let upstream_result = if first_upstream.is_err() && is_openai_oauth_channel {
+            let should_retry_connection = first_upstream.as_ref().err().is_some_and(|error| {
+                is_openai_oauth_channel && should_retry_openai_connection(error)
+            });
+            let upstream_result = if should_retry_connection {
                 tokio::time::sleep(std::time::Duration::from_millis(100)).await;
                 upstream_client
                     .request(
                         method.clone(),
-                        crate::codex_upstream::responses_url(Some(&channel.base_url)),
+                        retry_url.expect("OpenAI retry URL is present"),
                     )
                     .headers(out_headers.clone())
                     .body(attempt_body.clone())
@@ -477,8 +481,10 @@ pub async fn forward_with_config(
                 let db_path = db_path.clone();
                 let account_id = account.id.clone();
                 tokio::spawn(async move {
-                    if let Err(error) =
-                        storage::update_openai_account_quota(db_path, account_id, quota).await
+                    if let Err(error) = storage::update_openai_account_quota_from_headers(
+                        db_path, account_id, quota,
+                    )
+                    .await
                     {
                         tracing::warn!(%error, "persist OpenAI quota headers failed");
                     }
@@ -561,6 +567,15 @@ pub async fn forward_with_config(
     }
 
     Err(last_err.unwrap_or_else(|| ProxyError::Upstream("all channels failed".to_string())))
+}
+
+fn should_retry_openai_connection(error: &reqwest::Error) -> bool {
+    !error.is_timeout()
+        && !error.is_builder()
+        && !error.is_body()
+        && !error.is_decode()
+        && !error.is_redirect()
+        && !error.is_status()
 }
 
 fn build_anthropic_count_tokens_response(input_tokens: i64) -> Response<Body> {

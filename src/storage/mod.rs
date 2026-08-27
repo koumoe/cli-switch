@@ -64,7 +64,8 @@ pub use openai_account::{
     get_openai_account_with_secret_optional, get_openai_account_without_secret,
     get_openai_account_without_secret_optional, list_openai_accounts,
     list_openai_accounts_with_secret, mark_openai_account_auth_failure, update_openai_account_name,
-    update_openai_account_quota, upsert_openai_account_tokens,
+    update_openai_account_quota, update_openai_account_quota_from_headers,
+    upsert_openai_account_tokens,
 };
 pub use pricing::{
     PricingModel, PricingStatus, UpsertPricingModel, pricing_status, search_pricing_models,

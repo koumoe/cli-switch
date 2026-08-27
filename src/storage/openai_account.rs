@@ -390,6 +390,52 @@ pub async fn update_openai_account_quota(
     .await
 }
 
+/// Persist quota values observed on a Responses response. These headers only
+/// contain the primary/secondary windows, so deliberately leave the complete
+/// usage snapshot (`quota_windows_json`) untouched.
+pub async fn update_openai_account_quota_from_headers(
+    db_path: PathBuf,
+    account_id: String,
+    quota: OpenAiQuotaSnapshot,
+) -> anyhow::Result<()> {
+    with_conn(db_path, move |conn| {
+        let synced_at = quota.synced_at_ms.unwrap_or_else(now_ms);
+        let changed = conn.execute(
+            r#"
+            UPDATE remote_accounts SET
+              primary_quota_used_percent = COALESCE(?2, primary_quota_used_percent),
+              primary_quota_window_minutes = COALESCE(?3, primary_quota_window_minutes),
+              primary_quota_resets_at_ms = COALESCE(?4, primary_quota_resets_at_ms),
+              secondary_quota_used_percent = COALESCE(?5, secondary_quota_used_percent),
+              secondary_quota_window_minutes = COALESCE(?6, secondary_quota_window_minutes),
+              secondary_quota_resets_at_ms = COALESCE(?7, secondary_quota_resets_at_ms),
+              last_synced_at_ms = ?8, last_sync_error = NULL, reauth_required = 0,
+              updated_at_ms = ?9
+            WHERE provider = 'openai' AND id = ?1
+            "#,
+            params![
+                account_id,
+                quota.primary.as_ref().map(|value| value.used_percent),
+                quota.primary.as_ref().map(|value| value.window_minutes),
+                quota.primary.as_ref().and_then(|value| value.resets_at_ms),
+                quota.secondary.as_ref().map(|value| value.used_percent),
+                quota.secondary.as_ref().map(|value| value.window_minutes),
+                quota
+                    .secondary
+                    .as_ref()
+                    .and_then(|value| value.resets_at_ms),
+                synced_at,
+                now_ms(),
+            ],
+        )?;
+        if changed == 0 {
+            return Err(StorageError::RemoteAccountNotFound { account_id }.into());
+        }
+        Ok(())
+    })
+    .await
+}
+
 pub async fn mark_openai_account_auth_failure(
     db_path: PathBuf,
     account_id: String,
@@ -584,6 +630,27 @@ mod tests {
         assert!(!recovered.reauth_required);
         assert_eq!(recovered.last_sync_error, None);
         assert_eq!(recovered.quota.primary.unwrap().used_percent, 12.0);
+        update_openai_account_quota_from_headers(
+            db_path.clone(),
+            recovered.id.clone(),
+            OpenAiQuotaSnapshot {
+                primary: Some(OpenAiQuotaWindow {
+                    used_percent: 18.0,
+                    window_minutes: 300,
+                    resets_at_ms: None,
+                }),
+                secondary: None,
+                additional: Vec::new(),
+                synced_at_ms: Some(1_800_000_100_000),
+            },
+        )
+        .await
+        .unwrap();
+        let after_headers = get_openai_account_without_secret(db_path.clone(), recovered.id)
+            .await
+            .unwrap();
+        assert_eq!(after_headers.quota.primary.unwrap().used_percent, 18.0);
+        assert_eq!(after_headers.quota.additional.len(), 1);
         let _ = std::fs::remove_file(db_path);
     }
 
