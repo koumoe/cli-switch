@@ -276,14 +276,15 @@
     "title": "Account Management",
     "new": "New Account",
     "providers": {
+      "auto": "Auto-detect",
       "newapi": "newapi",
       "sub2api": "sub2api",
       "openai": "OpenAI"
     },
     "table": {
-      "account": "Account",
+      "name": "Name",
       "provider": "Provider",
-      "quota": "Quota / Balance",
+      "quota": "Quota",
       "checkin": "Check-in",
       "reauthRequired": "Session expired. Sign in again.",
       "empty": "No accounts yet. Click 'New Account' to add one."
@@ -295,7 +296,6 @@
       "done": "Checked in",
       "todo": "Not checked in",
       "none": "No check-in",
-      "unsupported": "Not supported",
       "dialog": {
         "title": "Check-in Confirmation",
         "description": "Opened the check-in page for {{name}}. Is check-in completed?",
@@ -319,8 +319,7 @@
       "description": "Choose an account provider and complete its login or authentication flow.",
       "provider": "Account provider",
       "providerHints": {
-        "newapi": "Panel account",
-        "sub2api": "Subscription account",
+        "auto": "Detect panel or subscription account",
         "openai": "Native account"
       },
       "steps": {

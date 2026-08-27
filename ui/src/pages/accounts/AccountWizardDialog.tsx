@@ -341,22 +341,25 @@ export function AccountWizardDialog({
                   <div className="space-y-4">
                     <div className="space-y-2">
                       <div className="text-sm font-medium">{t("accounts.wizard.provider")}</div>
-                      <div className="grid grid-cols-3 gap-2">
-                        {(["newapi", "sub2api", "openai"] as const).map((item) => (
-                          <Button
-                            key={item}
-                            type="button"
-                            variant={provider === item ? "default" : "outline"}
-                            className="h-auto min-h-16 flex-col gap-1"
-                            onClick={() => selectProvider(item)}
-                            disabled={oauthStatus !== "idle"}
-                          >
-                            <span>{t(`accounts.providers.${item}`)}</span>
-                            <span className="text-xs font-normal opacity-80">
-                              {t(`accounts.wizard.providerHints.${item}`)}
-                            </span>
-                          </Button>
-                        ))}
+                      <div className="grid grid-cols-2 gap-2">
+                        {(["auto", "openai"] as const).map((item) => {
+                          const isOpenAi = item === "openai";
+                          return (
+                            <Button
+                              key={item}
+                              type="button"
+                              variant={(isOpenAi ? provider === "openai" : provider !== "openai") ? "default" : "outline"}
+                              className="h-auto min-h-16 flex-col gap-1"
+                              onClick={() => selectProvider(isOpenAi ? "openai" : "newapi")}
+                              disabled={oauthStatus !== "idle"}
+                            >
+                              <span>{t(isOpenAi ? "accounts.providers.openai" : "accounts.providers.auto")}</span>
+                              <span className="text-xs font-normal opacity-80">
+                                {t(isOpenAi ? "accounts.wizard.providerHints.openai" : "accounts.wizard.providerHints.auto")}
+                              </span>
+                            </Button>
+                          );
+                        })}
                       </div>
                     </div>
             <FormField

@@ -51,7 +51,7 @@ const openAiAccount: OpenAiRemoteAccount = {
 };
 
 describe("AccountsTable OpenAI accounts", () => {
-  it("shows native identity, quota windows, and unsupported check-in", () => {
+  it("shows native identity, quota windows, and no check-in", () => {
     const noop = vi.fn();
     renderWithProviders(
       <AccountsTable
@@ -76,9 +76,10 @@ describe("AccountsTable OpenAI accounts", () => {
       />,
     );
 
-    expect(screen.getAllByText("codex@example.com").length).toBeGreaterThan(0);
+    expect(screen.getByText("Personal OpenAI")).toBeInTheDocument();
+    expect(screen.getByText("https://chatgpt.com")).toBeInTheDocument();
     expect(screen.getByText("周限额 43%")).toBeInTheDocument();
     expect(screen.getByText("5 小时限额 18%")).toBeInTheDocument();
-    expect(screen.getByText("不支持签到")).toBeInTheDocument();
+    expect(screen.getByText("无签到")).toBeInTheDocument();
   });
 });

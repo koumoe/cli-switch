@@ -276,14 +276,15 @@
     "title": "账号管理",
     "new": "新增账号",
     "providers": {
+      "auto": "自动探测",
       "newapi": "newapi",
       "sub2api": "sub2api",
       "openai": "OpenAI"
     },
     "table": {
-      "account": "账号",
+      "name": "名称",
       "provider": "账号体系",
-      "quota": "额度 / 余额",
+      "quota": "额度",
       "checkin": "签到",
       "reauthRequired": "登录状态已失效，请重新登录",
       "empty": "暂无账号，点击「新增账号」添加"
@@ -295,7 +296,6 @@
       "done": "已签到",
       "todo": "未签到",
       "none": "无签到",
-      "unsupported": "不支持签到",
       "dialog": {
         "title": "签到确认",
         "description": "已打开 {{name}} 的签到页面，是否已完成签到？",
@@ -319,8 +319,7 @@
       "description": "选择账号类型并完成对应的登录或认证配置",
       "provider": "账号类型",
       "providerHints": {
-        "newapi": "面板账号",
-        "sub2api": "订阅账号",
+        "auto": "自动识别面板或订阅账号",
         "openai": "原生账号"
       },
       "steps": {
