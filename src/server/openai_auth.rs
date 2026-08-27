@@ -396,7 +396,8 @@ async fn callback(Query(query): Query<OAuthCallbackQuery>) -> Response {
             if let Ok(secret) =
                 storage::get_openai_account_with_secret(session.db_path.clone(), account.id.clone())
                     .await
-                && let Ok(quota) = crate::openai_quota::fetch(&session.http_client, &secret).await
+                && let Ok(quota) =
+                    crate::openai_quota::fetch(&session.http_client, &secret, None).await
             {
                 let _ = storage::update_openai_account_quota(
                     session.db_path.clone(),

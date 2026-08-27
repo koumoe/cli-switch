@@ -4,7 +4,7 @@ use serde::Deserialize;
 
 use crate::storage::{OpenAiAccount, OpenAiQuotaSnapshot, OpenAiQuotaWindow};
 
-const USAGE_URL: &str = "https://chatgpt.com/backend-api/wham/usage";
+pub(crate) const USAGE_URL: &str = "https://chatgpt.com/backend-api/wham/usage";
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum OpenAiQuotaError {
@@ -61,18 +61,12 @@ fn window(value: UsageWindow, now_ms: i64) -> OpenAiQuotaWindow {
     }
 }
 
-pub async fn fetch(
+pub(crate) async fn fetch(
     client: &reqwest::Client,
     account: &OpenAiAccount,
+    usage_url: Option<&str>,
 ) -> Result<OpenAiQuotaSnapshot, OpenAiQuotaError> {
-    fetch_at(client, account, USAGE_URL).await
-}
-
-pub(crate) async fn fetch_at(
-    client: &reqwest::Client,
-    account: &OpenAiAccount,
-    usage_url: &str,
-) -> Result<OpenAiQuotaSnapshot, OpenAiQuotaError> {
+    let usage_url = usage_url.unwrap_or(USAGE_URL);
     let access_token = account
         .access_token
         .as_deref()
@@ -204,10 +198,10 @@ mod tests {
             let _ = axum::serve(listener, app).await;
         });
 
-        let error = fetch_at(
+        let error = fetch(
             &reqwest::Client::new(),
             &account(Some("expired")),
-            &format!("http://{address}/usage"),
+            Some(&format!("http://{address}/usage")),
         )
         .await
         .unwrap_err();
@@ -239,10 +233,10 @@ mod tests {
             let _ = axum::serve(listener, app).await;
         });
 
-        let quota = fetch_at(
+        let quota = fetch(
             &reqwest::Client::new(),
             &account(Some("valid")),
-            &format!("http://{address}/usage"),
+            Some(&format!("http://{address}/usage")),
         )
         .await
         .unwrap();

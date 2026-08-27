@@ -68,6 +68,9 @@ fn map_openai_storage_error(err: anyhow::Error) -> ApiError {
 }
 
 fn map_openai_refresh_error(err: anyhow::Error) -> ApiError {
+    if err.downcast_ref::<storage::StorageError>().is_some() {
+        return map_openai_storage_error(err);
+    }
     if let Some(message) = openai_auth::relogin_required_message(&err) {
         return ApiError::bad_gateway("openai_relogin_required", message);
     }
@@ -91,19 +94,6 @@ pub(super) async fn refresh_openai_account_data(
     refresh_openai_account_data_at(state, account_id, None).await
 }
 
-async fn fetch_quota(
-    state: &AppState,
-    account: &storage::OpenAiAccount,
-    usage_url: Option<&str>,
-) -> Result<storage::OpenAiQuotaSnapshot, crate::openai_quota::OpenAiQuotaError> {
-    match usage_url {
-        Some(usage_url) => {
-            crate::openai_quota::fetch_at(&state.http_client, account, usage_url).await
-        }
-        None => crate::openai_quota::fetch(&state.http_client, account).await,
-    }
-}
-
 pub(super) async fn refresh_openai_account_data_at(
     state: &AppState,
     account_id: String,
@@ -112,7 +102,7 @@ pub(super) async fn refresh_openai_account_data_at(
     let mut account = storage::get_openai_account_with_secret(state.db_path(), account_id.clone())
         .await
         .map_err(map_openai_storage_error)?;
-    let quota = match fetch_quota(state, &account, usage_url).await {
+    let quota = match crate::openai_quota::fetch(&state.http_client, &account, usage_url).await {
         Ok(quota) => quota,
         Err(error) if error.is_auth_failure() => {
             account = openai_auth::refresh_persisted_account(
@@ -122,15 +112,14 @@ pub(super) async fn refresh_openai_account_data_at(
             )
             .await
             .map_err(map_openai_refresh_error)?;
-            match fetch_quota(state, &account, usage_url).await {
+            match crate::openai_quota::fetch(&state.http_client, &account, usage_url).await {
                 Ok(quota) => quota,
                 Err(error) => {
-                    let reauth_required = error.is_auth_failure();
                     let _ = storage::mark_openai_account_auth_failure(
                         state.db_path(),
                         account_id.clone(),
                         error.to_string(),
-                        reauth_required,
+                        false,
                     )
                     .await;
                     return Err(map_openai_quota_error(error));
@@ -176,5 +165,15 @@ mod tests {
             .expect("read error body");
         let payload: serde_json::Value = serde_json::from_slice(&body).expect("parse error body");
         assert_eq!(payload["code"], "openai_refresh_failed");
+    }
+
+    #[test]
+    fn preserves_storage_errors_when_mapping_refresh_failures() {
+        let error = anyhow::Error::new(storage::StorageError::RemoteAccountNotFound {
+            account_id: "missing-account".to_string(),
+        });
+        let response = map_openai_refresh_error(error).into_response();
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
     }
 }
