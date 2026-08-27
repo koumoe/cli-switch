@@ -707,6 +707,14 @@ impl From<storage::OpenAiAccount> for RemoteAccountResponse {
                 resets_at_ms: window.resets_at_ms,
             });
         }
+        quota_windows.extend(account.quota.additional.into_iter().map(|window| {
+            OpenAiQuotaWindowResponse {
+                kind: "additional",
+                used_percent: window.used_percent,
+                window_minutes: window.window_minutes,
+                resets_at_ms: window.resets_at_ms,
+            }
+        }));
         let common = RemoteAccountCommonResponse {
             id: account.id,
             name: account.name,

@@ -448,7 +448,7 @@
       "days": "{{count}}-day quota",
       "hours": "{{count}}-hour quota",
       "window": "Quota",
-      "resetAt": "resets {{time}}",
+      "resetAt": "resets at {{time}}",
       "unavailable": "Unavailable"
     }
   },

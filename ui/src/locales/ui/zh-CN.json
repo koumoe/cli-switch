@@ -445,10 +445,10 @@
     },
     "quota": {
       "weekly": "周限额",
-      "days": "{{count}} 天限额",
-      "hours": "{{count}} 小时限额",
+      "days": "{{count}}日限额",
+      "hours": "{{count}}小时限额",
       "window": "限额",
-      "resetAt": "{{time}} 重置",
+      "resetAt": "重置时间：{{time}}",
       "unavailable": "暂不可用"
     }
   },

@@ -18,6 +18,8 @@ pub struct OpenAiQuotaWindow {
 pub struct OpenAiQuotaSnapshot {
     pub primary: Option<OpenAiQuotaWindow>,
     pub secondary: Option<OpenAiQuotaWindow>,
+    #[serde(default)]
+    pub additional: Vec<OpenAiQuotaWindow>,
     pub synced_at_ms: Option<i64>,
 }
 
@@ -67,7 +69,7 @@ const SELECT_COLUMNS: &str = r#"
     last_refresh_at_ms, primary_quota_used_percent, primary_quota_window_minutes,
     primary_quota_resets_at_ms, secondary_quota_used_percent,
     secondary_quota_window_minutes, secondary_quota_resets_at_ms,
-    last_sync_error, reauth_required, last_synced_at_ms, sort_order,
+    quota_windows_json, last_sync_error, reauth_required, last_synced_at_ms, sort_order,
     created_at_ms, updated_at_ms
 "#;
 
@@ -97,6 +99,10 @@ fn from_row(row: &rusqlite::Row<'_>, include_secret: bool) -> rusqlite::Result<O
     let primary_window: Option<i64> = row.get(13)?;
     let secondary_used: Option<f64> = row.get(15)?;
     let secondary_window: Option<i64> = row.get(16)?;
+    let additional: Vec<OpenAiQuotaWindow> = row
+        .get::<_, Option<String>>(18)?
+        .and_then(|value| serde_json::from_str(&value).ok())
+        .unwrap_or_default();
     Ok(OpenAiAccount {
         id: row.get(0)?,
         name: row.get(1)?,
@@ -133,14 +139,15 @@ fn from_row(row: &rusqlite::Row<'_>, include_secret: bool) -> rusqlite::Result<O
                     resets_at_ms: row.get(17).ok().flatten(),
                 },
             ),
-            synced_at_ms: row.get(20)?,
+            additional,
+            synced_at_ms: row.get(21)?,
         },
-        last_sync_error: row.get(18)?,
-        reauth_required: row.get::<_, i64>(19)? != 0,
-        last_synced_at_ms: row.get(20)?,
-        sort_order: row.get(21)?,
-        created_at_ms: row.get(22)?,
-        updated_at_ms: row.get(23)?,
+        last_sync_error: row.get(19)?,
+        reauth_required: row.get::<_, i64>(20)? != 0,
+        last_synced_at_ms: row.get(21)?,
+        sort_order: row.get(22)?,
+        created_at_ms: row.get(23)?,
+        updated_at_ms: row.get(24)?,
     })
 }
 
@@ -355,8 +362,8 @@ pub async fn update_openai_account_quota(
               primary_quota_used_percent = ?2, primary_quota_window_minutes = ?3,
               primary_quota_resets_at_ms = ?4, secondary_quota_used_percent = ?5,
               secondary_quota_window_minutes = ?6, secondary_quota_resets_at_ms = ?7,
-              last_synced_at_ms = ?8, last_sync_error = NULL, reauth_required = 0,
-              updated_at_ms = ?9
+              quota_windows_json = ?8, last_synced_at_ms = ?9,
+              last_sync_error = NULL, reauth_required = 0, updated_at_ms = ?10
             WHERE provider = 'openai' AND id = ?1
             "#,
             params![
@@ -370,6 +377,7 @@ pub async fn update_openai_account_quota(
                     .secondary
                     .as_ref()
                     .and_then(|value| value.resets_at_ms),
+                serde_json::to_string(&quota.additional).unwrap_or_else(|_| "[]".to_string()),
                 synced_at,
                 now_ms(),
             ],
@@ -557,6 +565,11 @@ mod tests {
                     resets_at_ms: None,
                 }),
                 secondary: None,
+                additional: vec![OpenAiQuotaWindow {
+                    used_percent: 9.0,
+                    window_minutes: 43_200,
+                    resets_at_ms: Some(1_800_086_400_000),
+                }],
                 synced_at_ms: Some(1_800_000_000_000),
             },
         )
@@ -566,6 +579,8 @@ mod tests {
         let recovered = get_openai_account_without_secret(db_path.clone(), created.id)
             .await
             .unwrap();
+        assert_eq!(recovered.quota.additional.len(), 1);
+        assert_eq!(recovered.quota.additional[0].window_minutes, 43_200);
         assert!(!recovered.reauth_required);
         assert_eq!(recovered.last_sync_error, None);
         assert_eq!(recovered.quota.primary.unwrap().used_percent, 12.0);

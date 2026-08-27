@@ -33,13 +33,13 @@ function quotaWindowLabel(
   windowMinutes: number,
   t: (key: string, vars?: Record<string, string | number>) => string,
 ): string {
-  if (kind === "weekly" || windowMinutes === 10_080) return t("accounts.quota.weekly");
   if (windowMinutes > 0 && windowMinutes % 1_440 === 0) {
     return t("accounts.quota.days", { count: windowMinutes / 1_440 });
   }
   if (windowMinutes > 0 && windowMinutes % 60 === 0) {
     return t("accounts.quota.hours", { count: windowMinutes / 60 });
   }
+  if (kind === "weekly") return t("accounts.quota.weekly");
   return kind || t("accounts.quota.window");
 }
 
@@ -196,15 +196,11 @@ export function AccountsTable({
             }).format(new Date(window.resets_at_ms));
             return t("accounts.quota.resetAt", { time: reset });
           };
-          const shortestReset = renderReset(shortestWindow);
           return (
             <Tooltip>
               <TooltipTrigger asChild>
                 <div className="inline-flex cursor-help whitespace-nowrap text-sm">
                   <span className="font-medium">{Math.round(shortestWindow.used_percent)}%</span>
-                  {shortestReset ? (
-                    <span className="text-muted-foreground"> · {shortestReset}</span>
-                  ) : null}
                 </div>
               </TooltipTrigger>
               <TooltipContent className="space-y-1.5 px-3 py-2">
