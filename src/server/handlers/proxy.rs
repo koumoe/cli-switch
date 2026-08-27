@@ -13,6 +13,7 @@ pub(in crate::server) async fn proxy_openai(
 ) -> Result<axum::response::Response, ApiError> {
     proxy::forward_with_config(
         &state.proxy_http_client,
+        Some(&state.openai_proxy_http_client),
         state.db_path(),
         storage::Protocol::Openai,
         "/v1",
@@ -33,6 +34,7 @@ pub(in crate::server) async fn proxy_anthropic(
 ) -> Result<axum::response::Response, ApiError> {
     proxy::forward_with_config(
         &state.proxy_http_client,
+        None,
         state.db_path(),
         storage::Protocol::Anthropic,
         "/v1",
@@ -53,6 +55,7 @@ pub(in crate::server) async fn proxy_gemini(
 ) -> Result<axum::response::Response, ApiError> {
     proxy::forward_with_config(
         &state.proxy_http_client,
+        None,
         state.db_path(),
         storage::Protocol::Gemini,
         "/v1beta",

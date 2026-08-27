@@ -201,6 +201,10 @@ async fn managed_openai_account_forwards_responses_with_dynamic_oauth_credential
         .unwrap();
     let addr = listener.local_addr().unwrap();
     tokio::spawn(async move {
+        // Simulate the transient connection reset seen at the ChatGPT edge.
+        if let Ok((stream, _)) = listener.accept().await {
+            drop(stream);
+        }
         let _ = axum::serve(listener, app).await;
     });
 

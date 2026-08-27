@@ -15,6 +15,7 @@ pub struct AppState {
     pub db_path: Arc<PathBuf>,
     pub http_client: reqwest::Client,
     pub proxy_http_client: reqwest::Client,
+    pub openai_proxy_http_client: reqwest::Client,
     pub settings_notify: watch::Sender<u64>,
     pub settings_cache: watch::Sender<Arc<storage::AppSettings>>,
     pub settings_cache_rx: watch::Receiver<Arc<storage::AppSettings>>,

@@ -2264,6 +2264,7 @@ mod tests {
             db_path: Arc::new(db_path),
             http_client: reqwest::Client::new(),
             proxy_http_client: reqwest::Client::new(),
+            openai_proxy_http_client: reqwest::Client::new(),
             settings_notify,
             settings_cache,
             settings_cache_rx,

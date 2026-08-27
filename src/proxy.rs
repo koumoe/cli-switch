@@ -93,6 +93,7 @@ pub async fn forward(
 
     forward_with_config(
         client,
+        None,
         db_path,
         protocol,
         protocol_root,
@@ -108,6 +109,7 @@ pub async fn forward(
 
 pub async fn forward_with_config(
     client: &reqwest::Client,
+    openai_oauth_client: Option<&reqwest::Client>,
     db_path: std::path::PathBuf,
     protocol: Protocol,
     protocol_root: &'static str,
@@ -194,6 +196,11 @@ pub async fn forward_with_config(
 
             let is_openai_oauth_channel =
                 channel.managed_provider() == Some(storage::ManagedRemoteProvider::Openai);
+            let upstream_client = if is_openai_oauth_channel {
+                openai_oauth_client.unwrap_or(client)
+            } else {
+                client
+            };
             let mut attempt_body = body_bytes.clone();
             let mut openai_account = None;
             if is_openai_oauth_channel {
@@ -329,13 +336,27 @@ pub async fn forward_with_config(
                 continue;
             }
 
-            let mut upstream = match client
+            let first_upstream = upstream_client
                 .request(method.clone(), url)
-                .headers(out_headers)
+                .headers(out_headers.clone())
                 .body(attempt_body.clone())
                 .send()
-                .await
-            {
+                .await;
+            let upstream_result = if first_upstream.is_err() && is_openai_oauth_channel {
+                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                upstream_client
+                    .request(
+                        method.clone(),
+                        crate::codex_upstream::responses_url(Some(&channel.base_url)),
+                    )
+                    .headers(out_headers.clone())
+                    .body(attempt_body.clone())
+                    .send()
+                    .await
+            } else {
+                first_upstream
+            };
+            let mut upstream = match upstream_result {
                 Ok(r) => r,
                 Err(e) => {
                     let auto_disabled = if !is_count_tokens {
@@ -414,7 +435,7 @@ pub async fn forward_with_config(
                     last_err = Some(ProxyError::Upstream(error.to_string()));
                     continue 'channel_loop;
                 }
-                upstream = match client
+                upstream = match upstream_client
                     .request(
                         method.clone(),
                         crate::codex_upstream::responses_url(Some(&channel.base_url)),
