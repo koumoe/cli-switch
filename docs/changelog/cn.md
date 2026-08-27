@@ -1,3 +1,12 @@
+## [0.64.0](https://github.com/koumoe/cli-switch/compare/v0.63.0...v0.64.0) (2026-08-27)
+
+### 功能
+* 合并远端账号体系选择 ([3a3dca2](https://github.com/koumoe/cli-switch/commit/3a3dca29a1f971fadbbece50dc720c3d4a411b4e))
+* 优化账号命名与额度显示 ([afa4a3b](https://github.com/koumoe/cli-switch/commit/afa4a3b7341626be4eb9e2d21a428c1287ec8ad6))
+
+### 修复
+* 修正账号界面语义与测试 ([2e136a9](https://github.com/koumoe/cli-switch/commit/2e136a98a3415f1eddbe5d1561ca44cb6f8441ef))
+* 删除未使用的签到文案 ([e332e6f](https://github.com/koumoe/cli-switch/commit/e332e6f5f2cd5232e0ee8b902b6f785b83994e5a))
 ## [0.63.0](https://github.com/koumoe/cli-switch/compare/v0.62.1...v0.63.0) (2026-08-26)
 
 ### 功能
