@@ -1,3 +1,11 @@
+## [0.64.1](https://github.com/koumoe/cli-switch/compare/v0.64.0...v0.64.1) (2026-08-27)
+
+### 修复
+* 修复限额成功后清除登录标记 ([037e226](https://github.com/koumoe/cli-switch/commit/037e226dd7d6bdca164b0939a7166182181c03e9))
+* 修复临时失败时保留 OpenAI 登录标记 ([e167d49](https://github.com/koumoe/cli-switch/commit/e167d494bfcb54528f0519b6e4929ea01b99212b))
+* 优化 OpenAI 刷新错误处理 ([709a04b](https://github.com/koumoe/cli-switch/commit/709a04b6ec4caaea38158b62b15e4d83202d9e2c))
+* 修复 OpenAI 账号刷新逻辑 ([3423140](https://github.com/koumoe/cli-switch/commit/3423140e76103ee0a9bcd671a96bc81a8b7cce83))
+* 修正账号与渠道名称展示 ([aa834aa](https://github.com/koumoe/cli-switch/commit/aa834aa3ce5cb1e877e2846d2b762cde214438d5))
 ## [0.64.0](https://github.com/koumoe/cli-switch/compare/v0.63.0...v0.64.0) (2026-08-27)
 
 ### 功能
