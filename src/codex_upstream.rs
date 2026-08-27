@@ -10,11 +10,7 @@ pub const DEFAULT_ORIGINATOR: &str = "codex-tui";
 pub const DEFAULT_USER_AGENT: &str =
     "codex-tui/0.150.1 (Mac OS 26.5.0; arm64) iTerm.app/3.6.10 (codex-tui; 0.150.1)";
 pub const MIN_SUPPORTED_VERSION: &str = "0.144.0";
-pub const RESPONSES_LITE_HEADER: &str = "x-openai-internal-codex-responses-lite";
-const RESPONSES_LITE_METADATA_PATH: [&str; 2] = [
-    "client_metadata",
-    "ws_request_header_x_openai_internal_codex_responses_lite",
-];
+const RESPONSES_LITE_HEADER: &str = "x-openai-internal-codex-responses-lite";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CodexClientIdentity {
@@ -64,20 +60,6 @@ pub fn is_responses_lite(headers: &HeaderMap) -> bool {
         .get(RESPONSES_LITE_HEADER)
         .and_then(|value| value.to_str().ok())
         .is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
-}
-
-fn body_indicates_responses_lite(value: &Value) -> bool {
-    let Some(value) = value
-        .get(RESPONSES_LITE_METADATA_PATH[0])
-        .and_then(|value| value.get(RESPONSES_LITE_METADATA_PATH[1]))
-    else {
-        return false;
-    };
-
-    value.as_bool().unwrap_or(false)
-        || value
-            .as_str()
-            .is_some_and(|value| value.trim().eq_ignore_ascii_case("true"))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -142,7 +124,6 @@ pub fn normalize_responses_body(
     responses_lite: bool,
 ) -> anyhow::Result<Vec<u8>> {
     let mut value: Value = serde_json::from_slice(body)?;
-    let responses_lite = responses_lite || body_indicates_responses_lite(&value);
     let object = value
         .as_object_mut()
         .ok_or_else(|| anyhow::anyhow!("Codex Responses 请求体必须是 JSON 对象"))?;
@@ -152,10 +133,13 @@ pub fn normalize_responses_body(
     }
     object.insert("stream".to_string(), Value::Bool(true));
     object.insert("store".to_string(), Value::Bool(false));
-    object.insert(
-        "parallel_tool_calls".to_string(),
-        Value::Bool(!responses_lite),
-    );
+    if responses_lite {
+        object.insert("parallel_tool_calls".to_string(), Value::Bool(false));
+    } else {
+        object
+            .entry("parallel_tool_calls".to_string())
+            .or_insert(Value::Bool(true));
+    }
     object.insert(
         "include".to_string(),
         json!(["reasoning.encrypted_content"]),
@@ -249,6 +233,9 @@ mod tests {
 
         headers.insert(RESPONSES_LITE_HEADER, HeaderValue::from_static("false"));
         assert!(!is_responses_lite(&headers));
+
+        headers.insert(RESPONSES_LITE_HEADER, HeaderValue::from_static("1"));
+        assert!(!is_responses_lite(&headers));
     }
 
     #[test]
@@ -272,6 +259,19 @@ mod tests {
     }
 
     #[test]
+    fn preserves_disabled_parallel_tool_calls_for_non_lite_requests() {
+        let normalized = normalize_responses_body(
+            br#"{"input":"hello","parallel_tool_calls":false}"#,
+            None,
+            false,
+        )
+        .unwrap();
+        let value: Value = serde_json::from_slice(&normalized).unwrap();
+
+        assert_eq!(value["parallel_tool_calls"], false);
+    }
+
+    #[test]
     fn pins_parallel_tool_calls_to_false_for_responses_lite() {
         for body in [
             br#"{"input":"hello"}"#.as_slice(),
@@ -283,26 +283,5 @@ mod tests {
             let value: Value = serde_json::from_slice(&normalized).unwrap();
             assert_eq!(value["parallel_tool_calls"], false);
         }
-    }
-
-    #[test]
-    fn detects_responses_lite_from_websocket_metadata() {
-        for marker in ["true", r#""true""#] {
-            let body = format!(
-                r#"{{"input":"hello","parallel_tool_calls":true,"client_metadata":{{"ws_request_header_x_openai_internal_codex_responses_lite":{marker}}}}}"#
-            );
-            let normalized = normalize_responses_body(body.as_bytes(), None, false).unwrap();
-            let value: Value = serde_json::from_slice(&normalized).unwrap();
-            assert_eq!(value["parallel_tool_calls"], false);
-        }
-
-        let normalized = normalize_responses_body(
-            br#"{"input":"hello","client_metadata":{"ws_request_header_x_openai_internal_codex_responses_lite":false}}"#,
-            None,
-            false,
-        )
-        .unwrap();
-        let value: Value = serde_json::from_slice(&normalized).unwrap();
-        assert_eq!(value["parallel_tool_calls"], true);
     }
 }
