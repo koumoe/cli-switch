@@ -154,11 +154,12 @@ async fn managed_openai_account_forwards_responses_with_dynamic_oauth_credential
         originator: String,
         user_agent: String,
         version: String,
+        responses_lite: String,
         path: String,
         body: serde_json::Value,
     }
 
-    let captured = Arc::new(Mutex::new(Captured::default()));
+    let captured = Arc::new(Mutex::new(Vec::<Captured>::new()));
     let captured_handler = captured.clone();
     let app = Router::new().route(
         "/codex/responses",
@@ -195,18 +196,25 @@ async fn managed_openai_account_forwards_responses_with_dynamic_oauth_credential
                     .and_then(|value| value.to_str().ok())
                     .unwrap_or_default()
                     .to_string();
+                let responses_lite = request
+                    .headers()
+                    .get("X-OpenAI-Internal-Codex-Responses-Lite")
+                    .and_then(|value| value.to_str().ok())
+                    .unwrap_or_default()
+                    .to_string();
                 let path = request.uri().path().to_string();
                 let body = to_bytes(request.into_body(), 1024 * 1024).await.unwrap();
                 let body = serde_json::from_slice(&body).unwrap();
-                *captured.lock().unwrap() = Captured {
+                captured.lock().unwrap().push(Captured {
                     authorization,
                     account_id,
                     originator,
                     user_agent,
                     version,
+                    responses_lite,
                     path,
                     body,
-                };
+                });
                 let mut headers = axum::http::HeaderMap::new();
                 headers.insert(axum::http::header::CONTENT_TYPE, "text/event-stream".parse().unwrap());
                 headers.insert("x-codex-primary-used-percent", "42".parse().unwrap());
@@ -277,49 +285,62 @@ async fn managed_openai_account_forwards_responses_with_dynamic_oauth_credential
     .await
     .unwrap();
 
-    let request = Request::builder()
-        .method("POST")
-        .uri("/v1/responses")
-        .header(axum::http::header::CONTENT_TYPE, "application/json")
-        .header(axum::http::header::USER_AGENT, "codex_cli_rs/0.21.0")
-        .header("originator", "codex_cli_rs")
-        .header("version", "0.21.0")
-        .body(Body::from(
-            r#"{"model":"gpt-5.6-sol","input":"hello","temperature":0.5}"#,
-        ))
-        .unwrap();
     let settings = Arc::new(storage::get_app_settings(db_path.clone()).await.unwrap());
     let channels = Arc::new(storage::list_channels(db_path.clone()).await.unwrap());
-    let response = proxy::forward_with_config(
-        &reqwest::Client::new(),
-        None,
-        db_path.clone(),
-        storage::Protocol::Openai,
-        "/v1",
-        request,
-        proxy::ProxyConfigSnapshot {
-            settings,
-            channels,
-            channels_cache: None,
-            codex_identity: Arc::new(proxy::CodexClientIdentity::for_version(Some("0.149.1"))),
-        },
-    )
-    .await
-    .unwrap();
-    assert_eq!(response.status(), StatusCode::OK);
-    let _ = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
+    for responses_lite in [false, true] {
+        let mut request = Request::builder()
+            .method("POST")
+            .uri("/v1/responses")
+            .header(axum::http::header::CONTENT_TYPE, "application/json")
+            .header(axum::http::header::USER_AGENT, "codex_cli_rs/0.21.0")
+            .header("originator", "codex_cli_rs")
+            .header("version", "0.21.0");
+        if responses_lite {
+            request = request.header("X-OpenAI-Internal-Codex-Responses-Lite", "true");
+        }
+        let request = request
+            .body(Body::from(
+                r#"{"model":"gpt-5.6-sol","input":"hello","parallel_tool_calls":true,"temperature":0.5}"#,
+            ))
+            .unwrap();
+        let response = proxy::forward_with_config(
+            &reqwest::Client::new(),
+            None,
+            db_path.clone(),
+            storage::Protocol::Openai,
+            "/v1",
+            request,
+            proxy::ProxyConfigSnapshot {
+                settings: settings.clone(),
+                channels: channels.clone(),
+                channels_cache: None,
+                codex_identity: Arc::new(proxy::CodexClientIdentity::for_version(Some("0.149.1"))),
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let _ = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
+    }
 
     let captured = captured.lock().unwrap().clone();
-    assert_eq!(captured.authorization, "Bearer oauth-access-token");
-    assert_eq!(captured.account_id, "chatgpt-account-1");
-    assert_eq!(captured.originator, "codex-tui");
-    assert_eq!(captured.version, "0.149.1");
-    assert!(captured.user_agent.starts_with("codex-tui/0.149.1 "));
-    assert_eq!(captured.path, "/codex/responses");
-    assert_eq!(captured.body["model"], "gpt-5.6-sol");
-    assert_eq!(captured.body["stream"], true);
-    assert_eq!(captured.body["store"], false);
-    assert!(captured.body.get("temperature").is_none());
+    assert_eq!(captured.len(), 2);
+    for request in &captured {
+        assert_eq!(request.authorization, "Bearer oauth-access-token");
+        assert_eq!(request.account_id, "chatgpt-account-1");
+        assert_eq!(request.originator, "codex-tui");
+        assert_eq!(request.version, "0.149.1");
+        assert!(request.user_agent.starts_with("codex-tui/0.149.1 "));
+        assert_eq!(request.path, "/codex/responses");
+        assert_eq!(request.body["model"], "gpt-5.6-sol");
+        assert_eq!(request.body["stream"], true);
+        assert_eq!(request.body["store"], false);
+        assert!(request.body.get("temperature").is_none());
+    }
+    assert_eq!(captured[0].responses_lite, "");
+    assert_eq!(captured[0].body["parallel_tool_calls"], true);
+    assert_eq!(captured[1].responses_lite, "true");
+    assert_eq!(captured[1].body["parallel_tool_calls"], false);
 
     for _ in 0..20 {
         let updated =
