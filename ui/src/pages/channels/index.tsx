@@ -223,7 +223,11 @@ export function ChannelsPage() {
         getSettings().catch(() => null),
         listRemoteAccounts().catch(() => []),
       ]);
-      setAccountNames(Object.fromEntries(accounts.map((a) => [a.id, a.name?.trim() || a.base_url])));
+      setAccountNames(
+        Object.fromEntries(
+          accounts.map((account) => [account.id, account.name.trim() || "-"]),
+        ),
+      );
       const by: Record<Protocol, Channel[]> = {
         openai: [],
         anthropic: [],
@@ -496,12 +500,20 @@ export function ChannelsPage() {
       },
       {
         id: "account",
-        header: t("accounts.table.name"),
-        cell: ({ row }) => (
-          <div className="mx-auto max-w-[160px] truncate text-center" title={row.original.managed_remote_account_id ? accountNames[row.original.managed_remote_account_id] : "-"}>
-            {row.original.managed_remote_account_id ? (accountNames[row.original.managed_remote_account_id] ?? "-") : "-"}
-          </div>
-        ),
+        header: t("channels.table.account"),
+        cell: ({ row }) => {
+          const accountName = row.original.managed_remote_account_id
+            ? (accountNames[row.original.managed_remote_account_id] ?? "-")
+            : "-";
+          return (
+            <div
+              className="mx-auto max-w-[160px] truncate text-center"
+              title={accountName}
+            >
+              {accountName}
+            </div>
+          );
+        },
         meta: { headerClassName: "w-36", skeletonClassName: "w-20 mx-auto" },
       },
       {

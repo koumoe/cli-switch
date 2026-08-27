@@ -159,6 +159,7 @@
       "gemini": "Gemini"
     },
     "table": {
+      "account": "Account",
       "name": "Name",
       "priority": "Priority",
       "realMultiplier": "Multiplier",
@@ -283,6 +284,7 @@
     },
     "table": {
       "name": "Name",
+      "baseUrl": "Base URL",
       "provider": "Provider",
       "quota": "Quota",
       "checkin": "Check-in",
