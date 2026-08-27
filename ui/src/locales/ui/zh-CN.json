@@ -159,6 +159,7 @@
       "gemini": "Gemini"
     },
     "table": {
+      "account": "账号",
       "name": "名称",
       "priority": "优先级",
       "realMultiplier": "实际倍率",
@@ -283,6 +284,7 @@
     },
     "table": {
       "name": "名称",
+      "baseUrl": "Base URL",
       "provider": "账号体系",
       "quota": "额度",
       "checkin": "签到",

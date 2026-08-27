@@ -355,7 +355,8 @@ pub async fn update_openai_account_quota(
               primary_quota_used_percent = ?2, primary_quota_window_minutes = ?3,
               primary_quota_resets_at_ms = ?4, secondary_quota_used_percent = ?5,
               secondary_quota_window_minutes = ?6, secondary_quota_resets_at_ms = ?7,
-              last_synced_at_ms = ?8, last_sync_error = NULL, updated_at_ms = ?9
+              last_synced_at_ms = ?8, last_sync_error = NULL, reauth_required = 0,
+              updated_at_ms = ?9
             WHERE provider = 'openai' AND id = ?1
             "#,
             params![
@@ -385,13 +386,13 @@ pub async fn mark_openai_account_auth_failure(
     db_path: PathBuf,
     account_id: String,
     message: String,
-    reauth_required: bool,
+    reauth_required: Option<bool>,
 ) -> anyhow::Result<()> {
     with_conn(db_path, move |conn| {
         let now = now_ms();
         let changed = conn.execute(
-            "UPDATE remote_accounts SET last_sync_error = ?2, reauth_required = ?3, last_synced_at_ms = ?4, updated_at_ms = ?4 WHERE provider = 'openai' AND id = ?1",
-            params![account_id, message, i64::from(reauth_required), now],
+            "UPDATE remote_accounts SET last_sync_error = ?2, reauth_required = COALESCE(?3, reauth_required), last_synced_at_ms = ?4, updated_at_ms = ?4 WHERE provider = 'openai' AND id = ?1",
+            params![account_id, message, reauth_required.map(i64::from), now],
         )?;
         if changed == 0 {
             return Err(StorageError::RemoteAccountNotFound { account_id }.into());
@@ -505,6 +506,69 @@ mod tests {
         assert_eq!(refreshed.name, "Custom name");
         assert_eq!(refreshed.access_token.as_deref(), Some("access-2"));
         assert_eq!(refreshed.refresh_token.as_deref(), Some("refresh-1"));
+        let _ = std::fs::remove_file(db_path);
+    }
+
+    #[tokio::test]
+    async fn quota_success_clears_reauth_required() {
+        let db_path = temp_db();
+        super::super::init_db(&db_path).unwrap();
+        let created = upsert_openai_account_tokens(
+            db_path.clone(),
+            None,
+            tokens("acct-1", "access-1", Some("refresh-1")),
+        )
+        .await
+        .unwrap();
+
+        mark_openai_account_auth_failure(
+            db_path.clone(),
+            created.id.clone(),
+            "expired access token".to_string(),
+            Some(true),
+        )
+        .await
+        .unwrap();
+        let marked = get_openai_account_without_secret(db_path.clone(), created.id.clone())
+            .await
+            .unwrap();
+        assert!(marked.reauth_required);
+
+        mark_openai_account_auth_failure(
+            db_path.clone(),
+            created.id.clone(),
+            "temporary usage failure".to_string(),
+            None,
+        )
+        .await
+        .unwrap();
+        let preserved = get_openai_account_without_secret(db_path.clone(), created.id.clone())
+            .await
+            .unwrap();
+        assert!(preserved.reauth_required);
+
+        update_openai_account_quota(
+            db_path.clone(),
+            created.id.clone(),
+            OpenAiQuotaSnapshot {
+                primary: Some(OpenAiQuotaWindow {
+                    used_percent: 12.0,
+                    window_minutes: 300,
+                    resets_at_ms: None,
+                }),
+                secondary: None,
+                synced_at_ms: Some(1_800_000_000_000),
+            },
+        )
+        .await
+        .unwrap();
+
+        let recovered = get_openai_account_without_secret(db_path.clone(), created.id)
+            .await
+            .unwrap();
+        assert!(!recovered.reauth_required);
+        assert_eq!(recovered.last_sync_error, None);
+        assert_eq!(recovered.quota.primary.unwrap().used_percent, 12.0);
         let _ = std::fs::remove_file(db_path);
     }
 

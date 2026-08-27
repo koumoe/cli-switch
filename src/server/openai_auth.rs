@@ -145,6 +145,22 @@ pub(crate) struct RefreshedOpenAiTokens {
     pub plan_type: Option<String>,
 }
 
+const RELOGIN_REQUIRED_MESSAGE: &str = "OpenAI login expired; please log in again";
+
+fn refresh_error_requires_relogin(message: &str) -> bool {
+    let message = message.to_ascii_lowercase();
+    message.contains("refresh token is missing")
+        || message.contains("invalid_grant")
+        || message.contains("invalid refresh token")
+        || message.contains("refresh token expired")
+        || message.contains("refresh token has expired")
+        || message.contains("http 401")
+}
+
+pub(crate) fn relogin_required_message(err: &anyhow::Error) -> Option<&'static str> {
+    refresh_error_requires_relogin(&err.to_string()).then_some(RELOGIN_REQUIRED_MESSAGE)
+}
+
 fn random_urlsafe() -> String {
     format!("{}{}", Uuid::new_v4().simple(), Uuid::new_v4().simple())
 }
@@ -380,7 +396,8 @@ async fn callback(Query(query): Query<OAuthCallbackQuery>) -> Response {
             if let Ok(secret) =
                 storage::get_openai_account_with_secret(session.db_path.clone(), account.id.clone())
                     .await
-                && let Ok(quota) = crate::openai_quota::fetch(&session.http_client, &secret).await
+                && let Ok(quota) =
+                    crate::openai_quota::fetch(&session.http_client, &secret, None).await
             {
                 let _ = storage::update_openai_account_quota(
                     session.db_path.clone(),
@@ -610,8 +627,19 @@ async fn refresh_persisted_account_if_current_at(
         .refresh_token
         .as_deref()
         .filter(|value| !value.trim().is_empty())
-        .ok_or_else(|| anyhow::anyhow!("OpenAI refresh token is missing"))?;
-    match refresh_tokens_at(client, token_url, refresh_token).await {
+        .map(str::to_string);
+    let Some(refresh_token) = refresh_token else {
+        let error = anyhow::anyhow!("OpenAI refresh token is missing");
+        let _ = storage::mark_openai_account_auth_failure(
+            db_path,
+            account_id,
+            error.to_string(),
+            Some(true),
+        )
+        .await;
+        return Err(error);
+    };
+    match refresh_tokens_at(client, token_url, &refresh_token).await {
         Ok(refreshed) => {
             if let Some(refreshed_account_id) = refreshed
                 .account_id
@@ -638,14 +666,12 @@ async fn refresh_persisted_account_if_current_at(
         }
         Err(error) => {
             let message = error.to_string();
-            let reauth_required = message.contains("invalid_grant")
-                || message.contains("invalid refresh token")
-                || message.contains("HTTP 401");
+            let reauth_required = refresh_error_requires_relogin(&message);
             let _ = storage::mark_openai_account_auth_failure(
                 db_path,
                 account_id,
                 message.clone(),
-                reauth_required,
+                reauth_required.then_some(true),
             )
             .await;
             Err(error)
@@ -702,6 +728,21 @@ mod tests {
                 .map(|value| value.as_ref()),
             Some("true")
         );
+    }
+
+    #[test]
+    fn recognizes_refresh_errors_that_require_login() {
+        for message in [
+            "OpenAI refresh token is missing",
+            "OpenAI token endpoint returned HTTP 401: unauthorized",
+            r#"OpenAI token endpoint returned HTTP 400: {"error":"invalid_grant"}"#,
+            "refresh token has expired",
+        ] {
+            assert!(refresh_error_requires_relogin(message), "{message}");
+        }
+        assert!(!refresh_error_requires_relogin(
+            "OpenAI token request failed: connection refused"
+        ));
     }
 
     #[test]

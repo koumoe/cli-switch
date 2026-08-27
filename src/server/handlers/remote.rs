@@ -4,7 +4,7 @@ use axum::response::IntoResponse;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
-use super::newapi as newapi_handlers;
+use super::{newapi as newapi_handlers, openai as openai_handlers};
 use crate::bearer_token::normalize_optional_bearer_token;
 use crate::events::{self, AppEvent, RemoteManagedChannelCreated};
 use crate::newapi as newapi_client;
@@ -2058,22 +2058,7 @@ pub(in crate::server) async fn refresh_remote_account(
             refresh_sub2api_remote_account_impl(&state, account).await?
         }
         storage::UnifiedRemoteAccount::Openai(account) => {
-            let refreshed = crate::server::openai_auth::refresh_persisted_account(
-                &state.http_client,
-                state.db_path(),
-                account.id,
-            )
-            .await?;
-            let secret =
-                storage::get_openai_account_with_secret(state.db_path(), refreshed.id.clone())
-                    .await?;
-            if let Ok(quota) = crate::openai_quota::fetch(&state.http_client, &secret).await {
-                storage::update_openai_account_quota(state.db_path(), refreshed.id.clone(), quota)
-                    .await?;
-            }
-            storage::get_openai_account_without_secret(state.db_path(), refreshed.id)
-                .await?
-                .into()
+            openai_handlers::refresh_openai_account_data(&state, account.id).await?
         }
     };
     Ok(Json(response))
@@ -2350,6 +2335,38 @@ mod tests {
             let _ = axum::serve(listener, app).await;
         });
         (format!("http://127.0.0.1:{}", addr.port()), calls)
+    }
+
+    async fn spawn_openai_usage_server() -> (String, Arc<AtomicUsize>) {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let handler_calls = calls.clone();
+        let app = Router::new().route(
+            "/usage",
+            get(move || {
+                let calls = handler_calls.clone();
+                async move {
+                    calls.fetch_add(1, Ordering::SeqCst);
+                    AxumJson(serde_json::json!({
+                        "rate_limit": {
+                            "primary_window": {
+                                "used_percent": 7.5,
+                                "limit_window_seconds": 18_000,
+                                "reset_after_seconds": 60
+                            },
+                            "secondary_window": null
+                        }
+                    }))
+                }
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+            .await
+            .expect("bind OpenAI usage server");
+        let address = listener.local_addr().expect("OpenAI usage server addr");
+        tokio::spawn(async move {
+            let _ = axum::serve(listener, app).await;
+        });
+        (format!("http://{address}/usage"), calls)
     }
 
     fn authorization_value(headers: &HeaderMap) -> Option<&str> {
@@ -2813,6 +2830,55 @@ mod tests {
         assert_eq!(updated.last_balance_amount, Some(12.5));
         assert_eq!(updated.last_sync_error, None);
 
+        remove_sqlite_artifacts(&db_path);
+    }
+
+    #[tokio::test]
+    async fn refresh_openai_account_uses_current_access_token_before_oauth_refresh() {
+        let db_path = temp_db_path();
+        remove_sqlite_artifacts(&db_path);
+        storage::init_db(&db_path).expect("init db");
+        let state = build_test_state(db_path.clone()).await;
+        let (usage_url, usage_calls) = spawn_openai_usage_server().await;
+        let account = storage::upsert_openai_account_tokens(
+            db_path.clone(),
+            Some("OpenAI test".to_string()),
+            storage::OpenAiAccountTokens {
+                access_token: "still-valid-access".to_string(),
+                refresh_token: Some("must-not-be-used".to_string()),
+                id_token: None,
+                token_expires_at_ms: Some(0),
+                account_id: "openai-account-1".to_string(),
+                email: None,
+                display_name: None,
+                plan_type: Some("plus".to_string()),
+            },
+        )
+        .await
+        .expect("seed OpenAI account");
+
+        let response = openai_handlers::refresh_openai_account_data_at(
+            &state,
+            account.id.clone(),
+            Some(&usage_url),
+        )
+        .await
+        .expect("refresh should use the current access token");
+
+        assert_eq!(usage_calls.load(Ordering::SeqCst), 1);
+        let RemoteAccountResponse::Openai { openai, .. } = response else {
+            panic!("expected OpenAI response");
+        };
+        assert_eq!(openai.quota_windows.len(), 1);
+        let stored = storage::get_openai_account_with_secret(db_path.clone(), account.id)
+            .await
+            .expect("reload OpenAI account");
+        assert_eq!(
+            stored.access_token.as_deref(),
+            Some("still-valid-access"),
+            "a successful quota fetch must not rotate OAuth tokens"
+        );
+        assert_eq!(stored.quota.primary.unwrap().used_percent, 7.5);
         remove_sqlite_artifacts(&db_path);
     }
 

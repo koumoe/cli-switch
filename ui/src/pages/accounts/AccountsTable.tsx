@@ -2,8 +2,15 @@ import React from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { ExternalLink, GripVertical, Link2, Pencil, RefreshCw, Trash2 } from "lucide-react";
 
-import type { RemoteAccount } from "@/types/api";
-import { Badge, Card, CardContent } from "@/components/ui";
+import type { OpenAiQuotaWindow, RemoteAccount } from "@/types/api";
+import {
+  Badge,
+  Card,
+  CardContent,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui";
 import {
   SortableDataTable,
   SortableDataTableHandle,
@@ -18,7 +25,6 @@ import {
   accountHasUserApiCredentials,
   formatAmount,
   isOpenAiAccount,
-  resolveAccountDisplayName,
   resolveCheckinMode,
 } from "./shared";
 
@@ -35,6 +41,14 @@ function quotaWindowLabel(
     return t("accounts.quota.hours", { count: windowMinutes / 60 });
   }
   return kind || t("accounts.quota.window");
+}
+
+function sortQuotaWindows(windows: OpenAiQuotaWindow[]): OpenAiQuotaWindow[] {
+  return [...windows].sort((a, b) => {
+    const aMinutes = a.window_minutes > 0 ? a.window_minutes : Number.POSITIVE_INFINITY;
+    const bMinutes = b.window_minutes > 0 ? b.window_minutes : Number.POSITIVE_INFINITY;
+    return aMinutes - bMinutes;
+  });
 }
 
 type AccountsTableProps = {
@@ -105,24 +119,39 @@ export function AccountsTable({
         header: t("accounts.table.name"),
         cell: ({ row }) => {
           const item = row.original;
-          const primary = item.name.trim() || resolveAccountDisplayName(item);
-          const secondary = item.base_url;
+          const name = item.name.trim() || "-";
           return (
-          <div className="mx-auto max-w-[360px] text-center">
-            <div className="truncate font-medium" title={primary}>
-              {primary}
-            </div>
-            {secondary ? <div className="mt-1 truncate text-xs text-muted-foreground">{secondary}</div> : null}
-            {item.reauth_required ? (
-              <div className="mt-1 text-xs text-destructive">
-                {t("accounts.table.reauthRequired")}
+            <div className="mx-auto max-w-[180px] text-center">
+              <div className="truncate font-medium" title={name}>
+                {name}
               </div>
-            ) : null}
-          </div>
+              {item.reauth_required ? (
+                <div className="mt-1 text-xs text-destructive">
+                  {t("accounts.table.reauthRequired")}
+                </div>
+              ) : null}
+            </div>
           );
         },
         meta: {
-          skeletonClassName: "w-56 mx-auto",
+          headerClassName: "w-44",
+          skeletonClassName: "w-28 mx-auto",
+        },
+      },
+      {
+        id: "base_url",
+        header: t("accounts.table.baseUrl"),
+        cell: ({ row }) => (
+          <div
+            className="mx-auto max-w-[260px] truncate text-center text-muted-foreground"
+            title={row.original.base_url}
+          >
+            {row.original.base_url || "-"}
+          </div>
+        ),
+        meta: {
+          headerClassName: "w-60",
+          skeletonClassName: "w-40 mx-auto",
         },
       },
       {
@@ -152,31 +181,49 @@ export function AccountsTable({
           if (!isOpenAiAccount(item)) {
             return <div className="font-mono">{formatAmount(item, item.last_balance_amount)}</div>;
           }
-          const windows = item.quota_windows ?? [];
+          const windows = sortQuotaWindows(item.quota_windows ?? []);
           if (windows.length === 0) {
             return <span className="text-muted-foreground">{t("accounts.quota.unavailable")}</span>;
           }
+          const shortestWindow = windows[0];
+          const renderReset = (window: OpenAiQuotaWindow) => {
+            if (!window.resets_at_ms) return null;
+            const reset = new Intl.DateTimeFormat(locale, {
+              month: "numeric",
+              day: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+            }).format(new Date(window.resets_at_ms));
+            return t("accounts.quota.resetAt", { time: reset });
+          };
+          const shortestReset = renderReset(shortestWindow);
           return (
-            <div className="space-y-1 text-left text-xs">
-              {windows.map((window, index) => {
-                const reset = window.resets_at_ms
-                  ? new Intl.DateTimeFormat(locale, {
-                      month: "numeric",
-                      day: "numeric",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    }).format(new Date(window.resets_at_ms))
-                  : null;
-                return (
-                  <div key={`${window.kind}-${window.window_minutes}-${index}`} className="whitespace-nowrap">
-                    <span className="font-medium">
-                      {quotaWindowLabel(window.kind, window.window_minutes, t)} {Math.round(window.used_percent)}%
-                    </span>
-                    {reset ? <span className="text-muted-foreground"> · {t("accounts.quota.resetAt", { time: reset })}</span> : null}
-                  </div>
-                );
-              })}
-            </div>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="inline-flex cursor-help whitespace-nowrap text-sm">
+                  <span className="font-medium">{Math.round(shortestWindow.used_percent)}%</span>
+                  {shortestReset ? (
+                    <span className="text-muted-foreground"> · {shortestReset}</span>
+                  ) : null}
+                </div>
+              </TooltipTrigger>
+              <TooltipContent className="space-y-1.5 px-3 py-2">
+                {windows.map((window, index) => {
+                  const reset = renderReset(window);
+                  return (
+                    <div
+                      key={`${window.kind}-${window.window_minutes}-${index}`}
+                      className="whitespace-nowrap"
+                    >
+                      <span className="font-medium">
+                        {quotaWindowLabel(window.kind, window.window_minutes, t)} {Math.round(window.used_percent)}%
+                      </span>
+                      {reset ? <span className="opacity-80"> · {reset}</span> : null}
+                    </div>
+                  );
+                })}
+              </TooltipContent>
+            </Tooltip>
           );
         },
         meta: {
