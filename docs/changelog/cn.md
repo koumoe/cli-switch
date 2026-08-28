@@ -1,3 +1,7 @@
+## [0.64.6](https://github.com/koumoe/cli-switch/compare/v0.64.5...v0.64.6) (2026-08-28)
+
+### 修复
+* 优化请求明细筛选与详情展示 (#218) ([ee838c4](https://github.com/koumoe/cli-switch/commit/ee838c4a00f26b1e3dc66da75c90b85cb385a033))
 ## [0.64.5](https://github.com/koumoe/cli-switch/compare/v0.64.4...v0.64.5) (2026-08-28)
 
 ### 修复
