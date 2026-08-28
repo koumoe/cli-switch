@@ -81,6 +81,7 @@ pub(in crate::server) struct Sub2ApiRemoteAccountResponse {
 #[derive(Debug, Clone, Serialize)]
 pub(in crate::server) struct OpenAiQuotaWindowResponse {
     pub kind: &'static str,
+    pub limit_name: Option<String>,
     pub used_percent: f64,
     pub window_minutes: i64,
     pub resets_at_ms: Option<i64>,
@@ -694,6 +695,7 @@ impl From<storage::OpenAiAccount> for RemoteAccountResponse {
         if let Some(window) = account.quota.primary {
             quota_windows.push(OpenAiQuotaWindowResponse {
                 kind: "primary",
+                limit_name: window.limit_name,
                 used_percent: window.used_percent,
                 window_minutes: window.window_minutes,
                 resets_at_ms: window.resets_at_ms,
@@ -702,6 +704,7 @@ impl From<storage::OpenAiAccount> for RemoteAccountResponse {
         if let Some(window) = account.quota.secondary {
             quota_windows.push(OpenAiQuotaWindowResponse {
                 kind: "secondary",
+                limit_name: window.limit_name,
                 used_percent: window.used_percent,
                 window_minutes: window.window_minutes,
                 resets_at_ms: window.resets_at_ms,
@@ -710,6 +713,7 @@ impl From<storage::OpenAiAccount> for RemoteAccountResponse {
         quota_windows.extend(account.quota.additional.into_iter().map(|window| {
             OpenAiQuotaWindowResponse {
                 kind: "additional",
+                limit_name: window.limit_name,
                 used_percent: window.used_percent,
                 window_minutes: window.window_minutes,
                 resets_at_ms: window.resets_at_ms,

@@ -558,23 +558,30 @@ impl UnifiedRemoteAccountRow {
                     .primary_quota_used_percent
                     .zip(self.primary_quota_window_minutes)
                     .map(|(used_percent, window_minutes)| OpenAiQuotaWindow {
+                        limit_name: None,
                         used_percent,
                         window_minutes,
                         resets_at_ms: self.primary_quota_resets_at_ms,
-                    }),
+                    })
+                    .filter(OpenAiQuotaWindow::is_valid),
                 secondary: self
                     .secondary_quota_used_percent
                     .zip(self.secondary_quota_window_minutes)
                     .map(|(used_percent, window_minutes)| OpenAiQuotaWindow {
+                        limit_name: None,
                         used_percent,
                         window_minutes,
                         resets_at_ms: self.secondary_quota_resets_at_ms,
-                    }),
+                    })
+                    .filter(OpenAiQuotaWindow::is_valid),
                 additional: self
                     .quota_windows_json
                     .as_deref()
-                    .and_then(|value| serde_json::from_str(value).ok())
-                    .unwrap_or_default(),
+                    .and_then(|value| serde_json::from_str::<Vec<OpenAiQuotaWindow>>(value).ok())
+                    .unwrap_or_default()
+                    .into_iter()
+                    .filter(OpenAiQuotaWindow::is_valid)
+                    .collect(),
                 synced_at_ms: self.last_synced_at_ms,
             },
             last_sync_error: self.last_sync_error,

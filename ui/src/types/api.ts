@@ -340,6 +340,7 @@ export type Sub2ApiRemoteAccount = RemoteAccountBase & {
 
 export type OpenAiQuotaWindow = {
   kind: string;
+  limit_name: string | null;
   used_percent: number;
   window_minutes: number;
   resets_at_ms: number | null;

@@ -27,20 +27,14 @@ impl OpenAiQuotaError {
     }
 }
 
-fn parse_window(value: &Value, now_ms: i64) -> Option<OpenAiQuotaWindow> {
+fn parse_window(value: &Value, now_ms: i64, limit_name: Option<&str>) -> Option<OpenAiQuotaWindow> {
     let object = value.as_object()?;
     let used_percent = object.get("used_percent")?.as_f64()?;
-    if !used_percent.is_finite() {
-        return None;
-    }
     let window_minutes = object
         .get("limit_window_seconds")
         .and_then(Value::as_i64)
         .map(|seconds| seconds / 60)
         .or_else(|| object.get("window_minutes").and_then(Value::as_i64))?;
-    if window_minutes <= 0 {
-        return None;
-    }
     let resets_at_ms = object
         .get("reset_at")
         .and_then(Value::as_i64)
@@ -51,64 +45,84 @@ fn parse_window(value: &Value, now_ms: i64) -> Option<OpenAiQuotaWindow> {
                 .and_then(Value::as_i64)
                 .map(|seconds| now_ms.saturating_add(seconds.saturating_mul(1000)))
         });
-    Some(OpenAiQuotaWindow {
+    let window = OpenAiQuotaWindow {
+        limit_name: limit_name
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string),
         used_percent,
         window_minutes,
         resets_at_ms,
-    })
+    };
+    window.is_valid().then_some(window)
+}
+
+fn push_unique(windows: &mut Vec<OpenAiQuotaWindow>, window: OpenAiQuotaWindow) {
+    if !windows.contains(&window) {
+        windows.push(window);
+    }
+}
+
+fn deduplicate_secondary(
+    primary: &Option<OpenAiQuotaWindow>,
+    secondary: Option<OpenAiQuotaWindow>,
+) -> Option<OpenAiQuotaWindow> {
+    secondary.filter(|window| primary.as_ref() != Some(window))
+}
+
+fn collect_fallback_windows(value: &Value, now_ms: i64, output: &mut Vec<OpenAiQuotaWindow>) {
+    if let Some(window) = parse_window(value, now_ms, None) {
+        push_unique(output, window);
+    }
+    match value {
+        Value::Object(object) => object
+            .values()
+            .for_each(|child| collect_fallback_windows(child, now_ms, output)),
+        Value::Array(values) => values
+            .iter()
+            .for_each(|child| collect_fallback_windows(child, now_ms, output)),
+        _ => {}
+    }
 }
 
 fn snapshot_from_payload(payload: Value, now_ms: i64) -> OpenAiQuotaSnapshot {
-    let mut windows = Vec::new();
-    let mut push = |value: Option<&Value>| {
-        if let Some(value) = value.and_then(|value| parse_window(value, now_ms))
-            && !windows.iter().any(|existing: &OpenAiQuotaWindow| {
-                existing.window_minutes == value.window_minutes
-                    && existing.used_percent.to_bits() == value.used_percent.to_bits()
-                    && existing.resets_at_ms == value.resets_at_ms
-            })
-        {
-            windows.push(value);
-        }
-    };
-    if let Some(rate_limit) = payload.get("rate_limit") {
-        push(rate_limit.get("primary_window"));
-        push(rate_limit.get("secondary_window"));
-    }
-    if let Some(additional) = payload
+    let rate_limit = payload.get("rate_limit");
+    let primary = rate_limit
+        .and_then(|value| value.get("primary_window"))
+        .and_then(|value| parse_window(value, now_ms, None));
+    let secondary = deduplicate_secondary(
+        &primary,
+        rate_limit
+            .and_then(|value| value.get("secondary_window"))
+            .and_then(|value| parse_window(value, now_ms, None)),
+    );
+
+    let mut additional = Vec::new();
+    if let Some(items) = payload
         .get("additional_rate_limits")
         .and_then(Value::as_array)
     {
-        for item in additional {
+        for item in items {
+            let limit_name = item.get("limit_name").and_then(Value::as_str);
             let rate_limit = item.get("rate_limit").unwrap_or(item);
-            push(rate_limit.get("primary_window"));
-            push(rate_limit.get("secondary_window"));
-        }
-    }
-    if windows.is_empty() {
-        fn walk(value: &Value, now_ms: i64, output: &mut Vec<OpenAiQuotaWindow>) {
-            if let Some(parsed) = parse_window(value, now_ms)
-                && !output.iter().any(|existing| {
-                    existing.window_minutes == parsed.window_minutes
-                        && existing.used_percent.to_bits() == parsed.used_percent.to_bits()
-                        && existing.resets_at_ms == parsed.resets_at_ms
-                })
-            {
-                output.push(parsed);
-            }
-            match value {
-                Value::Object(object) => object
-                    .values()
-                    .for_each(|child| walk(child, now_ms, output)),
-                Value::Array(values) => values.iter().for_each(|child| walk(child, now_ms, output)),
-                _ => {}
+            for window in [
+                rate_limit.get("primary_window"),
+                rate_limit.get("secondary_window"),
+            ] {
+                let Some(window) = window.and_then(|value| parse_window(value, now_ms, limit_name))
+                else {
+                    continue;
+                };
+                push_unique(&mut additional, window);
             }
         }
-        walk(&payload, now_ms, &mut windows);
     }
-    let primary = windows.first().cloned();
-    let secondary = windows.get(1).cloned();
-    let additional = windows.into_iter().skip(2).collect();
+    if primary.is_none() && secondary.is_none() && additional.is_empty() {
+        // Keep a schema-change safety net without guessing which unknown window
+        // belongs to the default bucket. Fallback windows remain additional.
+        collect_fallback_windows(&payload, now_ms, &mut additional);
+    }
+
     OpenAiQuotaSnapshot {
         primary,
         secondary,
@@ -169,14 +183,16 @@ pub fn from_headers(headers: &HeaderMap, now_ms: i64) -> Option<OpenAiQuotaSnaps
                 integer(headers, &format!("x-codex-{prefix}-reset-after-seconds"))
                     .map(|seconds| now_ms.saturating_add(seconds.saturating_mul(1000)))
             });
-        Some(OpenAiQuotaWindow {
+        let window = OpenAiQuotaWindow {
+            limit_name: None,
             used_percent,
             window_minutes,
             resets_at_ms,
-        })
+        };
+        window.is_valid().then_some(window)
     }
     let primary = read(headers, "primary", now_ms);
-    let secondary = read(headers, "secondary", now_ms);
+    let secondary = deduplicate_secondary(&primary, read(headers, "secondary", now_ms));
     (primary.is_some() || secondary.is_some()).then_some(OpenAiQuotaSnapshot {
         primary,
         secondary,
@@ -227,6 +243,67 @@ mod tests {
         assert_eq!(quota.primary.unwrap().resets_at_ms, Some(61_000));
     }
 
+    #[test]
+    fn ignores_zero_length_rate_limit_headers() {
+        let mut headers = HeaderMap::new();
+        headers.insert("x-codex-secondary-used-percent", "0".parse().unwrap());
+        headers.insert("x-codex-secondary-window-minutes", "0".parse().unwrap());
+        headers.insert(
+            "x-codex-secondary-reset-after-seconds",
+            "600".parse().unwrap(),
+        );
+        assert!(from_headers(&headers, 1_000).is_none());
+    }
+
+    #[test]
+    fn deduplicates_identical_default_windows() {
+        let window = json!({
+            "used_percent": 25,
+            "limit_window_seconds": 18_000,
+            "reset_at": 1_800_000_000
+        });
+        let quota = snapshot_from_payload(
+            json!({
+                "rate_limit": {
+                    "primary_window": window.clone(),
+                    "secondary_window": window
+                }
+            }),
+            1_000,
+        );
+        assert!(quota.primary.is_some());
+        assert!(quota.secondary.is_none());
+        assert!(quota.additional.is_empty());
+    }
+
+    #[test]
+    fn falls_back_to_nested_windows_when_known_paths_are_missing() {
+        let quota = snapshot_from_payload(
+            json!({
+                "future_usage": {
+                    "windows": [
+                        {
+                            "used_percent": 7,
+                            "window_minutes": 60,
+                            "reset_at": 1_800_000_000
+                        },
+                        {
+                            "used_percent": 7,
+                            "window_minutes": 60,
+                            "reset_at": 1_800_000_000
+                        }
+                    ]
+                }
+            }),
+            1_000,
+        );
+        assert!(quota.primary.is_none());
+        assert!(quota.secondary.is_none());
+        assert_eq!(quota.additional.len(), 1);
+        assert_eq!(quota.additional[0].used_percent, 7.0);
+        assert_eq!(quota.additional[0].window_minutes, 60);
+    }
+
     #[tokio::test]
     async fn reports_usage_auth_failures() {
         let app = Router::new().route(
@@ -259,25 +336,26 @@ mod tests {
                 Json(json!({
                     "rate_limit": {
                         "primary_window": {
-                            "used_percent": 12.5,
-                            "limit_window_seconds": 18_000,
+                            "used_percent": 2,
+                            "limit_window_seconds": 604_800,
                             "reset_after_seconds": 60
                         },
-                        "secondary_window": {
-                            "used_percent": 25,
-                            "limit_window_seconds": 604800,
-                            "reset_after_seconds": 120
-                        }
+                        "secondary_window": null
                     },
                     "additional_rate_limits": [
                         {
-                            "limit_name": "monthly",
-                            "metered_feature": "codex_monthly",
+                            "limit_name": "GPT-5.3-Codex-Spark",
+                            "metered_feature": "codex_bengalfox",
                             "rate_limit": {
                                 "primary_window": {
-                                    "used_percent": 9,
-                                    "limit_window_seconds": 2592000,
-                                    "reset_at": 1800000000
+                                    "used_percent": 0,
+                                    "limit_window_seconds": 18_000,
+                                    "reset_at": 1_800_000_000
+                                },
+                                "secondary_window": {
+                                    "used_percent": 0,
+                                    "limit_window_seconds": 604_800,
+                                    "reset_at": 1_800_604_800
                                 }
                             }
                         }
@@ -301,11 +379,15 @@ mod tests {
         .await
         .unwrap();
         let primary = quota.primary.unwrap();
-        assert_eq!(primary.used_percent, 12.5);
-        assert_eq!(primary.window_minutes, 300);
-        assert_eq!(quota.secondary.unwrap().window_minutes, 10_080);
-        assert_eq!(quota.additional.len(), 1);
-        assert_eq!(quota.additional[0].used_percent, 9.0);
-        assert_eq!(quota.additional[0].window_minutes, 43_200);
+        assert_eq!(primary.used_percent, 2.0);
+        assert_eq!(primary.window_minutes, 10_080);
+        assert!(quota.secondary.is_none());
+        assert_eq!(quota.additional.len(), 2);
+        assert_eq!(
+            quota.additional[0].limit_name.as_deref(),
+            Some("GPT-5.3-Codex-Spark")
+        );
+        assert_eq!(quota.additional[0].window_minutes, 300);
+        assert_eq!(quota.additional[1].window_minutes, 10_080);
     }
 }

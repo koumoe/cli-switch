@@ -9,9 +9,17 @@ pub const OPENAI_ACCOUNT_BASE_URL: &str = "https://chatgpt.com";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct OpenAiQuotaWindow {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub limit_name: Option<String>,
     pub used_percent: f64,
     pub window_minutes: i64,
     pub resets_at_ms: Option<i64>,
+}
+
+impl OpenAiQuotaWindow {
+    pub(crate) fn is_valid(&self) -> bool {
+        self.used_percent.is_finite() && self.window_minutes > 0
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
@@ -99,10 +107,11 @@ fn from_row(row: &rusqlite::Row<'_>, include_secret: bool) -> rusqlite::Result<O
     let primary_window: Option<i64> = row.get(13)?;
     let secondary_used: Option<f64> = row.get(15)?;
     let secondary_window: Option<i64> = row.get(16)?;
-    let additional: Vec<OpenAiQuotaWindow> = row
+    let mut additional: Vec<OpenAiQuotaWindow> = row
         .get::<_, Option<String>>(18)?
         .and_then(|value| serde_json::from_str(&value).ok())
         .unwrap_or_default();
+    additional.retain(OpenAiQuotaWindow::is_valid);
     Ok(OpenAiAccount {
         id: row.get(0)?,
         name: row.get(1)?,
@@ -128,17 +137,21 @@ fn from_row(row: &rusqlite::Row<'_>, include_secret: bool) -> rusqlite::Result<O
             primary: primary_used
                 .zip(primary_window)
                 .map(|(used_percent, window_minutes)| OpenAiQuotaWindow {
+                    limit_name: None,
                     used_percent,
                     window_minutes,
                     resets_at_ms: row.get(14).ok().flatten(),
-                }),
-            secondary: secondary_used.zip(secondary_window).map(
-                |(used_percent, window_minutes)| OpenAiQuotaWindow {
+                })
+                .filter(OpenAiQuotaWindow::is_valid),
+            secondary: secondary_used
+                .zip(secondary_window)
+                .map(|(used_percent, window_minutes)| OpenAiQuotaWindow {
+                    limit_name: None,
                     used_percent,
                     window_minutes,
                     resets_at_ms: row.get(17).ok().flatten(),
-                },
-            ),
+                })
+                .filter(OpenAiQuotaWindow::is_valid),
             additional,
             synced_at_ms: row.get(21)?,
         },
@@ -490,6 +503,31 @@ pub async fn assign_openai_account_sort_orders(
 mod tests {
     use super::*;
 
+    #[test]
+    fn quota_window_validity_requires_finite_usage_and_positive_duration() {
+        let valid = OpenAiQuotaWindow {
+            limit_name: None,
+            used_percent: 25.0,
+            window_minutes: 300,
+            resets_at_ms: None,
+        };
+        assert!(valid.is_valid());
+        assert!(
+            !OpenAiQuotaWindow {
+                used_percent: f64::NAN,
+                ..valid.clone()
+            }
+            .is_valid()
+        );
+        assert!(
+            !OpenAiQuotaWindow {
+                window_minutes: 0,
+                ..valid
+            }
+            .is_valid()
+        );
+    }
+
     fn temp_db() -> PathBuf {
         std::env::temp_dir().join(format!("cliswitch-openai-account-{}.db", Uuid::new_v4()))
     }
@@ -603,12 +641,14 @@ mod tests {
             created.id.clone(),
             OpenAiQuotaSnapshot {
                 primary: Some(OpenAiQuotaWindow {
+                    limit_name: None,
                     used_percent: 12.0,
                     window_minutes: 300,
                     resets_at_ms: None,
                 }),
                 secondary: None,
                 additional: vec![OpenAiQuotaWindow {
+                    limit_name: Some("Monthly".to_string()),
                     used_percent: 9.0,
                     window_minutes: 43_200,
                     resets_at_ms: Some(1_800_086_400_000),
@@ -624,6 +664,10 @@ mod tests {
             .unwrap();
         assert_eq!(recovered.quota.additional.len(), 1);
         assert_eq!(recovered.quota.additional[0].window_minutes, 43_200);
+        assert_eq!(
+            recovered.quota.additional[0].limit_name.as_deref(),
+            Some("Monthly")
+        );
         assert!(!recovered.reauth_required);
         assert_eq!(recovered.last_sync_error, None);
         assert_eq!(recovered.quota.primary.unwrap().used_percent, 12.0);
@@ -632,6 +676,7 @@ mod tests {
             recovered.id.clone(),
             OpenAiQuotaSnapshot {
                 primary: Some(OpenAiQuotaWindow {
+                    limit_name: None,
                     used_percent: 18.0,
                     window_minutes: 300,
                     resets_at_ms: None,
