@@ -39,6 +39,66 @@ async fn spawn_upstream(status: StatusCode, body: &'static str) -> String {
     format!("http://127.0.0.1:{}", addr.port())
 }
 
+async fn spawn_upstream_typed(
+    status: StatusCode,
+    content_type: &'static str,
+    body: &'static str,
+) -> String {
+    let app = Router::new().route(
+        "/{*path}",
+        any(move || async move {
+            (
+                status,
+                [(axum::http::header::CONTENT_TYPE, content_type)],
+                body,
+            )
+        }),
+    );
+
+    let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+        .await
+        .expect("bind");
+    let addr = listener.local_addr().expect("local_addr");
+    tokio::spawn(async move {
+        let _ = axum::serve(listener, app).await;
+    });
+
+    format!("http://127.0.0.1:{}", addr.port())
+}
+
+async fn spawn_upstream_typed_counted(
+    status: StatusCode,
+    content_type: &'static str,
+    body: &'static str,
+) -> (String, Arc<AtomicUsize>) {
+    let calls = Arc::new(AtomicUsize::new(0));
+    let calls_for_handler = calls.clone();
+    let app = Router::new().route(
+        "/{*path}",
+        any(move || {
+            let calls = calls_for_handler.clone();
+            async move {
+                calls.fetch_add(1, Ordering::Relaxed);
+                (
+                    status,
+                    [(axum::http::header::CONTENT_TYPE, content_type)],
+                    body,
+                )
+            }
+        }),
+    );
+
+    let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+        .await
+        .expect("bind");
+    let addr = listener.local_addr().expect("local_addr");
+    tokio::spawn(async move {
+        let _ = axum::serve(listener, app).await;
+    });
+
+    (format!("http://127.0.0.1:{}", addr.port()), calls)
+}
+
 async fn spawn_upstream_counted(
     status: StatusCode,
     body: &'static str,
@@ -143,6 +203,31 @@ async fn create_openai_channel(
     )
     .await
     .expect("create channel");
+}
+
+async fn forward_openai_responses(
+    db_path: std::path::PathBuf,
+    base_url: String,
+) -> axum::response::Response {
+    create_openai_channel(db_path.clone(), "openai", base_url, 10, 1, false).await;
+    let request = Request::builder()
+        .method("POST")
+        .uri("/v1/responses")
+        .header(axum::http::header::CONTENT_TYPE, "application/json")
+        .body(Body::from(
+            r#"{"model":"gpt-test","input":"hello","stream":true}"#,
+        ))
+        .expect("request");
+
+    proxy::forward(
+        &reqwest::Client::new(),
+        db_path,
+        storage::Protocol::Openai,
+        "/v1",
+        request,
+    )
+    .await
+    .expect("forward")
 }
 
 #[tokio::test]
@@ -696,6 +781,333 @@ async fn wait_for_usage_event(db_path: std::path::PathBuf) -> storage::UsageEven
         sleep(Duration::from_millis(10)).await;
     }
     panic!("timeout waiting for usage event");
+}
+
+#[tokio::test]
+async fn openai_responses_detects_sse_with_wrong_content_type() {
+    let base = spawn_upstream_typed(
+        StatusCode::OK,
+        "application/json",
+        concat!(
+            "event: response.created\n",
+            "data: {\"type\":\"response.created\",\"response\":{\"status\":\"in_progress\"}}\n\n",
+            "event: response.output_text.delta\n",
+            "data: {\"type\":\"response.output_text.delta\",\"delta\":\"hello\"}\n\n",
+            "event: response.completed\n",
+            "data: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\",\"usage\":{\"input_tokens\":4,\"output_tokens\":1,\"total_tokens\":5}}}\n\n",
+        ),
+    )
+    .await;
+    let db_path = temp_db_path();
+    storage::init_db(&db_path).expect("init_db");
+
+    let response = forward_openai_responses(db_path.clone(), format!("{base}/v1")).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response
+            .headers()
+            .get(axum::http::header::CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok()),
+        Some("text/event-stream")
+    );
+    let body = to_bytes(response.into_body(), 1024 * 1024)
+        .await
+        .expect("read body");
+    assert!(String::from_utf8_lossy(&body).contains("response.completed"));
+
+    let event = wait_for_usage_event(db_path).await;
+    assert!(event.success);
+    assert_eq!(event.prompt_tokens, Some(4));
+    assert_eq!(event.completion_tokens, Some(1));
+    assert_eq!(event.total_tokens, Some(5));
+}
+
+#[tokio::test]
+async fn openai_responses_records_failed_terminal_event() {
+    let base = spawn_upstream_typed(
+        StatusCode::OK,
+        "text/event-stream",
+        concat!(
+            "event: response.failed\n",
+            "data: {\"type\":\"response.failed\",\"response\":{\"status\":\"failed\",\"error\":{\"code\":\"context_length_exceeded\",\"message\":\"input is too long\"}}}\n\n",
+        ),
+    )
+    .await;
+    let db_path = temp_db_path();
+    storage::init_db(&db_path).expect("init_db");
+
+    let response = forward_openai_responses(db_path.clone(), format!("{base}/v1")).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let _ = to_bytes(response.into_body(), 1024 * 1024)
+        .await
+        .expect("read body");
+
+    let event = wait_for_usage_event(db_path).await;
+    assert!(!event.success);
+    assert_eq!(
+        event.error_kind.as_deref(),
+        Some("upstream_sse:response.failed")
+    );
+    assert_eq!(event.error_detail.as_deref(), Some("input is too long"));
+}
+
+#[tokio::test]
+async fn openai_responses_request_failure_does_not_fail_over() {
+    let (failed_base, failed_calls) = spawn_upstream_typed_counted(
+        StatusCode::OK,
+        "text/event-stream",
+        concat!(
+            "event: response.failed\n",
+            "data: {\"type\":\"response.failed\",\"response\":{\"status\":\"failed\",\"error\":{\"code\":\"context_length_exceeded\",\"message\":\"input is too long\"}}}\n\n",
+        ),
+    )
+    .await;
+    let (healthy_base, healthy_calls) = spawn_upstream_typed_counted(
+        StatusCode::OK,
+        "text/event-stream",
+        concat!(
+            "event: response.output_text.delta\n",
+            "data: {\"type\":\"response.output_text.delta\",\"delta\":\"should not run\"}\n\n",
+            "event: response.completed\n",
+            "data: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\",\"usage\":{\"input_tokens\":1,\"output_tokens\":1}}}\n\n",
+        ),
+    )
+    .await;
+    let db_path = temp_db_path();
+    storage::init_db(&db_path).expect("init_db");
+    create_openai_channel(
+        db_path.clone(),
+        "request-failure",
+        format!("{failed_base}/v1"),
+        20,
+        1,
+        false,
+    )
+    .await;
+    create_openai_channel(
+        db_path.clone(),
+        "healthy",
+        format!("{healthy_base}/v1"),
+        10,
+        1,
+        false,
+    )
+    .await;
+
+    let request = Request::builder()
+        .method("POST")
+        .uri("/v1/responses")
+        .header(axum::http::header::CONTENT_TYPE, "application/json")
+        .body(Body::from(
+            r#"{"model":"gpt-test","input":"hello","stream":true}"#,
+        ))
+        .expect("request");
+    let response = proxy::forward(
+        &reqwest::Client::new(),
+        db_path.clone(),
+        storage::Protocol::Openai,
+        "/v1",
+        request,
+    )
+    .await
+    .expect("forward");
+    let body = to_bytes(response.into_body(), 1024 * 1024)
+        .await
+        .expect("read body");
+
+    assert_eq!(failed_calls.load(Ordering::Relaxed), 1);
+    assert_eq!(healthy_calls.load(Ordering::Relaxed), 0);
+    let body = String::from_utf8_lossy(&body);
+    assert!(body.contains("context_length_exceeded"));
+    assert!(!body.contains("should not run"));
+
+    let event = wait_for_usage_event(db_path).await;
+    assert!(!event.success);
+    assert_eq!(
+        event.error_kind.as_deref(),
+        Some("upstream_sse:response.failed")
+    );
+}
+
+#[tokio::test]
+async fn openai_responses_accepts_incomplete_terminal_with_usage() {
+    let base = spawn_upstream_typed(
+        StatusCode::OK,
+        "text/event-stream",
+        concat!(
+            "event: response.output_text.delta\n",
+            "data: {\"type\":\"response.output_text.delta\",\"delta\":\"partial answer\"}\n\n",
+            "event: response.incomplete\n",
+            "data: {\"type\":\"response.incomplete\",\"response\":{\"status\":\"incomplete\",\"incomplete_details\":{\"reason\":\"max_output_tokens\"},\"usage\":{\"input_tokens\":7,\"output_tokens\":3,\"total_tokens\":10}}}\n\n",
+        ),
+    )
+    .await;
+    let db_path = temp_db_path();
+    storage::init_db(&db_path).expect("init_db");
+
+    let response = forward_openai_responses(db_path.clone(), format!("{base}/v1")).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let _ = to_bytes(response.into_body(), 1024 * 1024)
+        .await
+        .expect("read body");
+
+    let event = wait_for_usage_event(db_path).await;
+    assert!(event.success);
+    assert_eq!(event.prompt_tokens, Some(7));
+    assert_eq!(event.completion_tokens, Some(3));
+    assert_eq!(event.total_tokens, Some(10));
+}
+
+#[tokio::test]
+async fn openai_responses_records_missing_terminal_event() {
+    let base = spawn_upstream_typed(
+        StatusCode::OK,
+        "text/event-stream",
+        concat!(
+            "event: response.created\n",
+            "data: {\"type\":\"response.created\",\"response\":{\"status\":\"in_progress\"}}\n\n",
+            "event: response.output_text.delta\n",
+            "data: {\"type\":\"response.output_text.delta\",\"delta\":\"partial\"}\n\n",
+        ),
+    )
+    .await;
+    let db_path = temp_db_path();
+    storage::init_db(&db_path).expect("init_db");
+
+    let response = forward_openai_responses(db_path.clone(), format!("{base}/v1")).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let _ = to_bytes(response.into_body(), 1024 * 1024)
+        .await
+        .expect("read body");
+
+    let event = wait_for_usage_event(db_path).await;
+    assert!(!event.success);
+    assert_eq!(
+        event.error_kind.as_deref(),
+        Some("openai_responses_incomplete_stream")
+    );
+}
+
+#[tokio::test]
+async fn openai_responses_records_empty_completed_as_silent_refusal() {
+    let base = spawn_upstream_typed(
+        StatusCode::OK,
+        "text/event-stream",
+        concat!(
+            "event: response.created\n",
+            "data: {\"type\":\"response.created\",\"response\":{\"status\":\"in_progress\"}}\n\n",
+            "event: response.completed\n",
+            "data: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\",\"output\":[]}}\n\n",
+        ),
+    )
+    .await;
+    let db_path = temp_db_path();
+    storage::init_db(&db_path).expect("init_db");
+
+    let response = forward_openai_responses(db_path.clone(), format!("{base}/v1")).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = to_bytes(response.into_body(), 1024 * 1024)
+        .await
+        .expect("read body");
+    let body = String::from_utf8_lossy(&body);
+    assert!(body.contains("event: response.failed"));
+    assert!(body.contains("openai_silent_refusal"));
+
+    let event = wait_for_usage_event(db_path).await;
+    assert!(!event.success);
+    assert_eq!(event.error_kind.as_deref(), Some("openai_silent_refusal"));
+}
+
+#[tokio::test]
+async fn openai_responses_silent_refusal_fails_over_before_output() {
+    let (failed_base, failed_calls) = spawn_upstream_typed_counted(
+        StatusCode::OK,
+        "text/event-stream",
+        concat!(
+            "event: response.created\n",
+            "data: {\"type\":\"response.created\",\"response\":{\"status\":\"in_progress\"}}\n\n",
+            "event: response.completed\n",
+            "data: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\",\"output\":[]}}\n\n",
+        ),
+    )
+    .await;
+    let (healthy_base, healthy_calls) = spawn_upstream_typed_counted(
+        StatusCode::OK,
+        "text/event-stream",
+        concat!(
+            "event: response.output_text.delta\n",
+            "data: {\"type\":\"response.output_text.delta\",\"delta\":\"fallback answer\"}\n\n",
+            "event: response.completed\n",
+            "data: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\",\"usage\":{\"input_tokens\":8,\"output_tokens\":2,\"total_tokens\":10}}}\n\n",
+        ),
+    )
+    .await;
+    let db_path = temp_db_path();
+    storage::init_db(&db_path).expect("init_db");
+    create_openai_channel(
+        db_path.clone(),
+        "silent",
+        format!("{failed_base}/v1"),
+        20,
+        1,
+        false,
+    )
+    .await;
+    create_openai_channel(
+        db_path.clone(),
+        "healthy",
+        format!("{healthy_base}/v1"),
+        10,
+        1,
+        false,
+    )
+    .await;
+
+    let request = Request::builder()
+        .method("POST")
+        .uri("/v1/responses")
+        .header(axum::http::header::CONTENT_TYPE, "application/json")
+        .body(Body::from(
+            r#"{"model":"gpt-test","input":"hello","stream":true}"#,
+        ))
+        .expect("request");
+    let response = proxy::forward(
+        &reqwest::Client::new(),
+        db_path.clone(),
+        storage::Protocol::Openai,
+        "/v1",
+        request,
+    )
+    .await
+    .expect("forward");
+    let body = to_bytes(response.into_body(), 1024 * 1024)
+        .await
+        .expect("read body");
+
+    assert_eq!(failed_calls.load(Ordering::Relaxed), 1);
+    assert_eq!(healthy_calls.load(Ordering::Relaxed), 1);
+    let body = String::from_utf8_lossy(&body);
+    assert!(body.contains("fallback answer"));
+    assert!(!body.contains("openai_silent_refusal"));
+
+    for _ in 0..100 {
+        let events = storage::list_usage_events_recent(db_path.clone(), 10)
+            .await
+            .expect("list usage events");
+        if events.len() >= 2 {
+            assert!(events.iter().any(|event| {
+                !event.success && event.error_kind.as_deref() == Some("openai_silent_refusal")
+            }));
+            assert!(
+                events
+                    .iter()
+                    .any(|event| event.success && event.total_tokens == Some(10))
+            );
+            return;
+        }
+        sleep(Duration::from_millis(10)).await;
+    }
+    panic!("timeout waiting for failover usage events");
 }
 
 async fn assert_no_usage_events(db_path: std::path::PathBuf) {
