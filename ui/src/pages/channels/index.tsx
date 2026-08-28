@@ -58,6 +58,7 @@ import { PageBody } from "@/components/layout/page-body";
 import { useI18n } from "@/hooks/use-i18n";
 import { useCurrency } from "@/hooks/use-currency";
 import { useWindowEvent } from "@/hooks/use-window-event";
+import { resolveManagedChannelAccountName } from "@/lib/channel-display";
 import { humanizeApiError, humanizeIssue } from "@/lib/error";
 import { createChannelFormSchema } from "@/lib/schemas/channel";
 import {
@@ -502,9 +503,10 @@ export function ChannelsPage() {
         id: "account",
         header: t("channels.table.account"),
         cell: ({ row }) => {
-          const accountName = row.original.managed_remote_account_id
-            ? (accountNames[row.original.managed_remote_account_id] ?? "-")
-            : "-";
+          const accountName = resolveManagedChannelAccountName(
+            row.original,
+            accountNames,
+          );
           return (
             <div
               className="mx-auto max-w-[160px] truncate text-center"

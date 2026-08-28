@@ -36,6 +36,7 @@ import {
 import { useCurrency } from "@/hooks/use-currency";
 import { useI18n } from "@/hooks/use-i18n";
 import { useWindowEvent } from "@/hooks/use-window-event";
+import { resolveManagedChannelAccountName } from "@/lib/channel-display";
 import { dateRangeToMs, stringsToDateRange } from "@/lib/date-utils";
 import { humanizeApiError, humanizeErrorText } from "@/lib/error";
 import { cn } from "@/lib/utils";
@@ -82,14 +83,6 @@ function DetailRow({
       </div>
     </>
   );
-}
-
-function resolveChannelAccountName(
-  channel: Channel | undefined,
-  accountNames: Record<string, string>,
-): string {
-  const accountId = channel?.managed_remote_account_id;
-  return accountId ? (accountNames[accountId] ?? "-") : "-";
 }
 
 export function LogsPage() {
@@ -162,7 +155,10 @@ export function LogsPage() {
   const detailChannel = detailEvent
     ? channelsById.get(detailEvent.channel_id)
     : undefined;
-  const detailAccountName = resolveChannelAccountName(detailChannel, accountNames);
+  const detailAccountName = resolveManagedChannelAccountName(
+    detailChannel,
+    accountNames,
+  );
   const detailChannelName = detailEvent
     ? (channelNames.get(detailEvent.channel_id) ?? detailEvent.channel_id)
     : "-";
@@ -344,7 +340,10 @@ export function LogsPage() {
       header: t("logs.headers.channel"),
       cell: ({ row }) => {
         const channel = channelsById.get(row.original.channel_id);
-        const accountName = resolveChannelAccountName(channel, accountNames);
+        const accountName = resolveManagedChannelAccountName(
+          channel,
+          accountNames,
+        );
         const channelName = channelNames.get(row.original.channel_id) ?? "-";
 
         return (
@@ -362,7 +361,7 @@ export function LogsPage() {
         );
       },
       meta: {
-        headerClassName: "w-[10%]",
+        headerClassName: "w-[12%]",
         cellClassName: logsTableCellClassName,
         skeletonClassName: "mx-auto w-24",
       },
@@ -376,7 +375,7 @@ export function LogsPage() {
         </span>
       ),
       meta: {
-        headerClassName: "w-[15%]",
+        headerClassName: "w-[13%]",
         cellClassName: logsTableCellClassName,
         skeletonClassName: "mx-auto w-28",
       },
