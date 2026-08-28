@@ -15,7 +15,11 @@ import { useI18n } from "@/hooks/use-i18n";
 import { dateRangeToMs } from "@/lib/date-utils";
 import { useWindowEvent } from "@/hooks/use-window-event";
 import { humanizeApiError } from "@/lib/error";
-import { formatMoney, parseDecimalLike } from "@/providers/currency-provider";
+import {
+  calculateEstimatedSpend,
+  formatMoney,
+  parseDecimalLike,
+} from "@/providers/currency-provider";
 import { listChannels, statsChannels, statsSummary } from "@/api";
 import type { Channel, ChannelStats, StatsSummary } from "@/types/api";
 import { protocolLabel } from "../../lib";
@@ -33,7 +37,7 @@ const colClass = {
 
 export function MonitorPage() {
   const { locale, t } = useI18n();
-  const { currency } = useCurrency();
+  const { currency, usdToCnyRate } = useCurrency();
   const [stats, setStats] = useState<StatsSummary | null>(null);
   const [channelStats, setChannelStats] = useState<ChannelStats[]>([]);
   const [channels, setChannels] = useState<Channel[]>([]);
@@ -108,13 +112,22 @@ export function MonitorPage() {
       const est = parseDecimalLike(s.estimated_cost_usd);
       if (!est || est <= 0) continue;
       const ch = channelsById.get(s.channel_id);
-      const real = Number(ch?.real_multiplier ?? 1);
+      if (!ch) continue;
+      const real = Number(ch.real_multiplier ?? 1);
       if (!Number.isFinite(real) || real < 0) continue;
+      const converted = calculateEstimatedSpend(
+        est,
+        real,
+        ch.recharge_currency,
+        currency,
+        usdToCnyRate,
+      );
+      if (converted === null) return null;
       hasAny = true;
-      sum += est * real;
+      sum += converted;
     }
     return hasAny ? sum : null;
-  }, [channelStats, channels.length, channelsById]);
+  }, [channelStats, channels.length, channelsById, currency, usdToCnyRate]);
   const columns = React.useMemo<Array<ColumnDef<ChannelStats>>>(
     () => [
       {
@@ -205,24 +218,40 @@ export function MonitorPage() {
         accessorFn: (row) => {
           const est = parseDecimalLike(row.estimated_cost_usd);
           const channel = channelsById.get(row.channel_id);
-          const real = Number(channel?.real_multiplier ?? 1);
+          if (!channel) return -1;
+          const real = Number(channel.real_multiplier ?? 1);
           if (!est || est <= 0) return -1;
           if (!Number.isFinite(real) || real < 0) return -1;
-          return est * real;
+          return calculateEstimatedSpend(
+            est,
+            real,
+            channel.recharge_currency,
+            currency,
+            usdToCnyRate,
+          ) ?? -1;
         },
         enableSorting: true,
         cell: ({ row }) => {
           const est = parseDecimalLike(row.original.estimated_cost_usd);
           const channel = channelsById.get(row.original.channel_id);
-          const real = Number(channel?.real_multiplier ?? 1);
+          if (!channel)
+            return <span className="font-mono text-muted-foreground">-</span>;
+          const real = Number(channel.real_multiplier ?? 1);
           if (!est || est <= 0)
             return <span className="font-mono text-muted-foreground">-</span>;
           if (!Number.isFinite(real) || real < 0) {
             return <span className="font-mono text-muted-foreground">-</span>;
           }
+          const converted = calculateEstimatedSpend(
+            est,
+            real,
+            channel.recharge_currency,
+            currency,
+            usdToCnyRate,
+          );
           return (
             <span className="font-mono text-muted-foreground">
-              {formatMoney(est * real, currency)}
+              {formatMoney(converted, currency)}
             </span>
           );
         },
@@ -251,6 +280,7 @@ export function MonitorPage() {
     [
       channelsById,
       currency,
+      usdToCnyRate,
       t,
     ],
   );

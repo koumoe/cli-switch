@@ -30,6 +30,7 @@ import type {
   DeleteChannelInput,
   DeleteProjectDocumentInput,
   DeleteRemoteAccountInput,
+  ExchangeRate,
   GetProjectDocumentQuery,
   Health,
   InstallCliToolResponse,
@@ -194,6 +195,10 @@ export function updateSettings(
   patch: Partial<AppSettings>
 ): Promise<AppSettings> {
   return http<AppSettings>("PUT", "/api/settings", patch);
+}
+
+export function getUsdCnyExchangeRate(): Promise<ExchangeRate> {
+  return http<ExchangeRate>("GET", "/api/currency/usd-cny");
 }
 
 export function listChatBridgeBindings(): Promise<ChatBridgeBinding[]> {

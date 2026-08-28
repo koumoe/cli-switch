@@ -47,7 +47,11 @@ import { resolveManagedChannelAccountName } from "@/lib/channel-display";
 import { dateRangeToMs, stringsToDateRange } from "@/lib/date-utils";
 import { humanizeApiError, humanizeErrorText } from "@/lib/error";
 import { cn } from "@/lib/utils";
-import { formatMoney, parseDecimalLike } from "@/providers/currency-provider";
+import {
+  calculateEstimatedSpend,
+  formatMoney,
+  parseDecimalLike,
+} from "@/providers/currency-provider";
 import type { Channel, Protocol, UsageEvent } from "@/types/api";
 import { formatDuration, formatNumber, protocolLabel } from "../../lib";
 
@@ -94,7 +98,7 @@ function DetailRow({
 
 export function LogsPage() {
   const { t } = useI18n();
-  const { currency } = useCurrency();
+  const { currency, usdToCnyRate } = useCurrency();
   const [events, setEvents] = useState<UsageEvent[]>([]);
   const [channels, setChannels] = useState<Channel[]>([]);
   const [channelsLoaded, setChannelsLoaded] = useState(false);
@@ -221,16 +225,25 @@ export function LogsPage() {
   function getEstimatedSpend(event: UsageEvent) {
     const estimate = parseDecimalLike(event.estimated_cost_usd);
     const channel = channelsById.get(event.channel_id);
-    const multiplier = Number(channel?.real_multiplier ?? 1);
 
-    if (estimate === null) {
+    if (estimate === null || !channel) {
       return "-";
     }
+    const multiplier = Number(channel.real_multiplier ?? 1);
     if (!Number.isFinite(multiplier) || multiplier < 0) {
       return "-";
     }
 
-    return formatMoney(estimate * multiplier, currency);
+    return formatMoney(
+      calculateEstimatedSpend(
+        estimate,
+        multiplier,
+        channel.recharge_currency,
+        currency,
+        usdToCnyRate,
+      ),
+      currency,
+    );
   }
 
   function formatOfficialCost(value: string | null | undefined) {

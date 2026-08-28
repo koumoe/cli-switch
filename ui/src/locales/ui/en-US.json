@@ -143,14 +143,15 @@
     "autoSort": {
       "button": "Sort by multiplier",
       "title": "Auto sort",
-      "description": "Generate a suggested order for {{terminal}} based on multipliers",
+      "description": "Convert channel costs to {{currency}} before suggesting an order for {{terminal}}",
+      "rateUnavailable": "Some recharge currencies differ from the display currency, but the USD/CNY rate is not available yet",
       "noChange": "No changes needed for current order",
       "apply": "Apply",
       "headers": {
         "from": "From",
         "to": "To",
         "channel": "Channel",
-        "factor": "Factor"
+        "factor": "Cost factor ({{currency}})"
       }
     },
     "tabs": {
@@ -192,7 +193,7 @@
         "usd": "USD"
       },
       "realMultiplier": "Real multiplier",
-      "realMultiplierHint": "0 means free channel; up to 2 decimals",
+      "realMultiplierHint": "Official USD credits × multiplier = amount in the recharge currency; 0 means free, up to 2 decimals",
       "baseUrl": "Base URL",
       "apiKey": "API Key / Token",
       "enabled": "Enabled",
@@ -573,6 +574,10 @@
     },
     "currency": {
       "subtitle": "Used for displaying values like Estimated Cost (Official Credits are always calculated in official USD)",
+      "rateHint": "USD/CNY reference rate: 1 USD = {{rate}} CNY ({{date}}, {{source}})",
+      "rateStaleHint": "Cached USD/CNY rate: 1 USD = {{rate}} CNY ({{date}}, {{source}}; offline or refresh failed)",
+      "rateLoading": "Loading the USD/CNY reference rate…",
+      "rateUnavailable": "The USD/CNY rate is unavailable; cross-currency costs will be shown as —",
       "label": "Default currency",
       "options": {
         "auto": "Auto (follow language)",

@@ -2,6 +2,22 @@ import "@testing-library/jest-dom/vitest";
 import { cleanup } from "@testing-library/react";
 import { afterEach, vi } from "vitest";
 
+vi.mock("@/api", async () => {
+  const actual = await vi.importActual<typeof import("@/api")>("@/api");
+  return {
+    ...actual,
+    getUsdCnyExchangeRate: vi.fn(async () => ({
+      base_currency: "USD" as const,
+      quote_currency: "CNY" as const,
+      rate: 6.72,
+      effective_date: "2026-08-28",
+      source: "Frankfurter",
+      fetched_at_ms: 1_777_000_000_000,
+      stale: false,
+    })),
+  };
+});
+
 afterEach(() => {
   cleanup();
   if (typeof window !== "undefined") {

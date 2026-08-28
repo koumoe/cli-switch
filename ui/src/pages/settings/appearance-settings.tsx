@@ -9,8 +9,12 @@ import {
   SelectValue,
 } from "@/components/ui";
 import { useI18n } from "@/hooks/use-i18n";
+import { useCurrency } from "@/hooks/use-currency";
 import type { Theme } from "@/hooks/use-theme";
-import type { CurrencyMode } from "@/providers/currency-provider";
+import {
+  formatDecimal,
+  type CurrencyMode,
+} from "@/providers/currency-provider";
 import type { Locale } from "@/types/locale";
 import { SettingsFieldText, SettingsRow, SettingsSection } from "./settings-layout";
 
@@ -47,6 +51,21 @@ export function AppearanceSettings({
   onCurrencyModeChange,
 }: AppearanceSettingsProps) {
   const { t } = useI18n();
+  const { exchangeRate, exchangeRateLoading } = useCurrency();
+  const exchangeRateHint = exchangeRate
+    ? t(
+        exchangeRate.stale
+          ? "settings.currency.rateStaleHint"
+          : "settings.currency.rateHint",
+        {
+          rate: formatDecimal(exchangeRate.rate, 4),
+          date: exchangeRate.effective_date,
+          source: exchangeRate.source,
+        },
+      )
+    : exchangeRateLoading
+      ? t("settings.currency.rateLoading")
+      : t("settings.currency.rateUnavailable");
 
   return (
     <>
@@ -100,7 +119,13 @@ export function AppearanceSettings({
         <SettingsRow>
           <SettingsFieldText
             label={t("settings.currency.label")}
-            hint={t("settings.currency.subtitle")}
+            hint={
+              <>
+                <span>{t("settings.currency.subtitle")}</span>
+                <br />
+                <span>{exchangeRateHint}</span>
+              </>
+            }
           />
           <div className="w-[220px] shrink-0">
             <Select
