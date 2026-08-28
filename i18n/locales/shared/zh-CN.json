@@ -6,6 +6,7 @@
     "proxy_invalid_base_url": "渠道 base_url 无效",
     "proxy_read_body_failed": "读取请求体失败",
     "proxy_upstream_failed": "上游请求失败",
+    "currency_exchange_rate_unavailable": "暂时无法获取 USD/CNY 汇率，且本地没有可用缓存",
     "tools_proxy_config_apply_failed": "写入配置失败",
     "tools_proxy_config_apply_item_failed": "{{tool}} 的代理配置写入失败",
     "tools_terminal_shim_setup_failed": "{{tool}} 的终端 shim 配置失败",

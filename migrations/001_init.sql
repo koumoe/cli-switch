@@ -183,6 +183,16 @@ CREATE TABLE IF NOT EXISTS app_settings (
   updated_at_ms INTEGER NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS exchange_rates (
+  base_currency TEXT NOT NULL,
+  quote_currency TEXT NOT NULL,
+  rate REAL NOT NULL CHECK(rate > 0),
+  effective_date TEXT NOT NULL,
+  source TEXT NOT NULL,
+  fetched_at_ms INTEGER NOT NULL,
+  PRIMARY KEY (base_currency, quote_currency)
+);
+
 CREATE TABLE IF NOT EXISTS ignored_updates (
   version TEXT PRIMARY KEY,
   ignored_at_ms INTEGER NOT NULL
