@@ -16,6 +16,7 @@ use crate::storage::{self, Channel, Protocol};
 
 mod limits;
 mod openai_responses;
+mod sse;
 mod stream;
 mod usage_writer;
 
@@ -50,6 +51,8 @@ struct PreparedUpstreamResponse {
     status: StatusCode,
     headers: HeaderMap,
     content_length: Option<u64>,
+    /// Body inspection is authoritative over a potentially incorrect upstream Content-Type.
+    detected_sse: Option<bool>,
     stream: BoxStream<'static, Result<Bytes, reqwest::Error>>,
 }
 
@@ -59,6 +62,7 @@ impl PreparedUpstreamResponse {
             status: response.status(),
             headers: response.headers().clone(),
             content_length: response.content_length(),
+            detected_sse: None,
             stream: response.bytes_stream().boxed(),
         }
     }
@@ -867,10 +871,14 @@ async fn proxy_upstream_response(
         status,
         headers: upstream_headers,
         content_length,
+        detected_sse,
         stream,
     } = upstream;
     ctx.http_status = status.as_u16() as i64;
     ctx.status_is_success = status.is_success();
+    if let Some(detected_sse) = detected_sse {
+        ctx.require_openai_responses_terminal = detected_sse;
+    }
 
     let mut headers = filtered_headers(&upstream_headers);
     let content_type = upstream_headers
@@ -879,22 +887,32 @@ async fn proxy_upstream_response(
         .unwrap_or("")
         .to_ascii_lowercase();
     let header_is_sse = content_type.starts_with("text/event-stream");
-    let is_sse = header_is_sse || (status.is_success() && ctx.expected_sse);
-    let is_json = content_type.contains("application/json") || content_type.contains("+json");
+    let header_is_json =
+        content_type.contains("application/json") || content_type.contains("+json");
+    let is_sse = detected_sse.unwrap_or(header_is_sse || (status.is_success() && ctx.expected_sse));
+    let is_json = detected_sse == Some(false) || header_is_json;
 
     ctx.parse_sse = is_sse;
     ctx.upstream_content_type = (!content_type.is_empty()).then_some(content_type.clone());
-    ctx.content_type_corrected = status.is_success() && ctx.expected_sse && !header_is_sse;
+    ctx.content_type_corrected = status.is_success()
+        && ((detected_sse == Some(true) && !header_is_sse)
+            || (detected_sse == Some(false) && !header_is_json));
 
     if ctx.content_type_corrected {
         headers.insert(
             axum::http::header::CONTENT_TYPE,
-            HeaderValue::from_static("text/event-stream"),
+            if detected_sse == Some(false) {
+                HeaderValue::from_static("application/json")
+            } else {
+                HeaderValue::from_static("text/event-stream")
+            },
         );
-        headers.insert(
-            axum::http::header::CACHE_CONTROL,
-            HeaderValue::from_static("no-cache"),
-        );
+        if detected_sse != Some(false) {
+            headers.insert(
+                axum::http::header::CACHE_CONTROL,
+                HeaderValue::from_static("no-cache"),
+            );
+        }
     }
 
     let mut resp = Response::builder().status(status);

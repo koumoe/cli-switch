@@ -7,6 +7,8 @@ use std::time::Instant;
 
 use crate::storage::Protocol;
 
+use super::sse::{SseLine, SseLineParser};
+
 #[derive(Clone)]
 pub(super) struct StreamRecordContext {
     pub(super) db_path: std::path::PathBuf,
@@ -37,7 +39,7 @@ pub(super) struct InstrumentedStream {
     stream_bytes: usize,
     stream_chunks: u64,
     end_reason: Option<&'static str>,
-    sse_buf: Vec<u8>,
+    sse_parser: SseLineParser,
     sse_log_buf: Vec<u8>,
     sse_log_truncated: bool,
     err_body_buf: Vec<u8>,
@@ -52,7 +54,6 @@ pub(super) struct InstrumentedStream {
     sse_semantic_output_seen: bool,
     sse_terminal_error_kind: Option<String>,
     sse_terminal_error_detail: Option<String>,
-    sse_skip_oversized_line: bool,
 }
 
 impl InstrumentedStream {
@@ -69,7 +70,7 @@ impl InstrumentedStream {
             stream_bytes: 0,
             stream_chunks: 0,
             end_reason: None,
-            sse_buf: Vec::new(),
+            sse_parser: SseLineParser::new(super::limits::MAX_SSE_BUF_BYTES),
             sse_log_buf: Vec::new(),
             sse_log_truncated: false,
             err_body_buf: Vec::new(),
@@ -84,7 +85,6 @@ impl InstrumentedStream {
             sse_semantic_output_seen: false,
             sse_terminal_error_kind: None,
             sse_terminal_error_detail: None,
-            sse_skip_oversized_line: false,
         }
     }
 
@@ -181,59 +181,35 @@ impl InstrumentedStream {
     }
 
     fn consume_sse(&mut self, bytes: &Bytes) {
-        for byte in bytes {
-            if self.sse_skip_oversized_line {
-                if *byte == b'\n' {
-                    self.sse_skip_oversized_line = false;
-                    self.sse_pending_event = None;
-                }
-                continue;
-            }
-
-            if self.sse_buf.len() >= super::limits::MAX_SSE_BUF_BYTES {
-                self.sse_buf.clear();
-                self.sse_skip_oversized_line = true;
-                continue;
-            }
-
-            self.sse_buf.push(*byte);
-            if *byte == b'\n' {
-                let line = std::mem::take(&mut self.sse_buf);
-                self.consume_sse_line(&line);
-            }
+        let mut lines = Vec::new();
+        self.sse_parser.feed(bytes, |line| lines.push(line));
+        for line in lines {
+            self.consume_sse_line(line);
         }
     }
 
-    fn consume_sse_line(&mut self, line: &[u8]) {
-        let Ok(mut s) = std::str::from_utf8(line) else {
-            return;
-        };
-        s = s.trim();
-        if s.is_empty() {
-            self.sse_pending_event = None;
-            return;
-        }
-        if let Some(rest) = s.strip_prefix("event:") {
-            let event = rest.trim();
-            if !event.is_empty() {
-                let event = super::truncate(event, 120);
+    fn consume_sse_line(&mut self, line: SseLine) {
+        match line {
+            SseLine::Event(event) if !event.is_empty() => {
+                let event = super::truncate(&event, 120);
                 self.sse_last_event = Some(event.clone());
                 self.sse_pending_event = Some(event);
             }
-            return;
+            SseLine::Event(_) | SseLine::Blank => self.sse_pending_event = None,
+            SseLine::Data(data) => self.consume_sse_data(&data),
+            SseLine::Other => {}
         }
-        if !s.starts_with("data:") {
-            return;
-        }
-        let data = s["data:".len()..].trim();
+    }
+
+    fn consume_sse_data(&mut self, data: &[u8]) {
         if data.is_empty() {
             return;
         }
-        if data == "[DONE]" {
+        if data == b"[DONE]" {
             self.observe_terminal("[DONE]", None);
             return;
         }
-        let Ok(value) = serde_json::from_str::<serde_json::Value>(data) else {
+        let Ok(value) = serde_json::from_slice::<serde_json::Value>(data) else {
             return;
         };
 
@@ -331,11 +307,14 @@ impl InstrumentedStream {
     }
 
     fn finish_sse_parser(&mut self) {
-        if !self.ctx.parse_sse || self.sse_skip_oversized_line || self.sse_buf.is_empty() {
+        if !self.ctx.parse_sse {
             return;
         }
-        let line = std::mem::take(&mut self.sse_buf);
-        self.consume_sse_line(&line);
+        let mut lines = Vec::new();
+        self.sse_parser.finish(|line| lines.push(line));
+        for line in lines {
+            self.consume_sse_line(line);
+        }
     }
 
     fn finalize(&mut self) {

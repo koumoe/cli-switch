@@ -3,7 +3,10 @@ use bytes::{Bytes, BytesMut};
 use futures_util::StreamExt as _;
 use futures_util::stream::BoxStream;
 
-use super::{PreparedUpstreamResponse, Protocol, TokenUsage, extract_openai_usage, limits};
+use super::{
+    PreparedUpstreamResponse, Protocol, TokenUsage, extract_openai_usage, limits,
+    sse::{SseLine, SseLineParser, has_sse_field_prefix},
+};
 
 pub(super) enum OpenAiResponsesBootstrap {
     Ready(PreparedUpstreamResponse),
@@ -29,15 +32,28 @@ enum BootstrapTerminal {
     },
 }
 
-#[derive(Default)]
 struct BootstrapState {
-    line_buf: Vec<u8>,
+    parser: SseLineParser,
     pending_event: Option<String>,
-    skip_oversized_line: bool,
+    saw_sse_structure: bool,
     semantic_output_seen: bool,
     usage: TokenUsage,
     terminal: Option<BootstrapTerminal>,
     pending_error: Option<PendingError>,
+}
+
+impl Default for BootstrapState {
+    fn default() -> Self {
+        Self {
+            parser: SseLineParser::new(limits::MAX_SSE_BUF_BYTES),
+            pending_event: None,
+            saw_sse_structure: false,
+            semantic_output_seen: false,
+            usage: TokenUsage::default(),
+            terminal: None,
+            pending_error: None,
+        }
+    }
 }
 
 struct PendingError {
@@ -48,53 +64,35 @@ struct PendingError {
 
 impl BootstrapState {
     fn consume(&mut self, bytes: &[u8]) {
-        for byte in bytes {
-            if self.skip_oversized_line {
-                if *byte == b'\n' {
-                    self.skip_oversized_line = false;
-                    self.pending_event = None;
-                }
-                continue;
+        let mut lines = Vec::new();
+        self.parser.feed(bytes, |line| lines.push(line));
+        for line in lines {
+            if matches!(line, SseLine::Event(_) | SseLine::Data(_)) {
+                self.saw_sse_structure = true;
             }
-            if self.line_buf.len() >= limits::MAX_SSE_BUF_BYTES {
-                self.line_buf.clear();
-                self.skip_oversized_line = true;
-                continue;
-            }
-            self.line_buf.push(*byte);
-            if *byte == b'\n' {
-                let line = std::mem::take(&mut self.line_buf);
-                self.consume_line(&line);
-                if self.semantic_output_seen || self.terminal.is_some() {
-                    return;
-                }
+            self.consume_line(line);
+            if self.semantic_output_seen || self.terminal.is_some() {
+                return;
             }
         }
     }
 
-    fn consume_line(&mut self, line: &[u8]) {
-        let Ok(mut line) = std::str::from_utf8(line) else {
-            return;
-        };
-        line = line.trim();
-        if line.is_empty() {
-            self.pending_event = None;
-            return;
-        }
-        if let Some(event) = line.strip_prefix("event:") {
-            let event = event.trim();
-            if !event.is_empty() {
-                self.pending_event = Some(super::truncate(event, 120));
+    fn consume_line(&mut self, line: SseLine) {
+        match line {
+            SseLine::Event(event) if !event.is_empty() => {
+                self.pending_event = Some(super::truncate(&event, 120));
             }
-            return;
+            SseLine::Event(_) | SseLine::Blank => self.pending_event = None,
+            SseLine::Data(data) => self.consume_data(&data),
+            SseLine::Other => {}
         }
-        let Some(data) = line.strip_prefix("data:").map(str::trim) else {
-            return;
-        };
+    }
+
+    fn consume_data(&mut self, data: &[u8]) {
         if data.is_empty() {
             return;
         }
-        if data == "[DONE]" {
+        if data == b"[DONE]" {
             self.terminal = Some(
                 if self.semantic_output_seen || self.usage.has_any_fields() {
                     BootstrapTerminal::Success
@@ -110,7 +108,7 @@ impl BootstrapState {
             );
             return;
         }
-        let Ok(value) = serde_json::from_str::<serde_json::Value>(data) else {
+        let Ok(value) = serde_json::from_slice::<serde_json::Value>(data) else {
             return;
         };
         let marker = value
@@ -178,6 +176,7 @@ pub(super) async fn inspect_openai_responses_bootstrap(
         status,
         headers,
         content_length,
+        detected_sse: _,
         mut stream,
     } = response;
     let mut prefix = BytesMut::new();
@@ -190,26 +189,46 @@ pub(super) async fn inspect_openai_responses_bootstrap(
                 state.consume(&chunk);
 
                 if state.semantic_output_seen {
-                    return OpenAiResponsesBootstrap::Ready(prepared_response_with_prefix(
-                        status,
-                        headers,
-                        content_length,
-                        prefix.freeze(),
-                        stream,
+                    return OpenAiResponsesBootstrap::Ready(set_detected_sse(
+                        prepared_response_with_prefix(
+                            status,
+                            headers,
+                            content_length,
+                            prefix.freeze(),
+                            stream,
+                        ),
+                        true,
                     ));
                 }
                 if let Some(terminal) = state.terminal.take() {
                     return bootstrap_terminal_result(
-                        status,
-                        headers,
-                        content_length,
-                        prefix.freeze(),
-                        stream,
+                        prepared_response_with_prefix(
+                            status,
+                            headers,
+                            content_length,
+                            prefix.freeze(),
+                            stream,
+                        ),
                         state.usage,
                         terminal,
+                        state.saw_sse_structure,
                     );
                 }
                 if prefix.len() >= limits::MAX_OPENAI_RESPONSES_BOOTSTRAP_BYTES {
+                    let saw_sse_structure =
+                        state.saw_sse_structure || has_sse_field_prefix(&prefix);
+                    if !saw_sse_structure {
+                        return OpenAiResponsesBootstrap::Ready(set_detected_sse(
+                            prepared_response_with_prefix(
+                                status,
+                                headers,
+                                content_length,
+                                prefix.freeze(),
+                                stream,
+                            ),
+                            false,
+                        ));
+                    }
                     if let Some(pending_error) = state.pending_error.take() {
                         let response = prepared_response_with_prefix(
                             status,
@@ -229,16 +248,29 @@ pub(super) async fn inspect_openai_responses_bootstrap(
                             },
                         );
                     }
-                    return OpenAiResponsesBootstrap::Ready(prepared_response_with_prefix(
-                        status,
-                        headers,
-                        content_length,
-                        prefix.freeze(),
-                        stream,
+                    return OpenAiResponsesBootstrap::Ready(set_detected_sse(
+                        prepared_response_with_prefix(
+                            status,
+                            headers,
+                            content_length,
+                            prefix.freeze(),
+                            stream,
+                        ),
+                        saw_sse_structure,
                     ));
                 }
             }
             Some(Err(error)) => {
+                if !state.saw_sse_structure {
+                    let response = prepared_response_with_prefix(
+                        status,
+                        headers,
+                        content_length,
+                        prefix.freeze(),
+                        futures_util::stream::once(async move { Err(error) }).boxed(),
+                    );
+                    return OpenAiResponsesBootstrap::Ready(set_detected_sse(response, false));
+                }
                 let response = prepared_response_with_prefix(
                     status,
                     headers,
@@ -259,20 +291,58 @@ pub(super) async fn inspect_openai_responses_bootstrap(
                 });
             }
             None => {
-                if !state.skip_oversized_line && !state.line_buf.is_empty() {
-                    let line = std::mem::take(&mut state.line_buf);
-                    state.consume_line(&line);
+                let mut lines = Vec::new();
+                state.parser.finish(|line| lines.push(line));
+                for line in lines {
+                    if matches!(line, SseLine::Event(_) | SseLine::Data(_)) {
+                        state.saw_sse_structure = true;
+                    }
+                    state.consume_line(line);
                 }
                 if let Some(terminal) = state.terminal.take() {
                     return bootstrap_terminal_result(
+                        prepared_response_with_prefix(
+                            status,
+                            headers,
+                            content_length,
+                            prefix.freeze(),
+                            futures_util::stream::empty().boxed(),
+                        ),
+                        state.usage,
+                        terminal,
+                        state.saw_sse_structure,
+                    );
+                }
+                if !state.saw_sse_structure && !prefix.is_empty() {
+                    if serde_json::from_slice::<serde_json::Value>(&prefix).is_ok() {
+                        return OpenAiResponsesBootstrap::Ready(set_detected_sse(
+                            prepared_response_with_prefix(
+                                status,
+                                headers,
+                                content_length,
+                                prefix.freeze(),
+                                futures_util::stream::empty().boxed(),
+                            ),
+                            false,
+                        ));
+                    }
+                    let response = prepared_response_with_prefix(
                         status,
                         headers,
                         content_length,
                         prefix.freeze(),
                         futures_util::stream::empty().boxed(),
-                        state.usage,
-                        terminal,
                     );
+                    return OpenAiResponsesBootstrap::Failure(OpenAiResponsesBootstrapFailure {
+                        response,
+                        error_kind: "openai_responses_incomplete_stream".to_string(),
+                        error_detail:
+                            "OpenAI Responses upstream returned neither SSE nor valid JSON"
+                                .to_string(),
+                        usage: state.usage,
+                        retryable: true,
+                        synthetic_on_exhaustion: true,
+                    });
                 }
                 if let Some(pending_error) = state.pending_error.take() {
                     let response = prepared_response_with_prefix(
@@ -313,16 +383,12 @@ pub(super) async fn inspect_openai_responses_bootstrap(
 }
 
 fn bootstrap_terminal_result(
-    status: StatusCode,
-    headers: HeaderMap,
-    content_length: Option<u64>,
-    prefix: Bytes,
-    remainder: BoxStream<'static, Result<Bytes, reqwest::Error>>,
+    response: PreparedUpstreamResponse,
     usage: TokenUsage,
     terminal: BootstrapTerminal,
+    saw_sse_structure: bool,
 ) -> OpenAiResponsesBootstrap {
-    let response =
-        prepared_response_with_prefix(status, headers, content_length, prefix, remainder);
+    let response = set_detected_sse(response, saw_sse_structure);
     match terminal {
         BootstrapTerminal::Success => OpenAiResponsesBootstrap::Ready(response),
         BootstrapTerminal::Failure {
@@ -355,8 +421,17 @@ fn prepared_response_with_prefix(
         status,
         headers,
         content_length,
+        detected_sse: None,
         stream,
     }
+}
+
+fn set_detected_sse(
+    mut response: PreparedUpstreamResponse,
+    detected_sse: bool,
+) -> PreparedUpstreamResponse {
+    response.detected_sse = Some(detected_sse);
+    response
 }
 
 pub(super) fn synthetic_openai_responses_failure(
@@ -368,6 +443,7 @@ pub(super) fn synthetic_openai_responses_failure(
         status,
         mut headers,
         content_length: _,
+        detected_sse: _,
         stream: _,
     } = response;
     let payload = serde_json::json!({
@@ -396,6 +472,7 @@ pub(super) fn synthetic_openai_responses_failure(
         status,
         headers,
         content_length,
+        detected_sse: Some(true),
         stream,
     }
 }
@@ -544,5 +621,108 @@ fn json_scalar_string(value: &serde_json::Value) -> Option<String> {
         serde_json::Value::String(value) => Some(value.clone()),
         serde_json::Value::Number(value) => Some(value.to_string()),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn semantic_output_excludes_handshake_and_terminal_events() {
+        assert!(!event_has_semantic_output(
+            "response.created",
+            &json!({"type":"response.created"})
+        ));
+        assert!(!event_has_semantic_output(
+            "response.completed",
+            &json!({"type":"response.completed","response":{"output":[]}})
+        ));
+        assert!(event_has_semantic_output(
+            "response.output_text.delta",
+            &json!({"type":"response.output_text.delta","delta":"hello"})
+        ));
+        assert!(event_has_semantic_output(
+            "response.completed",
+            &json!({"type":"response.completed","response":{"output":[{"type":"message"}]}})
+        ));
+    }
+
+    #[test]
+    fn completed_failure_distinguishes_valid_incomplete_from_errors() {
+        assert!(
+            completed_failure(&json!({
+                "type":"response.completed",
+                "response":{"status":"failed","error":{"message":"failed upstream"}}
+            }))
+            .is_some()
+        );
+        assert!(completed_failure(&json!({
+            "type":"response.incomplete",
+            "response":{"status":"incomplete","incomplete_details":{"reason":"max_output_tokens"}}
+        }))
+        .is_none());
+        assert!(
+            completed_failure(&json!({
+                "type":"response.completed",
+                "response":{"status":"completed","error":null}
+            }))
+            .is_none()
+        );
+    }
+
+    #[test]
+    fn terminal_error_detail_reads_nested_response_error() {
+        assert_eq!(
+            terminal_error_detail(&json!({
+                "type":"response.failed",
+                "response":{"error":{"message":"nested failure"}}
+            }))
+            .as_deref(),
+            Some("nested failure")
+        );
+    }
+
+    #[test]
+    fn retryability_matches_cross_channel_policy() {
+        for code in [
+            "unauthorized",
+            "invalid_authentication",
+            "account_disabled",
+            "insufficient_quota",
+            "rate_limit_exceeded",
+            "server_error",
+        ] {
+            assert!(
+                terminal_failure_is_retryable(&json!({
+                    "type":"response.failed",
+                    "response":{"error":{"code":code,"message":"retry elsewhere"}}
+                })),
+                "expected {code} to be retryable across channels"
+            );
+        }
+
+        for code in ["context_length_exceeded", "invalid_request_error"] {
+            assert!(
+                !terminal_failure_is_retryable(&json!({
+                    "type":"response.failed",
+                    "response":{"error":{"code":code,"message":"fix the request"}}
+                })),
+                "expected {code} to remain request-scoped"
+            );
+        }
+    }
+
+    #[test]
+    fn numeric_retryable_status_is_recognized() {
+        assert!(terminal_failure_is_retryable(&json!({
+            "type":"response.failed",
+            "response":{"error":{"status":429,"message":"slow down"}}
+        })));
+        assert!(!terminal_failure_is_retryable(&json!({
+            "type":"response.failed",
+            "response":{"error":{"status":400,"message":"bad request"}}
+        })));
     }
 }
