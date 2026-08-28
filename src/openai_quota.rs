@@ -27,7 +27,7 @@ impl OpenAiQuotaError {
     }
 }
 
-fn parse_window(value: &Value, now_ms: i64) -> Option<OpenAiQuotaWindow> {
+fn parse_window(value: &Value, now_ms: i64, limit_name: Option<&str>) -> Option<OpenAiQuotaWindow> {
     let object = value.as_object()?;
     let used_percent = object.get("used_percent")?.as_f64()?;
     if !used_percent.is_finite() {
@@ -52,6 +52,10 @@ fn parse_window(value: &Value, now_ms: i64) -> Option<OpenAiQuotaWindow> {
                 .map(|seconds| now_ms.saturating_add(seconds.saturating_mul(1000)))
         });
     Some(OpenAiQuotaWindow {
+        limit_name: limit_name
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string),
         used_percent,
         window_minutes,
         resets_at_ms,
@@ -59,56 +63,42 @@ fn parse_window(value: &Value, now_ms: i64) -> Option<OpenAiQuotaWindow> {
 }
 
 fn snapshot_from_payload(payload: Value, now_ms: i64) -> OpenAiQuotaSnapshot {
-    let mut windows = Vec::new();
-    let mut push = |value: Option<&Value>| {
-        if let Some(value) = value.and_then(|value| parse_window(value, now_ms))
-            && !windows.iter().any(|existing: &OpenAiQuotaWindow| {
-                existing.window_minutes == value.window_minutes
-                    && existing.used_percent.to_bits() == value.used_percent.to_bits()
-                    && existing.resets_at_ms == value.resets_at_ms
-            })
-        {
-            windows.push(value);
-        }
-    };
-    if let Some(rate_limit) = payload.get("rate_limit") {
-        push(rate_limit.get("primary_window"));
-        push(rate_limit.get("secondary_window"));
-    }
-    if let Some(additional) = payload
+    let rate_limit = payload.get("rate_limit");
+    let primary = rate_limit
+        .and_then(|value| value.get("primary_window"))
+        .and_then(|value| parse_window(value, now_ms, None));
+    let secondary = rate_limit
+        .and_then(|value| value.get("secondary_window"))
+        .and_then(|value| parse_window(value, now_ms, None));
+
+    let mut additional = Vec::new();
+    if let Some(items) = payload
         .get("additional_rate_limits")
         .and_then(Value::as_array)
     {
-        for item in additional {
+        for item in items {
+            let limit_name = item.get("limit_name").and_then(Value::as_str);
             let rate_limit = item.get("rate_limit").unwrap_or(item);
-            push(rate_limit.get("primary_window"));
-            push(rate_limit.get("secondary_window"));
-        }
-    }
-    if windows.is_empty() {
-        fn walk(value: &Value, now_ms: i64, output: &mut Vec<OpenAiQuotaWindow>) {
-            if let Some(parsed) = parse_window(value, now_ms)
-                && !output.iter().any(|existing| {
-                    existing.window_minutes == parsed.window_minutes
-                        && existing.used_percent.to_bits() == parsed.used_percent.to_bits()
-                        && existing.resets_at_ms == parsed.resets_at_ms
-                })
-            {
-                output.push(parsed);
-            }
-            match value {
-                Value::Object(object) => object
-                    .values()
-                    .for_each(|child| walk(child, now_ms, output)),
-                Value::Array(values) => values.iter().for_each(|child| walk(child, now_ms, output)),
-                _ => {}
+            for window in [
+                rate_limit.get("primary_window"),
+                rate_limit.get("secondary_window"),
+            ] {
+                let Some(window) = window.and_then(|value| parse_window(value, now_ms, limit_name))
+                else {
+                    continue;
+                };
+                if !additional.iter().any(|existing: &OpenAiQuotaWindow| {
+                    existing.limit_name == window.limit_name
+                        && existing.window_minutes == window.window_minutes
+                        && existing.used_percent.to_bits() == window.used_percent.to_bits()
+                        && existing.resets_at_ms == window.resets_at_ms
+                }) {
+                    additional.push(window);
+                }
             }
         }
-        walk(&payload, now_ms, &mut windows);
     }
-    let primary = windows.first().cloned();
-    let secondary = windows.get(1).cloned();
-    let additional = windows.into_iter().skip(2).collect();
+
     OpenAiQuotaSnapshot {
         primary,
         secondary,
@@ -162,7 +152,13 @@ pub fn from_headers(headers: &HeaderMap, now_ms: i64) -> Option<OpenAiQuotaSnaps
     }
     fn read(headers: &HeaderMap, prefix: &str, now_ms: i64) -> Option<OpenAiQuotaWindow> {
         let used_percent = float(headers, &format!("x-codex-{prefix}-used-percent"))?;
+        if !used_percent.is_finite() {
+            return None;
+        }
         let window_minutes = integer(headers, &format!("x-codex-{prefix}-window-minutes"))?;
+        if window_minutes <= 0 {
+            return None;
+        }
         let resets_at_ms = integer(headers, &format!("x-codex-{prefix}-reset-at"))
             .map(|seconds| seconds.saturating_mul(1000))
             .or_else(|| {
@@ -170,6 +166,7 @@ pub fn from_headers(headers: &HeaderMap, now_ms: i64) -> Option<OpenAiQuotaSnaps
                     .map(|seconds| now_ms.saturating_add(seconds.saturating_mul(1000)))
             });
         Some(OpenAiQuotaWindow {
+            limit_name: None,
             used_percent,
             window_minutes,
             resets_at_ms,
@@ -227,6 +224,18 @@ mod tests {
         assert_eq!(quota.primary.unwrap().resets_at_ms, Some(61_000));
     }
 
+    #[test]
+    fn ignores_zero_length_rate_limit_headers() {
+        let mut headers = HeaderMap::new();
+        headers.insert("x-codex-secondary-used-percent", "0".parse().unwrap());
+        headers.insert("x-codex-secondary-window-minutes", "0".parse().unwrap());
+        headers.insert(
+            "x-codex-secondary-reset-after-seconds",
+            "600".parse().unwrap(),
+        );
+        assert!(from_headers(&headers, 1_000).is_none());
+    }
+
     #[tokio::test]
     async fn reports_usage_auth_failures() {
         let app = Router::new().route(
@@ -259,25 +268,26 @@ mod tests {
                 Json(json!({
                     "rate_limit": {
                         "primary_window": {
-                            "used_percent": 12.5,
-                            "limit_window_seconds": 18_000,
+                            "used_percent": 2,
+                            "limit_window_seconds": 604_800,
                             "reset_after_seconds": 60
                         },
-                        "secondary_window": {
-                            "used_percent": 25,
-                            "limit_window_seconds": 604800,
-                            "reset_after_seconds": 120
-                        }
+                        "secondary_window": null
                     },
                     "additional_rate_limits": [
                         {
-                            "limit_name": "monthly",
-                            "metered_feature": "codex_monthly",
+                            "limit_name": "GPT-5.3-Codex-Spark",
+                            "metered_feature": "codex_bengalfox",
                             "rate_limit": {
                                 "primary_window": {
-                                    "used_percent": 9,
-                                    "limit_window_seconds": 2592000,
-                                    "reset_at": 1800000000
+                                    "used_percent": 0,
+                                    "limit_window_seconds": 18_000,
+                                    "reset_at": 1_800_000_000
+                                },
+                                "secondary_window": {
+                                    "used_percent": 0,
+                                    "limit_window_seconds": 604_800,
+                                    "reset_at": 1_800_604_800
                                 }
                             }
                         }
@@ -301,11 +311,15 @@ mod tests {
         .await
         .unwrap();
         let primary = quota.primary.unwrap();
-        assert_eq!(primary.used_percent, 12.5);
-        assert_eq!(primary.window_minutes, 300);
-        assert_eq!(quota.secondary.unwrap().window_minutes, 10_080);
-        assert_eq!(quota.additional.len(), 1);
-        assert_eq!(quota.additional[0].used_percent, 9.0);
-        assert_eq!(quota.additional[0].window_minutes, 43_200);
+        assert_eq!(primary.used_percent, 2.0);
+        assert_eq!(primary.window_minutes, 10_080);
+        assert!(quota.secondary.is_none());
+        assert_eq!(quota.additional.len(), 2);
+        assert_eq!(
+            quota.additional[0].limit_name.as_deref(),
+            Some("GPT-5.3-Codex-Spark")
+        );
+        assert_eq!(quota.additional[0].window_minutes, 300);
+        assert_eq!(quota.additional[1].window_minutes, 10_080);
     }
 }

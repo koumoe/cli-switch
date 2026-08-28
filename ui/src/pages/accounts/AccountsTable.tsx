@@ -51,6 +51,19 @@ function sortQuotaWindows(windows: OpenAiQuotaWindow[]): OpenAiQuotaWindow[] {
   });
 }
 
+function quotaUsageLabel(
+  window: OpenAiQuotaWindow,
+  t: (key: string, vars?: Record<string, string | number>) => string,
+): string {
+  return [
+    window.limit_name,
+    quotaWindowLabel(window.kind, window.window_minutes, t),
+    `${Math.round(window.used_percent)}%`,
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
 type AccountsTableProps = {
   accounts: RemoteAccount[];
   loading: boolean;
@@ -185,7 +198,7 @@ export function AccountsTable({
           if (windows.length === 0) {
             return <span className="text-muted-foreground">{t("accounts.quota.unavailable")}</span>;
           }
-          const shortestWindow = windows[0];
+          const summaryWindow = windows[0];
           const renderReset = (window: OpenAiQuotaWindow) => {
             if (!window.resets_at_ms) return null;
             const reset = new Intl.DateTimeFormat(locale, {
@@ -200,21 +213,23 @@ export function AccountsTable({
             <Tooltip>
               <TooltipTrigger asChild>
                 <div className="inline-flex cursor-help whitespace-nowrap text-sm">
-                  <span className="font-medium">{Math.round(shortestWindow.used_percent)}%</span>
+                  <span className="font-medium">{Math.round(summaryWindow.used_percent)}%</span>
                 </div>
               </TooltipTrigger>
-              <TooltipContent className="space-y-1.5 px-3 py-2">
+              <TooltipContent className="min-w-[22rem] space-y-1.5 px-3 py-2">
                 {windows.map((window, index) => {
                   const reset = renderReset(window);
                   return (
                     <div
                       key={`${window.kind}-${window.window_minutes}-${index}`}
-                      className="whitespace-nowrap"
+                      className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-8 whitespace-nowrap"
                     >
-                      <span className="font-medium">
-                        {quotaWindowLabel(window.kind, window.window_minutes, t)} {Math.round(window.used_percent)}%
+                      <span className="text-left font-medium">
+                        {quotaUsageLabel(window, t)}
                       </span>
-                      {reset ? <span className="opacity-80"> · {reset}</span> : null}
+                      {reset ? (
+                        <span className="text-right opacity-80">{reset}</span>
+                      ) : null}
                     </div>
                   );
                 })}

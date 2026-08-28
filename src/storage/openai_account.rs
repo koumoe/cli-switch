@@ -9,6 +9,8 @@ pub const OPENAI_ACCOUNT_BASE_URL: &str = "https://chatgpt.com";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct OpenAiQuotaWindow {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub limit_name: Option<String>,
     pub used_percent: f64,
     pub window_minutes: i64,
     pub resets_at_ms: Option<i64>,
@@ -99,10 +101,11 @@ fn from_row(row: &rusqlite::Row<'_>, include_secret: bool) -> rusqlite::Result<O
     let primary_window: Option<i64> = row.get(13)?;
     let secondary_used: Option<f64> = row.get(15)?;
     let secondary_window: Option<i64> = row.get(16)?;
-    let additional: Vec<OpenAiQuotaWindow> = row
+    let mut additional: Vec<OpenAiQuotaWindow> = row
         .get::<_, Option<String>>(18)?
         .and_then(|value| serde_json::from_str(&value).ok())
         .unwrap_or_default();
+    additional.retain(|window| window.used_percent.is_finite() && window.window_minutes > 0);
     Ok(OpenAiAccount {
         id: row.get(0)?,
         name: row.get(1)?,
@@ -128,17 +131,21 @@ fn from_row(row: &rusqlite::Row<'_>, include_secret: bool) -> rusqlite::Result<O
             primary: primary_used
                 .zip(primary_window)
                 .map(|(used_percent, window_minutes)| OpenAiQuotaWindow {
+                    limit_name: None,
                     used_percent,
                     window_minutes,
                     resets_at_ms: row.get(14).ok().flatten(),
-                }),
-            secondary: secondary_used.zip(secondary_window).map(
-                |(used_percent, window_minutes)| OpenAiQuotaWindow {
+                })
+                .filter(|window| window.used_percent.is_finite() && window.window_minutes > 0),
+            secondary: secondary_used
+                .zip(secondary_window)
+                .map(|(used_percent, window_minutes)| OpenAiQuotaWindow {
+                    limit_name: None,
                     used_percent,
                     window_minutes,
                     resets_at_ms: row.get(17).ok().flatten(),
-                },
-            ),
+                })
+                .filter(|window| window.used_percent.is_finite() && window.window_minutes > 0),
             additional,
             synced_at_ms: row.get(21)?,
         },
@@ -603,12 +610,14 @@ mod tests {
             created.id.clone(),
             OpenAiQuotaSnapshot {
                 primary: Some(OpenAiQuotaWindow {
+                    limit_name: None,
                     used_percent: 12.0,
                     window_minutes: 300,
                     resets_at_ms: None,
                 }),
                 secondary: None,
                 additional: vec![OpenAiQuotaWindow {
+                    limit_name: Some("Monthly".to_string()),
                     used_percent: 9.0,
                     window_minutes: 43_200,
                     resets_at_ms: Some(1_800_086_400_000),
@@ -624,6 +633,10 @@ mod tests {
             .unwrap();
         assert_eq!(recovered.quota.additional.len(), 1);
         assert_eq!(recovered.quota.additional[0].window_minutes, 43_200);
+        assert_eq!(
+            recovered.quota.additional[0].limit_name.as_deref(),
+            Some("Monthly")
+        );
         assert!(!recovered.reauth_required);
         assert_eq!(recovered.last_sync_error, None);
         assert_eq!(recovered.quota.primary.unwrap().used_percent, 12.0);
@@ -632,6 +645,7 @@ mod tests {
             recovered.id.clone(),
             OpenAiQuotaSnapshot {
                 primary: Some(OpenAiQuotaWindow {
+                    limit_name: None,
                     used_percent: 18.0,
                     window_minutes: 300,
                     resets_at_ms: None,

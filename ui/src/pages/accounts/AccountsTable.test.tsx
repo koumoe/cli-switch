@@ -37,22 +37,25 @@ const openAiAccount: OpenAiRemoteAccount = {
   token_expires_at_ms: null,
   quota_windows: [
     {
-      kind: "weekly",
+      kind: "primary",
+      limit_name: null,
       used_percent: 43,
       window_minutes: 10_080,
       resets_at_ms: Date.UTC(2026, 8, 10, 0, 0),
     },
     {
-      kind: "primary",
+      kind: "additional",
+      limit_name: "GPT-5.3-Codex-Spark",
       used_percent: 18,
       window_minutes: 300,
       resets_at_ms: Date.UTC(2026, 8, 3, 9, 33),
     },
     {
       kind: "additional",
+      limit_name: "GPT-5.3-Codex-Spark",
       used_percent: 9,
-      window_minutes: 43_200,
-      resets_at_ms: Date.UTC(2026, 8, 30, 0, 0),
+      window_minutes: 10_080,
+      resets_at_ms: Date.UTC(2026, 8, 10, 0, 0),
     },
   ],
 };
@@ -91,7 +94,7 @@ describe("AccountsTable OpenAI accounts", () => {
     expect(screen.getByText("无签到")).toBeInTheDocument();
   });
 
-  it("shows the shortest OpenAI quota window and reveals all windows on hover", async () => {
+  it("shows the shortest OpenAI quota and labels additional limit buckets on hover", async () => {
     const user = userEvent.setup();
     const noop = vi.fn();
     renderWithProviders(
@@ -124,9 +127,20 @@ describe("AccountsTable OpenAI accounts", () => {
 
     await user.hover(shortestQuota);
 
-    expect((await screen.findAllByText("5小时限额 18%")).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("7日限额 43%")).length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText("GPT-5.3-Codex-Spark 5小时限额 18%").length,
+    ).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText("GPT-5.3-Codex-Spark 7日限额 9%").length,
+    ).toBeGreaterThan(0);
     expect(screen.getAllByText("7日限额 43%").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("30日限额 9%").length).toBeGreaterThan(0);
     expect(screen.getAllByText(/重置时间/).length).toBeGreaterThanOrEqual(3);
+    expect(screen.queryByText(/·/)).not.toBeInTheDocument();
+
+    const usage = screen.getAllByText("GPT-5.3-Codex-Spark 5小时限额 18%")[0];
+    const reset = screen.getAllByText(/重置时间/)[0];
+    expect(usage.className).toContain("text-left");
+    expect(reset.className).toContain("text-right");
   });
 });
