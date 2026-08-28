@@ -228,4 +228,43 @@ describe("LogsPage", () => {
       expect(lastUpdate?.searchParams.get("status")).toBe("failed");
     });
   });
+
+  it("resets pagination when a filter changes", async () => {
+    const user = userEvent.setup();
+    const onUrlUpdate = vi.fn();
+
+    vi.mocked(usageList).mockResolvedValue({
+      total: 100,
+      items: [],
+    });
+
+    renderWithProviders(
+      <NuqsTestingAdapter
+        onUrlUpdate={onUrlUpdate}
+        searchParams="?protocol=openai&channel=channel-1&page=5"
+      >
+        <LogsPage />
+      </NuqsTestingAdapter>,
+    );
+
+    const [protocolSelect, channelSelect, statusSelect] =
+      screen.getAllByRole("combobox");
+
+    await waitFor(() => {
+      expect(protocolSelect).toHaveTextContent("Codex");
+      expect(channelSelect).toHaveTextContent("Hoxkai · Codex");
+    });
+
+    await user.click(statusSelect);
+    await user.click(await screen.findByRole("option", { name: "失败" }));
+
+    await waitFor(() => {
+      const lastUpdate = onUrlUpdate.mock.calls.at(-1)?.[0];
+
+      expect(lastUpdate?.searchParams.get("protocol")).toBe("openai");
+      expect(lastUpdate?.searchParams.get("channel")).toBe("channel-1");
+      expect(lastUpdate?.searchParams.get("status")).toBe("failed");
+      expect(lastUpdate?.searchParams.has("page")).toBe(false);
+    });
+  });
 });
