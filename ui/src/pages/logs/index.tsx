@@ -4,7 +4,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { parseAsInteger, parseAsString, parseAsStringLiteral, useQueryStates } from "nuqs";
 import { toast } from "sonner";
 
-import { listChannels, usageList } from "@/api";
+import { listChannels, listRemoteAccounts, usageList } from "@/api";
 import { PageHeader } from "@/components/PageHeader";
 import { PageBody } from "@/components/layout/page-body";
 import { DataTable } from "@/components/composed/data-table";
@@ -36,6 +36,7 @@ import {
 import { useCurrency } from "@/hooks/use-currency";
 import { useI18n } from "@/hooks/use-i18n";
 import { useWindowEvent } from "@/hooks/use-window-event";
+import { resolveManagedChannelAccountName } from "@/lib/channel-display";
 import { dateRangeToMs, stringsToDateRange } from "@/lib/date-utils";
 import { humanizeApiError, humanizeErrorText } from "@/lib/error";
 import { cn } from "@/lib/utils";
@@ -89,6 +90,7 @@ export function LogsPage() {
   const { currency } = useCurrency();
   const [events, setEvents] = useState<UsageEvent[]>([]);
   const [channels, setChannels] = useState<Channel[]>([]);
+  const [accountNames, setAccountNames] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const loadingRef = useRef(false);
   const [total, setTotal] = useState(0);
@@ -150,6 +152,16 @@ export function LogsPage() {
     [detailEventId, events],
   );
   const detailTimestamp = detailEvent ? formatLogDateParts(detailEvent.ts_ms) : null;
+  const detailChannel = detailEvent
+    ? channelsById.get(detailEvent.channel_id)
+    : undefined;
+  const detailAccountName = resolveManagedChannelAccountName(
+    detailChannel,
+    accountNames,
+  );
+  const detailChannelName = detailEvent
+    ? (channelNames.get(detailEvent.channel_id) ?? detailEvent.channel_id)
+    : "-";
 
   function getEstimatedSpend(event: UsageEvent) {
     const estimate = parseDecimalLike(event.estimated_cost_usd);
@@ -225,9 +237,22 @@ export function LogsPage() {
   }
 
   useEffect(() => {
-    listChannels()
-      .then(setChannels)
-      .catch(() => setChannels([]));
+    Promise.all([
+      listChannels(),
+      listRemoteAccounts().catch(() => []),
+    ])
+      .then(([nextChannels, accounts]) => {
+        setChannels(nextChannels);
+        setAccountNames(
+          Object.fromEntries(
+            accounts.map((account) => [account.id, account.name.trim() || "-"]),
+          ),
+        );
+      })
+      .catch(() => {
+        setChannels([]);
+        setAccountNames({});
+      });
   }, []);
 
   useEffect(() => {
@@ -313,13 +338,30 @@ export function LogsPage() {
     {
       id: "channel",
       header: t("logs.headers.channel"),
-      cell: ({ row }) => (
-        <span className="inline-block max-w-full truncate align-middle text-xs font-semibold">
-          {channelNames.get(row.original.channel_id) ?? "-"}
-        </span>
-      ),
+      cell: ({ row }) => {
+        const channel = channelsById.get(row.original.channel_id);
+        const accountName = resolveManagedChannelAccountName(
+          channel,
+          accountNames,
+        );
+        const channelName = channelNames.get(row.original.channel_id) ?? "-";
+
+        return (
+          <div
+            className="mx-auto flex min-w-0 max-w-full flex-col text-center text-xs"
+            title={`${accountName} / ${channelName}`}
+          >
+            <span className="block max-w-full truncate text-muted-foreground">
+              {accountName}
+            </span>
+            <span className="block max-w-full truncate font-semibold">
+              {channelName}
+            </span>
+          </div>
+        );
+      },
       meta: {
-        headerClassName: "w-[10%]",
+        headerClassName: "w-[12%]",
         cellClassName: logsTableCellClassName,
         skeletonClassName: "mx-auto w-24",
       },
@@ -333,7 +375,7 @@ export function LogsPage() {
         </span>
       ),
       meta: {
-        headerClassName: "w-[15%]",
+        headerClassName: "w-[13%]",
         cellClassName: logsTableCellClassName,
         skeletonClassName: "mx-auto w-28",
       },
@@ -663,7 +705,10 @@ export function LogsPage() {
                   </ProtocolBadge>
                 </DetailRow>
                 <DetailRow label={t("logs.headers.channel")}>
-                  {channelNames.get(detailEvent.channel_id) ?? detailEvent.channel_id}
+                  <div className="flex flex-col">
+                    <span className="text-muted-foreground">{detailAccountName}</span>
+                    <span className="font-semibold">{detailChannelName}</span>
+                  </div>
                 </DetailRow>
                 <DetailRow label={t("logs.headers.model")}>
                   {detailEvent.model ?? "-"}
