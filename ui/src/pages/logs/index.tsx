@@ -90,6 +90,7 @@ export function LogsPage() {
   const { currency } = useCurrency();
   const [events, setEvents] = useState<UsageEvent[]>([]);
   const [channels, setChannels] = useState<Channel[]>([]);
+  const [channelsLoaded, setChannelsLoaded] = useState(false);
   const [accountNames, setAccountNames] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const loadingRef = useRef(false);
@@ -162,6 +163,35 @@ export function LogsPage() {
   const detailChannelName = detailEvent
     ? (channelNames.get(detailEvent.channel_id) ?? detailEvent.channel_id)
     : "-";
+
+  function getChannelFilterLabel(channel: Channel) {
+    const accountName = resolveManagedChannelAccountName(channel, accountNames);
+    return accountName === "-"
+      ? channel.name
+      : `${accountName} · ${channel.name}`;
+  }
+
+  function updateProtocolFilter(value: string) {
+    const protocol = value as Protocol | "all";
+    const selectedChannel = channelsById.get(search.channel);
+    const channelIsCompatible = protocol === "all"
+      || search.channel === "all"
+      || selectedChannel?.protocol === protocol;
+
+    void setSearch({
+      protocol,
+      ...(channelIsCompatible ? {} : { channel: "all" }),
+    });
+  }
+
+  function updateChannelFilter(value: string) {
+    const selectedChannel = channelsById.get(value);
+
+    void setSearch({
+      channel: value,
+      ...(selectedChannel ? { protocol: selectedChannel.protocol } : {}),
+    });
+  }
 
   function getEstimatedSpend(event: UsageEvent) {
     const estimate = parseDecimalLike(event.estimated_cost_usd);
@@ -248,10 +278,12 @@ export function LogsPage() {
             accounts.map((account) => [account.id, account.name.trim() || "-"]),
           ),
         );
+        setChannelsLoaded(true);
       })
       .catch(() => {
         setChannels([]);
         setAccountNames({});
+        setChannelsLoaded(true);
       });
   }, []);
 
@@ -266,14 +298,14 @@ export function LogsPage() {
   }, [page, setSearch, totalPages]);
 
   useEffect(() => {
-    if (search.channel === "all") {
+    if (!channelsLoaded || search.channel === "all") {
       return;
     }
     if (filteredChannels.some((channel) => channel.id === search.channel)) {
       return;
     }
     void setSearch({ channel: "all" });
-  }, [filteredChannels, search.channel, setSearch]);
+  }, [channelsLoaded, filteredChannels, search.channel, setSearch]);
 
   useEffect(() => {
     if (!detailEventId) {
@@ -519,12 +551,7 @@ export function LogsPage() {
 
                   <Select
                     value={search.protocol}
-                    onValueChange={(value) => {
-                      void setSearch({
-                        protocol: value as Protocol | "all",
-                        channel: "all",
-                      });
-                    }}
+                    onValueChange={updateProtocolFilter}
                   >
                     <SelectTrigger className="h-7 w-[106px] px-2 py-1 text-[11px]">
                       <SelectValue />
@@ -539,9 +566,7 @@ export function LogsPage() {
 
                   <Select
                     value={search.channel}
-                    onValueChange={(value) => {
-                      void setSearch({ channel: value });
-                    }}
+                    onValueChange={updateChannelFilter}
                   >
                     <SelectTrigger className="h-7 w-[154px] px-2 py-1 text-[11px]">
                       <SelectValue placeholder={t("logs.filters.channel")} />
@@ -550,7 +575,7 @@ export function LogsPage() {
                       <SelectItem value="all">{t("logs.filters.all")}</SelectItem>
                       {filteredChannels.map((channel) => (
                         <SelectItem key={channel.id} value={channel.id}>
-                          {channel.name}
+                          {getChannelFilterLabel(channel)}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -704,11 +729,11 @@ export function LogsPage() {
                     {protocolLabel(t, detailEvent.protocol)}
                   </ProtocolBadge>
                 </DetailRow>
+                <DetailRow label={t("logs.details.account")}>
+                  {detailAccountName}
+                </DetailRow>
                 <DetailRow label={t("logs.headers.channel")}>
-                  <div className="flex flex-col">
-                    <span className="text-muted-foreground">{detailAccountName}</span>
-                    <span className="font-semibold">{detailChannelName}</span>
-                  </div>
+                  {detailChannelName}
                 </DetailRow>
                 <DetailRow label={t("logs.headers.model")}>
                   {detailEvent.model ?? "-"}
