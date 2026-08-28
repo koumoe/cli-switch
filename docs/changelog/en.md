@@ -1,3 +1,8 @@
+## [0.64.8](https://github.com/koumoe/cli-switch/compare/v0.64.7...v0.64.8) (2026-08-28)
+
+### Bug Fixes
+
+* correct OpenAI quota windows and layout (#220) ([6f090b2](https://github.com/koumoe/cli-switch/commit/6f090b2eac8a567ab51ed1d3d21a4b7efd3fc57a))
 ## [0.64.7](https://github.com/koumoe/cli-switch/compare/v0.64.6...v0.64.7) (2026-08-28)
 
 ### Bug Fixes
