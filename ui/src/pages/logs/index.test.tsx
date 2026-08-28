@@ -190,4 +190,42 @@ describe("LogsPage", () => {
       );
     });
   });
+
+  it("preserves protocol and channel when status changes after selecting protocol first", async () => {
+    const user = userEvent.setup();
+    const onUrlUpdate = vi.fn();
+
+    renderWithProviders(
+      <NuqsTestingAdapter onUrlUpdate={onUrlUpdate}>
+        <LogsPage />
+      </NuqsTestingAdapter>,
+    );
+
+    await screen.findByText("Hoxkai");
+    const [protocolSelect, channelSelect, statusSelect] =
+      screen.getAllByRole("combobox");
+
+    await user.click(protocolSelect);
+    await user.click(await screen.findByRole("option", { name: "Codex" }));
+    await waitFor(() => expect(protocolSelect).toHaveTextContent("Codex"));
+
+    await user.click(channelSelect);
+    await user.click(
+      await screen.findByRole("option", { name: "Hoxkai · Codex" }),
+    );
+    await waitFor(() => {
+      expect(protocolSelect).toHaveTextContent("Codex");
+      expect(channelSelect).toHaveTextContent("Hoxkai · Codex");
+    });
+
+    await user.click(statusSelect);
+    await user.click(await screen.findByRole("option", { name: "失败" }));
+    await waitFor(() => {
+      const lastUpdate = onUrlUpdate.mock.calls.at(-1)?.[0];
+
+      expect(lastUpdate?.searchParams.get("protocol")).toBe("openai");
+      expect(lastUpdate?.searchParams.get("channel")).toBe("channel-1");
+      expect(lastUpdate?.searchParams.get("status")).toBe("failed");
+    });
+  });
 });
