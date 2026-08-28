@@ -9,6 +9,15 @@ import { renderWithProviders } from "@/test/render";
 import { LogsPage } from "./index";
 
 vi.mock("@/api", () => ({
+  getUsdCnyExchangeRate: vi.fn(async () => ({
+    base_currency: "USD",
+    quote_currency: "CNY",
+    rate: 6.72,
+    effective_date: "2026-08-28",
+    source: "Frankfurter",
+    fetched_at_ms: 1_777_000_000_000,
+    stale: false,
+  })),
   listChannels: vi.fn(async () => [
     {
       id: "channel-1",
@@ -69,6 +78,13 @@ vi.mock("@/api", () => ({
   })),
 }));
 
+vi.mock("@/hooks/use-currency", () => ({
+  useCurrency: () => ({
+    currency: "CNY",
+    usdToCnyRate: 6.72,
+  }),
+}));
+
 describe("LogsPage", () => {
   it("shows the account and channel names on separate lines", async () => {
     renderWithProviders(
@@ -112,6 +128,26 @@ describe("LogsPage", () => {
     expect(accountLabel.nextElementSibling).toHaveTextContent("Hoxkai");
     expect(channelLabel.nextElementSibling).toHaveTextContent("Codex");
     expect(channelLabel.nextElementSibling).not.toHaveTextContent("Hoxkai");
+  });
+
+  it("converts USD recharge costs to the selected display currency", async () => {
+    const user = userEvent.setup();
+
+    renderWithProviders(
+      <NuqsTestingAdapter>
+        <LogsPage />
+      </NuqsTestingAdapter>,
+    );
+
+    const accountName = await screen.findByText("Hoxkai");
+    const row = accountName.closest("tr");
+    expect(row).not.toBeNull();
+    expect(within(row!).getByText(/^(?:CN)?¥0\.0672$/)).toBeInTheDocument();
+
+    await user.click(within(row!).getByRole("button", { name: "详情" }));
+    const dialog = await screen.findByRole("dialog");
+    const spendLabel = within(dialog).getByText("预估费用");
+    expect(spendLabel.nextElementSibling).toHaveTextContent(/(?:CN)?¥0\.0672/);
   });
 
   it("labels channel options with account and channel names", async () => {

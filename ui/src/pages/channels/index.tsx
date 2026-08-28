@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import type { ColumnDef } from "@tanstack/react-table";
@@ -79,6 +79,7 @@ import type {
   CreateChannelInput,
   Protocol,
 } from "@/types/api";
+import { convertCurrency } from "@/providers/currency-provider";
 import { protocolLabel } from "../../lib";
 
 type ChannelDraft = CreateChannelInput;
@@ -188,7 +189,7 @@ function defaultBaseUrl(protocol: Protocol): string {
 
 export function ChannelsPage() {
   const { t } = useI18n();
-  const { currency } = useCurrency();
+  const { currency, usdToCnyRate } = useCurrency();
   const [activeProtocol, setActiveProtocol] = useState<Protocol>("openai");
   const [channelsByProtocol, setChannelsByProtocol] = useState<
     Record<Protocol, Channel[]>
@@ -261,14 +262,31 @@ export function ChannelsPage() {
     return () => window.clearInterval(timer);
   }, []);
 
-  function effectiveCostFactor(c: Channel): number {
-    const real = Number(c.real_multiplier ?? 1);
-    if (!Number.isFinite(real) || real < 0) return Number.POSITIVE_INFINITY;
-    return real;
-  }
-
   const autoSortCurrent = channelsByProtocol[activeProtocol] ?? [];
+  const autoSortNeedsExchangeRate = useMemo(() => {
+    return autoSortCurrent.some((channel) => channel.recharge_currency !== currency);
+  }, [autoSortCurrent, currency]);
+  const autoSortRateUnavailable = autoSortNeedsExchangeRate && usdToCnyRate === null;
+
+  const effectiveCostFactor = useCallback(
+    (channel: Channel): number => {
+      const real = Number(channel.real_multiplier ?? 1);
+      if (!Number.isFinite(real) || real < 0) return Number.POSITIVE_INFINITY;
+      if (autoSortRateUnavailable) return Number.POSITIVE_INFINITY;
+
+      const converted = convertCurrency(
+        real,
+        channel.recharge_currency,
+        currency,
+        usdToCnyRate,
+      );
+      return converted === null ? Number.POSITIVE_INFINITY : converted;
+    },
+    [autoSortRateUnavailable, currency, usdToCnyRate],
+  );
+
   const autoSortSuggested = useMemo(() => {
+    if (autoSortRateUnavailable) return autoSortCurrent;
     const list = autoSortCurrent.map((c, originalIndex) => ({
       c,
       originalIndex,
@@ -280,7 +298,7 @@ export function ChannelsPage() {
       return a.originalIndex - b.originalIndex;
     });
     return list.map((x) => x.c);
-  }, [autoSortCurrent, activeProtocol]);
+  }, [autoSortCurrent, autoSortRateUnavailable, effectiveCostFactor]);
 
   const autoSortChanged = useMemo(() => {
     if (autoSortCurrent.length !== autoSortSuggested.length) return true;
@@ -700,7 +718,7 @@ export function ChannelsPage() {
         oldIndex: autoSortCurrent.findIndex((item) => item.id === channel.id),
         factor: effectiveCostFactor(channel),
       })),
-    [autoSortCurrent, autoSortSuggested],
+    [autoSortCurrent, autoSortSuggested, effectiveCostFactor],
   );
   const autoSortPreviewColumns = useMemo<
     Array<ColumnDef<(typeof autoSortPreviewRows)[number]>>
@@ -751,7 +769,7 @@ export function ChannelsPage() {
       },
       {
         id: "factor",
-        header: t("channels.autoSort.headers.factor"),
+        header: t("channels.autoSort.headers.factor", { currency }),
         cell: ({ row }) => (
           <span className="font-mono text-xs text-muted-foreground">
             {Number.isFinite(row.original.factor)
@@ -765,7 +783,7 @@ export function ChannelsPage() {
         },
       },
     ],
-    [t],
+    [currency, t],
   );
 
   return (
@@ -1132,12 +1150,17 @@ export function ChannelsPage() {
             <DialogDescription>
               {t("channels.autoSort.description", {
                 terminal: protocolLabel(t, activeProtocol),
+                currency,
               })}
             </DialogDescription>
           </DialogHeader>
 
           <DialogBody className="flex-1 min-h-0 overflow-y-auto">
-            {!autoSortChanged ? (
+            {autoSortRateUnavailable ? (
+              <div className="text-sm text-muted-foreground">
+                {t("channels.autoSort.rateUnavailable")}
+              </div>
+            ) : !autoSortChanged ? (
               <div className="text-sm text-muted-foreground">
                 {t("channels.autoSort.noChange")}
               </div>
@@ -1162,7 +1185,7 @@ export function ChannelsPage() {
             </Button>
             <Button
               onClick={applyAutoSort}
-              disabled={!autoSortChanged || autoSortApplying}
+              disabled={autoSortRateUnavailable || !autoSortChanged || autoSortApplying}
             >
               {t("channels.autoSort.apply")}
             </Button>

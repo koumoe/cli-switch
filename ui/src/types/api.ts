@@ -56,6 +56,16 @@ export type AppSettings = {
   remote_managed_channel_sync_free_multiplier_enabled: boolean;
 };
 
+export type ExchangeRate = {
+  base_currency: "USD";
+  quote_currency: "CNY";
+  rate: number;
+  effective_date: string;
+  source: string;
+  fetched_at_ms: number;
+  stale: boolean;
+};
+
 export type ChatPlatform = "telegram" | "discord" | "whatsapp" | "weixin";
 
 export type ChatBridgeRuntimeStatusState =

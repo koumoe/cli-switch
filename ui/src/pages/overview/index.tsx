@@ -30,6 +30,7 @@ import { useCurrency } from "@/hooks/use-currency";
 import { useI18n } from "@/hooks/use-i18n";
 import { humanizeApiError } from "@/lib/error";
 import {
+  calculateEstimatedSpend,
   formatDecimal,
   formatMoney,
   parseDecimalLike,
@@ -90,7 +91,7 @@ function pickTrendColor(channelId: string): string {
 
 export function OverviewPage() {
   const { t } = useI18n();
-  const { currency } = useCurrency();
+  const { currency, usdToCnyRate } = useCurrency();
   const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
   const [channels, setChannels] = useState<Channel[]>([]);
   const [stats, setStats] = useState<StatsSummary | null>(null);
@@ -174,13 +175,22 @@ export function OverviewPage() {
       const est = parseDecimalLike(s.estimated_cost_usd);
       if (!est || est <= 0) continue;
       const ch = byId.get(s.channel_id);
-      const real = Number(ch?.real_multiplier ?? 1);
+      if (!ch) continue;
+      const real = Number(ch.real_multiplier ?? 1);
       if (!Number.isFinite(real) || real < 0) continue;
+      const converted = calculateEstimatedSpend(
+        est,
+        real,
+        ch.recharge_currency,
+        currency,
+        usdToCnyRate,
+      );
+      if (converted === null) return null;
       hasAny = true;
-      sum += est * real;
+      sum += converted;
     }
     return hasAny ? sum : null;
-  }, [channels, channelStats]);
+  }, [channels, channelStats, currency, usdToCnyRate]);
 
   const estimatedOfficialCost = useMemo(
     () => parseDecimalLike(stats?.estimated_cost_usd),

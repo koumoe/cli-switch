@@ -10,6 +10,15 @@ vi.mock("@/api", () => ({
   deleteChannel: vi.fn(),
   disableChannel: vi.fn(),
   enableChannel: vi.fn(),
+  getUsdCnyExchangeRate: vi.fn(async () => ({
+    base_currency: "USD",
+    quote_currency: "CNY",
+    rate: 6.72,
+    effective_date: "2026-08-28",
+    source: "Frankfurter",
+    fetched_at_ms: 1_777_000_000_000,
+    stale: false,
+  })),
   getSettings: vi.fn(async () => null),
   listChannels: vi.fn(async () => [
     {

@@ -16,6 +16,15 @@ const apiMocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/api", () => ({
+  getUsdCnyExchangeRate: vi.fn(async () => ({
+    base_currency: "USD",
+    quote_currency: "CNY",
+    rate: 6.72,
+    effective_date: "2026-08-28",
+    source: "Frankfurter",
+    fetched_at_ms: 1_777_000_000_000,
+    stale: false,
+  })),
   listProjects: apiMocks.listProjects,
   getProjectDocument: apiMocks.getProjectDocument,
   deleteProject: apiMocks.deleteProject,

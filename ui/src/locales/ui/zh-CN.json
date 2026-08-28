@@ -143,14 +143,15 @@
     "autoSort": {
       "button": "按倍率排序",
       "title": "自动排序",
-      "description": "根据倍率为 {{terminal}} 生成建议顺序",
+      "description": "将渠道费用统一换算为 {{currency}} 后，为 {{terminal}} 生成建议顺序",
+      "rateUnavailable": "当前存在与显示币种不同的充值币种，但尚未取得 USD/CNY 汇率，暂时无法可靠排序",
       "noChange": "当前顺序无需调整",
       "apply": "确认应用",
       "headers": {
         "from": "原序",
         "to": "新序",
         "channel": "渠道",
-        "factor": "系数"
+        "factor": "费用系数（{{currency}}）"
       }
     },
     "tabs": {
@@ -192,7 +193,7 @@
         "usd": "美元（USD）"
       },
       "realMultiplier": "真实倍率",
-      "realMultiplierHint": "支持 0 表示免费渠道，最多 2 位小数",
+      "realMultiplierHint": "官方 USD 额度 × 真实倍率 = 充值货币金额；0 表示免费渠道，最多 2 位小数",
       "baseUrl": "Base URL",
       "apiKey": "API Key / Token",
       "enabled": "启用",
@@ -573,6 +574,10 @@
     },
     "currency": {
       "subtitle": "用于显示「预估费用」等金额单位（官方额度固定按官方 USD 计算）",
+      "rateHint": "USD/CNY 参考汇率：1 USD = {{rate}} CNY（{{date}}，{{source}}）",
+      "rateStaleHint": "USD/CNY 缓存汇率：1 USD = {{rate}} CNY（{{date}}，{{source}}；当前离线或刷新失败）",
+      "rateLoading": "正在获取 USD/CNY 参考汇率…",
+      "rateUnavailable": "暂未取得 USD/CNY 汇率，跨币种费用将显示为 —",
       "label": "默认货币",
       "options": {
         "auto": "自动（跟随语言）",

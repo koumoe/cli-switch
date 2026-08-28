@@ -6,6 +6,7 @@
     "proxy_invalid_base_url": "Invalid channel base_url",
     "proxy_read_body_failed": "Failed to read request body",
     "proxy_upstream_failed": "Upstream request failed",
+    "currency_exchange_rate_unavailable": "The USD/CNY exchange rate is unavailable and no cached rate exists",
     "tools_proxy_config_apply_failed": "Failed to write config",
     "tools_unknown_id": "Unknown CLI tool",
     "tools_brew_missing": "Homebrew was not found",

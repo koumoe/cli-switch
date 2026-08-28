@@ -10,6 +10,7 @@ mod channel;
 mod chat_bridge;
 mod checkin;
 mod error;
+mod exchange_rate;
 mod newapi;
 mod openai_account;
 mod pricing;
@@ -23,6 +24,7 @@ mod update_ignore;
 mod usage;
 
 pub use error::StorageError;
+pub use exchange_rate::{ExchangeRate, get_exchange_rate, upsert_exchange_rate};
 
 pub use channel::{
     Channel, CreateChannel, ManagedRemoteProvider, RechargeCurrency, UpdateChannel,

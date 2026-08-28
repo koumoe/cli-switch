@@ -70,6 +70,7 @@ fn request_endpoint_template(method: &Method, path: &str) -> Option<&'static str
         ("GET", "/api/health") => Some("/api/health"),
         ("GET", "/api/settings") => Some("/api/settings"),
         ("PUT", "/api/settings") => Some("/api/settings"),
+        ("GET", "/api/currency/usd-cny") => Some("/api/currency/usd-cny"),
         ("POST", "/api/maintenance/records/clear") => Some("/api/maintenance/records/clear"),
         ("POST", "/api/maintenance/logs/clear") => Some("/api/maintenance/logs/clear"),
         ("GET", "/api/maintenance/logs/size") => Some("/api/maintenance/logs/size"),
@@ -188,6 +189,7 @@ fn request_purpose(method: &Method, path: &str) -> &'static str {
         ("GET", "/api/health") => "handlers::health",
         ("GET", "/api/settings") => "handlers::get_settings",
         ("PUT", "/api/settings") => "handlers::update_settings",
+        ("GET", "/api/currency/usd-cny") => "handlers::usd_cny_exchange_rate",
         ("POST", "/api/maintenance/records/clear") => "handlers::records_clear",
         ("POST", "/api/maintenance/logs/clear") => "handlers::logs_clear",
         ("GET", "/api/maintenance/logs/size") => "handlers::logs_size",
@@ -331,6 +333,10 @@ fn build_app(state: AppState) -> Router {
         .route(
             "/api/settings",
             get(handlers::get_settings).put(handlers::update_settings),
+        )
+        .route(
+            "/api/currency/usd-cny",
+            get(handlers::usd_cny_exchange_rate),
         )
         .route(
             "/api/maintenance/records/clear",

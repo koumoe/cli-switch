@@ -1,13 +1,23 @@
-import { createContext, useCallback, useMemo, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 
+import { getUsdCnyExchangeRate } from "@/api";
 import { formatNumber } from "@/lib/format";
 import { useI18n } from "@/hooks/use-i18n";
+import type { ExchangeRate } from "@/types/api";
 import type { Locale } from "@/types/locale";
 
 export type Currency = "USD" | "CNY";
 export type CurrencyMode = "auto" | Currency;
 
 const STORAGE_KEY = "cliswitch-currency-mode";
+const EXCHANGE_RATE_POLL_INTERVAL_MS = 30 * 60 * 1_000;
 
 function detectCurrencyFromLocale(locale: Locale): Currency {
   return locale.startsWith("zh") ? "CNY" : "USD";
@@ -66,10 +76,63 @@ export function formatMoney(
   });
 }
 
+export function convertCurrency(
+  amount: number | null | undefined,
+  sourceCurrency: Currency,
+  targetCurrency: Currency,
+  usdToCnyRate: number | null | undefined,
+): number | null {
+  if (amount === null || amount === undefined || !Number.isFinite(amount)) return null;
+  if (sourceCurrency === targetCurrency) return amount;
+  if (
+    usdToCnyRate === null ||
+    usdToCnyRate === undefined ||
+    !Number.isFinite(usdToCnyRate) ||
+    usdToCnyRate <= 0
+  ) {
+    return null;
+  }
+
+  return sourceCurrency === "USD"
+    ? amount * usdToCnyRate
+    : amount / usdToCnyRate;
+}
+
+export function calculateEstimatedSpend(
+  officialCostUsd: number | null | undefined,
+  realMultiplier: number | null | undefined,
+  rechargeCurrency: Currency,
+  displayCurrency: Currency,
+  usdToCnyRate: number | null | undefined,
+): number | null {
+  if (
+    officialCostUsd === null ||
+    officialCostUsd === undefined ||
+    !Number.isFinite(officialCostUsd) ||
+    officialCostUsd < 0 ||
+    realMultiplier === null ||
+    realMultiplier === undefined ||
+    !Number.isFinite(realMultiplier) ||
+    realMultiplier < 0
+  ) {
+    return null;
+  }
+
+  return convertCurrency(
+    officialCostUsd * realMultiplier,
+    rechargeCurrency,
+    displayCurrency,
+    usdToCnyRate,
+  );
+}
+
 export type CurrencyContextValue = {
   currencyMode: CurrencyMode;
   setCurrencyMode: (next: CurrencyMode) => void;
   currency: Currency;
+  exchangeRate: ExchangeRate | null;
+  exchangeRateLoading: boolean;
+  usdToCnyRate: number | null;
 };
 
 export const CurrencyContext = createContext<CurrencyContextValue | null>(null);
@@ -77,6 +140,39 @@ export const CurrencyContext = createContext<CurrencyContextValue | null>(null);
 export function CurrencyProvider({ children }: { children: ReactNode }) {
   const { locale } = useI18n();
   const [currencyMode, setCurrencyModeState] = useState<CurrencyMode>(() => getInitialCurrencyMode());
+  const [exchangeRate, setExchangeRate] = useState<ExchangeRate | null>(null);
+  const [exchangeRateLoading, setExchangeRateLoading] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    const refresh = async () => {
+      setExchangeRateLoading(true);
+      try {
+        const next = await getUsdCnyExchangeRate();
+        if (
+          active &&
+          next.base_currency === "USD" &&
+          next.quote_currency === "CNY" &&
+          Number.isFinite(next.rate) &&
+          next.rate > 0
+        ) {
+          setExchangeRate(next);
+        }
+      } catch {
+        // Keep the last cached rate in memory. The backend returns a persisted
+        // stale rate whenever refreshing the external source fails.
+      } finally {
+        if (active) setExchangeRateLoading(false);
+      }
+    };
+
+    void refresh();
+    const timer = window.setInterval(refresh, EXCHANGE_RATE_POLL_INTERVAL_MS);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, []);
 
   const setCurrencyMode = useCallback((next: CurrencyMode) => {
     setCurrencyModeState(next);
@@ -90,9 +186,25 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
     [currencyMode, locale],
   );
 
+  const usdToCnyRate = exchangeRate?.rate ?? null;
+
   const value = useMemo(
-    () => ({ currencyMode, setCurrencyMode, currency }),
-    [currencyMode, setCurrencyMode, currency],
+    () => ({
+      currencyMode,
+      setCurrencyMode,
+      currency,
+      exchangeRate,
+      exchangeRateLoading,
+      usdToCnyRate,
+    }),
+    [
+      currencyMode,
+      setCurrencyMode,
+      currency,
+      exchangeRate,
+      exchangeRateLoading,
+      usdToCnyRate,
+    ],
   );
 
   return <CurrencyContext.Provider value={value}>{children}</CurrencyContext.Provider>;
