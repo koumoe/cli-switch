@@ -94,7 +94,7 @@ describe("AccountsTable OpenAI accounts", () => {
     expect(screen.getByText("无签到")).toBeInTheDocument();
   });
 
-  it("shows the shortest OpenAI quota and labels additional limit buckets on hover", async () => {
+  it("shows the default OpenAI quota and labels additional limit buckets on hover", async () => {
     const user = userEvent.setup();
     const noop = vi.fn();
     renderWithProviders(
@@ -120,12 +120,13 @@ describe("AccountsTable OpenAI accounts", () => {
       />,
     );
 
-    const shortestQuota = screen.getByText("18%");
-    expect(shortestQuota).toBeInTheDocument();
+    const defaultQuota = screen.getByText("43%");
+    expect(defaultQuota).toBeInTheDocument();
+    expect(screen.queryByText("18%")).not.toBeInTheDocument();
     expect(screen.queryByText(/重置时间/)).not.toBeInTheDocument();
     expect(screen.queryByText("7日限额 43%")).not.toBeInTheDocument();
 
-    await user.hover(shortestQuota);
+    await user.hover(defaultQuota);
 
     expect((await screen.findAllByText("7日限额 43%")).length).toBeGreaterThan(0);
     expect(

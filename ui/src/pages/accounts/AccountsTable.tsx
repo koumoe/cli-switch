@@ -198,7 +198,10 @@ export function AccountsTable({
           if (windows.length === 0) {
             return <span className="text-muted-foreground">{t("accounts.quota.unavailable")}</span>;
           }
-          const summaryWindow = windows[0];
+          const summaryWindow =
+            windows.find(
+              (window) => window.kind === "primary" || window.kind === "secondary",
+            ) ?? windows[0];
           const renderReset = (window: OpenAiQuotaWindow) => {
             if (!window.resets_at_ms) return null;
             const reset = new Intl.DateTimeFormat(locale, {
