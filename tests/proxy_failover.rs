@@ -823,6 +823,69 @@ async fn openai_responses_detects_sse_with_wrong_content_type() {
 }
 
 #[tokio::test]
+async fn openai_responses_preserves_complete_json_when_upstream_ignores_stream() {
+    let response_json = r#"{"id":"resp_json","object":"response","status":"completed","output":[{"type":"message","content":[{"type":"output_text","text":"whole response"}]}],"usage":{"input_tokens":11,"output_tokens":4,"total_tokens":15}}"#;
+
+    for content_type in ["application/json", "text/event-stream"] {
+        let base = spawn_upstream_typed(StatusCode::OK, content_type, response_json).await;
+        let db_path = temp_db_path();
+        storage::init_db(&db_path).expect("init_db");
+
+        let response = forward_openai_responses(db_path.clone(), format!("{base}/v1")).await;
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            response
+                .headers()
+                .get(axum::http::header::CONTENT_TYPE)
+                .and_then(|value| value.to_str().ok()),
+            Some("application/json")
+        );
+        let body = to_bytes(response.into_body(), 1024 * 1024)
+            .await
+            .expect("read body");
+        let body: serde_json::Value = serde_json::from_slice(&body).expect("parse response JSON");
+        assert_eq!(body["id"], "resp_json");
+        assert_eq!(body["output"][0]["content"][0]["text"], "whole response");
+
+        let event = wait_for_usage_event(db_path).await;
+        assert!(event.success);
+        assert_eq!(event.prompt_tokens, Some(11));
+        assert_eq!(event.completion_tokens, Some(4));
+        assert_eq!(event.total_tokens, Some(15));
+    }
+}
+
+#[tokio::test]
+async fn openai_responses_rejects_non_sse_invalid_json_body() {
+    let base = spawn_upstream_typed(StatusCode::OK, "application/json", "not valid JSON").await;
+    let db_path = temp_db_path();
+    storage::init_db(&db_path).expect("init_db");
+
+    let response = forward_openai_responses(db_path.clone(), format!("{base}/v1")).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response
+            .headers()
+            .get(axum::http::header::CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok()),
+        Some("text/event-stream")
+    );
+    let body = to_bytes(response.into_body(), 1024 * 1024)
+        .await
+        .expect("read body");
+    let body = String::from_utf8_lossy(&body);
+    assert!(body.contains("event: response.failed"));
+    assert!(body.contains("openai_responses_incomplete_stream"));
+
+    let event = wait_for_usage_event(db_path).await;
+    assert!(!event.success);
+    assert_eq!(
+        event.error_kind.as_deref(),
+        Some("openai_responses_incomplete_stream")
+    );
+}
+
+#[tokio::test]
 async fn openai_responses_records_failed_terminal_event() {
     let base = spawn_upstream_typed(
         StatusCode::OK,
@@ -1108,6 +1171,94 @@ async fn openai_responses_silent_refusal_fails_over_before_output() {
         sleep(Duration::from_millis(10)).await;
     }
     panic!("timeout waiting for failover usage events");
+}
+
+#[tokio::test]
+async fn openai_responses_auth_failure_fails_over_before_output() {
+    let (failed_base, failed_calls) = spawn_upstream_typed_counted(
+        StatusCode::OK,
+        "text/event-stream",
+        concat!(
+            "event: response.failed\n",
+            "data: {\"type\":\"response.failed\",\"response\":{\"status\":\"failed\",\"error\":{\"code\":\"unauthorized\",\"message\":\"credential rejected\"}}}\n\n",
+        ),
+    )
+    .await;
+    let (healthy_base, healthy_calls) = spawn_upstream_typed_counted(
+        StatusCode::OK,
+        "text/event-stream",
+        concat!(
+            "event: response.output_text.delta\n",
+            "data: {\"type\":\"response.output_text.delta\",\"delta\":\"healthy account\"}\n\n",
+            "event: response.completed\n",
+            "data: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\",\"usage\":{\"input_tokens\":2,\"output_tokens\":2,\"total_tokens\":4}}}\n\n",
+        ),
+    )
+    .await;
+    let db_path = temp_db_path();
+    storage::init_db(&db_path).expect("init_db");
+    create_openai_channel(
+        db_path.clone(),
+        "unauthorized",
+        format!("{failed_base}/v1"),
+        20,
+        1,
+        false,
+    )
+    .await;
+    create_openai_channel(
+        db_path.clone(),
+        "healthy",
+        format!("{healthy_base}/v1"),
+        10,
+        1,
+        false,
+    )
+    .await;
+
+    let request = Request::builder()
+        .method("POST")
+        .uri("/v1/responses")
+        .header(axum::http::header::CONTENT_TYPE, "application/json")
+        .body(Body::from(
+            r#"{"model":"gpt-test","input":"hello","stream":true}"#,
+        ))
+        .expect("request");
+    let response = proxy::forward(
+        &reqwest::Client::new(),
+        db_path.clone(),
+        storage::Protocol::Openai,
+        "/v1",
+        request,
+    )
+    .await
+    .expect("forward");
+    let body = to_bytes(response.into_body(), 1024 * 1024)
+        .await
+        .expect("read body");
+
+    assert_eq!(failed_calls.load(Ordering::Relaxed), 1);
+    assert_eq!(healthy_calls.load(Ordering::Relaxed), 1);
+    assert!(String::from_utf8_lossy(&body).contains("healthy account"));
+
+    for _ in 0..100 {
+        let events = storage::list_usage_events_recent(db_path.clone(), 10)
+            .await
+            .expect("list usage events");
+        if events.len() >= 2 {
+            assert!(events.iter().any(|event| {
+                !event.success && event.error_detail.as_deref() == Some("credential rejected")
+            }));
+            assert!(
+                events
+                    .iter()
+                    .any(|event| event.success && event.total_tokens == Some(4))
+            );
+            return;
+        }
+        sleep(Duration::from_millis(10)).await;
+    }
+    panic!("timeout waiting for authentication failover usage events");
 }
 
 async fn assert_no_usage_events(db_path: std::path::PathBuf) {
