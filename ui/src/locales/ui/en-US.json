@@ -522,6 +522,7 @@
     "details": {
       "id": "ID",
       "requestId": "Request ID",
+      "account": "Account",
       "errorKind": "Error Kind",
       "errorDetail": "Error Detail",
       "estimatedSpend": "Estimated Cost"

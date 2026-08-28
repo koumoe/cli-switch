@@ -522,6 +522,7 @@
     "details": {
       "id": "ID",
       "requestId": "请求 ID",
+      "account": "账号",
       "errorKind": "错误类型",
       "errorDetail": "错误详情",
       "estimatedSpend": "预估费用"
