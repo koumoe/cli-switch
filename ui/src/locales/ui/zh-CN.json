@@ -570,6 +570,7 @@
     },
     "language": {
       "label": "应用语言",
+      "subtitle": "切换界面与聊天命令的显示语言",
       "saveFail": "保存应用语言失败"
     },
     "currency": {
