@@ -1,3 +1,8 @@
+## [0.64.4](https://github.com/koumoe/cli-switch/compare/v0.64.3...v0.64.4) (2026-08-28)
+
+### Bug Fixes
+
+* show account and channel names in request logs (#216) ([bad1b0c](https://github.com/koumoe/cli-switch/commit/bad1b0ca8ccec62bf171e78252d31049b90339f6))
 ## [0.64.3](https://github.com/koumoe/cli-switch/compare/v0.64.2...v0.64.3) (2026-08-27)
 
 ### Bug Fixes
