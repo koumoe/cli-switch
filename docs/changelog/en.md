@@ -1,3 +1,8 @@
+## [0.64.9](https://github.com/koumoe/cli-switch/compare/v0.64.8...v0.64.9) (2026-08-28)
+
+### Bug Fixes
+
+* convert estimated costs across currencies (#221) ([3acee82](https://github.com/koumoe/cli-switch/commit/3acee82230a004e5a7cbbd534a14a88408b8285a))
 ## [0.64.8](https://github.com/koumoe/cli-switch/compare/v0.64.7...v0.64.8) (2026-08-28)
 
 ### Bug Fixes
