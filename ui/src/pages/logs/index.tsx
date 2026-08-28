@@ -1,4 +1,11 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { Eye, RefreshCw, Search } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { parseAsInteger, parseAsString, parseAsStringLiteral, useQueryStates } from "nuqs";
@@ -113,6 +120,24 @@ export function LogsPage() {
     },
   );
 
+  const updateSearch = useCallback(
+    (next: Partial<typeof search>) =>
+      setSearch((current) => ({
+        ...current,
+        ...next,
+      })),
+    [setSearch],
+  );
+
+  const updateFilterSearch = useCallback(
+    (next: Partial<Omit<typeof search, "page">>) =>
+      updateSearch({
+        ...next,
+        page: 1,
+      }),
+    [updateSearch],
+  );
+
   const page = Number.isFinite(search.page) && search.page > 0 ? search.page : 1;
   const pageSize = Number.isFinite(search.pageSize) && search.pageSize > 0 ? search.pageSize : 20;
 
@@ -178,7 +203,7 @@ export function LogsPage() {
       || search.channel === "all"
       || selectedChannel?.protocol === protocol;
 
-    void setSearch({
+    void updateFilterSearch({
       protocol,
       ...(channelIsCompatible ? {} : { channel: "all" }),
     });
@@ -187,7 +212,7 @@ export function LogsPage() {
   function updateChannelFilter(value: string) {
     const selectedChannel = channelsById.get(value);
 
-    void setSearch({
+    void updateFilterSearch({
       channel: value,
       ...(selectedChannel ? { protocol: selectedChannel.protocol } : {}),
     });
@@ -293,9 +318,9 @@ export function LogsPage() {
 
   useEffect(() => {
     if (page > totalPages) {
-      void setSearch({ page: totalPages });
+      void updateSearch({ page: totalPages });
     }
-  }, [page, setSearch, totalPages]);
+  }, [page, totalPages, updateSearch]);
 
   useEffect(() => {
     if (!channelsLoaded || search.channel === "all") {
@@ -304,8 +329,8 @@ export function LogsPage() {
     if (filteredChannels.some((channel) => channel.id === search.channel)) {
       return;
     }
-    void setSearch({ channel: "all" });
-  }, [channelsLoaded, filteredChannels, search.channel, setSearch]);
+    void updateFilterSearch({ channel: "all" });
+  }, [channelsLoaded, filteredChannels, search.channel, updateFilterSearch]);
 
   useEffect(() => {
     if (!detailEventId) {
@@ -535,7 +560,7 @@ export function LogsPage() {
                       type="date"
                       value={search.start}
                       onChange={(event) => {
-                        void setSearch({ start: event.target.value });
+                        void updateFilterSearch({ start: event.target.value });
                       }}
                     />
                     <span className="text-[11px] text-muted-foreground">~</span>
@@ -544,7 +569,7 @@ export function LogsPage() {
                       type="date"
                       value={search.end}
                       onChange={(event) => {
-                        void setSearch({ end: event.target.value });
+                        void updateFilterSearch({ end: event.target.value });
                       }}
                     />
                   </div>
@@ -586,7 +611,7 @@ export function LogsPage() {
                     placeholder={t("logs.filters.model")}
                     value={search.model}
                     onChange={(event) => {
-                      void setSearch({ model: event.target.value });
+                      void updateFilterSearch({ model: event.target.value });
                     }}
                   />
 
@@ -595,14 +620,14 @@ export function LogsPage() {
                     placeholder={t("logs.filters.dimension")}
                     value={search.requestId}
                     onChange={(event) => {
-                      void setSearch({ requestId: event.target.value });
+                      void updateFilterSearch({ requestId: event.target.value });
                     }}
                   />
 
                   <Select
                     value={search.status}
                     onValueChange={(value) => {
-                      void setSearch({
+                      void updateFilterSearch({
                         status: value as "all" | "success" | "failed",
                       });
                     }}
@@ -623,7 +648,7 @@ export function LogsPage() {
                     size="sm"
                     onClick={() => {
                       if (page !== 1) {
-                        void setSearch({ page: 1 });
+                        void updateSearch({ page: 1 });
                         return;
                       }
                       void refresh(1);
@@ -689,10 +714,10 @@ export function LogsPage() {
                   pageSizeSuffix: null,
                   disabled: loading,
                   onPageChange: (nextPage) => {
-                    void setSearch({ page: nextPage });
+                    void updateSearch({ page: nextPage });
                   },
                   onPageSizeChange: (nextPageSize) => {
-                    void setSearch({ pageSize: nextPageSize, page: 1 });
+                    void updateSearch({ pageSize: nextPageSize, page: 1 });
                   },
                 }}
               />
