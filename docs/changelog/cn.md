@@ -1,3 +1,7 @@
+## [0.64.7](https://github.com/koumoe/cli-switch/compare/v0.64.6...v0.64.7) (2026-08-28)
+
+### 修复
+* 修复请求筛选条件丢失 (#219) ([a1b6c8f](https://github.com/koumoe/cli-switch/commit/a1b6c8f3fd8bac3396865c0eba24213e095bb1da))
 ## [0.64.6](https://github.com/koumoe/cli-switch/compare/v0.64.5...v0.64.6) (2026-08-28)
 
 ### 修复
