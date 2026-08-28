@@ -1,3 +1,8 @@
+## [0.64.5](https://github.com/koumoe/cli-switch/compare/v0.64.4...v0.64.5) (2026-08-28)
+
+### Bug Fixes
+
+* handle OpenAI Responses SSE semantics (#217) ([d8d5efe](https://github.com/koumoe/cli-switch/commit/d8d5efe4dc80b31e440902407dfc82dfb2ce9b2e))
 ## [0.64.4](https://github.com/koumoe/cli-switch/compare/v0.64.3...v0.64.4) (2026-08-28)
 
 ### Bug Fixes
