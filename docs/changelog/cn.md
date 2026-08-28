@@ -1,3 +1,7 @@
+## [0.64.10](https://github.com/koumoe/cli-switch/compare/v0.64.9...v0.64.10) (2026-08-28)
+
+### 修复
+* 恢复语言设置说明文案 (#222) ([2a4f802](https://github.com/koumoe/cli-switch/commit/2a4f802fbb1260eec8d83c9344ca4d5c632a874c))
 ## [0.64.9](https://github.com/koumoe/cli-switch/compare/v0.64.8...v0.64.9) (2026-08-28)
 
 ### 修复
