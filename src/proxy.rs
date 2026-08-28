@@ -3,6 +3,7 @@ use axum::http::{HeaderMap, HeaderName, HeaderValue, Request, Response, StatusCo
 use bytes::{Bytes, BytesMut};
 use futures_util::StreamExt as _;
 use futures_util::TryStreamExt as _;
+use futures_util::stream::BoxStream;
 use reqwest::Url;
 use std::path::Path;
 use std::sync::Arc;
@@ -14,9 +15,15 @@ pub use crate::codex_upstream::CodexClientIdentity;
 use crate::storage::{self, Channel, Protocol};
 
 mod limits;
+mod openai_responses;
+mod sse;
 mod stream;
 mod usage_writer;
 
+use openai_responses::{
+    OpenAiResponsesBootstrap, inspect_openai_responses_bootstrap,
+    synthetic_openai_responses_failure,
+};
 use stream::{InstrumentedStream, StreamRecordContext};
 
 #[derive(Clone)]
@@ -38,6 +45,27 @@ struct AttemptCtx<'a> {
     channel_attempt: usize,
     channel_total: usize,
     channels_cache: Option<watch::Sender<Arc<Vec<Channel>>>>,
+}
+
+struct PreparedUpstreamResponse {
+    status: StatusCode,
+    headers: HeaderMap,
+    content_length: Option<u64>,
+    /// Body inspection is authoritative over a potentially incorrect upstream Content-Type.
+    detected_sse: Option<bool>,
+    stream: BoxStream<'static, Result<Bytes, reqwest::Error>>,
+}
+
+impl PreparedUpstreamResponse {
+    fn from_response(response: reqwest::Response) -> Self {
+        Self {
+            status: response.status(),
+            headers: response.headers().clone(),
+            content_length: response.content_length(),
+            detected_sse: None,
+            stream: response.bytes_stream().boxed(),
+        }
+    }
 }
 
 impl AttemptCtx<'_> {
@@ -158,6 +186,9 @@ pub async fn forward_with_config(
         .map_err(|e| ProxyError::ReadBody(e.to_string()))?;
 
     let model = extract_model(protocol, &parts.headers, &parts.uri, &body_bytes);
+    let request_streaming = extract_stream_flag(&parts.headers, &body_bytes);
+    let is_openai_responses =
+        protocol == Protocol::Openai && parts.uri.path().trim_end_matches('/') == "/v1/responses";
 
     let method = reqwest::Method::from_bytes(parts.method.as_str().as_bytes())
         .map_err(|e| ProxyError::Upstream(format!("invalid method: {e}")))?;
@@ -544,12 +575,82 @@ pub async fn forward_with_config(
                 }
             }
 
-            if !is_count_tokens && status.is_success() {
+            let expected_openai_responses_sse = is_openai_responses
+                && (request_streaming || is_openai_oauth_channel)
+                && status.is_success();
+            let mut prepared_upstream = PreparedUpstreamResponse::from_response(upstream);
+            let mut final_semantic_failure = None;
+            if expected_openai_responses_sse {
+                match inspect_openai_responses_bootstrap(prepared_upstream).await {
+                    OpenAiResponsesBootstrap::Ready(response) => {
+                        prepared_upstream = response;
+                    }
+                    OpenAiResponsesBootstrap::Failure(failure) => {
+                        let auto_disabled = if failure.retryable {
+                            attempt_ctx.record_failure().await
+                        } else {
+                            false
+                        };
+                        let retry_same_channel =
+                            failure.retryable && has_more_attempts_on_channel && !auto_disabled;
+                        let retry_next_channel =
+                            failure.retryable && !retry_same_channel && has_more_channels;
+
+                        if retry_same_channel || retry_next_channel {
+                            tracing::warn!(
+                                protocol = protocol.as_str(),
+                                channel_id = %channel.id,
+                                attempt = overall_attempt,
+                                total = total_attempts,
+                                channel_attempt = channel_attempt,
+                                channel_total = channel_total,
+                                error_kind = %failure.error_kind,
+                                error_detail = %failure.error_detail,
+                                "proxy attempt got OpenAI Responses semantic failure, retrying"
+                            );
+                            spawn_usage_event(
+                                build_usage_event(UsageEventParams {
+                                    request_id: Some(request_id.clone()),
+                                    protocol,
+                                    channel_id: channel.id.clone(),
+                                    model: model.clone(),
+                                    success: false,
+                                    http_status: Some(status.as_u16() as i64),
+                                    error_kind: Some(failure.error_kind),
+                                    error_detail: Some(failure.error_detail),
+                                    latency_ms: started.elapsed().as_millis() as i64,
+                                    ttft_ms: None,
+                                    tokens: failure.usage.as_event_fields(),
+                                }),
+                                db_path.clone(),
+                            );
+                            if retry_same_channel {
+                                continue;
+                            }
+                            continue 'channel_loop;
+                        }
+
+                        let response = if failure.synthetic_on_exhaustion {
+                            synthetic_openai_responses_failure(
+                                failure.response,
+                                &failure.error_kind,
+                                &failure.error_detail,
+                            )
+                        } else {
+                            failure.response
+                        };
+                        final_semantic_failure = Some(failure.error_kind);
+                        prepared_upstream = response;
+                    }
+                }
+            }
+
+            if !is_count_tokens && status.is_success() && final_semantic_failure.is_none() {
                 spawn_clear_channel_failures(db_path.clone(), &channel, settings.as_ref());
             }
 
             return proxy_upstream_response(
-                upstream,
+                prepared_upstream,
                 StreamRecordContext {
                     db_path: db_path.clone(),
                     protocol,
@@ -560,6 +661,10 @@ pub async fn forward_with_config(
                     status_is_success: false,
                     started,
                     parse_sse: false, // 将在内部按 Content-Type 决定
+                    expected_sse: expected_openai_responses_sse,
+                    require_openai_responses_terminal: expected_openai_responses_sse,
+                    upstream_content_type: None,
+                    content_type_corrected: false,
                     record_usage: !is_count_tokens,
                     span: tracing::Span::current(),
                 },
@@ -759,24 +864,56 @@ fn spawn_clear_channel_failures(
 }
 
 async fn proxy_upstream_response(
-    upstream: reqwest::Response,
+    upstream: PreparedUpstreamResponse,
     mut ctx: StreamRecordContext,
 ) -> Result<Response<Body>, ProxyError> {
-    let status = upstream.status();
+    let PreparedUpstreamResponse {
+        status,
+        headers: upstream_headers,
+        content_length,
+        detected_sse,
+        stream,
+    } = upstream;
     ctx.http_status = status.as_u16() as i64;
     ctx.status_is_success = status.is_success();
+    if let Some(detected_sse) = detected_sse {
+        ctx.require_openai_responses_terminal = detected_sse;
+    }
 
-    let headers = filtered_headers(upstream.headers());
-    let content_type = upstream
-        .headers()
+    let mut headers = filtered_headers(&upstream_headers);
+    let content_type = upstream_headers
         .get(axum::http::header::CONTENT_TYPE)
         .and_then(|v| v.to_str().ok())
         .unwrap_or("")
         .to_ascii_lowercase();
-    let is_sse = content_type.starts_with("text/event-stream");
-    let is_json = content_type.contains("application/json") || content_type.contains("+json");
+    let header_is_sse = content_type.starts_with("text/event-stream");
+    let header_is_json =
+        content_type.contains("application/json") || content_type.contains("+json");
+    let is_sse = detected_sse.unwrap_or(header_is_sse || (status.is_success() && ctx.expected_sse));
+    let is_json = detected_sse == Some(false) || header_is_json;
 
     ctx.parse_sse = is_sse;
+    ctx.upstream_content_type = (!content_type.is_empty()).then_some(content_type.clone());
+    ctx.content_type_corrected = status.is_success()
+        && ((detected_sse == Some(true) && !header_is_sse)
+            || (detected_sse == Some(false) && !header_is_json));
+
+    if ctx.content_type_corrected {
+        headers.insert(
+            axum::http::header::CONTENT_TYPE,
+            if detected_sse == Some(false) {
+                HeaderValue::from_static("application/json")
+            } else {
+                HeaderValue::from_static("text/event-stream")
+            },
+        );
+        if detected_sse != Some(false) {
+            headers.insert(
+                axum::http::header::CACHE_CONTROL,
+                HeaderValue::from_static("no-cache"),
+            );
+        }
+    }
 
     let mut resp = Response::builder().status(status);
     if let Some(h) = resp.headers_mut() {
@@ -786,26 +923,21 @@ async fn proxy_upstream_response(
     }
 
     if !ctx.record_usage {
-        let stream = upstream
-            .bytes_stream()
-            .map_err(std::io::Error::other)
-            .boxed();
+        let stream = stream.map_err(std::io::Error::other).boxed();
         return resp
             .body(Body::from_stream(stream))
             .map_err(|e| ProxyError::Upstream(e.to_string()));
     }
 
-    let can_capture_json = match upstream.content_length() {
+    let can_capture_json = match content_length {
         Some(n) => (n as usize) <= limits::MAX_JSON_CAPTURE_BYTES,
         None => true,
     };
     if !is_sse && is_json && can_capture_json {
-        let (captured, remainder) = read_stream_prefix_or_all(
-            upstream.bytes_stream().boxed(),
-            limits::MAX_JSON_CAPTURE_BYTES,
-        )
-        .await
-        .map_err(|e| ProxyError::Upstream(e.to_string()))?;
+        let (captured, remainder) =
+            read_stream_prefix_or_all(stream, limits::MAX_JSON_CAPTURE_BYTES)
+                .await
+                .map_err(|e| ProxyError::Upstream(e.to_string()))?;
 
         let Some(remainder) = remainder else {
             let bytes = captured;
@@ -916,7 +1048,7 @@ async fn proxy_upstream_response(
             .map_err(|e| ProxyError::Upstream(e.to_string()));
     }
 
-    let stream = InstrumentedStream::new(upstream.bytes_stream().boxed(), ctx);
+    let stream = InstrumentedStream::new(stream, ctx);
 
     resp.body(Body::from_stream(stream))
         .map_err(|e| ProxyError::Upstream(e.to_string()))
@@ -1234,6 +1366,26 @@ fn extract_model_from_body(headers: &HeaderMap, body: &[u8]) -> Option<String> {
         .map(|s| s.to_string())
 }
 
+fn extract_stream_flag(headers: &HeaderMap, body: &[u8]) -> bool {
+    if body.is_empty() {
+        return false;
+    }
+
+    let is_json = headers
+        .get(axum::http::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .map(|v| v.to_ascii_lowercase())
+        .is_some_and(|v| v.starts_with("application/json"));
+    if !is_json {
+        return false;
+    }
+
+    serde_json::from_slice::<serde_json::Value>(body)
+        .ok()
+        .and_then(|value| value.get("stream").and_then(|stream| stream.as_bool()))
+        .unwrap_or(false)
+}
+
 fn extract_model(
     protocol: Protocol,
     headers: &HeaderMap,
@@ -1318,6 +1470,14 @@ impl TokenUsage {
             self.cache_write_tokens = other.cache_write_tokens;
         }
     }
+
+    fn has_any_fields(self) -> bool {
+        self.prompt_tokens.is_some()
+            || self.completion_tokens.is_some()
+            || self.total_tokens.is_some()
+            || self.cache_read_tokens.is_some()
+            || self.cache_write_tokens.is_some()
+    }
 }
 
 fn parse_usage_from_value(protocol: Protocol, v: &serde_json::Value) -> TokenUsage {
@@ -1357,6 +1517,7 @@ fn get_error_message(v: &serde_json::Value) -> Option<String> {
     // - Anthropic: { error: { message, type } } 或 { type: "error", error: { message } }
     // - Gemini: { error: { message, status, code } }
     let msg = get_str_path(v, &["error", "message"])
+        .or_else(|| get_str_path(v, &["response", "error", "message"]))
         .or_else(|| get_str_path(v, &["error", "error", "message"]))
         .or_else(|| get_str_path(v, &["message"]))
         .or_else(|| get_str_path(v, &["detail"]))
