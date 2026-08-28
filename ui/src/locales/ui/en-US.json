@@ -570,6 +570,7 @@
     },
     "language": {
       "label": "App language",
+      "subtitle": "Switch the display language for UI and chat commands",
       "saveFail": "Failed to save app language"
     },
     "currency": {
