@@ -37,6 +37,7 @@ pub(in crate::server) struct UpdateSettingsInput {
     auto_disable_disable_minutes: Option<i64>,
     channel_retry_enabled: Option<bool>,
     anthropic_count_tokens_mock_enabled: Option<bool>,
+    openai_responses_reasoning_id_sanitizer_enabled: Option<bool>,
     log_level: Option<logging::LogLevel>,
     log_retention_days: Option<i64>,
     chat_bridge_enabled: Option<bool>,
@@ -121,6 +122,12 @@ pub(in crate::server) async fn update_settings(
         (
             "anthropic_count_tokens_mock_enabled",
             input.anthropic_count_tokens_mock_enabled.is_some(),
+        ),
+        (
+            "openai_responses_reasoning_id_sanitizer_enabled",
+            input
+                .openai_responses_reasoning_id_sanitizer_enabled
+                .is_some(),
         ),
         ("log_level", input.log_level.is_some()),
         ("log_retention_days", input.log_retention_days.is_some()),
@@ -299,6 +306,8 @@ pub(in crate::server) async fn update_settings(
             auto_disable_disable_minutes: input.auto_disable_disable_minutes,
             channel_retry_enabled: input.channel_retry_enabled,
             anthropic_count_tokens_mock_enabled: input.anthropic_count_tokens_mock_enabled,
+            openai_responses_reasoning_id_sanitizer_enabled: input
+                .openai_responses_reasoning_id_sanitizer_enabled,
             log_level: input.log_level,
             log_retention_days: input.log_retention_days,
             chat_bridge_enabled: input.chat_bridge_enabled,

@@ -39,6 +39,39 @@ async fn spawn_upstream(status: StatusCode, body: &'static str) -> String {
     format!("http://127.0.0.1:{}", addr.port())
 }
 
+async fn spawn_upstream_capturing_json_body() -> (String, Arc<Mutex<Vec<serde_json::Value>>>) {
+    let captured = Arc::new(Mutex::new(Vec::new()));
+    let captured_for_handler = captured.clone();
+    let app = Router::new().route(
+        "/{*path}",
+        any(move |request: Request<Body>| {
+            let captured = captured_for_handler.clone();
+            async move {
+                let body = to_bytes(request.into_body(), 1024 * 1024).await.unwrap();
+                captured
+                    .lock()
+                    .unwrap()
+                    .push(serde_json::from_slice(&body).unwrap());
+                (
+                    StatusCode::OK,
+                    [(axum::http::header::CONTENT_TYPE, "application/json")],
+                    r#"{"id":"resp_test","output":[],"usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2}}"#,
+                )
+            }
+        }),
+    );
+
+    let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+        .await
+        .expect("bind");
+    let addr = listener.local_addr().expect("local_addr");
+    tokio::spawn(async move {
+        let _ = axum::serve(listener, app).await;
+    });
+
+    (format!("http://127.0.0.1:{}", addr.port()), captured)
+}
+
 async fn spawn_upstream_typed(
     status: StatusCode,
     content_type: &'static str,
@@ -231,6 +264,65 @@ async fn forward_openai_responses(
 }
 
 #[tokio::test]
+async fn openai_responses_reasoning_id_sanitizer_respects_setting() {
+    let (base_url, captured) = spawn_upstream_capturing_json_body().await;
+    let db_path = temp_db_path();
+    storage::init_db(&db_path).unwrap();
+    create_openai_channel(
+        db_path.clone(),
+        "openai",
+        format!("{base_url}/v1"),
+        10,
+        1,
+        false,
+    )
+    .await;
+    let channels = Arc::new(storage::list_channels(db_path.clone()).await.unwrap());
+
+    for enabled in [true, false] {
+        let mut settings = storage::get_app_settings(db_path.clone()).await.unwrap();
+        settings.openai_responses_reasoning_id_sanitizer_enabled = enabled;
+        let request = Request::builder()
+            .method("POST")
+            .uri("/v1/responses")
+            .header(axum::http::header::CONTENT_TYPE, "application/json")
+            .body(Body::from(
+                r#"{"model":"gpt-test","input":[{"type":"message","id":"item_message","role":"assistant","content":[]},{"type":"reasoning","id":"item_reasoning","encrypted_content":"opaque","summary":[]},{"type":"function_call","id":"item_call","call_id":"call_1","name":"tool","arguments":"{}"}],"stream":false}"#,
+            ))
+            .unwrap();
+        let response = proxy::forward_with_config(
+            &reqwest::Client::new(),
+            None,
+            db_path.clone(),
+            storage::Protocol::Openai,
+            "/v1",
+            request,
+            proxy::ProxyConfigSnapshot {
+                settings: Arc::new(settings),
+                channels: channels.clone(),
+                channels_cache: None,
+                codex_identity: Arc::new(proxy::CodexClientIdentity::for_version(None)),
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let _ = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
+    }
+
+    let captured = captured.lock().unwrap();
+    assert_eq!(captured.len(), 2);
+    assert_eq!(captured[0]["input"].as_array().unwrap().len(), 3);
+    assert_eq!(captured[0]["input"][0]["id"], "item_message");
+    assert!(captured[0]["input"][1].get("id").is_none());
+    assert_eq!(captured[0]["input"][1]["encrypted_content"], "opaque");
+    assert_eq!(captured[0]["input"][1]["summary"], serde_json::json!([]));
+    assert_eq!(captured[0]["input"][2]["id"], "item_call");
+    assert_eq!(captured[0]["input"][2]["call_id"], "call_1");
+    assert_eq!(captured[1]["input"][1]["id"], "item_reasoning");
+}
+
+#[tokio::test]
 async fn managed_openai_account_forwards_responses_with_dynamic_oauth_credentials() {
     #[derive(Clone, Default)]
     struct Captured {
@@ -385,7 +477,7 @@ async fn managed_openai_account_forwards_responses_with_dynamic_oauth_credential
         }
         let request = request
             .body(Body::from(
-                r#"{"model":"gpt-5.6-sol","input":"hello","parallel_tool_calls":true,"temperature":0.5}"#,
+                r#"{"model":"gpt-5.6-sol","input":[{"type":"reasoning","id":"item_oauth_reasoning","encrypted_content":"opaque","summary":[]},{"type":"message","id":"item_message","role":"user","content":[{"type":"input_text","text":"hello"}]}],"parallel_tool_calls":true,"temperature":0.5}"#,
             ))
             .unwrap();
         let response = proxy::forward_with_config(
@@ -421,6 +513,10 @@ async fn managed_openai_account_forwards_responses_with_dynamic_oauth_credential
         assert_eq!(request.body["stream"], true);
         assert_eq!(request.body["store"], false);
         assert!(request.body.get("temperature").is_none());
+        assert!(request.body["input"][0].get("id").is_none());
+        assert_eq!(request.body["input"][0]["encrypted_content"], "opaque");
+        assert_eq!(request.body["input"][0]["summary"], serde_json::json!([]));
+        assert_eq!(request.body["input"][1]["id"], "item_message");
     }
     assert_eq!(captured[0].responses_lite, "");
     assert_eq!(captured[0].body["parallel_tool_calls"], true);

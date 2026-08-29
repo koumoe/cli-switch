@@ -42,6 +42,11 @@ async fn get_app_settings_keeps_defaults_on_invalid_values() {
     upsert_setting(&conn, "log_retention_days", "NaN");
     upsert_setting(&conn, "chat_bridge_turn_timeout_minutes", "-1");
     upsert_setting(&conn, "channel_retry_enabled", "maybe");
+    upsert_setting(
+        &conn,
+        "openai_responses_reasoning_id_sanitizer_enabled",
+        "maybe",
+    );
     upsert_setting(&conn, "system_notifications_enabled", "maybe");
     upsert_setting(
         &conn,
@@ -91,6 +96,7 @@ async fn get_app_settings_keeps_defaults_on_invalid_values() {
     assert_eq!(settings.chat_bridge_turn_timeout_minutes, 0);
     assert_eq!(settings.chat_bridge_turn_timeout(), None);
     assert!(!settings.channel_retry_enabled);
+    assert!(settings.openai_responses_reasoning_id_sanitizer_enabled);
     assert!(settings.system_notifications_enabled);
     assert!(settings.remote_low_balance_system_notification_enabled);
     assert!(settings.remote_managed_channel_missing_system_notification_enabled);
@@ -117,6 +123,7 @@ async fn default_chat_bridge_turn_timeout_is_disabled() {
     assert_eq!(settings.chat_bridge_turn_timeout_minutes, 0);
     assert_eq!(settings.chat_bridge_turn_timeout(), None);
     assert!(!settings.channel_retry_enabled);
+    assert!(settings.openai_responses_reasoning_id_sanitizer_enabled);
     assert!(settings.system_notifications_enabled);
     assert!(settings.remote_low_balance_system_notification_enabled);
     assert!(settings.remote_managed_channel_missing_system_notification_enabled);
@@ -143,6 +150,7 @@ async fn update_app_settings_persists_chat_bridge_turn_timeout_settings() {
         db_path.clone(),
         storage::AppSettingsPatch {
             channel_retry_enabled: Some(true),
+            openai_responses_reasoning_id_sanitizer_enabled: Some(false),
             system_notifications_enabled: Some(false),
             remote_low_balance_system_notification_enabled: Some(false),
             remote_managed_channel_missing_system_notification_enabled: Some(false),
@@ -158,6 +166,7 @@ async fn update_app_settings_persists_chat_bridge_turn_timeout_settings() {
     assert_eq!(updated.chat_bridge_turn_timeout_minutes, 0);
     assert_eq!(updated.chat_bridge_turn_timeout(), None);
     assert!(updated.channel_retry_enabled);
+    assert!(!updated.openai_responses_reasoning_id_sanitizer_enabled);
     assert!(!updated.system_notifications_enabled);
     assert!(!updated.remote_low_balance_system_notification_enabled);
     assert!(!updated.remote_managed_channel_missing_system_notification_enabled);
@@ -168,6 +177,7 @@ async fn update_app_settings_persists_chat_bridge_turn_timeout_settings() {
     assert_eq!(reread.chat_bridge_turn_timeout_minutes, 0);
     assert_eq!(reread.chat_bridge_turn_timeout(), None);
     assert!(reread.channel_retry_enabled);
+    assert!(!reread.openai_responses_reasoning_id_sanitizer_enabled);
     assert!(!reread.system_notifications_enabled);
     assert!(!reread.remote_low_balance_system_notification_enabled);
     assert!(!reread.remote_managed_channel_missing_system_notification_enabled);

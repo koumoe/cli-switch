@@ -189,6 +189,15 @@ pub async fn forward_with_config(
     let request_streaming = extract_stream_flag(&parts.headers, &body_bytes);
     let is_openai_responses =
         protocol == Protocol::Openai && parts.uri.path().trim_end_matches('/') == "/v1/responses";
+    let body_bytes =
+        if is_openai_responses && settings.openai_responses_reasoning_id_sanitizer_enabled {
+            match crate::codex_upstream::sanitize_responses_reasoning_item_ids(&body_bytes) {
+                Some(body) => Bytes::from(body),
+                None => body_bytes,
+            }
+        } else {
+            body_bytes
+        };
 
     let method = reqwest::Method::from_bytes(parts.method.as_str().as_bytes())
         .map_err(|e| ProxyError::Upstream(format!("invalid method: {e}")))?;

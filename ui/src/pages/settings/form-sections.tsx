@@ -106,6 +106,7 @@ type ServiceInfoFormValues = {
 };
 
 type CompatibilityFormValues = {
+  openai_responses_reasoning_id_sanitizer_enabled: boolean;
   anthropic_count_tokens_mock_enabled: boolean;
 };
 
@@ -279,6 +280,8 @@ function serviceInfoDefaults(settings: AppSettings | null): ServiceInfoFormValue
 
 function compatibilityDefaults(settings: AppSettings | null): CompatibilityFormValues {
   return {
+    openai_responses_reasoning_id_sanitizer_enabled:
+      settings?.openai_responses_reasoning_id_sanitizer_enabled ?? true,
     anthropic_count_tokens_mock_enabled: settings?.anthropic_count_tokens_mock_enabled ?? false,
   };
 }
@@ -1491,6 +1494,8 @@ export function CompatibilitySettingsCard({ settings, onSaved }: SettingsSection
     setSaving(true);
     try {
       const next = await updateSettings({
+        openai_responses_reasoning_id_sanitizer_enabled:
+          values.openai_responses_reasoning_id_sanitizer_enabled,
         anthropic_count_tokens_mock_enabled: values.anthropic_count_tokens_mock_enabled,
       });
       onSaved(next);
@@ -1508,6 +1513,32 @@ export function CompatibilitySettingsCard({ settings, onSaved }: SettingsSection
     <Form {...form}>
       <form onSubmit={submit}>
         <SettingsSection title={t("settings.compatibility.title")}>
+          <FormField
+            control={form.control}
+            name="openai_responses_reasoning_id_sanitizer_enabled"
+            render={({ field }) => (
+              <FormItem className="space-y-0">
+                <SettingsRow>
+                  <SettingsFieldText
+                    label={
+                      <FormLabel className="text-[12.5px] font-semibold">
+                        {t("settings.compatibility.sanitizeOpenAiReasoningIds")}
+                      </FormLabel>
+                    }
+                    hint={
+                      <UiFormDescription className={settingsDescriptionClassName}>
+                        {t("settings.compatibility.sanitizeOpenAiReasoningIdsHint")}
+                      </UiFormDescription>
+                    }
+                  />
+                  <FormControl>
+                    <Switch checked={field.value} onCheckedChange={field.onChange} disabled={!settings || saving} />
+                  </FormControl>
+                </SettingsRow>
+              </FormItem>
+            )}
+          />
+
           <FormField
             control={form.control}
             name="anthropic_count_tokens_mock_enabled"
