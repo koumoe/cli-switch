@@ -1,3 +1,8 @@
+## [0.64.11](https://github.com/koumoe/cli-switch/compare/v0.64.10...v0.64.11) (2026-08-29)
+
+### Bug Fixes
+
+* sanitize invalid OpenAI reasoning item IDs (#223) ([35e8ad3](https://github.com/koumoe/cli-switch/commit/35e8ad38a89b5aa42ecb61a21f13b83b664333bd))
 ## [0.64.10](https://github.com/koumoe/cli-switch/compare/v0.64.9...v0.64.10) (2026-08-28)
 
 ### Bug Fixes
