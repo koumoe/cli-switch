@@ -29,6 +29,8 @@ const KEY_AUTO_DISABLE_FAILURE_TIMES: &str = "auto_disable_failure_times";
 const KEY_AUTO_DISABLE_DISABLE_MINUTES: &str = "auto_disable_disable_minutes";
 const KEY_CHANNEL_RETRY_ENABLED: &str = "channel_retry_enabled";
 const KEY_ANTHROPIC_COUNT_TOKENS_MOCK_ENABLED: &str = "anthropic_count_tokens_mock_enabled";
+const KEY_OPENAI_RESPONSES_REASONING_ID_SANITIZER_ENABLED: &str =
+    "openai_responses_reasoning_id_sanitizer_enabled";
 const KEY_LOG_LEVEL: &str = "log_level";
 const KEY_LOG_RETENTION_DAYS: &str = "log_retention_days";
 const KEY_CHAT_BRIDGE_ENABLED: &str = "chat_bridge_enabled";
@@ -112,6 +114,7 @@ pub struct AppSettings {
     pub auto_disable_disable_minutes: i64,
     pub channel_retry_enabled: bool,
     pub anthropic_count_tokens_mock_enabled: bool,
+    pub openai_responses_reasoning_id_sanitizer_enabled: bool,
     pub log_level: LogLevel,
     pub log_retention_days: i64,
     pub chat_bridge_enabled: bool,
@@ -161,6 +164,7 @@ impl Default for AppSettings {
             auto_disable_disable_minutes: 30,
             channel_retry_enabled: false,
             anthropic_count_tokens_mock_enabled: false,
+            openai_responses_reasoning_id_sanitizer_enabled: true,
             log_level: LogLevel::Warning,
             log_retention_days: 30,
             chat_bridge_enabled: false,
@@ -244,6 +248,7 @@ pub struct AppSettingsPatch {
     pub auto_disable_disable_minutes: Option<i64>,
     pub channel_retry_enabled: Option<bool>,
     pub anthropic_count_tokens_mock_enabled: Option<bool>,
+    pub openai_responses_reasoning_id_sanitizer_enabled: Option<bool>,
     pub log_level: Option<LogLevel>,
     pub log_retention_days: Option<i64>,
     pub chat_bridge_enabled: Option<bool>,
@@ -497,6 +502,14 @@ pub async fn get_app_settings(db_path: PathBuf) -> anyhow::Result<AppSettings> {
                 &v,
                 &mut has_invalid_values,
                 out.anthropic_count_tokens_mock_enabled,
+            );
+        }
+        if let Some(v) = get_setting(conn, KEY_OPENAI_RESPONSES_REASONING_ID_SANITIZER_ENABLED)? {
+            out.openai_responses_reasoning_id_sanitizer_enabled = parse_bool_setting(
+                KEY_OPENAI_RESPONSES_REASONING_ID_SANITIZER_ENABLED,
+                &v,
+                &mut has_invalid_values,
+                out.openai_responses_reasoning_id_sanitizer_enabled,
             );
         }
         if let Some(v) = get_setting(conn, KEY_LOG_LEVEL)? {
@@ -815,6 +828,14 @@ pub async fn update_app_settings(
             set_setting(
                 conn,
                 KEY_ANTHROPIC_COUNT_TOKENS_MOCK_ENABLED,
+                if v { "true" } else { "false" },
+                updated_at_ms,
+            )?;
+        }
+        if let Some(v) = patch.openai_responses_reasoning_id_sanitizer_enabled {
+            set_setting(
+                conn,
+                KEY_OPENAI_RESPONSES_REASONING_ID_SANITIZER_ENABLED,
                 if v { "true" } else { "false" },
                 updated_at_ms,
             )?;

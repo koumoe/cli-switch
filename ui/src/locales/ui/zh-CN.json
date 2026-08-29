@@ -942,6 +942,8 @@
     },
     "compatibility": {
       "title": "兼容性",
+      "sanitizeOpenAiReasoningIds": "清理 OpenAI Responses 无效推理 ID",
+      "sanitizeOpenAiReasoningIdsHint": "仅移除 reasoning 项中前缀不合法的 ID，保留加密推理内容、摘要和输入顺序",
       "mockCountTokens": "模拟 Anthropic count_tokens",
       "mockCountTokensHint": "拦截 /v1/messages/count_tokens 并在本地估算 input_tokens",
       "saved": "已保存",

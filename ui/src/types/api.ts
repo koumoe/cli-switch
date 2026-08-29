@@ -33,6 +33,7 @@ export type AppSettings = {
   auto_disable_disable_minutes: number;
   channel_retry_enabled: boolean;
   anthropic_count_tokens_mock_enabled: boolean;
+  openai_responses_reasoning_id_sanitizer_enabled: boolean;
   log_level: LogLevel;
   log_retention_days: number;
   chat_bridge_enabled: boolean;

@@ -942,6 +942,8 @@
     },
     "compatibility": {
       "title": "Compatibility",
+      "sanitizeOpenAiReasoningIds": "Sanitize invalid OpenAI Responses reasoning IDs",
+      "sanitizeOpenAiReasoningIdsHint": "Remove only reasoning IDs with invalid prefixes while preserving encrypted reasoning, summaries, and input order",
       "mockCountTokens": "Mock Anthropic count_tokens",
       "mockCountTokensHint": "Intercept /v1/messages/count_tokens and estimate input_tokens locally",
       "saved": "Saved",

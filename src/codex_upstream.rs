@@ -77,6 +77,42 @@ pub fn responses_url(base_url: Option<&str>) -> String {
     format!("{base_url}{RESPONSES_PATH}")
 }
 
+/// Remove invalid IDs from replayed Responses reasoning items.
+///
+/// Some compatible upstreams emit generic `item_*` IDs for reasoning output.
+/// When a client replays that history, OpenAI rejects the item because reasoning
+/// IDs must begin with `rs`. Removing only the invalid ID lets the upstream treat
+/// the preserved reasoning payload as an input item without changing its
+/// encrypted content, summary, other fields, or array position.
+pub fn sanitize_responses_reasoning_item_ids(body: &[u8]) -> Option<Vec<u8>> {
+    let mut value = serde_json::from_slice::<Value>(body).ok()?;
+    let input = value.get_mut("input").and_then(Value::as_array_mut)?;
+
+    let mut changed = false;
+    for item in input {
+        let Some(item) = item.as_object_mut() else {
+            continue;
+        };
+        if item.get("type").and_then(Value::as_str) != Some("reasoning") {
+            continue;
+        }
+
+        let has_valid_id = item
+            .get("id")
+            .and_then(Value::as_str)
+            .is_some_and(|id| id.starts_with("rs"));
+        if item.contains_key("id") && !has_valid_id {
+            item.remove("id");
+            changed = true;
+        }
+    }
+
+    if !changed {
+        return None;
+    }
+    serde_json::to_vec(&value).ok()
+}
+
 /// Apply a self-consistent current Codex identity for OAuth accounts.
 /// ChatGPT validates that `originator`, the User-Agent client name/version,
 /// and the `version` header agree. Stale or mixed identities can be rejected
@@ -236,6 +272,48 @@ mod tests {
 
         headers.insert(RESPONSES_LITE_HEADER, HeaderValue::from_static("1"));
         assert!(!is_responses_lite(&headers));
+    }
+
+    #[test]
+    fn strips_only_invalid_reasoning_item_ids() {
+        let body = br#"{
+            "input":[
+                {"type":"message","id":"item_message","role":"assistant"},
+                {"type":"reasoning","id":"item_reasoning","encrypted_content":"opaque","summary":[{"type":"summary_text","text":"kept"}],"content":[{"type":"reasoning_text","text":"kept"}]},
+                {"type":"reasoning","id":"rs_valid","summary":[]},
+                {"type":"reasoning","id":null,"summary":[]},
+                {"type":"reasoning","summary":[]},
+                {"type":"function_call","id":"item_call","call_id":"call_1","name":"tool","arguments":"{}"}
+            ]
+        }"#;
+
+        let sanitized = sanitize_responses_reasoning_item_ids(body).unwrap();
+        let value: Value = serde_json::from_slice(&sanitized).unwrap();
+        let input = value["input"].as_array().unwrap();
+
+        assert_eq!(input.len(), 6);
+        assert_eq!(input[0]["id"], "item_message");
+        assert!(input[1].get("id").is_none());
+        assert_eq!(input[1]["encrypted_content"], "opaque");
+        assert_eq!(input[1]["summary"][0]["text"], "kept");
+        assert_eq!(input[1]["content"][0]["text"], "kept");
+        assert_eq!(input[2]["id"], "rs_valid");
+        assert!(input[3].get("id").is_none());
+        assert!(input[4].get("id").is_none());
+        assert_eq!(input[5]["id"], "item_call");
+        assert_eq!(input[5]["call_id"], "call_1");
+    }
+
+    #[test]
+    fn keeps_unmatched_responses_bodies_byte_for_byte() {
+        for body in [
+            br#"{ "input": "hello" }"#.as_slice(),
+            br#"{ "input": [{"type":"reasoning","id":"rs_valid","summary":[]}] }"#.as_slice(),
+            br#"{ "input": [{"type":"message","id":"item_legacy"}] }"#.as_slice(),
+            b"not-json".as_slice(),
+        ] {
+            assert!(sanitize_responses_reasoning_item_ids(body).is_none());
+        }
     }
 
     #[test]

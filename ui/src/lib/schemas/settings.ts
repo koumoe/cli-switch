@@ -82,6 +82,7 @@ export function createServiceInfoSchema() {
 
 export function createCompatibilitySchema() {
   return z.object({
+    openai_responses_reasoning_id_sanitizer_enabled: z.boolean(),
     anthropic_count_tokens_mock_enabled: z.boolean(),
   });
 }
