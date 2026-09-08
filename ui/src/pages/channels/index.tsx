@@ -1183,7 +1183,6 @@ export function ChannelsPage() {
                 columns={autoSortPreviewColumns}
                 data={autoSortPreviewRows}
                 getRowId={(row) => row.id}
-                containerClassName="overflow-x-auto"
                 stickyHeader={false}
               />
             )}

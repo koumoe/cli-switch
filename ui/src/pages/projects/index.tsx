@@ -259,7 +259,6 @@ export function ProjectsPage() {
                 data={state.projects}
                 loading={state.projectsLoading}
                 getRowId={(row) => row.id}
-                containerClassName="h-full overflow-y-auto"
                 emptyState={
                   <div className="px-4 py-2 text-sm text-muted-foreground">
                     {t("projects.table.empty")}

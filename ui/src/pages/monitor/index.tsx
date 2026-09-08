@@ -392,7 +392,6 @@ export function MonitorPage() {
                 data={channelStats}
                 loading={loading}
                 getRowId={(row) => row.channel_id}
-                containerClassName="h-full overflow-y-auto"
                 emptyState={t("monitor.channelStats.empty")}
                 pagination={{
                   page,
