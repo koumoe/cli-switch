@@ -1,12 +1,37 @@
 import { describe, expect, it } from "vitest";
 
 import { renderWithProviders } from "@/test/render";
+import type { Channel, ChannelStats } from "@/types/api";
 
 import { ChannelDistribution } from "./channel-distribution";
 
 const protocolLabel = (protocol: "openai" | "anthropic" | "gemini") => protocol;
 
 describe("ChannelDistribution", () => {
+  it("preserves equal channel labels with distinct accounts and unchanged usage shares", () => {
+    const stats = [
+      { channel_id: "a", name: "OpenAI 20X", protocol: "openai", success: 60 },
+      { channel_id: "b", name: "OpenAI 20X", protocol: "openai", success: 40 },
+    ] as ChannelStats[];
+    const channels = new Map([
+      ["a", { id: "a", name: "OpenAI 20X", managed_remote_account_id: "account-a" } as Channel],
+      ["b", { id: "b", name: "OpenAI 20X", managed_remote_account_id: "account-b" } as Channel],
+    ]);
+    const { getByRole, rerender, queryByText, getByText } = renderWithProviders(
+      <ChannelDistribution stats={stats} channelsById={channels}
+        accountNames={{ "account-a": "Gmail", "account-b": "Icloud" }}
+        protocolLabel={protocolLabel} view="percent" />,
+    );
+    expect(getByRole("progressbar", { name: "Gmail · OpenAI 20X" })).toHaveAttribute("aria-valuenow", "60");
+    expect(getByRole("progressbar", { name: "Icloud · OpenAI 20X" })).toHaveAttribute("aria-valuenow", "40");
+    rerender(<ChannelDistribution stats={stats} channelsById={channels}
+      accountNames={{ "account-a": "Renamed", "account-b": "Icloud" }}
+      protocolLabel={protocolLabel} view="percent" />);
+    expect(queryByText("Gmail")).not.toBeInTheDocument();
+    expect(getByText("Renamed")).toBeInTheDocument();
+    expect(getByRole("progressbar", { name: "Renamed · OpenAI 20X" })).toHaveAttribute("aria-valuenow", "60");
+  });
+
   it("renders nothing when the total usage is zero", () => {
     const { container } = renderWithProviders(
       <ChannelDistribution
@@ -23,6 +48,8 @@ describe("ChannelDistribution", () => {
             total_tokens: 0,
           },
         ]}
+        channelsById={new Map()}
+        accountNames={{}}
         protocolLabel={protocolLabel}
         view="percent"
       />,
@@ -69,6 +96,8 @@ describe("ChannelDistribution", () => {
             total_tokens: 0,
           },
         ]}
+        channelsById={new Map()}
+        accountNames={{}}
         protocolLabel={protocolLabel}
         view="percent"
       />,
@@ -108,6 +137,8 @@ describe("ChannelDistribution", () => {
             total_tokens: 0,
           },
         ]}
+        channelsById={new Map()}
+        accountNames={{}}
         protocolLabel={protocolLabel}
         view="usage"
       />,

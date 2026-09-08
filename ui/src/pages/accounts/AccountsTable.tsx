@@ -2,14 +2,11 @@ import React from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { ExternalLink, GripVertical, Link2, Pencil, RefreshCw, Trash2 } from "lucide-react";
 
-import type { OpenAiQuotaWindow, RemoteAccount } from "@/types/api";
+import type { OpenAiRemoteAccount, RemoteAccount } from "@/types/api";
 import {
   Badge,
   Card,
   CardContent,
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
 } from "@/components/ui";
 import {
   SortableDataTable,
@@ -28,41 +25,8 @@ import {
   resolveCheckinMode,
 } from "./shared";
 
-function quotaWindowLabel(
-  kind: string,
-  windowMinutes: number,
-  t: (key: string, vars?: Record<string, string | number>) => string,
-): string {
-  if (windowMinutes > 0 && windowMinutes % 1_440 === 0) {
-    return t("accounts.quota.days", { count: windowMinutes / 1_440 });
-  }
-  if (windowMinutes > 0 && windowMinutes % 60 === 0) {
-    return t("accounts.quota.hours", { count: windowMinutes / 60 });
-  }
-  if (kind === "weekly") return t("accounts.quota.weekly");
-  return kind || t("accounts.quota.window");
-}
-
-function sortQuotaWindows(windows: OpenAiQuotaWindow[]): OpenAiQuotaWindow[] {
-  return [...windows].sort((a, b) => {
-    const aMinutes = a.window_minutes > 0 ? a.window_minutes : Number.POSITIVE_INFINITY;
-    const bMinutes = b.window_minutes > 0 ? b.window_minutes : Number.POSITIVE_INFINITY;
-    return aMinutes - bMinutes;
-  });
-}
-
-function quotaUsageLabel(
-  window: OpenAiQuotaWindow,
-  t: (key: string, vars?: Record<string, string | number>) => string,
-): string {
-  return [
-    window.limit_name,
-    quotaWindowLabel(window.kind, window.window_minutes, t),
-    `${Math.round(window.used_percent)}%`,
-  ]
-    .filter(Boolean)
-    .join(" ");
-}
+import { OpenAiQuotaCell } from "./OpenAiQuotaCell";
+import { accountStatusBadgeClass, ResetQuotaButton } from "./ResetQuotaButton";
 
 type AccountsTableProps = {
   accounts: RemoteAccount[];
@@ -74,6 +38,10 @@ type AccountsTableProps = {
   refreshing: Record<string, boolean>;
   systemChecking: Record<string, boolean>;
   pageOpening: Record<string, boolean>;
+  resetting: Record<string, boolean>;
+  resetPending: Record<string, boolean>;
+  resetRefreshRequired: Record<string, boolean>;
+  onResetQuota: (item: OpenAiRemoteAccount) => Promise<boolean>;
   setAccounts: (next: RemoteAccount[]) => void;
   persistOrder: (next: RemoteAccount[]) => Promise<void>;
   onRefreshAccount: (item: RemoteAccount) => void | Promise<void>;
@@ -97,6 +65,10 @@ export function AccountsTable({
   refreshing,
   systemChecking,
   pageOpening,
+  resetting,
+  resetPending,
+  resetRefreshRequired,
+  onResetQuota,
   setAccounts,
   persistOrder,
   onRefreshAccount,
@@ -107,7 +79,7 @@ export function AccountsTable({
   onOpenEdit,
   onOpenDeleteDialog,
 }: AccountsTableProps) {
-  const { locale, t } = useI18n();
+  const { t } = useI18n();
   const columns = React.useMemo<Array<ColumnDef<RemoteAccount>>>(
     () => [
       {
@@ -194,51 +166,7 @@ export function AccountsTable({
           if (!isOpenAiAccount(item)) {
             return <div className="font-mono">{formatAmount(item, item.last_balance_amount)}</div>;
           }
-          const windows = sortQuotaWindows(item.quota_windows ?? []);
-          if (windows.length === 0) {
-            return <span className="text-muted-foreground">{t("accounts.quota.unavailable")}</span>;
-          }
-          const summaryWindow =
-            windows.find(
-              (window) => window.kind === "primary" || window.kind === "secondary",
-            ) ?? windows[0];
-          const renderReset = (window: OpenAiQuotaWindow) => {
-            if (!window.resets_at_ms) return null;
-            const reset = new Intl.DateTimeFormat(locale, {
-              month: "numeric",
-              day: "numeric",
-              hour: "2-digit",
-              minute: "2-digit",
-            }).format(new Date(window.resets_at_ms));
-            return t("accounts.quota.resetAt", { time: reset });
-          };
-          return (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div className="inline-flex cursor-help whitespace-nowrap text-sm">
-                  <span className="font-medium">{Math.round(summaryWindow.used_percent)}%</span>
-                </div>
-              </TooltipTrigger>
-              <TooltipContent className="min-w-[22rem] space-y-1.5 px-3 py-2">
-                {windows.map((window, index) => {
-                  const reset = renderReset(window);
-                  return (
-                    <div
-                      key={`${window.kind}-${window.window_minutes}-${index}`}
-                      className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-8 whitespace-nowrap"
-                    >
-                      <span className="text-left font-medium">
-                        {quotaUsageLabel(window, t)}
-                      </span>
-                      {reset ? (
-                        <span className="text-right opacity-80">{reset}</span>
-                      ) : null}
-                    </div>
-                  );
-                })}
-              </TooltipContent>
-            </Tooltip>
-          );
+          return <OpenAiQuotaCell account={item} />;
         },
         meta: {
           skeletonClassName: "w-18 mx-auto",
@@ -246,11 +174,19 @@ export function AccountsTable({
       },
       {
         id: "checkin",
-        header: t("accounts.table.checkin"),
+        header: t("accounts.table.checkinOrReset"),
         cell: ({ row }) => {
           const item = row.original;
           if (item.provider === "openai") {
-            return <Badge variant="secondary">{t("accounts.checkin.none")}</Badge>;
+            return (
+              <ResetQuotaButton
+                account={item}
+                busy={!!resetting[item.id] || !!refreshing[item.id]}
+                pending={!!resetPending[item.id]}
+                refreshRequired={!!resetRefreshRequired[item.id]}
+                onReset={onResetQuota}
+              />
+            );
           }
           const logicalCheckinMode = resolveCheckinMode(item);
           const done = !!checkinDoneMap[item.id] && checkinsDate === today;
@@ -293,13 +229,13 @@ export function AccountsTable({
             >
               <Badge
                 variant={checkinBadge.variant}
-                className={checkinBusy ? "opacity-60" : "cursor-pointer"}
+                className={`${accountStatusBadgeClass} ${checkinBusy ? "opacity-60" : "cursor-pointer"}`}
               >
                 {checkinBadge.text}
               </Badge>
             </button>
           ) : (
-            <Badge variant={checkinBadge.variant}>{checkinBadge.text}</Badge>
+            <Badge variant={checkinBadge.variant} className={accountStatusBadgeClass}>{checkinBadge.text}</Badge>
           );
         },
         meta: {
@@ -323,14 +259,14 @@ export function AccountsTable({
               </TableIconButton>
               <TableIconButton
                 onClick={() => void onRefreshAccount(item)}
-                disabled={!!refreshing[item.id]}
+                disabled={!!refreshing[item.id] || !!resetting[item.id]}
                 title={t("accounts.actions.refresh")}
               >
                 <RefreshCw className="h-4 w-4" />
               </TableIconButton>
               <TableIconButton
                 onClick={() => void onOpenCreateManagedChannelDialog(item)}
-                disabled={!canManageRemote}
+                disabled={!canManageRemote || !!resetting[item.id]}
                 title={t(
                   item.provider === "openai"
                     ? "accounts.actions.createOpenAiManaged"
@@ -341,12 +277,14 @@ export function AccountsTable({
               </TableIconButton>
               <TableIconButton
                 onClick={() => onOpenEdit(item)}
+                disabled={!!resetting[item.id]}
                 title={t("accounts.actions.edit")}
               >
                 <Pencil className="h-4 w-4" />
               </TableIconButton>
               <TableIconButton
                 onClick={() => onOpenDeleteDialog(item)}
+                disabled={!!resetting[item.id]}
                 title={t("accounts.actions.delete")}
               >
                 <Trash2 className="h-4 w-4 text-destructive" />
@@ -370,13 +308,16 @@ export function AccountsTable({
       onOpenManualCheckinPrompt,
       onOpenBaseUrl,
       onRefreshAccount,
+      onResetQuota,
       onSystemCheckin,
       pageOpening,
       refreshing,
+      resetting,
+      resetPending,
+      resetRefreshRequired,
       systemChecking,
       t,
       today,
-      locale,
     ],
   );
 

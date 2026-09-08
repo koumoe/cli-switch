@@ -368,9 +368,16 @@ export type OpenAiRemoteAccount = RemoteAccountBase & {
   plan_type: string | null;
   token_expires_at_ms: number | null;
   quota_windows: OpenAiQuotaWindow[];
+  quota_reset_available_count?: number | null;
 };
 
 export type RemoteAccount = NewapiRemoteAccount | Sub2ApiRemoteAccount | OpenAiRemoteAccount;
+
+export type OpenAiQuotaResetResult = {
+  outcome: "reset" | "already_redeemed" | "nothing_to_reset" | "no_credit";
+  account: RemoteAccount;
+  quota_refresh_error: string | null;
+};
 
 export type RemoteAccountDetection = {
   provider: RemoteAccountProvider;

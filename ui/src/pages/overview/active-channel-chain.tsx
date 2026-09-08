@@ -2,17 +2,20 @@ import { ArrowRight } from "lucide-react";
 
 import { Badge } from "@/components/ui";
 import { ProtocolBadge } from "@/components/composed/protocol-badge";
+import { resolveChannelIdentity } from "@/lib/channel-display";
 import type { AppSettings, Channel, Protocol } from "@/types/api";
 
 type ActiveChannelChainProps = {
   enabledByProtocol: Record<Protocol, Channel[]>;
   settings: AppSettings | null;
+  accountNames: Readonly<Record<string, string>>;
   protocolLabel: (protocol: Protocol) => string;
 };
 
 export function ActiveChannelChain({
   enabledByProtocol,
   settings,
+  accountNames,
   protocolLabel,
 }: ActiveChannelChainProps) {
   return (
@@ -29,18 +32,22 @@ export function ActiveChannelChain({
                 </ProtocolBadge>
               </div>
               <div className="flex flex-wrap items-center gap-1.5">
-                {list.map((channel, index) => (
-                  <div key={channel.id} className="contents">
-                    <div className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-secondary/25 px-2.5 py-1 text-[11.5px] font-medium">
+                {list.map((channel, index) => {
+                  const identity = resolveChannelIdentity(channel, accountNames);
+                  return <div key={channel.id} className="contents">
+                    <div title={identity.label} className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-lg border border-border bg-secondary/25 px-2.5 py-1 text-[11.5px] font-medium">
                       <Badge
                         variant="secondary"
-                        className="flex h-[18px] w-[18px] items-center justify-center rounded-sm px-0 text-[9px] font-bold text-muted-foreground"
+                        className="flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-sm px-0 text-[9px] font-bold text-muted-foreground"
                       >
                         {index + 1}
                       </Badge>
-                      <span>{channel.name}</span>
+                      <span className="max-w-[280px] truncate whitespace-nowrap">
+                        <span>{identity.accountName}</span>
+                        <span className="text-muted-foreground"> · {identity.channelName}</span>
+                      </span>
                       {settings?.channel_retry_enabled ? (
-                        <span className="text-[10px] text-muted-foreground">
+                        <span className="shrink-0 text-[10px] text-muted-foreground">
                           ({Math.max(1, channel.retry_times ?? 1)})
                         </span>
                       ) : null}
@@ -48,8 +55,8 @@ export function ActiveChannelChain({
                     {index < list.length - 1 ? (
                       <ArrowRight className="h-3 w-3 text-muted-foreground/60" />
                     ) : null}
-                  </div>
-                ))}
+                  </div>;
+                })}
               </div>
             </div>
           );

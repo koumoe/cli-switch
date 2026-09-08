@@ -94,6 +94,7 @@ pub(in crate::server) struct OpenAiRemoteAccountResponse {
     pub token_expires_at_ms: Option<i64>,
     pub refresh_token_configured: bool,
     pub quota_windows: Vec<OpenAiQuotaWindowResponse>,
+    pub quota_reset_available_count: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -752,6 +753,7 @@ impl From<storage::OpenAiAccount> for RemoteAccountResponse {
                 token_expires_at_ms: account.token_expires_at_ms,
                 refresh_token_configured: account.refresh_token_configured,
                 quota_windows,
+                quota_reset_available_count: account.quota.reset_available_count,
             },
         }
     }

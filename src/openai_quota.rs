@@ -1,10 +1,28 @@
 use reqwest::StatusCode;
 use reqwest::header::HeaderMap;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::storage::{OpenAiAccount, OpenAiQuotaSnapshot, OpenAiQuotaWindow};
 
 pub(crate) const USAGE_URL: &str = "https://chatgpt.com/backend-api/wham/usage";
+// Verified against openai/codex's backend-client rate_limit_resets contract.
+pub(crate) const RESET_URL: &str =
+    "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits/consume";
+
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum OpenAiQuotaResetOutcome {
+    Reset,
+    AlreadyRedeemed,
+    NothingToReset,
+    NoCredit,
+}
+
+#[derive(Deserialize)]
+struct ResetResponse {
+    code: OpenAiQuotaResetOutcome,
+}
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum OpenAiQuotaError {
@@ -127,6 +145,11 @@ fn snapshot_from_payload(payload: Value, now_ms: i64) -> OpenAiQuotaSnapshot {
         primary,
         secondary,
         additional,
+        reset_available_count: payload
+            .get("rate_limit_reset_credits")
+            .and_then(|credits| credits.get("available_count"))
+            .and_then(Value::as_i64)
+            .filter(|count| *count >= 0),
         synced_at_ms: Some(now_ms),
     }
 }
@@ -143,6 +166,7 @@ pub(crate) async fn fetch(
         .ok_or(OpenAiQuotaError::MissingAccessToken)?;
     let response = client
         .get(usage_url)
+        .timeout(std::time::Duration::from_secs(30))
         .bearer_auth(access_token)
         .header("chatgpt-account-id", &account.remote_user_id)
         .header("openai-beta", "codex-1")
@@ -197,8 +221,41 @@ pub fn from_headers(headers: &HeaderMap, now_ms: i64) -> Option<OpenAiQuotaSnaps
         primary,
         secondary,
         additional: Vec::new(),
+        reset_available_count: None,
         synced_at_ms: Some(now_ms),
     })
+}
+
+pub(crate) async fn consume_reset(
+    client: &reqwest::Client,
+    account: &OpenAiAccount,
+    idempotency_key: &str,
+    reset_url: Option<&str>,
+) -> Result<OpenAiQuotaResetOutcome, OpenAiQuotaError> {
+    let access_token = account
+        .access_token
+        .as_deref()
+        .ok_or(OpenAiQuotaError::MissingAccessToken)?;
+    let response = client
+        .post(reset_url.unwrap_or(RESET_URL))
+        .bearer_auth(access_token)
+        .header("chatgpt-account-id", &account.remote_user_id)
+        .header("openai-beta", "codex-1")
+        .header("originator", "Codex Desktop")
+        .header("accept", "application/json")
+        .timeout(std::time::Duration::from_secs(30))
+        .json(&serde_json::json!({ "redeem_request_id": idempotency_key }))
+        .send()
+        .await
+        .map_err(OpenAiQuotaError::Request)?;
+    if !response.status().is_success() {
+        return Err(OpenAiQuotaError::Http(response.status()));
+    }
+    Ok(response
+        .json::<ResetResponse>()
+        .await
+        .map_err(OpenAiQuotaError::InvalidResponse)?
+        .code)
 }
 
 #[cfg(test)]
@@ -253,6 +310,28 @@ mod tests {
             "600".parse().unwrap(),
         );
         assert!(from_headers(&headers, 1_000).is_none());
+    }
+
+    #[test]
+    fn reset_credit_counts_preserve_unknown_and_zero() {
+        for (credits, expected) in [
+            (serde_json::json!(null), None),
+            (serde_json::json!({}), None),
+            (serde_json::json!({"available_count": 0}), Some(0)),
+            (serde_json::json!({"available_count": 2}), Some(2)),
+            (serde_json::json!({"available_count": -1}), None),
+            (serde_json::json!({"available_count": 1.5}), None),
+        ] {
+            let quota = snapshot_from_payload(
+                serde_json::json!({"rate_limit_reset_credits": credits}),
+                1_000,
+            );
+            assert_eq!(quota.reset_available_count, expected);
+        }
+        assert_eq!(
+            snapshot_from_payload(serde_json::json!({}), 1_000).reset_available_count,
+            None
+        );
     }
 
     #[test]

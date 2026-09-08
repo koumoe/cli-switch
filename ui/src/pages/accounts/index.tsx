@@ -26,6 +26,7 @@ import { useI18n } from "@/hooks/use-i18n";
 import { AccountEditorDialog } from "./AccountEditorDialog";
 import { AccountWizardDialog } from "./AccountWizardDialog";
 import { AccountsTable } from "./AccountsTable";
+import { useQuotaReset } from "./useQuotaReset";
 import { DeleteAccountDialog } from "./DeleteAccountDialog";
 import { ManagedChannelDialog } from "./ManagedChannelDialog";
 import { ManualCheckinDialog } from "./ManualCheckinDialog";
@@ -44,6 +45,15 @@ export function AccountsPage() {
   const { t } = useI18n();
   const { currency } = useCurrency();
   const [accounts, setAccounts] = useState<RemoteAccount[]>([]);
+  const {
+    resetting,
+    pending: resetPending,
+    refreshRequired: resetRefreshRequired,
+    resetQuota,
+    markQuotaRefreshed,
+    getRefreshRequiredIds,
+    forgetAccount,
+  } = useQuotaReset(setAccounts);
   const [loading, setLoading] = useState(false);
   const [reordering, setReordering] = useState(false);
   const [checkinsDate, setCheckinsDate] = useState<string | null>(null);
@@ -88,6 +98,13 @@ export function AccountsPage() {
   async function refreshAll() {
     setLoading(true);
     try {
+      const refreshResults = await Promise.allSettled(getRefreshRequiredIds().map(async (id) => {
+        const updated = await refreshRemoteAccount(id);
+        markQuotaRefreshed(updated);
+      }));
+      if (refreshResults.some((result) => result.status === "rejected")) {
+        toast.warning(t("accounts.reset.refreshFailed"));
+      }
       const [items, checkins] = await Promise.all([
         listRemoteAccounts(),
         remoteAccountCheckinsToday().catch(() => null),
@@ -218,6 +235,7 @@ export function AccountsPage() {
         });
       }
 
+      window.dispatchEvent(new Event("cliswitch-accounts-changed"));
       toast.success(t("accounts.toast.updateOk"));
       setEditorOpen(false);
       setEditingId(null);
@@ -231,7 +249,8 @@ export function AccountsPage() {
   async function onRefreshAccount(item: RemoteAccount) {
     setRefreshing((current) => ({ ...current, [item.id]: true }));
     try {
-      await refreshRemoteAccount(item.id);
+      const updated = await refreshRemoteAccount(item.id);
+      markQuotaRefreshed(updated);
       toast.success(t("accounts.toast.refreshOk"));
       await refreshAll();
     } catch (e) {
@@ -321,6 +340,8 @@ export function AccountsPage() {
           sync_remote_delete: deleteSyncRemote,
         }
       );
+      forgetAccount(deleteTarget.id);
+      window.dispatchEvent(new Event("cliswitch-accounts-changed"));
       toast.success(t("accounts.toast.deleteOk"));
       setDeleteOpen(false);
       setDeleteTarget(null);
@@ -416,6 +437,7 @@ export function AccountsPage() {
         group_id: selectedGroup?.id ?? null,
         base_url_override: baseUrlOverride || null,
       });
+      window.dispatchEvent(new Event("cliswitch-accounts-changed"));
       toast.success(t("accounts.toast.createManagedOk"));
       setManagedOpen(false);
       setManagedTarget(null);
@@ -462,7 +484,7 @@ export function AccountsPage() {
         title={t("accounts.title")}
         actions={
           <>
-            <Button variant="outline" size="icon" onClick={() => void refreshAll()} disabled={loading}>
+            <Button variant="outline" size="icon" onClick={() => void refreshAll()} disabled={loading || Object.values(resetting).some(Boolean)}>
               <RefreshCw className="h-3.5 w-3.5" />
             </Button>
             <Button size="sm" onClick={openCreate}>
@@ -482,6 +504,10 @@ export function AccountsPage() {
             checkinsDate={checkinsDate}
             checkinDoneMap={checkinDoneMap}
             refreshing={refreshing}
+            resetting={resetting}
+            resetPending={resetPending}
+            resetRefreshRequired={resetRefreshRequired}
+            onResetQuota={resetQuota}
             systemChecking={systemChecking}
             pageOpening={pageOpening}
             setAccounts={setAccounts}
@@ -501,7 +527,10 @@ export function AccountsPage() {
         open={wizardOpen}
         defaultRechargeCurrency={currency}
         onOpenChange={setWizardOpen}
-        onCreated={refreshAll}
+        onCreated={async () => {
+          window.dispatchEvent(new Event("cliswitch-accounts-changed"));
+          await refreshAll();
+        }}
       />
 
       <AccountEditorDialog
