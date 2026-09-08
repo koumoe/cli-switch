@@ -76,8 +76,6 @@ export function OpenAiQuotaCell({ account }: { account: OpenAiRemoteAccount }) {
           className={cn(
             "inline-flex cursor-help whitespace-nowrap rounded-sm text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
             percent === null && "text-muted-foreground",
-            percent !== null && percent >= 100 && "text-destructive",
-            percent !== null && percent >= 80 && percent < 100 && "text-warning-foreground",
           )}
           aria-label={percent === null
             ? t("accounts.quota.details")
@@ -110,7 +108,7 @@ export function OpenAiQuotaCell({ account }: { account: OpenAiRemoteAccount }) {
                     </td>
                   )}
                   <td className="whitespace-nowrap py-2 pr-3 text-left">{period(window)}</td>
-                  <td className={cn("whitespace-nowrap py-2 pr-3 text-left tabular-nums", window.used_percent === 0 && "text-muted-foreground")}>
+                  <td className="whitespace-nowrap py-2 pr-3 text-left tabular-nums">
                     {Number.isFinite(window.used_percent) ? `${Math.round(window.used_percent)}%` : "—"}
                   </td>
                   <td
