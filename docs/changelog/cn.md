@@ -1,3 +1,7 @@
+## [0.65.1](https://github.com/koumoe/cli-switch/compare/v0.65.0...v0.65.1) (2026-09-08)
+
+### 修复
+* 精简 CLI 更新标题区域 (#226) ([7a0a56d](https://github.com/koumoe/cli-switch/commit/7a0a56d202da4b2171bbddc86a2e4ef8d4ee923d))
 ## [0.65.0](https://github.com/koumoe/cli-switch/compare/v0.64.12...v0.65.0) (2026-09-08)
 
 ### 功能
