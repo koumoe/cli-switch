@@ -1,3 +1,7 @@
+## [0.65.2](https://github.com/koumoe/cli-switch/compare/v0.65.1...v0.65.2) (2026-09-08)
+
+### 修复
+* 修正用量文字及警告对比度 ([a5f2bcd](https://github.com/koumoe/cli-switch/commit/a5f2bcddf0d59c0bd6c87e83bb6f9d6fb3f07237))
 ## [0.65.1](https://github.com/koumoe/cli-switch/compare/v0.65.0...v0.65.1) (2026-09-08)
 
 ### 修复
