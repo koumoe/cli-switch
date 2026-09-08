@@ -695,7 +695,6 @@ export function ChannelsPage() {
             loading={loading}
             disabled={reordering}
             getRowId={(row) => row.id}
-            containerClassName="h-full overflow-y-auto"
             onReorder={(next) => {
               setChannelsByProtocol((current) => ({
                 ...current,

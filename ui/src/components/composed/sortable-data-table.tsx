@@ -234,7 +234,7 @@ export function SortableDataTable<TData>({
           }}
         >
           <Table
-            containerClassName={cn("overflow-auto", containerClassName)}
+            containerClassName={cn("h-full overflow-y-auto", containerClassName)}
             className={tableClassName}
           >
             <TableHeader className="sticky top-0 z-10 bg-card">
