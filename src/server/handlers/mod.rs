@@ -34,7 +34,9 @@ pub(super) use chat_bridge_whatsapp::{
 pub(super) use currency::usd_cny_exchange_rate;
 pub(super) use health::health;
 pub(super) use maintenance::{db_size, frontend_log_ingest, logs_clear, logs_size, records_clear};
-pub(super) use openai::{get_openai_oauth_status, refresh_openai_account, start_openai_oauth};
+pub(super) use openai::{
+    get_openai_oauth_status, refresh_openai_account, reset_openai_account_quota, start_openai_oauth,
+};
 pub(super) use pricing::{pricing_models, pricing_status, pricing_sync};
 pub(super) use project::{
     delete_project, delete_project_document, get_project_document, list_projects,

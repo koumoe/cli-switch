@@ -128,7 +128,9 @@
     "update_check_failed": "Failed to check for updates",
     "update_version_parse_failed": "Failed to parse the version number",
     "update_asset_not_found": "No update package is available for the current platform",
-    "update_download_failed": "Failed to download the update"
+    "update_download_failed": "Failed to download the update",
+    "openai_quota_reset_failed": "The reset result could not be confirmed. Retry the same attempt.",
+    "openai_quota_reset_invalid_key": "Invalid reset attempt ID. Reload the page."
   },
   "desktop": {
     "editMenuTitle": "Edit",

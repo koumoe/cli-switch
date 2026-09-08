@@ -151,6 +151,9 @@ fn request_endpoint_template(method: &Method, path: &str) -> Option<&'static str
                 ["api", "openai", "accounts", _, "refresh"] if method == Method::POST => {
                     Some("/api/openai/accounts/{id}/refresh")
                 }
+                ["api", "openai", "accounts", _, "quota", "reset"] if method == Method::POST => {
+                    Some("/api/openai/accounts/{id}/quota/reset")
+                }
                 ["api", "remote", "accounts", _, "groups"] if method == Method::GET => {
                     Some("/api/remote/accounts/{id}/groups")
                 }
@@ -267,6 +270,9 @@ fn request_purpose(method: &Method, path: &str) -> &'static str {
                 }
                 ["api", "openai", "accounts", _, "refresh"] if method == Method::POST => {
                     "handlers::refresh_openai_account"
+                }
+                ["api", "openai", "accounts", _, "quota", "reset"] if method == Method::POST => {
+                    "handlers::reset_openai_account_quota"
                 }
                 ["api", "remote", "accounts", _, "groups"] if method == Method::GET => {
                     "handlers::list_remote_account_groups"
@@ -439,6 +445,10 @@ fn build_app(state: AppState) -> Router {
         .route(
             "/api/openai/accounts/{id}/refresh",
             post(handlers::refresh_openai_account),
+        )
+        .route(
+            "/api/openai/accounts/{id}/quota/reset",
+            post(handlers::reset_openai_account_quota),
         )
         .route(
             "/api/remote/accounts/checkins/today",

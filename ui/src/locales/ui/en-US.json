@@ -293,9 +293,9 @@
       "baseUrl": "Base URL",
       "provider": "Provider",
       "quota": "Quota",
-      "checkin": "Check-in",
       "reauthRequired": "Session expired. Sign in again.",
-      "empty": "No accounts yet. Click 'New Account' to add one."
+      "empty": "No accounts yet. Click 'New Account' to add one.",
+      "checkinOrReset": "Check-in / Reset"
     },
     "checkin": {
       "modeDisabled": "No check-in",
@@ -450,12 +450,35 @@
       "reorderFail": "Failed to save order"
     },
     "quota": {
-      "weekly": "Weekly quota",
-      "days": "{{count}}-day quota",
-      "hours": "{{count}}-hour quota",
-      "window": "Quota",
-      "resetAt": "resets at {{time}}",
-      "unavailable": "Unavailable"
+      "unavailable": "Unavailable",
+      "pool": "Quota pool",
+      "period": "Window",
+      "used": "Used",
+      "resetTime": "Resets at",
+      "main": "Main quota",
+      "additional": "Additional quota",
+      "daysShort": "{{count}}d",
+      "hoursShort": "{{count}}h",
+      "minutesShort": "{{count}}m",
+      "pending": "Pending sync",
+      "missingReset": "Reset time not provided",
+      "summaryLabel": "{{percent}}% used, view quota details",
+      "details": "View quota details",
+      "syncFailed": "Usage sync failed. Showing the last synced data."
+    },
+    "reset": {
+      "action": "Reset",
+      "confirm": "Confirm reset",
+      "description": "Use a reset credit to reset usage for {{name}}. {{count}} credits currently available.",
+      "noCredit": "No reset credits available",
+      "unavailable": "Reset credit count unavailable. Refresh the account.",
+      "busy": "Resetting usage",
+      "success": "Usage reset",
+      "nothingToReset": "No eligible usage window to reset",
+      "failed": "Reset result unconfirmed. Please retry.",
+      "retryHint": "Retrying checks the same reset attempt without consuming another credit.",
+      "refreshFailed": "Reset succeeded, but usage sync failed. Refresh the account.",
+      "refreshRequired": "Refresh account usage first"
     }
   },
   "monitor": {

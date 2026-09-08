@@ -293,9 +293,9 @@
       "baseUrl": "Base URL",
       "provider": "账号体系",
       "quota": "额度",
-      "checkin": "签到",
       "reauthRequired": "登录状态已失效，请重新登录",
-      "empty": "暂无账号，点击「新增账号」添加"
+      "empty": "暂无账号，点击「新增账号」添加",
+      "checkinOrReset": "签到 / 重置"
     },
     "checkin": {
       "modeDisabled": "不签到",
@@ -450,12 +450,35 @@
       "reorderFail": "保存排序失败"
     },
     "quota": {
-      "weekly": "周限额",
-      "days": "{{count}}日限额",
-      "hours": "{{count}}小时限额",
-      "window": "限额",
-      "resetAt": "重置时间：{{time}}",
-      "unavailable": "暂不可用"
+      "unavailable": "暂不可用",
+      "pool": "额度池",
+      "period": "周期",
+      "used": "已用",
+      "resetTime": "重置时间",
+      "main": "主额度",
+      "additional": "附加额度",
+      "daysShort": "{{count}}天",
+      "hoursShort": "{{count}}小时",
+      "minutesShort": "{{count}}分钟",
+      "pending": "待同步",
+      "missingReset": "未提供重置时间",
+      "summaryLabel": "已用 {{percent}}%，查看额度详情",
+      "details": "查看额度详情",
+      "syncFailed": "用量同步失败，当前显示上次同步数据。"
+    },
+    "reset": {
+      "action": "重置",
+      "confirm": "确认重置",
+      "description": "消耗重置卡，重置 {{name}} 用量，当前可用 {{count}} 张。",
+      "noCredit": "没有可用重置卡",
+      "unavailable": "重置卡数量暂不可用，请刷新",
+      "busy": "正在重置",
+      "success": "用量已重置",
+      "nothingToReset": "暂无符合条件的用量可重置",
+      "failed": "重置结果待确认，请重试",
+      "retryHint": "重试将确认本次重置结果，不会重新消耗重置卡。",
+      "refreshFailed": "重置成功，用量同步失败，请刷新账号",
+      "refreshRequired": "请先刷新账号用量"
     }
   },
   "monitor": {

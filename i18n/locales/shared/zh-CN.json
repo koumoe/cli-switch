@@ -128,7 +128,9 @@
     "update_check_failed": "检查更新失败",
     "update_version_parse_failed": "版本号解析失败",
     "update_asset_not_found": "未找到适配当前平台的更新包",
-    "update_download_failed": "下载更新失败"
+    "update_download_failed": "下载更新失败",
+    "openai_quota_reset_failed": "重置结果暂未确认，请重试同一次操作",
+    "openai_quota_reset_invalid_key": "重置操作标识无效，请刷新页面"
   },
   "desktop": {
     "editMenuTitle": "编辑",

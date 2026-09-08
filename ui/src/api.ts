@@ -37,6 +37,7 @@ import type {
   LogsSize,
   OpenAiOAuthSessionResponse,
   OpenAiOAuthStartResponse,
+  OpenAiQuotaResetResult,
   PickFolderInput,
   PickFolderResponse,
   PricingModel,
@@ -367,6 +368,17 @@ export function updateRemoteAccount(
 
 export function refreshRemoteAccount(id: string): Promise<RemoteAccount> {
   return http<RemoteAccount>("POST", `/api/remote/accounts/${encodeURIComponent(id)}/refresh`, {});
+}
+
+export function resetOpenAiAccountQuota(
+  id: string,
+  idempotencyKey: string,
+): Promise<OpenAiQuotaResetResult> {
+  return http<OpenAiQuotaResetResult>(
+    "POST",
+    `/api/openai/accounts/${encodeURIComponent(id)}/quota/reset`,
+    { idempotency_key: idempotencyKey },
+  );
 }
 
 export function listRemoteAccountGroups(accountId: string): Promise<RemoteGroupOption[]> {

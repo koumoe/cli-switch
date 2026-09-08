@@ -28,6 +28,8 @@ pub struct OpenAiQuotaSnapshot {
     pub secondary: Option<OpenAiQuotaWindow>,
     #[serde(default)]
     pub additional: Vec<OpenAiQuotaWindow>,
+    #[serde(default)]
+    pub reset_available_count: Option<i64>,
     pub synced_at_ms: Option<i64>,
 }
 
@@ -78,7 +80,7 @@ const SELECT_COLUMNS: &str = r#"
     primary_quota_resets_at_ms, secondary_quota_used_percent,
     secondary_quota_window_minutes, secondary_quota_resets_at_ms,
     quota_windows_json, last_sync_error, reauth_required, last_synced_at_ms, sort_order,
-    created_at_ms, updated_at_ms
+    created_at_ms, updated_at_ms, quota_reset_available_count
 "#;
 
 fn normalize_optional_text(value: Option<String>) -> Option<String> {
@@ -153,6 +155,7 @@ fn from_row(row: &rusqlite::Row<'_>, include_secret: bool) -> rusqlite::Result<O
                 })
                 .filter(OpenAiQuotaWindow::is_valid),
             additional,
+            reset_available_count: row.get(25)?,
             synced_at_ms: row.get(21)?,
         },
         last_sync_error: row.get(19)?,
@@ -376,7 +379,8 @@ pub async fn update_openai_account_quota(
               primary_quota_resets_at_ms = ?4, secondary_quota_used_percent = ?5,
               secondary_quota_window_minutes = ?6, secondary_quota_resets_at_ms = ?7,
               quota_windows_json = ?8, last_synced_at_ms = ?9,
-              last_sync_error = NULL, reauth_required = 0, updated_at_ms = ?10
+              last_sync_error = NULL, reauth_required = 0, updated_at_ms = ?10,
+              quota_reset_available_count = ?11
             WHERE provider = 'openai' AND id = ?1
             "#,
             params![
@@ -393,7 +397,27 @@ pub async fn update_openai_account_quota(
                 serde_json::to_string(&quota.additional).unwrap_or_else(|_| "[]".to_string()),
                 synced_at,
                 now_ms(),
+                quota.reset_available_count.filter(|count| *count >= 0),
             ],
+        )?;
+        if changed == 0 {
+            return Err(StorageError::RemoteAccountNotFound { account_id }.into());
+        }
+        Ok(())
+    })
+    .await
+}
+
+/// Invalidate the cached count after a redemption. A usage refresh will replace
+/// it with the authoritative value; a failed refresh must not leave cards usable.
+pub async fn invalidate_openai_account_quota_reset_count(
+    db_path: PathBuf,
+    account_id: String,
+) -> anyhow::Result<()> {
+    with_conn(db_path, move |conn| {
+        let changed = conn.execute(
+            "UPDATE remote_accounts SET quota_reset_available_count = NULL WHERE provider = 'openai' AND id = ?1",
+            [&account_id],
         )?;
         if changed == 0 {
             return Err(StorageError::RemoteAccountNotFound { account_id }.into());
@@ -654,6 +678,7 @@ mod tests {
                     resets_at_ms: Some(1_800_086_400_000),
                 }],
                 synced_at_ms: Some(1_800_000_000_000),
+                reset_available_count: Some(2),
             },
         )
         .await
@@ -663,6 +688,7 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(recovered.quota.additional.len(), 1);
+        assert_eq!(recovered.quota.reset_available_count, Some(2));
         assert_eq!(recovered.quota.additional[0].window_minutes, 43_200);
         assert_eq!(
             recovered.quota.additional[0].limit_name.as_deref(),
@@ -684,6 +710,7 @@ mod tests {
                 secondary: None,
                 additional: Vec::new(),
                 synced_at_ms: Some(1_800_000_100_000),
+                reset_available_count: None,
             },
         )
         .await
@@ -693,7 +720,26 @@ mod tests {
             .unwrap();
         assert_eq!(after_headers.quota.primary.unwrap().used_percent, 18.0);
         assert_eq!(after_headers.quota.additional.len(), 1);
+        assert_eq!(after_headers.quota.reset_available_count, Some(2));
         assert_eq!(after_headers.last_synced_at_ms, Some(1_800_000_000_000));
+        let unified = super::super::get_unified_remote_account_without_secret_optional(
+            db_path.clone(),
+            after_headers.id.clone(),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        let super::super::UnifiedRemoteAccount::Openai(unified) = unified else {
+            panic!("expected OpenAI account")
+        };
+        assert_eq!(unified.quota.reset_available_count, Some(2));
+        invalidate_openai_account_quota_reset_count(db_path.clone(), after_headers.id.clone())
+            .await
+            .unwrap();
+        let invalidated = get_openai_account_without_secret(db_path.clone(), after_headers.id)
+            .await
+            .unwrap();
+        assert_eq!(invalidated.quota.reset_available_count, None);
         let _ = std::fs::remove_file(db_path);
     }
 
