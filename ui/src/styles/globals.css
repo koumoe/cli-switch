@@ -121,7 +121,7 @@
   --success: 69.6% 0.17 162.48; /* emerald-500 */
   --success-foreground: 98.5% 0 0;
   --warning: 76.9% 0.188 70.08; /* amber-500 */
-  --warning-foreground: 14.1% 0.005 285.823;
+  --warning-foreground: 98.5% 0 0; /* zinc-50 */
   --border: 27.4% 0.006 286.033; /* zinc-800 */
   --input: 27.4% 0.006 286.033;
   --ring: 70.7% 0.165 254.624; /* blue-400 */
