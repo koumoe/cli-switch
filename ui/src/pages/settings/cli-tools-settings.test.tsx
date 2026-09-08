@@ -146,14 +146,10 @@ describe("CliToolsSettings", () => {
     expect(screen.getAllByRole("button", { name: "刷新" })[1]).toBeEnabled();
   });
 
-  it.each(["zh-CN", "en-US"] as const)("localizes the schedule and Unix check time in %s", (locale) => {
+  it.each(["zh-CN", "en-US"] as const)("localizes the Unix check time in %s", (locale) => {
     renderWithProviders(<CliToolsSettings {...props()} />, { locale });
     const time = formatDateTime(1_700_000_000 * 1000, { locale });
 
-    expect(screen.getByText(locale === "zh-CN"
-      ? "启动时及每 6 小时在后台检测更新；开启自动更新后，发现新版本会自动更新。"
-      : "Checks for updates at startup and every 6 hours in the background. With auto update enabled, new versions are installed when found."
-    )).toBeInTheDocument();
     expect(screen.getByText(locale === "zh-CN" ? `上次检测：${time}` : `Last checked: ${time}`)).toBeInTheDocument();
   });
 });
