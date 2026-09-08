@@ -1,3 +1,8 @@
+## [0.65.0](https://github.com/koumoe/cli-switch/compare/v0.64.12...v0.65.0) (2026-09-08)
+
+### Features
+
+* improve account usage visibility and add OpenAI quota resets (#225) ([d5fc7ba](https://github.com/koumoe/cli-switch/commit/d5fc7babd58b01c51230a077d5084634522cbaee))
 ## [0.64.12](https://github.com/koumoe/cli-switch/compare/v0.64.11...v0.64.12) (2026-09-08)
 
 ### Bug Fixes
