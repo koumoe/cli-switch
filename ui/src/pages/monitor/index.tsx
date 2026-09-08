@@ -350,9 +350,9 @@ export function MonitorPage() {
           </>
         }
       />
-      <div className="flex-1 overflow-y-auto">
-        <PageBody className="space-y-3">
-          <div className="grid gap-3 md:grid-cols-5">
+      <div className="min-h-0 flex-1 overflow-hidden">
+        <PageBody className="flex h-full min-h-0 flex-col gap-3">
+          <div className="grid shrink-0 gap-3 md:grid-cols-5">
             <MetricCard
               label={t("monitor.cards.totalRequests")}
               value={stats?.requests ?? "-"}
@@ -385,8 +385,8 @@ export function MonitorPage() {
             />
           </div>
 
-          <Card className="flex min-h-0 flex-col overflow-hidden">
-            <CardContent className="flex min-h-0 flex-col p-0">
+          <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <CardContent className="flex min-h-0 flex-1 flex-col p-0">
               <DataTable
                 columns={columns}
                 data={channelStats}
