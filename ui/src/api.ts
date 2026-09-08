@@ -239,8 +239,13 @@ export function logoutChatBridgeWeixin(): Promise<void> {
   return http<void>("POST", "/api/chat_bridge/weixin/logout", {});
 }
 
-export function getCliToolsStatus(): Promise<CliToolsStatus> {
-  return http<CliToolsStatus>("GET", "/api/tools/status");
+export function getCliToolsStatus(
+  options: { refresh?: boolean } = {},
+): Promise<CliToolsStatus> {
+  return http<CliToolsStatus>(
+    "GET",
+    options.refresh ? "/api/tools/status?refresh=true" : "/api/tools/status",
+  );
 }
 
 export function installCliTool(id: CliToolId): Promise<InstallCliToolResponse> {

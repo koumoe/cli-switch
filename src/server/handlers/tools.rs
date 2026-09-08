@@ -1,5 +1,5 @@
 use axum::Json;
-use axum::extract::State;
+use axum::extract::{Query, State};
 use axum::response::IntoResponse;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -8,76 +8,21 @@ use crate::cli_tools::{CLI_TOOLS, CliToolId, CliToolInstallMethod};
 use crate::i18n::{UserFacingIssue, UserFacingIssuePayload, current_locale};
 use crate::nodejs;
 use crate::server::AppState;
+use crate::server::cli_tool_updates::{self, CliToolStatus};
 use crate::server::error::ApiError;
 use crate::storage;
 
-#[derive(Debug, Clone, Serialize)]
-pub(crate) struct CliToolStatus {
-    pub(crate) id: CliToolId,
-    pub(crate) name: &'static str,
-    pub(crate) bin: &'static str,
-    pub(crate) npm_package: &'static str,
-    pub(crate) installed: bool,
-    pub(crate) version: Option<String>,
-    pub(crate) install_method: CliToolInstallMethod,
-    pub(crate) install_path: Option<String>,
-    pub(crate) installer_path: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub(crate) struct CliToolsStatusResponse {
-    pub(crate) os: &'static str,
-    pub(crate) tools: Vec<CliToolStatus>,
+#[derive(Debug, Default, Deserialize)]
+pub(crate) struct CliToolsStatusQuery {
+    #[serde(default)]
+    refresh: bool,
 }
 
 pub(in crate::server) async fn cli_tools_status(
     State(state): State<AppState>,
+    Query(query): Query<CliToolsStatusQuery>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let settings = storage::get_app_settings(state.db_path()).await?;
-    let npm_path = settings.cli_tools_npm_path.clone();
-    let node_path = settings.cli_tools_node_path.clone();
-    let data_dir = state.data_dir();
-
-    let res = tokio::task::spawn_blocking(move || {
-        let env = crate::cli_tools::CliExecEnv::new(npm_path.as_deref(), node_path.as_deref());
-
-        let tools = CLI_TOOLS
-            .iter()
-            .map(|d| {
-                let detected =
-                    crate::cli_tools::detect_cli_tool_with_terminal_shim(&env, &data_dir, d);
-
-                CliToolStatus {
-                    id: d.id,
-                    name: d.name,
-                    bin: d.bin,
-                    npm_package: d.npm_package,
-                    installed: detected.installed,
-                    version: detected.version,
-                    install_method: detected.install_method,
-                    install_path: detected
-                        .install_path
-                        .map(|p| p.to_string_lossy().to_string()),
-                    installer_path: detected
-                        .installer_path
-                        .map(|p| p.to_string_lossy().to_string()),
-                }
-            })
-            .collect::<Vec<_>>();
-
-        CliToolsStatusResponse {
-            os: crate::cli_tools::os_name(),
-            tools,
-        }
-    })
-    .await;
-
-    match res {
-        Ok(v) => Ok(Json(v)),
-        Err(e) => Err(ApiError::Internal(anyhow::anyhow!(
-            "cli tools status task join failed: {e}"
-        ))),
-    }
+    Ok(Json(cli_tool_updates::status(&state, query.refresh).await?))
 }
 
 #[derive(Debug, Deserialize)]
@@ -102,13 +47,42 @@ pub(in crate::server) async fn install_cli_tool(
     State(state): State<AppState>,
     Json(input): Json<InstallCliToolRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let requested_tool = input.id;
+    // Keep ownership of the installation lock even if an HTTP client disconnects.
+    let locale = current_locale().unwrap_or_default();
+    let response = tokio::spawn(run_cli_tool_install(state, input.id, false, locale))
+        .await
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("CLI install task join failed: {e}")))??;
+    Ok(Json(response))
+}
+
+pub(crate) async fn run_cli_tool_install(
+    state: AppState,
+    requested_tool: CliToolId,
+    automatic: bool,
+    locale: crate::i18n::AppLocale,
+) -> Result<InstallCliToolResponse, ApiError> {
+    let runtime = state.cli_tools_runtime.clone();
+    let operation = Arc::new(runtime.operation.clone().lock_owned().await);
     let def = CLI_TOOLS
         .iter()
-        .find(|d| d.id == input.id)
+        .find(|d| d.id == requested_tool)
         .ok_or_else(|| ApiError::bad_request("tools_unknown_id", "unknown tool id"))?;
 
     let settings = storage::get_app_settings(state.db_path()).await?;
+    if automatic {
+        let snapshot = runtime.snapshot().await;
+        let candidate = snapshot
+            .as_ref()
+            .and_then(|s| s.tools.iter().find(|t| t.id == requested_tool));
+        if !candidate.is_some_and(|tool| cli_tool_updates::should_auto_update(tool, &settings)) {
+            return Err(ApiError::conflict(
+                "tools_update_unavailable",
+                "CLI update is no longer enabled or available",
+            ));
+        }
+    }
+    let activity = Arc::new(runtime.start_install(requested_tool));
+
     let mut npm_path = settings.cli_tools_npm_path.clone();
     let mut node_path = settings.cli_tools_node_path.clone();
     let npm_registry = crate::cli_tools::pick_cli_tools_npm_registry(&state.http_client).await;
@@ -117,14 +91,15 @@ pub(in crate::server) async fn install_cli_tool(
 
     // If the tool isn't managed by brew, we need a working npm. Keep it fully automatic and
     // invisible to users: install our bundled npm env on demand and persist it internally.
-    let (method0, npm_available0) = tokio::task::spawn_blocking({
+    let (detected0, npm_available0) = tokio::task::spawn_blocking({
         let npm_path = npm_path.clone();
         let node_path = node_path.clone();
         let data_dir = data_dir.clone();
         move || {
             let env = crate::cli_tools::CliExecEnv::new(npm_path.as_deref(), node_path.as_deref());
-            let detected0 = crate::cli_tools::detect_cli_tool(&env, &data_dir, def);
-            (detected0.install_method, env.npm_available())
+            let detected0 =
+                crate::cli_tools::detect_cli_tool_with_terminal_shim(&env, &data_dir, def);
+            (detected0, env.npm_available())
         }
     })
     .await
@@ -134,7 +109,43 @@ pub(in crate::server) async fn install_cli_tool(
         ))
     })?;
 
-    if method0 != CliToolInstallMethod::Brew && !npm_available0 {
+    // Recheck against the actual installer and pin npm installs to that release/source.
+    // A mirror lag or an external CLI update must never cause an automatic downgrade.
+    let mut current = CliToolStatus::from_detected(def, detected0.clone());
+    let release = match crate::cli_tools::updates::latest_release(
+        &state.http_client,
+        def,
+        detected0.install_method,
+        &npm_registry,
+    )
+    .await
+    {
+        Ok(release) => release,
+        Err(err) => {
+            current.apply_latest_version(Err(anyhow::anyhow!(err.to_string())));
+            runtime.record_checked_tool(&current).await;
+            return Err(ApiError::Internal(err));
+        }
+    };
+    current.apply_latest_version(Ok(release.version.clone()));
+    runtime.record_checked_tool(&current).await;
+    if (automatic
+        && !cli_tool_updates::should_auto_update(
+            &current,
+            &storage::get_app_settings(state.db_path()).await?,
+        ))
+        || (current.installed && !current.update_available)
+    {
+        return Err(ApiError::conflict(
+            "tools_update_unavailable",
+            "CLI update is no longer enabled or available",
+        ));
+    }
+    let target_version = release.version;
+    let npm_package = format!("{}@{}", def.npm_package, target_version);
+    let npm_registry = release.npm_registry.unwrap_or(npm_registry);
+
+    if detected0.install_method != CliToolInstallMethod::Brew && !npm_available0 {
         let paths = nodejs::ensure_npm_env_installed(&state.http_client, &data_dir)
             .await
             .map_err(|e| ApiError::bad_request("tools_npm_env_install_failed", e.to_string()))?;
@@ -160,10 +171,37 @@ pub(in crate::server) async fn install_cli_tool(
         node_path = Some(node_path1);
     }
 
-    let locale = current_locale().unwrap_or_default();
+    if automatic
+        && !cli_tool_updates::should_auto_update(
+            &current,
+            &storage::get_app_settings(state.db_path()).await?,
+        )
+    {
+        return Err(ApiError::conflict(
+            "tools_update_unavailable",
+            "CLI update is no longer enabled or available",
+        ));
+    }
+
+    let expected_install_method = detected0.install_method;
+    let expected_install_path = detected0.install_path;
+    let install_operation = operation.clone();
+    let install_activity = activity.clone();
     let res = tokio::task::spawn_blocking(move || {
+        // The blocking installer retains these guards through timeout/HTTP cancellation.
+        let _operation = install_operation;
+        let _activity = install_activity;
         let env = crate::cli_tools::CliExecEnv::new(npm_path.as_deref(), node_path.as_deref());
-        let detected0 = crate::cli_tools::detect_cli_tool(&env, &data_dir, def);
+        let detected0 = crate::cli_tools::detect_cli_tool_with_terminal_shim(&env, &data_dir, def);
+        if detected0.install_method != expected_install_method
+            || detected0.install_path != expected_install_path
+            || (automatic && !detected0.installed)
+            || (detected0.installed && !detected0.version.as_deref().is_some_and(|version| {
+                crate::cli_tools::updates::is_update_available(version, &target_version).unwrap_or(false)
+            }))
+        {
+            return Err(ApiError::conflict("tools_update_unavailable", "CLI installation changed or the target version is no longer newer; refresh and retry"));
+        }
 
         // Decide update strategy without asking the user:
         // - If installed via brew, upgrade via brew (no npm required).
@@ -178,7 +216,6 @@ pub(in crate::server) async fn install_cli_tool(
                     ));
                 };
                 crate::cli_tools::brew_upgrade_cli_tool(&brew, def.id)
-                    .map_err(ApiError::Internal)?
             }
             CliToolInstallMethod::Npm => {
                 if !env.npm_available() {
@@ -187,8 +224,7 @@ pub(in crate::server) async fn install_cli_tool(
                         "npm not found in PATH",
                     ));
                 }
-                env.npm_install_global_with_registry(def.npm_package, Some(npm_registry.as_str()))
-                    .map_err(ApiError::Internal)?
+                env.npm_install_global_with_registry(&npm_package, Some(npm_registry.as_str()))
             }
             CliToolInstallMethod::ManagedNpmPrefix | CliToolInstallMethod::Other => {
                 if !env.npm_available() {
@@ -198,34 +234,42 @@ pub(in crate::server) async fn install_cli_tool(
                     ));
                 }
                 env.npm_install_global_to_prefix(
-                    def.npm_package,
+                    &npm_package,
                     &tools_prefix_dir,
                     Some(npm_registry.as_str()),
                 )
-                .map_err(ApiError::Internal)?
             }
         };
 
         // Re-detect after install/update so we can report the latest version/method/path.
-        let detected = crate::cli_tools::detect_cli_tool(&env, &data_dir, def);
+        let detected = crate::cli_tools::detect_cli_tool_with_terminal_shim(&env, &data_dir, def);
         let install_verified = detected.installed && detected.version.is_some();
+        let target_verified = detected.version.as_deref().is_some_and(|version| {
+            crate::cli_tools::updates::is_update_available(version, &target_version)
+                .is_ok_and(|available| !available)
+        });
         let tool_path = if install_verified {
             detected.install_path.clone()
         } else {
             None
         };
 
-        let command_ok = out.status.success();
-        let exit_code = out.status.code();
-        let stdout = out.stdout;
-        let mut stderr = out.stderr;
-        if command_ok && !install_verified {
+        let (command_ok, exit_code, stdout, mut stderr) = match out {
+            Ok(out) => (
+                out.status.success(),
+                out.status.code(),
+                out.stdout,
+                out.stderr,
+            ),
+            Err(err) => (false, None, String::new(), err.to_string()),
+        };
+        if command_ok && (!install_verified || !target_verified) {
             if !stderr.is_empty() && !stderr.ends_with('\n') {
                 stderr.push('\n');
             }
             stderr.push_str(&format!(
-                "{} installation completed, but `{} --version` failed; the executable is unusable.",
-                def.name, def.bin
+                "{} installation completed, but `{} --version` did not report the requested version {} or newer.",
+                def.name, def.bin, target_version
             ));
         }
 
@@ -275,25 +319,11 @@ pub(in crate::server) async fn install_cli_tool(
         });
 
         Ok(InstallCliToolResponse {
-            ok: command_ok && install_verified,
+            ok: command_ok && install_verified && target_verified,
             exit_code,
             stdout,
             stderr,
-            tool: CliToolStatus {
-                id: def.id,
-                name: def.name,
-                bin: def.bin,
-                npm_package: def.npm_package,
-                installed: detected.installed,
-                version: detected.version,
-                install_method: detected.install_method,
-                install_path: detected
-                    .install_path
-                    .map(|p| p.to_string_lossy().to_string()),
-                installer_path: detected
-                    .installer_path
-                    .map(|p| p.to_string_lossy().to_string()),
-            },
+            tool: CliToolStatus::from_detected(def, detected),
             terminal_shim_ok,
             terminal_shim_dir,
             terminal_shim_issue: terminal_shim_issue
@@ -304,18 +334,25 @@ pub(in crate::server) async fn install_cli_tool(
     .await;
 
     match res {
-        Ok(Ok(v)) => {
+        Ok(Ok(mut v)) => {
+            runtime.record_install(&mut v.tool).await;
             if requested_tool == CliToolId::Codex && v.ok {
                 let identity =
                     crate::codex_upstream::identity_for_version(v.tool.version.as_deref());
                 let _ = state.codex_identity_cache.send(Arc::new(identity));
             }
-            Ok(Json(v))
+            Ok(v)
         }
-        Ok(Err(e)) => Err(e),
-        Err(e) => Err(ApiError::Internal(anyhow::anyhow!(
-            "cli tool install task join failed: {e}"
-        ))),
+        Ok(Err(e)) => {
+            runtime.invalidate().await;
+            Err(e)
+        }
+        Err(e) => {
+            runtime.invalidate().await;
+            Err(ApiError::Internal(anyhow::anyhow!(
+                "cli tool install task join failed: {e}"
+            )))
+        }
     }
 }
 

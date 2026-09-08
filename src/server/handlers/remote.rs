@@ -2286,6 +2286,9 @@ mod tests {
             settings_cache_rx,
             channels_cache,
             channels_cache_rx,
+            cli_tools_runtime: Arc::new(
+                super::super::super::cli_tool_updates::CliToolsRuntime::default(),
+            ),
             update_runtime: Arc::new(tokio::sync::Mutex::new(update::UpdateRuntime::default())),
             whatsapp_control_tx,
             whatsapp_status_rx,

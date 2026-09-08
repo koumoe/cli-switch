@@ -20,6 +20,7 @@ use crate::i18n::locale_context_middleware;
 use crate::update;
 use crate::{chat_bridge, events, storage};
 
+mod cli_tool_updates;
 mod error;
 mod handlers;
 pub(crate) mod openai_auth;
@@ -587,6 +588,7 @@ pub async fn serve_with_listener(
         settings_cache_rx,
         channels_cache,
         channels_cache_rx,
+        cli_tools_runtime: Arc::new(cli_tool_updates::CliToolsRuntime::default()),
         update_runtime: update_runtime.clone(),
         whatsapp_control_tx,
         whatsapp_status_rx,
@@ -598,7 +600,7 @@ pub async fn serve_with_listener(
 
     let chat_bridge_settings_rx = state.settings_cache_rx.clone();
     let chat_bridge_channels_cache = state.channels_cache.clone();
-    let codex_identity_cache = state.codex_identity_cache.clone();
+    let cli_tools_state = state.clone();
     let app = build_app(state);
 
     let mut bg = tokio::task::JoinSet::<()>::new();
@@ -649,9 +651,8 @@ pub async fn serve_with_listener(
     ));
 
     bg.spawn(tasks::cli_tools_auto_update_loop(
-        (*db_path).clone(),
+        cli_tools_state,
         settings_rx4,
-        codex_identity_cache,
     ));
 
     bg.spawn(tasks::logs_retention_cleanup_loop(

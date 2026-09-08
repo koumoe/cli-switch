@@ -6,6 +6,8 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
+pub mod updates;
+
 const CMD_VERSION_TIMEOUT: Duration = Duration::from_secs(5);
 const NPM_BIN_TIMEOUT: Duration = Duration::from_secs(5);
 const NPM_INSTALL_TIMEOUT: Duration = Duration::from_secs(20 * 60);

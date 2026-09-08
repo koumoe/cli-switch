@@ -24,6 +24,7 @@ pub struct AppState {
     pub settings_cache_rx: watch::Receiver<Arc<storage::AppSettings>>,
     pub channels_cache: watch::Sender<Arc<Vec<storage::Channel>>>,
     pub channels_cache_rx: watch::Receiver<Arc<Vec<storage::Channel>>>,
+    pub(crate) cli_tools_runtime: Arc<super::cli_tool_updates::CliToolsRuntime>,
     pub update_runtime: Arc<tokio::sync::Mutex<update::UpdateRuntime>>,
     pub whatsapp_control_tx: mpsc::Sender<WhatsAppWebControl>,
     pub whatsapp_status_rx: watch::Receiver<WhatsAppWebStatus>,

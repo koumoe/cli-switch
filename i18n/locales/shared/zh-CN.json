@@ -11,6 +11,7 @@
     "tools_proxy_config_apply_item_failed": "{{tool}} 的代理配置写入失败",
     "tools_terminal_shim_setup_failed": "{{tool}} 的终端 shim 配置失败",
     "tools_unknown_id": "未知的 CLI 工具",
+    "tools_update_unavailable": "CLI 自动更新已关闭或已无可用更新",
     "tools_brew_missing": "未找到 Homebrew",
     "tools_npm_missing": "未找到 npm",
     "tools_npm_env_install_failed": "安装内置 npm 环境失败",
