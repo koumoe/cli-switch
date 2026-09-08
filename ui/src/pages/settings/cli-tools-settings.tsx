@@ -2,6 +2,7 @@ import { RefreshCw } from "lucide-react";
 
 import { Button, Switch } from "@/components/ui";
 import { useI18n } from "@/hooks/use-i18n";
+import { formatDateTime } from "@/lib/format";
 import type {
   AppSettings,
   CliToolId,
@@ -15,6 +16,7 @@ type CliToolsSettingsProps = {
   cliProxyConfigBusy: Record<CliToolId, boolean>;
   cliToolsStatus: CliToolsStatus | null;
   cliToolsLoading: boolean;
+  cliToolsError: string | null;
   cliToolBusy: Record<CliToolId, boolean>;
   appSettings: AppSettings | null;
   onRefreshCliToolsProxyConfigStatus: () => void | Promise<void>;
@@ -33,6 +35,7 @@ export function CliToolsSettings({
   cliProxyConfigBusy,
   cliToolsStatus,
   cliToolsLoading,
+  cliToolsError,
   cliToolBusy,
   appSettings,
   onRefreshCliToolsProxyConfigStatus,
@@ -41,7 +44,7 @@ export function CliToolsSettings({
   onInstallCliTool,
   onCliToolAutoUpdateChange,
 }: CliToolsSettingsProps) {
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
 
   return (
     <div className="pb-4">
@@ -108,18 +111,58 @@ export function CliToolsSettings({
           <RefreshCw
             className={`h-3.5 w-3.5 ${cliToolsLoading ? "animate-spin" : ""}`}
           />
-          {t("settings.cliTools.refresh")}
+          {cliToolsLoading
+            ? t("settings.cliTools.checking")
+            : t("settings.cliTools.refresh")}
         </Button>
+      </div>
+      <div className="space-y-1 px-5 pb-3 pt-1 text-[10.5px] text-muted-foreground">
+        <p>{t("settings.cliTools.checkSchedule")}</p>
+        {cliToolsStatus?.checked_at != null ? (
+          <p>
+            {t("settings.cliTools.lastChecked", {
+              time: formatDateTime(cliToolsStatus.checked_at * 1000, { locale }),
+            })}
+          </p>
+        ) : null}
+        {cliToolsError ? (
+          <p role="status" className="break-words text-destructive">
+            {t("settings.cliTools.loadFailRetry")}
+          </p>
+        ) : null}
       </div>
       {!cliToolsStatus ? (
         <div className="border-t border-border px-5 py-3 text-[11px] text-muted-foreground">
-          {cliToolsLoading ? t("common.loading") : "-"}
+          {cliToolsLoading ? t("settings.cliTools.checking") : "-"}
         </div>
       ) : null}
       {(cliToolsStatus?.tools ?? []).map((tool) => {
         const installed = tool.installed;
         const version = tool.version ?? "-";
-        const busy = cliToolBusy[tool.id];
+        const busy = cliToolBusy[tool.id] || tool.updating;
+        const checkError = tool.update_check_error || cliToolsError;
+        let updateStatus: string;
+        if (busy) {
+          updateStatus = installed
+            ? tool.latest_version
+              ? t("settings.cliTools.updatingTo", { version: tool.latest_version })
+              : t("settings.cliTools.updating")
+            : t("settings.cliTools.installing");
+        } else if (cliToolsLoading) {
+          updateStatus = t("settings.cliTools.checking");
+        } else if (checkError) {
+          updateStatus = t("settings.cliTools.checkFailed");
+        } else if (tool.update_available) {
+          updateStatus = tool.latest_version
+            ? t("settings.cliTools.updateAvailableVersion", { version: tool.latest_version })
+            : t("settings.cliTools.updateAvailable");
+        } else if (installed && tool.version && tool.latest_version) {
+          updateStatus = t("settings.cliTools.upToDate");
+        } else if (!installed && tool.latest_version) {
+          updateStatus = t("settings.cliTools.latestVersion", { version: tool.latest_version });
+        } else {
+          updateStatus = t("settings.cliTools.notChecked");
+        }
         const autoEnabled =
           tool.id === "gemini"
             ? (appSettings?.gemini_cli_auto_update_enabled ?? false)
@@ -139,18 +182,28 @@ export function CliToolsSettings({
                   ? t("settings.cliTools.installedWithVersion", { version })
                   : t("settings.cliTools.notInstalled")}
               </div>
+              <div
+                role="status"
+                className={`mt-0.5 break-words text-[10.5px] ${checkError && !busy && !cliToolsLoading ? "text-destructive" : "text-muted-foreground"}`}
+              >
+                {updateStatus}
+              </div>
             </div>
             <div className="flex shrink-0 items-center gap-3">
               <Button
                 size="sm"
                 variant="outline"
-                disabled={busy}
+                disabled={busy || cliToolsLoading || (installed && !tool.update_available)}
                 onClick={() => void onInstallCliTool(tool.id)}
                 className="h-7 rounded-md px-2 text-[11px]"
               >
-                {installed
-                  ? t("settings.cliTools.update")
-                  : t("settings.cliTools.install")}
+                {busy
+                  ? installed
+                    ? t("settings.cliTools.updating")
+                    : t("settings.cliTools.installing")
+                  : installed
+                    ? t("settings.cliTools.update")
+                    : t("settings.cliTools.install")}
               </Button>
               <div className="flex items-center gap-2">
                 <div className="text-[10.5px] text-muted-foreground">

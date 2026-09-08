@@ -31,10 +31,10 @@ import { PageHeader } from "@/components/PageHeader";
 import { PageBody } from "@/components/layout/page-body";
 import { useCurrency } from "@/hooks/use-currency";
 import { useI18n } from "@/hooks/use-i18n";
+import { useCliToolsStatus } from "@/hooks/use-cli-tools-status";
 import { useTheme, type Theme } from "@/hooks/use-theme";
 import { dateRangeToMs, dateRangeToStrings } from "@/lib/date-utils";
 import { humanizeApiError, humanizeIssue } from "@/lib/error";
-import { installCliToolWithToast } from "@/lib/cliToolInstaller";
 import type { CurrencyMode } from "@/providers/currency-provider";
 import type { Locale } from "@/types/locale";
 import { setLogLevel } from "@/lib/logger";
@@ -58,7 +58,6 @@ import {
   getChatBridgeWeixinStatus,
   getChatBridgeWhatsAppStatus,
   getCliToolsProxyConfigStatus,
-  getCliToolsStatus,
   getDbSize,
   getHealth,
   getLogsSize,
@@ -87,8 +86,6 @@ import type {
   CliToolId,
   CliToolProxyConfigStatus,
   CliToolProxyConfigToolStatus,
-  CliToolStatus,
-  CliToolsStatus,
   DbSize,
   Health,
   LogsSize,
@@ -201,10 +198,14 @@ export function SettingsPage() {
   >(null);
   const [updateDownloading, setUpdateDownloading] = useState(false);
   const [updateIgnoring, setUpdateIgnoring] = useState(false);
-  const [cliToolsStatus, setCliToolsStatus] = useState<CliToolsStatus | null>(
-    null,
-  );
-  const [cliToolsLoading, setCliToolsLoading] = useState(false);
+  const {
+    status: cliToolsStatus,
+    loading: cliToolsLoading,
+    error: cliToolsError,
+    busy: cliToolBusy,
+    refresh: refreshCliToolsStatus,
+    install: installCliTool,
+  } = useCliToolsStatus();
   const [cliToolsProxyConfig, setCliToolsProxyConfig] =
     useState<CliToolProxyConfigStatus | null>(null);
   const [cliToolsProxyConfigLoading, setCliToolsProxyConfigLoading] =
@@ -212,11 +213,6 @@ export function SettingsPage() {
   const [cliProxyConfigBusy, setCliProxyConfigBusy] = useState<
     Record<CliToolId, boolean>
   >({
-    gemini: false,
-    claude: false,
-    codex: false,
-  });
-  const [cliToolBusy, setCliToolBusy] = useState<Record<CliToolId, boolean>>({
     gemini: false,
     claude: false,
     codex: false,
@@ -307,20 +303,6 @@ export function SettingsPage() {
       });
     } finally {
       setLogsSizeLoading(false);
-    }
-  }
-
-  async function refreshCliToolsStatus() {
-    setCliToolsLoading(true);
-    try {
-      const next = await getCliToolsStatus();
-      setCliToolsStatus(next);
-    } catch (e) {
-      toast.error(t("settings.cliTools.loadFail"), {
-        description: humanizeApiError(e, t),
-      });
-    } finally {
-      setCliToolsLoading(false);
     }
   }
 
@@ -590,7 +572,6 @@ export function SettingsPage() {
 
     void refreshDbSize();
     void refreshLogsSize();
-    void refreshCliToolsStatus();
     void refreshCliToolsProxyConfigStatus();
     void refreshChatBridgeBindings();
     void refreshChatBridgeWhatsAppStatus({ silent: true });
@@ -1603,6 +1584,7 @@ export function SettingsPage() {
                   cliProxyConfigBusy={cliProxyConfigBusy}
                   cliToolsStatus={cliToolsStatus}
                   cliToolsLoading={cliToolsLoading}
+                  cliToolsError={cliToolsError}
                   cliToolBusy={cliToolBusy}
                   appSettings={appSettings}
                   onRefreshCliToolsProxyConfigStatus={
@@ -1641,32 +1623,7 @@ export function SettingsPage() {
                     }
                   }}
                   onRefreshCliToolsStatus={refreshCliToolsStatus}
-                  onInstallCliTool={async (toolId) => {
-                    const tool = cliToolsStatus?.tools.find(
-                      (item) => item.id === toolId,
-                    );
-                    if (!tool) return;
-                    setCliToolBusy((prev) => ({ ...prev, [toolId]: true }));
-                    try {
-                      await installCliToolWithToast({
-                        tool,
-                        t,
-                        onToolUpdated: (nextTool) =>
-                          setCliToolsStatus((prev) =>
-                            prev
-                              ? {
-                                  ...prev,
-                                  tools: prev.tools.map((item) =>
-                                    item.id === nextTool.id ? nextTool : item,
-                                  ),
-                                }
-                              : prev,
-                          ),
-                      });
-                    } finally {
-                      setCliToolBusy((prev) => ({ ...prev, [toolId]: false }));
-                    }
-                  }}
+                  onInstallCliTool={installCliTool}
                   onCliToolAutoUpdateChange={async (toolId, enabled) => {
                     if (!appSettings) return;
                     const previous =

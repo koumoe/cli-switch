@@ -166,6 +166,10 @@ export type CliToolStatus = {
   npm_package: string;
   installed: boolean;
   version: string | null;
+  latest_version: string | null;
+  update_available: boolean;
+  update_check_error: string | null;
+  updating: boolean;
   install_method: CliToolInstallMethod;
   install_path: string | null;
   installer_path: string | null;
@@ -173,6 +177,7 @@ export type CliToolStatus = {
 
 export type CliToolsStatus = {
   os: string;
+  checked_at: number | null;
   tools: CliToolStatus[];
 };
 
