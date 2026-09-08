@@ -97,9 +97,18 @@ export function CliToolsSettings({
         );
       })}
 
-      <div className="flex items-center justify-between gap-3 border-t border-border px-5 pb-1 pt-2.5">
-        <div className="text-[10px] font-bold uppercase tracking-[0.06em] text-muted-foreground">
-          {t("settings.cliTools.title")}
+      <div className="flex items-center justify-between gap-3 border-t border-border px-5 py-2.5">
+        <div className="min-w-0 space-y-0.5 text-muted-foreground">
+          <div className="text-[10px] font-bold uppercase tracking-[0.06em]">
+            {t("settings.cliTools.title")}
+          </div>
+          {cliToolsStatus?.checked_at != null ? (
+            <p className="text-[10.5px]">
+              {t("settings.cliTools.lastChecked", {
+                time: formatDateTime(cliToolsStatus.checked_at * 1000, { locale }),
+              })}
+            </p>
+          ) : null}
         </div>
         <Button
           size="sm"
@@ -116,21 +125,11 @@ export function CliToolsSettings({
             : t("settings.cliTools.refresh")}
         </Button>
       </div>
-      <div className="space-y-1 px-5 pb-3 pt-1 text-[10.5px] text-muted-foreground">
-        <p>{t("settings.cliTools.checkSchedule")}</p>
-        {cliToolsStatus?.checked_at != null ? (
-          <p>
-            {t("settings.cliTools.lastChecked", {
-              time: formatDateTime(cliToolsStatus.checked_at * 1000, { locale }),
-            })}
-          </p>
-        ) : null}
-        {cliToolsError ? (
-          <p role="status" className="break-words text-destructive">
-            {t("settings.cliTools.loadFailRetry")}
-          </p>
-        ) : null}
-      </div>
+      {cliToolsError ? (
+        <p role="status" className="break-words px-5 pb-2.5 text-[10.5px] text-destructive">
+          {t("settings.cliTools.loadFailRetry")}
+        </p>
+      ) : null}
       {!cliToolsStatus ? (
         <div className="border-t border-border px-5 py-3 text-[11px] text-muted-foreground">
           {cliToolsLoading ? t("settings.cliTools.checking") : "-"}

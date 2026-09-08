@@ -674,7 +674,6 @@
       "title": "CLI Tools",
       "refresh": "Refresh",
       "checking": "Checking...",
-      "checkSchedule": "Checks for updates at startup and every 6 hours in the background. With auto update enabled, new versions are installed when found.",
       "lastChecked": "Last checked: {{time}}",
       "checkFailed": "Update check failed. Refresh to retry.",
       "notChecked": "Update status unknown. Refresh to check.",

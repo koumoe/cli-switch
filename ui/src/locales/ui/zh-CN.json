@@ -674,7 +674,6 @@
       "title": "CLI 更新",
       "refresh": "刷新",
       "checking": "检测中...",
-      "checkSchedule": "启动时及每 6 小时在后台检测更新；开启自动更新后，发现新版本会自动更新。",
       "lastChecked": "上次检测：{{time}}",
       "checkFailed": "检测更新失败，请刷新重试。",
       "notChecked": "更新状态未知，请刷新检测。",
