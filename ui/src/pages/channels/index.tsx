@@ -687,14 +687,15 @@ export function ChannelsPage() {
     ];
 
     return (
-      <Card className="animate-fade-up anim-d1 flex min-h-0 flex-col overflow-hidden">
-        <CardContent className="p-0">
+      <Card className="animate-fade-up anim-d1 flex min-h-0 flex-1 flex-col overflow-hidden">
+        <CardContent className="flex min-h-0 flex-1 flex-col p-0">
           <SortableDataTable
             columns={columns}
             data={tabChannels}
             loading={loading}
             disabled={reordering}
             getRowId={(row) => row.id}
+            containerClassName="h-full overflow-y-auto"
             onReorder={(next) => {
               setChannelsByProtocol((current) => ({
                 ...current,
@@ -808,15 +809,16 @@ export function ChannelsPage() {
           </>
         }
       />
-      <div className="flex-1 overflow-y-auto">
-        <PageBody className="space-y-3">
+      <div className="min-h-0 flex-1 overflow-hidden">
+        <PageBody className="flex h-full min-h-0 flex-col">
           <Tabs
+            className="flex min-h-0 flex-1 flex-col"
             value={activeProtocol}
             onValueChange={(v) => {
               setActiveProtocol(v as Protocol);
             }}
           >
-            <TabsList className="animate-fade-up">
+            <TabsList className="animate-fade-up shrink-0 self-start">
               <TabsTrigger value="openai">
                 {t("channels.tabs.codex")}
               </TabsTrigger>
@@ -828,11 +830,24 @@ export function ChannelsPage() {
               </TabsTrigger>
             </TabsList>
 
-            <TabsContent value="openai">{renderTable("openai")}</TabsContent>
-            <TabsContent value="anthropic">
+            <TabsContent
+              value="openai"
+              className="min-h-0 flex-1 data-[state=active]:flex data-[state=active]:flex-col"
+            >
+              {renderTable("openai")}
+            </TabsContent>
+            <TabsContent
+              value="anthropic"
+              className="min-h-0 flex-1 data-[state=active]:flex data-[state=active]:flex-col"
+            >
               {renderTable("anthropic")}
             </TabsContent>
-            <TabsContent value="gemini">{renderTable("gemini")}</TabsContent>
+            <TabsContent
+              value="gemini"
+              className="min-h-0 flex-1 data-[state=active]:flex data-[state=active]:flex-col"
+            >
+              {renderTable("gemini")}
+            </TabsContent>
           </Tabs>
         </PageBody>
       </div>
