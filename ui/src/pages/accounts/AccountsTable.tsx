@@ -323,7 +323,7 @@ export function AccountsTable({
 
   return (
     <Card className="animate-fade-up flex min-h-0 flex-1 flex-col overflow-hidden">
-      <CardContent className="p-0">
+      <CardContent className="flex min-h-0 flex-1 flex-col p-0">
         <SortableDataTable
           columns={columns}
           data={accounts}

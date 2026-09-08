@@ -713,7 +713,6 @@ export function LogsPage() {
                 getRowId={(row) => row.id}
                 className="min-h-0"
                 tableClassName="table-fixed text-[11px]"
-                containerClassName="h-full overflow-y-auto"
                 emptyState={t("logs.empty")}
                 rowClassName={() => "hover:!bg-secondary/35"}
                 pagination={{
