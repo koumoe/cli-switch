@@ -1,3 +1,8 @@
+## [0.65.3](https://github.com/koumoe/cli-switch/compare/v0.65.2...v0.65.3) (2026-09-08)
+
+### Bug Fixes
+
+* keep table pages within the viewport (#228) ([d1403dd](https://github.com/koumoe/cli-switch/commit/d1403dde5530aac80ed16ee7fff4f7c74e0fb125))
 ## [0.65.2](https://github.com/koumoe/cli-switch/compare/v0.65.1...v0.65.2) (2026-09-08)
 
 ### Bug Fixes
