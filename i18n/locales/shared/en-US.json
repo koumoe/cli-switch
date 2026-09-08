@@ -9,6 +9,7 @@
     "currency_exchange_rate_unavailable": "The USD/CNY exchange rate is unavailable and no cached rate exists",
     "tools_proxy_config_apply_failed": "Failed to write config",
     "tools_unknown_id": "Unknown CLI tool",
+    "tools_update_unavailable": "CLI update is no longer enabled or available",
     "tools_brew_missing": "Homebrew was not found",
     "tools_npm_missing": "npm was not found",
     "tools_npm_env_install_failed": "Failed to install the bundled npm environment",
