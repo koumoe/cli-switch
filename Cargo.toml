@@ -1,6 +1,6 @@
 [package]
 name = "cliswitch"
-version = "0.64.11"
+version = "0.64.12"
 edition = "2024"
 
 [features]

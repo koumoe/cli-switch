@@ -1,3 +1,8 @@
+## [0.64.12](https://github.com/koumoe/cli-switch/compare/v0.64.11...v0.64.12) (2026-09-08)
+
+### Bug Fixes
+
+* detect CLI updates before installing (#224) ([5499aca](https://github.com/koumoe/cli-switch/commit/5499aca8c15fced47971c9090d1611a945b6ac0c))
 ## [0.64.11](https://github.com/koumoe/cli-switch/compare/v0.64.10...v0.64.11) (2026-08-29)
 
 ### Bug Fixes
