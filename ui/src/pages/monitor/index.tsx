@@ -14,17 +14,19 @@ import { useCurrency } from "@/hooks/use-currency";
 import { useI18n } from "@/hooks/use-i18n";
 import { dateRangeToMs } from "@/lib/date-utils";
 import { useWindowEvent } from "@/hooks/use-window-event";
+import { resolveChannelIdentity } from "@/lib/channel-display";
 import { humanizeApiError } from "@/lib/error";
 import {
   calculateEstimatedSpend,
   formatMoney,
   parseDecimalLike,
 } from "@/providers/currency-provider";
-import { listChannels, statsChannels, statsSummary } from "@/api";
+import { listChannels, listRemoteAccounts, statsChannels, statsSummary } from "@/api";
 import type { Channel, ChannelStats, StatsSummary } from "@/types/api";
 import { protocolLabel } from "../../lib";
 
 const colClass = {
+  name: "w-24",
   channel: "w-28",
   terminal: "w-20",
   requests: "w-16",
@@ -40,9 +42,11 @@ export function MonitorPage() {
   const { currency, usdToCnyRate } = useCurrency();
   const [stats, setStats] = useState<StatsSummary | null>(null);
   const [channelStats, setChannelStats] = useState<ChannelStats[]>([]);
+  const [accountNames, setAccountNames] = useState<Record<string, string>>({});
   const [channels, setChannels] = useState<Channel[]>([]);
   const [loading, setLoading] = useState(false);
   const loadingRef = useRef(false);
+  const refreshId = useRef(0);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
 
@@ -52,46 +56,58 @@ export function MonitorPage() {
   });
 
   async function refresh() {
+    const requestId = ++refreshId.current;
     setLoading(true);
+    loadingRef.current = true;
     try {
-      loadingRef.current = true;
-      const cs = await listChannels();
-      setChannels(cs);
-
       const msRange = dateRangeToMs(dateRange);
-      if (!msRange) {
-        setStats(null);
-        setChannelStats([]);
-        return;
-      }
-
-      const q = { start_ms: msRange.start_ms, end_ms: msRange.end_ms };
-      const [st, cst] = await Promise.all([statsSummary(q), statsChannels(q)]);
+      const q = msRange ? { start_ms: msRange.start_ms, end_ms: msRange.end_ms } : null;
+      const [cs, accounts, st, cst] = await Promise.all([
+        listChannels(),
+        listRemoteAccounts().catch(() => []),
+        q ? statsSummary(q) : Promise.resolve(null),
+        q ? statsChannels(q) : Promise.resolve(null),
+      ]);
+      if (requestId !== refreshId.current) return;
+      setChannels(cs);
+      setAccountNames(
+        Object.fromEntries(accounts.map((account) => [account.id, account.name])),
+      );
       setStats(st);
       setChannelStats(
-        [...cst.items].sort((a, b) => {
+        [...(cst?.items ?? [])].sort((a, b) => {
           if (b.success !== a.success) return b.success - a.success;
           if (b.requests !== a.requests) return b.requests - a.requests;
           return a.name.localeCompare(b.name);
         }),
       );
     } catch (e) {
+      if (requestId !== refreshId.current) return;
       toast.error(t("monitor.toast.loadFail"), {
         description: humanizeApiError(e, t),
       });
     } finally {
-      setLoading(false);
-      loadingRef.current = false;
+      if (requestId === refreshId.current) {
+        setLoading(false);
+        loadingRef.current = false;
+      }
     }
   }
 
   useEffect(() => {
-    refresh();
+    void refresh();
+    return () => { refreshId.current += 1; };
   }, [dateRange?.from, dateRange?.to]);
 
   useWindowEvent("cliswitch-usage-changed", () => {
     if (loadingRef.current) return;
     void refresh();
+  });
+
+  useWindowEvent("cliswitch-accounts-changed", () => { void refresh(); });
+  useWindowEvent("cliswitch-channels-changed", () => { void refresh(); });
+  useWindowEvent("focus", () => {
+    if (!loadingRef.current) void refresh();
   });
 
   const successRate =
@@ -130,6 +146,26 @@ export function MonitorPage() {
   }, [channelStats, channels.length, channelsById, currency, usdToCnyRate]);
   const columns = React.useMemo<Array<ColumnDef<ChannelStats>>>(
     () => [
+      {
+        id: "account_name",
+        header: t("monitor.channelStats.headers.name"),
+        accessorFn: (row) => resolveChannelIdentity(
+          channelsById.get(row.channel_id), accountNames,
+        ).accountName,
+        enableSorting: true,
+        cell: ({ getValue }) => (
+          <span
+            className="mx-auto block max-w-[160px] truncate whitespace-nowrap text-center font-medium"
+            title={String(getValue())}
+          >
+            {String(getValue())}
+          </span>
+        ),
+        meta: {
+          headerClassName: colClass.name,
+          skeletonClassName: "w-20 mx-auto",
+        },
+      },
       {
         accessorKey: "name",
         header: t("monitor.channelStats.headers.channel"),
@@ -279,6 +315,7 @@ export function MonitorPage() {
     ],
     [
       channelsById,
+      accountNames,
       currency,
       usdToCnyRate,
       t,

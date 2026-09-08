@@ -118,8 +118,13 @@
       "empty": "No trend data",
       "tooltip": {
         "empty": "No requests for this day",
-        "omitted": "{{count}} more channels hidden"
-      }
+        "omitted": "{{count}} more channels hidden",
+        "origin": "Drawing origin",
+        "name": "Name",
+        "channel": "Channel",
+        "requests": "Daily successful requests"
+      },
+      "origin": "Start"
     },
     "distribution": {
       "title": "Channel Usage",
@@ -474,7 +479,8 @@
         "failed": "Failed",
         "estimatedCost": "Official Credits",
         "actualSpend": "Estimated Cost",
-        "avgLatency": "Avg Duration"
+        "avgLatency": "Avg Duration",
+        "name": "Name"
       },
       "empty": "No channel statistics"
     },

@@ -118,8 +118,13 @@
       "empty": "暂无趋势数据",
       "tooltip": {
         "empty": "当前日期暂无请求",
-        "omitted": "其余 {{count}} 个渠道已省略"
-      }
+        "omitted": "其余 {{count}} 个渠道已省略",
+        "origin": "绘图起点",
+        "name": "名称",
+        "channel": "渠道",
+        "requests": "当日成功请求"
+      },
+      "origin": "起点"
     },
     "distribution": {
       "title": "渠道使用分布",
@@ -474,7 +479,8 @@
         "failed": "失败",
         "estimatedCost": "官方额度",
         "actualSpend": "预估费用",
-        "avgLatency": "平均耗时"
+        "avgLatency": "平均耗时",
+        "name": "名称"
       },
       "empty": "暂无渠道统计"
     },

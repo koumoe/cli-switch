@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import {
@@ -12,22 +12,20 @@ import {
   TabsTrigger,
 } from "@/components/ui";
 import { MetricCard } from "@/components/composed/metric-card";
-import {
-  TrendChart,
-  type TrendChartDay,
-  type TrendChartSeries,
-} from "@/components/composed/trend-chart";
+import { TrendChart } from "@/components/composed/trend-chart";
 import { PageHeader } from "@/components/PageHeader";
 import { PageBody } from "@/components/layout/page-body";
 import {
   getSettings,
   listChannels,
+  listRemoteAccounts,
   statsChannels,
   statsSummary,
   statsTrend,
 } from "@/api";
 import { useCurrency } from "@/hooks/use-currency";
 import { useI18n } from "@/hooks/use-i18n";
+import { useWindowEvent } from "@/hooks/use-window-event";
 import { humanizeApiError } from "@/lib/error";
 import {
   calculateEstimatedSpend,
@@ -46,27 +44,7 @@ import type {
 import { formatNumber, protocolLabel } from "../../lib";
 import { ActiveChannelChain } from "./active-channel-chain";
 import { ChannelDistribution } from "./channel-distribution";
-
-function localDateKey(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-
-function buildMonthDays(startMs: number, end: Date): TrendChartDay[] {
-  const out: TrendChartDay[] = [];
-  const cur = new Date(startMs);
-  cur.setHours(0, 0, 0, 0);
-  const endLocal = new Date(end);
-  endLocal.setHours(0, 0, 0, 0);
-
-  while (cur.getTime() <= endLocal.getTime()) {
-    out.push({ key: localDateKey(cur), label: String(cur.getDate()) });
-    cur.setDate(cur.getDate() + 1);
-  }
-  return out;
-}
+import { buildMonthTrend, localDateKey } from "./trend-data";
 
 const trendPalette = [
   "oklch(var(--chart-1))",
@@ -94,6 +72,8 @@ export function OverviewPage() {
   const { currency, usdToCnyRate } = useCurrency();
   const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
   const [channels, setChannels] = useState<Channel[]>([]);
+  const [accountNames, setAccountNames] = useState<Record<string, string>>({});
+  const refreshId = useRef(0);
   const [stats, setStats] = useState<StatsSummary | null>(null);
   const [channelStats, setChannelStats] = useState<ChannelStats[]>([]);
   const [trendItems, setTrendItems] = useState<TrendPoint[]>([]);
@@ -103,30 +83,50 @@ export function OverviewPage() {
     "percent",
   );
 
+  async function refresh(showLoading = false) {
+    const requestId = ++refreshId.current;
+    if (showLoading) setLoading(true);
+    try {
+      const [cs, settings, st, cst, tr, accounts] = await Promise.all([
+        listChannels(),
+        getSettings().catch(() => null),
+        statsSummary({ range: "month" }),
+        statsChannels({ range: "month" }),
+        statsTrend("month"),
+        listRemoteAccounts().catch(() => []),
+      ]);
+      if (requestId !== refreshId.current) return;
+      setChannels(cs);
+      setAccountNames(
+        Object.fromEntries(accounts.map((account) => [account.id, account.name])),
+      );
+      if (settings) setAppSettings(settings);
+      setStats(st);
+      setChannelStats(cst.items);
+      setTrendItems(tr.items);
+    } catch (error) {
+      if (requestId !== refreshId.current) return;
+      toast.error(t("overview.toast.loadFail"), {
+        description: humanizeApiError(error, t),
+      });
+    } finally {
+      if (requestId === refreshId.current) setLoading(false);
+    }
+  }
+
+  const todayKey = localDateKey(new Date(nowMs));
   useEffect(() => {
-    Promise.all([
-      listChannels(),
-      getSettings().catch(() => null),
-      statsSummary({ range: "month" }),
-      statsChannels({ range: "month" }),
-      statsTrend("month"),
-    ])
-      .then(([cs, settings, st, cst, tr]) => {
-        setChannels(cs);
-        if (settings) {
-          setAppSettings(settings);
-        }
-        setStats(st);
-        setChannelStats(cst.items);
-        setTrendItems(tr.items);
-      })
-      .catch((e) => {
-        toast.error(t("overview.toast.loadFail"), {
-          description: humanizeApiError(e, t),
-        });
-      })
-      .finally(() => setLoading(false));
-  }, []);
+    void refresh(true);
+    return () => { refreshId.current += 1; };
+  }, [todayKey]);
+
+  useWindowEvent("cliswitch-accounts-changed", () => { void refresh(); });
+  useWindowEvent("cliswitch-channels-changed", () => { void refresh(); });
+  useWindowEvent("cliswitch-usage-changed", () => { void refresh(); });
+  useWindowEvent("focus", () => {
+    setNowMs(Date.now());
+    void refresh();
+  });
 
   useEffect(() => {
     const timer = window.setInterval(() => setNowMs(Date.now()), 30_000);
@@ -203,47 +203,30 @@ export function OverviewPage() {
   );
 
   const monthTrend = useMemo(() => {
-    const startMs = stats?.start_ms ?? Date.now();
-    const days = buildMonthDays(startMs, new Date());
-    const byDayChannel = new Map<string, number>();
-    for (const it of trendItems) {
-      const k = `${localDateKey(new Date(it.bucket_start_ms))}|${it.channel_id}`;
-      byDayChannel.set(k, (byDayChannel.get(k) ?? 0) + it.success);
-    }
+    const now = new Date(nowMs);
+    return buildMonthTrend({
+      startMs: stats?.start_ms ?? new Date(now.getFullYear(), now.getMonth(), 1).getTime(),
+      now,
+      items: trendItems,
+      channels,
+      accountNames,
+      colorForChannel: pickTrendColor,
+    });
+  }, [trendItems, stats?.start_ms, channels, accountNames, todayKey]);
 
-    const totals = new Map<string, { name: string; total: number }>();
-    for (const it of trendItems) {
-      const cur = totals.get(it.channel_id);
-      totals.set(it.channel_id, {
-        name: it.name,
-        total: (cur?.total ?? 0) + it.success,
-      });
-    }
-
-    const protocolById = new Map<string, Protocol>();
-    for (const c of channels) protocolById.set(c.id, c.protocol);
-
-    const used = [...totals.entries()]
-      .filter(([, v]) => v.total > 0)
-      .sort(
-        (a, b) => b[1].total - a[1].total || a[1].name.localeCompare(b[1].name),
-      );
-
-    const series: TrendChartSeries[] = used.map(([channel_id, meta]) => ({
-      channel_id,
-      name: meta.name,
-      protocol: protocolById.get(channel_id) ?? null,
-      color: pickTrendColor(channel_id),
-      values: days.map((d) => byDayChannel.get(`${d.key}|${channel_id}`) ?? 0),
-    }));
-
-    return { days, series };
-  }, [trendItems, stats?.start_ms, channels]);
+  const channelsById = useMemo(
+    () => new Map(channels.map((channel) => [channel.id, channel])),
+    [channels],
+  );
 
   const protocolLabelText = (protocol: Protocol) => protocolLabel(t, protocol);
   const trendTooltipLabels = useMemo(
     () => ({
       empty: t("overview.trend.tooltip.empty"),
+      origin: t("overview.trend.tooltip.origin"),
+      name: t("overview.trend.tooltip.name"),
+      channel: t("overview.trend.tooltip.channel"),
+      requests: t("overview.trend.tooltip.requests"),
       omitted: (count: number) => t("overview.trend.tooltip.omitted", { count }),
     }),
     [t],
@@ -308,7 +291,7 @@ export function OverviewPage() {
                   <TrendChart
                     days={monthTrend.days}
                     series={monthTrend.series}
-                    protocolLabel={protocolLabelText}
+                    originLabel={t("overview.trend.origin")}
                     tooltipLabels={trendTooltipLabels}
                   />
                 )}
@@ -361,6 +344,8 @@ export function OverviewPage() {
                   <div className="min-h-0 flex-1 overflow-y-auto">
                     <ChannelDistribution
                       stats={channelStatsUsed}
+                      channelsById={channelsById}
+                      accountNames={accountNames}
                       protocolLabel={protocolLabelText}
                       view={distributionView}
                     />
@@ -388,6 +373,7 @@ export function OverviewPage() {
               ) : (
                 <ActiveChannelChain
                   enabledByProtocol={enabledByProtocol}
+                  accountNames={accountNames}
                   settings={appSettings}
                   protocolLabel={protocolLabelText}
                 />

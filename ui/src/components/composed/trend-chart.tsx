@@ -1,9 +1,7 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { ApexAxisChartSeries, ApexOptions } from "apexcharts";
 import ReactApexChart from "react-apexcharts/core";
 import "apexcharts/line";
-
-import type { Protocol } from "@/types/api";
 
 export type TrendChartDay = {
   key: string;
@@ -13,20 +11,24 @@ export type TrendChartDay = {
 export type TrendChartSeries = {
   channel_id: string;
   name: string;
-  protocol: Protocol | null;
+  account_name: string;
   color: string;
   values: number[];
 };
 
 type TrendChartTooltipLabels = {
   empty: string;
+  origin: string;
+  name: string;
+  channel: string;
+  requests: string;
   omitted: (count: number) => string;
 };
 
 type TrendChartProps = {
   days: TrendChartDay[];
   series: TrendChartSeries[];
-  protocolLabel: (protocol: Protocol) => string;
+  originLabel: string;
   tooltipLabels: TrendChartTooltipLabels;
 };
 
@@ -49,9 +51,11 @@ function escapeHtml(value: string): string {
 export function TrendChart({
   days,
   series,
-  protocolLabel,
+  originLabel,
   tooltipLabels,
 }: TrendChartProps) {
+  const chartRef = useRef<HTMLDivElement>(null);
+  const [chartWidth, setChartWidth] = useState(640);
   const [themeMode, setThemeMode] = useState<"light" | "dark">(
     resolveThemeMode,
   );
@@ -71,25 +75,47 @@ export function TrendChart({
     return () => observer.disconnect();
   }, []);
 
-  const labelIndices = useMemo(
-    () =>
-      days.length <= 10
-        ? new Set(days.map((_, index) => index))
-        : new Set([0, Math.floor((days.length - 1) / 2), days.length - 1]),
-    [days],
-  );
+  useEffect(() => {
+    const element = chartRef.current;
+    if (!element) return;
+    const updateWidth = () => setChartWidth(element.clientWidth || 640);
+    updateWidth();
+    const observer = new ResizeObserver(updateWidth);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
 
+  // The synthetic point belongs only to chart data, never to monthly statistics.
+  const plotDays = useMemo(
+    () => [{ key: "__origin__", label: originLabel }, ...days],
+    [days, originLabel],
+  );
+  const integerFormat = useMemo(() => new Intl.NumberFormat(undefined, {
+    maximumFractionDigits: 0,
+  }), []);
+  const yAxisWidth = useMemo(() => {
+    const largest = series.reduce((max, item) => item.values.reduce(
+      (value, next) => Math.max(value, next), max,
+    ), 0);
+    return Math.max(36, integerFormat.format(Math.ceil(largest * 1.2)).length * 7 + 12);
+  }, [integerFormat, series]);
+  const labelKeys = useMemo(() => {
+    const capacity = Math.max(3, Math.floor((chartWidth - yAxisWidth) / 44));
+    const step = Math.max(1, Math.ceil((plotDays.length - 1) / (capacity - 1)));
+    return new Set(plotDays.filter((_, index) =>
+      index === 0 || index === 1 || index === plotDays.length - 1 || index % step === 0,
+    ).map((day) => day.key));
+  }, [chartWidth, plotDays, yAxisWidth]);
   const dayByKey = useMemo(
-    () => new Map(days.map((day) => [day.key, day] as const)),
-    [days],
+    () => new Map(plotDays.map((day) => [day.key, day] as const)),
+    [plotDays],
   );
-
   const chartSeries = useMemo<ApexAxisChartSeries>(
-    () =>
-      series.map((item) => ({
-        name: item.name,
-        data: item.values,
-      })),
+    () => series.map((item) => ({
+      // ApexCharts also uses names as identity; equal channel labels must stay separate.
+      name: item.channel_id,
+      data: [0, ...item.values],
+    })),
     [series],
   );
 
@@ -123,6 +149,13 @@ export function TrendChart({
       },
       markers: {
         size: 0,
+        discrete: days.length === 1 ? series.map((item, seriesIndex) => ({
+          seriesIndex,
+          dataPointIndex: 1,
+          fillColor: item.color,
+          strokeColor: "oklch(var(--card))",
+          size: 4,
+        })) : [],
         hover: {
           size: 4,
           sizeOffset: 2,
@@ -163,8 +196,8 @@ export function TrendChart({
       },
       xaxis: {
         type: "category",
-        categories: days.map((day) => day.key),
-        tickPlacement: "between",
+        categories: plotDays.map((day) => day.key),
+        tickPlacement: "on",
         axisBorder: {
           show: false,
         },
@@ -180,17 +213,16 @@ export function TrendChart({
         },
         labels: {
           rotate: 0,
-          hideOverlappingLabels: false,
+          hideOverlappingLabels: true,
           trim: false,
           style: {
             colors: "oklch(var(--muted-foreground))",
             fontSize: "10px",
             fontWeight: 500,
           },
-          formatter(value, _timestamp, opts) {
-            const index = opts?.dataPointIndex ?? -1;
-            if (!labelIndices.has(index)) return "";
-            return dayByKey.get(String(value))?.label ?? "";
+          formatter(value) {
+            const key = String(value);
+            return labelKeys.has(key) ? (dayByKey.get(key)?.label ?? "") : "";
           },
         },
         tooltip: {
@@ -202,15 +234,15 @@ export function TrendChart({
         tickAmount: 2,
         forceNiceScale: true,
         labels: {
-          minWidth: 28,
-          maxWidth: 28,
+          minWidth: yAxisWidth,
+          maxWidth: yAxisWidth,
           style: {
             colors: "oklch(var(--muted-foreground))",
             fontSize: "10px",
             fontWeight: 500,
           },
           formatter(value) {
-            return String(Math.round(value));
+            return integerFormat.format(value);
           },
         },
       },
@@ -230,56 +262,40 @@ export function TrendChart({
         },
         y: {
           formatter(value) {
-            return String(Math.round(value));
+            return integerFormat.format(value);
           },
         },
         custom({ dataPointIndex }: { dataPointIndex: number }) {
-          const hoveredDay = days[dataPointIndex];
+          if (dataPointIndex === 0) {
+            return `<div style="padding:8px 10px;color:oklch(var(--muted-foreground));background:oklch(var(--card));">${escapeHtml(tooltipLabels.origin)}</div>`;
+          }
+          const realIndex = dataPointIndex - 1;
+          const hoveredDay = days[realIndex];
           if (!hoveredDay) return "";
-
-          const rankedRows = series
-            .map((item) => ({
-              color: item.color,
-              name: item.name,
-              protocol: item.protocol ? protocolLabel(item.protocol) : "",
-              value: item.values[dataPointIndex] ?? 0,
-            }))
-            .sort((a, b) => b.value - a.value || a.name.localeCompare(b.name));
-
-          const nonZeroRows = rankedRows.filter((item) => item.value > 0);
-          const sourceRows = nonZeroRows.length > 0 ? nonZeroRows : rankedRows;
-          const visibleRows = sourceRows.slice(0, TREND_TOOLTIP_LIMIT);
-          const omittedCount = sourceRows.length - visibleRows.length;
-
-          const rowsMarkup =
-            nonZeroRows.length === 0
-              ? `<div style="padding: 4px 0 2px; color: oklch(var(--muted-foreground));">${escapeHtml(tooltipLabels.empty)}</div>`
-              : visibleRows
-                  .map((item) => {
-                    const protocolMarkup = item.protocol
-                      ? `<span style="margin-left: 6px; color: oklch(var(--muted-foreground));">${escapeHtml(item.protocol)}</span>`
-                      : "";
-                    return `<div style="display:flex; align-items:center; justify-content:space-between; gap:12px; padding: 3px 0;">
-  <div style="display:flex; min-width:0; align-items:center; gap:8px;">
-    <span style="display:inline-block; width:8px; height:8px; flex:none; border-radius:9999px; background:${item.color};"></span>
-    <span style="min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
-      <span style="color: oklch(var(--foreground)); font-weight:600;">${escapeHtml(item.name)}</span>${protocolMarkup}
-    </span>
-  </div>
-  <span style="flex:none; color: oklch(var(--foreground)); font-weight:600;">${Math.round(item.value)}</span>
-</div>`;
-                  })
-                  .join("");
-
-          const omittedMarkup =
-            nonZeroRows.length > 0 && omittedCount > 0
-              ? `<div style="padding-top: 6px; color: oklch(var(--muted-foreground)); border-top: 1px solid oklch(var(--border));">${escapeHtml(tooltipLabels.omitted(omittedCount))}</div>`
-              : "";
-
-          return `<div style="min-width: 220px; max-width: 280px; border: 1px solid oklch(var(--border)); border-radius: 10px; background: oklch(var(--card)); padding: 10px 12px; box-shadow: 0 10px 30px oklch(0% 0 0 / 0.12);">
-  <div style="padding-bottom: 8px; margin-bottom: 6px; border-bottom: 1px solid oklch(var(--border)); color: oklch(var(--foreground)); font-size: 12px; font-weight: 700;">${escapeHtml(hoveredDay.key)}</div>
-  <div style="display:flex; flex-direction:column; gap:0; font-size: 11px; line-height: 1.35;">${rowsMarkup}</div>
-  ${omittedMarkup}
+          const rows = series.map((item) => ({
+            ...item, value: item.values[realIndex] ?? 0,
+          })).filter((item) => item.value > 0)
+            .sort((a, b) => b.value - a.value || a.account_name.localeCompare(b.account_name));
+          const visibleRows = rows.slice(0, TREND_TOOLTIP_LIMIT);
+          const rowsMarkup = visibleRows.length === 0
+            ? `<tr><td colspan="3" style="padding:6px 0;color:oklch(var(--muted-foreground));">${escapeHtml(tooltipLabels.empty)}</td></tr>`
+            : visibleRows.map((item) => `<tr>
+  <td style="padding:4px 8px 4px 0;overflow-wrap:anywhere;"><span style="display:inline-block;width:7px;height:7px;margin-right:5px;border-radius:50%;background:${item.color};"></span>${escapeHtml(item.account_name)}</td>
+  <td style="padding:4px 8px 4px 0;color:oklch(var(--muted-foreground));overflow-wrap:anywhere;">${escapeHtml(item.name)}</td>
+  <td style="padding:4px 0;text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;">${integerFormat.format(item.value)}</td>
+</tr>`).join("");
+          const omittedMarkup = rows.length > TREND_TOOLTIP_LIMIT
+            ? `<div style="padding-top:5px;color:oklch(var(--muted-foreground));">${escapeHtml(tooltipLabels.omitted(rows.length - TREND_TOOLTIP_LIMIT))}</div>` : "";
+          return `<div style="width:340px;max-width:min(440px,80vw);border:1px solid oklch(var(--border));border-radius:8px;background:oklch(var(--card));color:oklch(var(--foreground));padding:9px 11px;box-shadow:0 5px 18px oklch(0% 0 0 / 0.12);font-size:11px;">
+  <div style="padding-bottom:5px;font-weight:500;">${escapeHtml(hoveredDay.key)}</div>
+  <table style="width:100%;table-layout:fixed;border-collapse:collapse;line-height:1.4;">
+    <colgroup><col style="width:28%"><col style="width:40%"><col style="width:32%"></colgroup>
+    <thead><tr style="border-bottom:1px solid oklch(var(--border));color:oklch(var(--muted-foreground));">
+      <th style="padding:2px 8px 5px 0;text-align:left;font-weight:400;">${escapeHtml(tooltipLabels.name)}</th>
+      <th style="padding:2px 8px 5px 0;text-align:left;font-weight:400;">${escapeHtml(tooltipLabels.channel)}</th>
+      <th style="padding:2px 0 5px;text-align:right;font-weight:400;">${escapeHtml(tooltipLabels.requests)}</th>
+    </tr></thead><tbody>${rowsMarkup}</tbody>
+  </table>${omittedMarkup}
 </div>`;
         },
       },
@@ -287,11 +303,11 @@ export function TrendChart({
         text: "",
       },
     }),
-    [dayByKey, days, labelIndices, protocolLabel, series, themeMode, tooltipLabels],
+    [dayByKey, days, integerFormat, labelKeys, plotDays, series, themeMode, tooltipLabels, yAxisWidth],
   );
 
   return (
-    <div className="flex h-full flex-col space-y-2">
+    <div ref={chartRef} className="flex h-full min-w-0 flex-col space-y-2">
       <div className="min-h-[220px] w-full flex-1">
         <ReactApexChart
           key={themeMode}
@@ -309,20 +325,17 @@ export function TrendChart({
             {series.map((item) => (
               <div
                 key={item.channel_id}
-                className="flex min-w-0 items-center gap-1.5"
+                className="flex min-w-0 max-w-full items-center gap-1.5"
+                title={`${item.account_name} · ${item.name}`}
               >
                 <span
                   className="inline-block h-2 w-2 shrink-0 rounded-full"
                   style={{ background: item.color }}
                 />
-                <span className="max-w-[140px] truncate font-medium text-foreground">
-                  {item.name}
+                <span className="max-w-[260px] truncate whitespace-nowrap">
+                  <span className="font-medium text-foreground">{item.account_name}</span>
+                  <span className="text-muted-foreground"> · {item.name}</span>
                 </span>
-                {item.protocol ? (
-                  <span className="truncate text-muted-foreground">
-                    {protocolLabel(item.protocol)}
-                  </span>
-                ) : null}
               </div>
             ))}
           </div>
