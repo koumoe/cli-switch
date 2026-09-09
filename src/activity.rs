@@ -257,22 +257,31 @@ impl Registry {
         let Some(entry) = entry else {
             return;
         };
-        let (Some(thread), Some(turn)) = (
-            entry.thread_id.as_deref(),
-            entry.observed_turn_id.as_deref(),
-        ) else {
+        let Some(thread) = entry.thread_id.as_deref() else {
             return;
         };
-        let key = format!("{thread}:{turn}");
-        if !self
+        self.resolve_pending_thread(thread);
+    }
+
+    fn resolve_pending_thread(&self, thread: &str) {
+        let keys = self
             .pending_turns
             .lock()
             .unwrap_or_else(|err| err.into_inner())
-            .remove(&key)
-        {
-            return;
+            .iter()
+            .filter(|key| key.starts_with(&format!("{thread}:")))
+            .cloned()
+            .collect::<Vec<_>>();
+        for key in keys {
+            let Some(turn) = key.strip_prefix(&format!("{thread}:")) else {
+                continue;
+            };
+            self.pending_turns
+                .lock()
+                .unwrap_or_else(|err| err.into_inner())
+                .remove(&key);
+            let _ = self.notify_codex_turn(thread, turn);
         }
-        let _ = self.notify_codex_turn(thread, turn);
     }
 }
 
@@ -288,6 +297,22 @@ pub(crate) fn deliver_codex_turn(thread_id: &str, turn_id: &str) -> Result<(), N
 
 pub fn snapshot() -> ActivitySnapshot {
     registry().snapshot()
+}
+
+/// Cheap main-loop summary; unlike `snapshot()` it does not clone, group, or sort entries.
+pub fn status_summary() -> (u64, bool) {
+    let state = registry()
+        .state
+        .lock()
+        .unwrap_or_else(|err| err.into_inner());
+    (
+        state.revision,
+        state.omitted_running > 0
+            || state
+                .entries
+                .iter()
+                .any(|entry| entry.status == ActivityStatus::Running),
+    )
 }
 
 fn label(value: &str) -> String {

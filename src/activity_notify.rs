@@ -110,6 +110,7 @@ pub(crate) fn register(data_dir: &Path, port: u16) -> anyhow::Result<Registratio
     std::fs::create_dir_all(data_dir)?;
     let token = uuid::Uuid::new_v4().to_string();
     let path = rendezvous_path(data_dir);
+    let temp_path = path.with_extension("json.tmp");
     let file = RendezvousFile {
         pid: std::process::id(),
         port,
@@ -123,10 +124,11 @@ pub(crate) fn register(data_dir: &Path, port: u16) -> anyhow::Result<Registratio
         use std::os::unix::fs::OpenOptionsExt as _;
         options.mode(0o600);
     }
-    let mut handle = options.open(&path)?;
+    let mut handle = options.open(&temp_path)?;
     use std::io::Write as _;
     handle.write_all(&bytes)?;
     handle.sync_all().ok();
+    std::fs::rename(&temp_path, &path)?;
     let guard = RegistrationGuard { path, token };
     registrations().lock().unwrap().push(Registration {
         path: guard.path.clone(),
@@ -420,5 +422,40 @@ mod late_notify_tests {
             ActivityStatus::Running
         );
         drop(new);
+    }
+
+    #[test]
+    fn notification_pending_while_running_is_retried_when_that_request_finishes() {
+        let thread = uuid::Uuid::new_v4().to_string();
+        let turn = uuid::Uuid::new_v4().to_string();
+        let mut request = ActivityGuard::proxy(
+            "pending-same-turn",
+            crate::storage::Protocol::Openai,
+            Some((thread.clone(), Some(turn.clone()))),
+        );
+        let payload = format!(
+            r#"{{"type":"agent-turn-complete","thread-id":"{thread}","turn-id":"{turn}"}}"#
+        );
+        assert!(accept_codex_notification(Path::new("/tmp"), "token", "token", &payload).is_ok());
+        assert_eq!(
+            activity::snapshot()
+                .entries
+                .iter()
+                .find(|entry| entry.thread_id.as_deref() == Some(&thread))
+                .unwrap()
+                .status,
+            ActivityStatus::Running
+        );
+        request.finish(ActivityStatus::ResponseFinished);
+        assert_eq!(
+            activity::snapshot()
+                .entries
+                .iter()
+                .find(|entry| entry.thread_id.as_deref() == Some(&thread))
+                .unwrap()
+                .completed_turn_id
+                .as_deref(),
+            Some(turn.as_str())
+        );
     }
 }

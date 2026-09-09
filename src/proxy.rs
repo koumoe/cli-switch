@@ -1117,7 +1117,11 @@ async fn proxy_upstream_response(
                     }
                 });
                 let cancelled = parsed_json.as_ref().is_some_and(|value| {
+                    let response = value.get("response").unwrap_or(value);
                     matches!(
+                        response.get("status").and_then(serde_json::Value::as_str),
+                        Some("cancelled" | "canceled")
+                    ) || matches!(
                         value.get("status").and_then(serde_json::Value::as_str),
                         Some("cancelled" | "canceled")
                     )

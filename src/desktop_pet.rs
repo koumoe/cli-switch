@@ -292,6 +292,7 @@ pub(super) struct DesktopPet {
     pub(super) next_tick: Instant,
     last_monitor_check: Instant,
     bounds: Bounds,
+    last_activity_revision: u64,
 }
 
 pub(super) enum Action {
@@ -340,6 +341,7 @@ impl DesktopPet {
                 width: 1024.0,
                 height: 768.0,
             },
+            last_activity_revision: snapshot.revision,
         };
         let placement = std::fs::read(&this.placement_path)
             .ok()
@@ -689,10 +691,11 @@ impl DesktopPet {
         if now < self.next_tick {
             return;
         }
-        let running = activity::snapshot()
-            .entries
-            .iter()
-            .any(|entry| entry.status == activity::ActivityStatus::Running);
+        let (revision, running) = activity::status_summary();
+        if revision != self.last_activity_revision {
+            self.last_activity_revision = revision;
+            self.render();
+        }
         self.next_tick = now
             + if self.drag.is_some() || self.notification.is_some() || running {
                 ACTIVE_TICK
