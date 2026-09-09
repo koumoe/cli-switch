@@ -60,6 +60,7 @@ pub struct ActivitySnapshot {
 struct Registry {
     state: Mutex<ActivitySnapshot>,
     completed_turns: Mutex<(HashSet<String>, VecDeque<String>)>,
+    pending_turns: Mutex<HashSet<String>>,
 }
 
 fn registry() -> &'static Arc<Registry> {
@@ -104,12 +105,18 @@ impl Registry {
             let latest_turn = thread_entries
                 .last()
                 .and_then(|entry| entry.observed_turn_id.as_deref());
-            if latest_turn != Some(turn_id)
-                || thread_entries
-                    .iter()
-                    .any(|entry| entry.status == ActivityStatus::Running)
-            {
+            if latest_turn != Some(turn_id) {
                 return Err(NotifyError::NotObservedOrPending);
+            }
+            if thread_entries
+                .iter()
+                .any(|entry| entry.status == ActivityStatus::Running)
+            {
+                self.pending_turns
+                    .lock()
+                    .unwrap_or_else(|err| err.into_inner())
+                    .insert(key);
+                return Ok(());
             }
             let now = crate::storage::now_ms();
             let mut accepted = false;
@@ -237,6 +244,36 @@ impl Registry {
             finished: false,
         }
     }
+
+    fn resolve_pending_for(&self, id: &str) {
+        let entry = self
+            .state
+            .lock()
+            .unwrap_or_else(|err| err.into_inner())
+            .entries
+            .iter()
+            .find(|entry| entry.id == id)
+            .cloned();
+        let Some(entry) = entry else {
+            return;
+        };
+        let (Some(thread), Some(turn)) = (
+            entry.thread_id.as_deref(),
+            entry.observed_turn_id.as_deref(),
+        ) else {
+            return;
+        };
+        let key = format!("{thread}:{turn}");
+        if !self
+            .pending_turns
+            .lock()
+            .unwrap_or_else(|err| err.into_inner())
+            .remove(&key)
+        {
+            return;
+        }
+        let _ = self.notify_codex_turn(thread, turn);
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -331,7 +368,7 @@ pub(crate) fn codex_thread_identity(
                     .then(|| turn.to_string())
                 })
         }
-        Some(_) => return None,
+        Some(_) => None,
     };
     Some((id.to_string(), turn_id))
 }
@@ -447,6 +484,9 @@ impl ActivityGuard {
         });
         if let Some(entry) = completed_entry {
             events::publish(AppEvent::ActivityCompleted(entry));
+        }
+        if let Some(id) = &self.retained_id {
+            self.registry.resolve_pending_for(id);
         }
     }
 }

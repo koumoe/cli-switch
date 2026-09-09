@@ -1106,11 +1106,15 @@ async fn proxy_upstream_response(
 
             if let Some(activity) = &mut ctx.activity {
                 let semantic_failure = parsed_json.as_ref().is_some_and(|value| {
-                    value.get("error").is_some_and(|error| !error.is_null())
-                        || matches!(
-                            value.get("status").and_then(serde_json::Value::as_str),
-                            Some("failed")
-                        )
+                    if ctx.protocol == Protocol::Openai {
+                        crate::proxy::openai_responses::completed_failure(value).is_some()
+                    } else {
+                        value.get("error").is_some_and(|error| !error.is_null())
+                            || matches!(
+                                value.get("status").and_then(serde_json::Value::as_str),
+                                Some("failed")
+                            )
+                    }
                 });
                 let cancelled = parsed_json.as_ref().is_some_and(|value| {
                     matches!(

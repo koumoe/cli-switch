@@ -345,24 +345,29 @@ async fn activity_codex_notify(
         Ok(payload) => payload,
         Err(_) => return (StatusCode::BAD_REQUEST, "invalid body").into_response(),
     };
-    let mut last_error = None;
+    let mut saw_not_observed = false;
     for token in tokens {
         match crate::activity_notify::accept_codex_notification(&data_dir, &token, auth, payload) {
             Ok(()) => return StatusCode::NO_CONTENT.into_response(),
-            Err(error) if error.to_string().contains("not observed or still") => {
-                last_error = Some(error)
+            Err(crate::activity_notify::NotifyHttpError::NotObserved) => {
+                saw_not_observed = true;
             }
-            Err(error) if error.to_string().contains("token") => continue,
+            Err(crate::activity_notify::NotifyHttpError::InvalidToken) => continue,
             Err(error) => return (StatusCode::BAD_REQUEST, error.to_string()).into_response(),
         }
     }
-    match last_error {
-        Some(error) => (StatusCode::CONFLICT, error.to_string()).into_response(),
-        None => (
+    if saw_not_observed {
+        (
+            StatusCode::CONFLICT,
+            "thread was not observed or is still running",
+        )
+            .into_response()
+    } else {
+        (
             StatusCode::UNAUTHORIZED,
             "invalid activity notification token",
         )
-            .into_response(),
+            .into_response()
     }
 }
 

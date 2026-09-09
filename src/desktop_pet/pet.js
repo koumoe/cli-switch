@@ -38,7 +38,7 @@
   root.dataset.surface = surface;
   const pet = doc.getElementById('pet'), canvas = doc.getElementById('pet-canvas'), count = doc.getElementById('activity-count');
   const panel = doc.getElementById('activity-panel'), list = doc.getElementById('activity-list'), toast = doc.getElementById('toast'), toastText = doc.getElementById('toast-text');
-  const state = { locale: localeOf(global.__PET_LOCALE__), dock:'none', entries:[], omitted_running:0, celebrating:false, notification:null, frame:0, lastMask:'' , drag:null, moved:false, panelOpen:false };
+  const state = { locale: 'zh-CN', dock:'none', entries:[], omitted_running:0, celebrating:false, notification:null, frame:0, lastMask:'' , drag:null, moved:false, panelOpen:false };
   function send(message) { const body = JSON.stringify(message); try { if (global.ipc && typeof global.ipc.postMessage === 'function') global.ipc.postMessage(body); else if (global.webkit && global.webkit.messageHandlers && global.webkit.messageHandlers.ipc) global.webkit.messageHandlers.ipc.postMessage(body); } catch (_) {} }
   function tr(key) { return (LABELS[state.locale] || LABELS['zh-CN'])[key] || key; }
   function statusLabel(status) { return tr(status); }
@@ -71,17 +71,10 @@
     global.drawPetSprite(canvas, { dock: state.dock, celebrating: state.celebrating, working: runningCount(state.entries, state.omitted_running) > 0 || state.celebrating, frame: state.frame }); updateMask();
     if (pet) { pet.classList.toggle('docked', state.dock !== 'none'); pet.classList.toggle('celebrating', state.celebrating); pet.setAttribute('aria-label', state.dock !== 'none' ? tr('petDocked') : tr('petWorking')); }
   }
-  function placeFloating(el, gap) {
-    if (!el || !pet || surface !== 'pet') return;
-    const px = pet.offsetLeft + (state.dock === 'right' ? -150 : state.dock === 'left' ? 28 : 32);
-    const py = pet.offsetTop - el.offsetHeight - gap;
-    el.style.left = `${Math.max(3, Math.min(root.clientWidth - el.offsetWidth - 3, px))}px`;
-    el.style.top = `${Math.max(3, py >= 3 ? py : pet.offsetTop + (state.dock !== 'none' ? 42 : 66) + gap)}px`;
-  }
-  function setPanel(open) { if (!panel) return; state.panelOpen = !!open; panel.hidden = !state.panelOpen; if (pet) pet.setAttribute('aria-expanded', String(state.panelOpen)); if (state.panelOpen) placeFloating(panel, 6); }
+  function setPanel(open) { if (!panel) return; state.panelOpen = !!open; panel.hidden = !state.panelOpen; if (pet) pet.setAttribute('aria-expanded', String(state.panelOpen)); }
   function apply(payload) {
     payload = payload && typeof payload === 'object' ? payload : {};
-    state.locale = localeOf(payload.locale || global.__PET_LOCALE__); localize(); state.dock = ['left','right'].includes(payload.dock) ? payload.dock : 'none'; state.entries = normalizeSnapshot(payload.snapshot, state.locale); state.omitted_running = Number.isFinite(payload.snapshot && payload.snapshot.omitted_running) ? Math.max(0, payload.snapshot.omitted_running) : 0; state.celebrating = !!payload.celebrating; state.notification = payload.notification && typeof payload.notification.title === 'string' ? { title: payload.notification.title.slice(0, 120), count: Number(payload.notification.count) || 1 } : null;
+    state.locale = localeOf(payload.locale); localize(); state.dock = ['left','right'].includes(payload.dock) ? payload.dock : 'none'; state.entries = normalizeSnapshot(payload.snapshot, state.locale); state.omitted_running = Number.isFinite(payload.snapshot && payload.snapshot.omitted_running) ? Math.max(0, payload.snapshot.omitted_running) : 0; state.celebrating = !!payload.celebrating; state.notification = payload.notification && typeof payload.notification.title === 'string' ? { title: payload.notification.title.slice(0, 120), count: Number(payload.notification.count) || 1 } : null;
     const n = runningCount(state.entries, state.omitted_running); if (count) { count.hidden = n < 1; count.textContent = n > 99 ? '99+' : String(n); }
     renderRows(); draw();
     if (surface === 'toast' && toast) { toast.hidden = !state.notification; if (state.notification) { const suffix = tr('toastDone'); const title = state.notification.title.endsWith(suffix) ? state.notification.title : `${state.notification.title} · ${suffix}`; toastText.textContent = `${title}${state.notification.count > 1 ? ` · ${state.notification.count}` : ''}`; } }

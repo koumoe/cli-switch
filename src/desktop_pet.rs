@@ -17,7 +17,8 @@ use wry::{WebView, WebViewBuilder};
 
 use super::UserEvent;
 
-const TICK: Duration = Duration::from_millis(50);
+const ACTIVE_TICK: Duration = Duration::from_millis(50);
+const IDLE_TICK: Duration = Duration::from_millis(500);
 const TOAST_DURATION: Duration = Duration::from_secs(2);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -688,7 +689,16 @@ impl DesktopPet {
         if now < self.next_tick {
             return;
         }
-        self.next_tick = now + TICK;
+        let running = activity::snapshot()
+            .entries
+            .iter()
+            .any(|entry| entry.status == activity::ActivityStatus::Running);
+        self.next_tick = now
+            + if self.drag.is_some() || self.notification.is_some() || running {
+                ACTIVE_TICK
+            } else {
+                IDLE_TICK
+            };
         if self
             .notification_until
             .is_some_and(|deadline| now >= deadline)

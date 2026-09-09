@@ -1360,6 +1360,7 @@ pub async fn run(
         tokio::spawn(async move {
             let mut rx = events::subscribe();
             let mut last_usage_emit = tokio::time::Instant::now() - Duration::from_secs(10);
+            let mut last_activity_emit = tokio::time::Instant::now() - Duration::from_secs(1);
             loop {
                 let ev = match rx.recv().await {
                     Ok(e) => e,
@@ -1373,6 +1374,13 @@ pub async fn run(
                         continue;
                     }
                     last_usage_emit = now;
+                }
+                if let AppEvent::ActivityChanged { .. } = ev {
+                    let now = tokio::time::Instant::now();
+                    if now.duration_since(last_activity_emit) < Duration::from_millis(100) {
+                        continue;
+                    }
+                    last_activity_emit = now;
                 }
 
                 let _ = proxy.send_event(UserEvent::BackendEvent(ev));
@@ -1409,7 +1417,6 @@ pub async fn run(
             Ok(pet) => Some(pet),
             Err(err) => {
                 tracing::error!(err = %err, "start desktop pet failed");
-                set_pet_enabled(db_path.clone(), false);
                 None
             }
         }
@@ -1468,7 +1475,6 @@ pub async fn run(
                         Ok(pet) => desktop_pet = Some(pet),
                         Err(err) => {
                             tracing::error!(err=%err,"start desktop pet failed");
-                            set_pet_enabled(db_path.clone(), false);
                         }
                     }
                 } else if !pet_enabled {

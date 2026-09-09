@@ -42,10 +42,15 @@ export function ActivitiesPage() {
   useEffect(() => {
     void load();
     const timer = window.setInterval(() => void load(), 2500);
-    const onActivitiesChanged = () => void load();
+    let refreshTimer: number | undefined;
+    const onActivitiesChanged = () => {
+      if (refreshTimer !== undefined) window.clearTimeout(refreshTimer);
+      refreshTimer = window.setTimeout(() => { refreshTimer = undefined; void load(); }, 100);
+    };
     window.addEventListener("cliswitch-activities-changed", onActivitiesChanged);
     return () => {
       window.clearInterval(timer);
+      if (refreshTimer !== undefined) window.clearTimeout(refreshTimer);
       window.removeEventListener("cliswitch-activities-changed", onActivitiesChanged);
     };
   }, [load]);

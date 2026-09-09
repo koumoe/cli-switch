@@ -1096,7 +1096,6 @@ impl ChatBridgeRuntime {
         active_turn: ActiveTurnRegistration,
         locale: AppLocale,
     ) -> anyhow::Result<()> {
-        let mut activity = crate::activity::ActivityGuard::bridge(&session);
         let settings = self.settings_snapshot();
         let active_session_count = storage::count_active_bridge_sessions_for_platform(
             self.db_path.clone(),
@@ -1135,7 +1134,6 @@ impl ChatBridgeRuntime {
             {
                 ValidateResult::Valid => {}
                 ValidateResult::Invalid(reason) => {
-                    activity.finish(crate::activity::ActivityStatus::Failed);
                     self.restore_session_after_turn(session.id, None).await;
                     self.send_text(
                         adapter,
@@ -1161,6 +1159,11 @@ impl ChatBridgeRuntime {
             use_streaming,
             resume_existing,
         )?;
+
+        // Only start activity tracking once all preflight validation, prompt construction,
+        // session checks and process invocation construction have succeeded. Those failures
+        // are setup errors, not failed agent turns.
+        let mut activity = crate::activity::ActivityGuard::bridge(&session);
 
         let execution = self
             .execute_turn_process(

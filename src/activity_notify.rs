@@ -6,11 +6,63 @@ use std::sync::{Mutex, OnceLock};
 use anyhow::Context as _;
 use serde::{Deserialize, Serialize};
 
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum NotifyHttpError {
+    #[error("invalid activity notification token")]
+    InvalidToken,
+    #[error("invalid Codex notify JSON: {0}")]
+    InvalidPayload(String),
+    #[error("missing Codex notify field: {0}")]
+    MissingField(&'static str),
+    #[error("thread was not observed or still has a running request")]
+    NotObserved,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct RendezvousFile {
     pid: u32,
     port: u16,
     token: String,
+}
+
+fn process_is_alive(pid: u32) -> bool {
+    #[cfg(unix)]
+    {
+        let result = unsafe { libc::kill(pid as libc::pid_t, 0) };
+        result == 0 || std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM)
+    }
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::Foundation::CloseHandle;
+        use windows_sys::Win32::System::Threading::{
+            GetExitCodeProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
+        };
+        let handle = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
+        if handle.is_null() {
+            return false;
+        }
+        let mut code = 0;
+        let ok = unsafe { GetExitCodeProcess(handle, &mut code) } != 0;
+        unsafe {
+            CloseHandle(handle);
+        }
+        const STILL_ACTIVE: u32 = 259;
+        return ok && code == STILL_ACTIVE;
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        let _ = pid;
+        true
+    }
+}
+
+fn read_live_file(path: &Path) -> Option<RendezvousFile> {
+    let metadata = std::fs::symlink_metadata(path).ok()?;
+    if !metadata.file_type().is_file() || metadata.len() > 8 * 1024 {
+        return None;
+    }
+    let file: RendezvousFile = serde_json::from_str(&std::fs::read_to_string(path).ok()?).ok()?;
+    process_is_alive(file.pid).then_some(file)
 }
 
 #[derive(Debug)]
@@ -84,7 +136,7 @@ pub(crate) fn register(data_dir: &Path, port: u16) -> anyhow::Result<Registratio
 }
 
 pub(crate) fn tokens_for(data_dir: &Path) -> Vec<String> {
-    registrations()
+    let mut tokens: Vec<String> = registrations()
         .lock()
         .map(|entries| {
             entries
@@ -93,7 +145,26 @@ pub(crate) fn tokens_for(data_dir: &Path) -> Vec<String> {
                 .map(|entry| entry.token.clone())
                 .collect()
         })
-        .unwrap_or_default()
+        .unwrap_or_default();
+    if let Ok(entries) = std::fs::read_dir(data_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if !path.file_name().is_some_and(|n| {
+                n.to_string_lossy()
+                    .starts_with("cliswitch-activity-notify-")
+            }) {
+                continue;
+            }
+            if let Some(file) = read_live_file(&path) {
+                tokens.push(file.token);
+            } else {
+                let _ = std::fs::remove_file(path);
+            }
+        }
+    }
+    tokens.sort();
+    tokens.dedup();
+    tokens
 }
 
 fn safe_turn_id(value: &str) -> Option<&str> {
@@ -110,57 +181,55 @@ struct NotifyPayload {
     turn_id: Option<String>,
 }
 
+struct ParsedNotify {
+    thread_id: String,
+    turn_id: String,
+}
+
+fn parse_payload(payload: &str) -> Result<Option<ParsedNotify>, NotifyHttpError> {
+    let payload: NotifyPayload = serde_json::from_str(payload)
+        .map_err(|error| NotifyHttpError::InvalidPayload(error.to_string()))?;
+    if payload.r#type.as_deref() != Some("agent-turn-complete") {
+        return Ok(None);
+    }
+    let thread_id = payload
+        .thread_id
+        .filter(|v| !v.is_empty())
+        .ok_or(NotifyHttpError::MissingField("thread-id"))?;
+    let turn_id = payload
+        .turn_id
+        .filter(|v| safe_turn_id(v).is_some())
+        .ok_or(NotifyHttpError::MissingField("turn-id"))?;
+    Ok(Some(ParsedNotify { thread_id, turn_id }))
+}
+
 /// Validate and deliver a request received by this process. Request bodies are not retained.
 pub(crate) fn accept_codex_notification(
     _data_dir: &Path,
     token: &str,
     auth_token: &str,
     payload: &str,
-) -> anyhow::Result<()> {
+) -> Result<(), NotifyHttpError> {
     if token.is_empty() || auth_token != token {
-        anyhow::bail!("invalid activity notification token");
+        return Err(NotifyHttpError::InvalidToken);
     }
-    let payload: NotifyPayload =
-        serde_json::from_str(payload).context("invalid Codex notify JSON")?;
-    if payload.r#type.as_deref() != Some("agent-turn-complete") {
+    let Some(parsed) = parse_payload(payload)? else {
         return Ok(());
-    }
-    let thread_id = payload
-        .thread_id
-        .as_deref()
-        .filter(|v| !v.is_empty())
-        .context("missing thread-id")?;
-    let turn_id = payload
-        .turn_id
-        .as_deref()
-        .filter(|v| safe_turn_id(v).is_some())
-        .context("missing turn-id")?;
-    crate::activity::deliver_codex_turn(thread_id, turn_id).map_err(Into::into)
+    };
+    crate::activity::deliver_codex_turn(&parsed.thread_id, &parsed.turn_id)
+        .map_err(|_| NotifyHttpError::NotObserved)
 }
 
 /// Send a Codex notify JSON payload to every live CliSwitch instance in `data_dir`.
 /// The payload is parsed only for allowlisted fields and is never persisted.
 pub async fn deliver_codex_notification(data_dir: &Path, payload: &str) -> anyhow::Result<()> {
-    let payload: NotifyPayload =
-        serde_json::from_str(payload).context("invalid Codex notify JSON")?;
-    if payload.r#type.as_deref() != Some("agent-turn-complete") {
+    let Some(parsed) = parse_payload(payload).map_err(|error| anyhow::anyhow!(error))? else {
         return Ok(());
-    }
-    let thread_id = payload
-        .thread_id
-        .as_deref()
-        .filter(|v| !v.is_empty())
-        .context("missing thread-id")?;
-    let turn_id = payload
-        .turn_id
-        .as_deref()
-        .filter(|v| safe_turn_id(v).is_some())
-        .context("missing turn-id")?;
-    let body = serde_json::json!({ "type": "agent-turn-complete", "thread-id": thread_id, "turn-id": turn_id });
+    };
+    let body = serde_json::json!({ "type": "agent-turn-complete", "thread-id": parsed.thread_id, "turn-id": parsed.turn_id });
     if !data_dir.is_dir() {
         return Ok(());
     }
-    let mut sent = 0usize;
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_millis(400))
         .no_proxy()
@@ -173,16 +242,8 @@ pub async fn deliver_codex_notification(data_dir: &Path, payload: &str) -> anyho
         if !name.starts_with("cliswitch-activity-notify-") || !name.ends_with(".json") {
             continue;
         }
-        let Ok(metadata) = std::fs::symlink_metadata(entry.path()) else {
-            continue;
-        };
-        if !metadata.file_type().is_file() || metadata.len() > 8 * 1024 {
-            continue;
-        }
-        let Ok(file) = std::fs::read_to_string(entry.path()) else {
-            continue;
-        };
-        let Ok(rendezvous) = serde_json::from_str::<RendezvousFile>(&file) else {
+        let Some(rendezvous) = read_live_file(&entry.path()) else {
+            let _ = std::fs::remove_file(entry.path());
             continue;
         };
         let url = format!(
@@ -204,14 +265,8 @@ pub async fn deliver_codex_notification(data_dir: &Path, payload: &str) -> anyho
         .await
         .ok()
         .and_then(Result::ok);
-        if response
-            .as_ref()
-            .is_some_and(|response| response.status().is_success())
-        {
-            sent += 1;
-        }
+        let _ = response;
     }
-    let _ = sent;
     Ok(())
 }
 

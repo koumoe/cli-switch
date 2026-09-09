@@ -66,7 +66,8 @@ pub(in crate::server) async fn update_settings(
 ) -> Result<impl IntoResponse, ApiError> {
     let prev_notification_settings =
         SystemNotificationSettings::from_settings(state.settings_snapshot().as_ref());
-    let prev_desktop_pet_enabled = state.settings_snapshot().desktop_pet_enabled;
+    let previous_settings = storage::get_app_settings(state.db_path()).await?;
+    let prev_desktop_pet_enabled = previous_settings.desktop_pet_enabled;
 
     let changed: Vec<&'static str> = [
         (
