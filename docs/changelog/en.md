@@ -1,3 +1,8 @@
+## [0.66.0](https://github.com/koumoe/cli-switch/compare/v0.65.3...v0.66.0) (2026-09-09)
+
+### Features
+
+* add low-profile desktop pet (#229) ([b9faaad](https://github.com/koumoe/cli-switch/commit/b9faaad8c8ee8df44d06c5e5aeb3bc5b9af21551))
 ## [0.65.3](https://github.com/koumoe/cli-switch/compare/v0.65.2...v0.65.3) (2026-09-08)
 
 ### Bug Fixes
