@@ -1,3 +1,7 @@
+## [0.66.1](https://github.com/koumoe/cli-switch/compare/v0.66.0...v0.66.1) (2026-09-09)
+
+### 修复
+* 修复桌面宠物窗口行为 (#230) ([dc5e0d9](https://github.com/koumoe/cli-switch/commit/dc5e0d9bc6d39e1cfbb6a5ef770ae3505e96aa5c))
 ## [0.66.0](https://github.com/koumoe/cli-switch/compare/v0.65.3...v0.66.0) (2026-09-09)
 
 ### 功能
