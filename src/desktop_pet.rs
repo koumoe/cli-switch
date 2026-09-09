@@ -49,33 +49,6 @@ pub(super) enum Command {
     DragStart { x: f64, y: f64 },
     DragMove { x: f64, y: f64 },
     DragEnd,
-    HitRegions { rects: Vec<HitRect> },
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub(super) struct HitRect {
-    x: f64,
-    y: f64,
-    width: f64,
-    height: f64,
-}
-
-impl HitRect {
-    fn valid(&self) -> bool {
-        [self.x, self.y, self.width, self.height]
-            .iter()
-            .all(|v| v.is_finite())
-            && self.x >= 0.0
-            && self.y >= 0.0
-            && self.width > 0.0
-            && self.height > 0.0
-            && self.x + self.width <= 64.0
-            && self.y + self.height <= 64.0
-    }
-
-    fn contains(&self, x: f64, y: f64) -> bool {
-        x >= self.x && x < self.x + self.width && y >= self.y && y < self.y + self.height
-    }
 }
 
 #[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, PartialEq, Eq)]
@@ -228,6 +201,9 @@ impl NativeSurface {
         if !self.ready {
             return;
         }
+        // Reapply the level on every show: some platform window managers reset it
+        // after a hidden window is shown again.
+        self.window.set_always_on_top(true);
         // orderFront does not activate another app's background task on macOS.
         #[cfg(target_os = "macos")]
         if !focus {
@@ -287,8 +263,6 @@ pub(super) struct DesktopPet {
     seen_finished: HashSet<String>,
     finished_order: VecDeque<String>,
     born_at_ms: i64,
-    hit_regions: Vec<HitRect>,
-    ignoring_cursor: bool,
     pub(super) next_tick: Instant,
     last_monitor_check: Instant,
     bounds: Bounds,
@@ -326,13 +300,6 @@ impl DesktopPet {
             seen_finished: snapshot.entries.iter().filter_map(completion_key).collect(),
             finished_order: snapshot.entries.iter().filter_map(completion_key).collect(),
             born_at_ms: cliswitch::storage::now_ms(),
-            hit_regions: vec![HitRect {
-                x: 8.0,
-                y: 8.0,
-                width: 52.0,
-                height: 52.0,
-            }],
-            ignoring_cursor: false,
             next_tick: Instant::now(),
             last_monitor_check: Instant::now(),
             bounds: Bounds {
@@ -602,13 +569,6 @@ impl DesktopPet {
                     self.render();
                 }
             }
-            Command::HitRegions { rects }
-                if surface == Surface::Pet
-                    && rects.len() <= 512
-                    && rects.iter().all(HitRect::valid) =>
-            {
-                self.hit_regions = rects;
-            }
             _ => {}
         }
         Action::None
@@ -712,15 +672,9 @@ impl DesktopPet {
             self.toast.window.set_visible(false);
             self.render();
         }
-        // Query only pointer coordinates. No keyboard capture or inspection of other apps.
-        if let Some((x, y)) = cursor_in_window(&self.pet.window) {
-            let ignore = self.drag.is_none() && !self.hit_regions.iter().any(|r| r.contains(x, y));
-            if ignore != self.ignoring_cursor
-                && self.pet.window.set_ignore_cursor_events(ignore).is_ok()
-            {
-                self.ignoring_cursor = ignore;
-            }
-        }
+        // Keep the small 64x64 pet window hit-testable at all times. Toggling
+        // native ignore-mouse-events asynchronously from a global cursor poll
+        // can drop the initial pointer-down and make dragging impossible.
         if self.drag.is_none()
             && now.duration_since(self.last_monitor_check) >= Duration::from_secs(2)
         {
@@ -755,38 +709,6 @@ fn completion_key(entry: &activity::ActivityEntry) -> Option<String> {
     match (&entry.thread_id, &entry.completed_turn_id) {
         (Some(thread), Some(turn)) => Some(format!("codex:{thread}:{turn}")),
         _ => Some(entry.id.clone()),
-    }
-}
-
-fn cursor_in_window(window: &Window) -> Option<(f64, f64)> {
-    #[cfg(target_os = "macos")]
-    {
-        use tao::platform::macos::WindowExtMacOS;
-        // NSScreen points share a coordinate space even across monitors with different DPI.
-        // SAFETY: the borrowed NSWindow is live, and this function is called on the main thread.
-        let frame = unsafe { &*window.ns_window().cast::<objc2_app_kit::NSWindow>() }.frame();
-        let cursor = objc2_app_kit::NSEvent::mouseLocation();
-        Some((
-            cursor.x - frame.origin.x,
-            frame.origin.y + frame.size.height - cursor.y,
-        ))
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        // Wayland intentionally provides no global pointer position; retain the tiny hit area.
-        #[cfg(target_os = "linux")]
-        if std::env::var_os("WAYLAND_DISPLAY").is_some()
-            && std::env::var("GDK_BACKEND").as_deref() != Ok("x11")
-        {
-            return None;
-        }
-        let cursor = window.cursor_position().ok()?;
-        let origin = window.outer_position().ok()?;
-        let scale = window.scale_factor();
-        Some((
-            (cursor.x - f64::from(origin.x)) / scale,
-            (cursor.y - f64::from(origin.y)) / scale,
-        ))
     }
 }
 
@@ -938,24 +860,5 @@ mod tests {
             height: 100.0,
         };
         assert_eq!(rect.clamp((-50.0, 999.0), (190.0, 136.0)), (100.0, 30.0));
-    }
-    #[test]
-    fn hit_regions_reject_invalid_ipc_coordinates() {
-        let rect = HitRect {
-            x: f64::NAN,
-            y: 0.0,
-            width: 64.0,
-            height: 64.0,
-        };
-        assert!(!rect.valid());
-        let rect = HitRect {
-            x: 0.0,
-            y: 0.0,
-            width: 28.0,
-            height: 40.0,
-        };
-        assert!(rect.valid());
-        assert!(rect.contains(27.0, 39.0));
-        assert!(!rect.contains(28.0, 40.0));
     }
 }

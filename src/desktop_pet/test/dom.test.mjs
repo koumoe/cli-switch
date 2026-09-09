@@ -33,8 +33,8 @@ function makeDom(surface = 'pet') {
   });
   return { dom, messages };
 }
-function pointer(window, type, x, y) {
-  const e = new window.MouseEvent(type, { bubbles: true, button: 0, clientX: x, clientY: y, screenX: x, screenY: y });
+function pointer(window, type, x, y, screenX = x, screenY = y) {
+  const e = new window.MouseEvent(type, { bubbles: true, button: 0, clientX: x, clientY: y, screenX, screenY });
   Object.defineProperty(e, 'pointerId', { value: 1 });
   return e;
 }
@@ -45,15 +45,14 @@ function pointer(window, type, x, y) {
   await new Promise(resolve => dom.window.setTimeout(resolve, 0));
   const pet = document.getElementById('pet');
   assert.equal(document.getElementById('activity-panel').hidden, true, 'pet surface never embeds the panel');
-  pet.dispatchEvent(pointer(dom.window, 'pointerdown', 10, 10));
-  pet.dispatchEvent(pointer(dom.window, 'pointermove', 12, 12));
+  pet.dispatchEvent(pointer(dom.window, 'pointerdown', 10, 10, 110, 210));
+  pet.dispatchEvent(pointer(dom.window, 'pointermove', 12, 12, 112, 212));
   assert.equal(messages.some(m => m.type === 'drag-start'), false, 'sub-threshold motion remains a click');
-  pet.dispatchEvent(pointer(dom.window, 'pointermove', 20, 10));
+  pet.dispatchEvent(pointer(dom.window, 'pointermove', 20, 10, 120, 210));
   assert.equal(messages.some(m => m.type === 'drag-start'), true, 'drag-start is sent after threshold');
-  pet.dispatchEvent(pointer(dom.window, 'pointerup', 20, 10));
+  assert.equal(messages.find(m => m.type === 'drag-start').x, 110, 'drag uses absolute screen coordinates');
+  pet.dispatchEvent(pointer(dom.window, 'pointerup', 20, 10, 120, 210));
   renderPetState({ locale: 'zh-CN', dock: 'right', snapshot: { entries: [{ id:'x', status:'running', source:'Codex', title:null, thread_id:'12345678-abcd' }] } });
-  const hit = messages.filter(m => m.type === 'hit-regions').at(-1);
-  assert.ok(hit?.rects.some(r => r.x === 18 && r.width === 10), 'docked badge hit region stays within the 28px dock');
   dom.window.close();
 }
 
