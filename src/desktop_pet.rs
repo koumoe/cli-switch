@@ -180,11 +180,12 @@ impl NativeSurface {
             window.set_has_shadow(false);
             // SAFETY: tao owns the window, and surface creation runs on the main thread.
             let ns = unsafe { &*window.ns_window().cast::<objc2_app_kit::NSWindow>() };
+            ns.setOpaque(false);
+            ns.setBackgroundColor(None);
             ns.setCollectionBehavior(
                 objc2_app_kit::NSWindowCollectionBehavior::CanJoinAllSpaces
                     | objc2_app_kit::NSWindowCollectionBehavior::FullScreenAuxiliary,
             );
-            ns.setLevel(objc2_app_kit::NSFloatingWindowLevel);
         }
         if surface == Surface::Toast {
             let _ = window.set_ignore_cursor_events(true);
@@ -197,7 +198,6 @@ impl NativeSurface {
             .replace("/*__PET_JS__*/", include_str!("desktop_pet/pet.js"));
         let view = WebViewBuilder::new()
             .with_transparent(true)
-            .with_background_color((0, 0, 0, 0))
             .with_focused(false)
             .with_accept_first_mouse(true)
             .with_initialization_script(format!("window.__PET_SURFACE__ = {:?};", surface.as_str()))

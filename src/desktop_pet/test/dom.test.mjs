@@ -33,8 +33,8 @@ function makeDom(surface = 'pet') {
   });
   return { dom, messages };
 }
-function pointer(window, type, x, y) {
-  const e = new window.MouseEvent(type, { bubbles: true, button: 0, clientX: x, clientY: y, screenX: x, screenY: y });
+function pointer(window, type, x, y, screenX = x, screenY = y) {
+  const e = new window.MouseEvent(type, { bubbles: true, button: 0, clientX: x, clientY: y, screenX, screenY });
   Object.defineProperty(e, 'pointerId', { value: 1 });
   return e;
 }
@@ -50,6 +50,7 @@ function pointer(window, type, x, y) {
   assert.equal(messages.some(m => m.type === 'drag-start'), false, 'sub-threshold motion remains a click');
   pet.dispatchEvent(pointer(dom.window, 'pointermove', 20, 10));
   assert.equal(messages.some(m => m.type === 'drag-start'), true, 'drag-start is sent after threshold');
+  assert.equal(messages.find(m => m.type === 'drag-start').x, 10, 'drag uses absolute screen coordinates');
   pet.dispatchEvent(pointer(dom.window, 'pointerup', 20, 10));
   renderPetState({ locale: 'zh-CN', dock: 'right', snapshot: { entries: [{ id:'x', status:'running', source:'Codex', title:null, thread_id:'12345678-abcd' }] } });
   const hit = messages.filter(m => m.type === 'hit-regions').at(-1);

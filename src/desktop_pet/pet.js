@@ -89,8 +89,8 @@
     if (!pet) return;
     pet.addEventListener('click', () => { if (state.moved) { state.moved = false; return; } send({type:'toggle-list'}); });
     pet.addEventListener('contextmenu', e => { e.preventDefault(); send({type:'hide'}); });
-    pet.addEventListener('pointerdown', e => { if (e.button !== 0) return; state.drag = { x:e.clientX, y:e.clientY, started:false }; state.moved = false; pet.setPointerCapture(e.pointerId); });
-    pet.addEventListener('pointermove', e => { if (!state.drag) return; const dx=e.clientX-state.drag.x, dy=e.clientY-state.drag.y; if (!state.moved && !global.__PET_CORE__.dragMoved(dx, dy, 4)) return; state.moved=true; pet.classList.add('dragging'); if (!state.drag.started) { state.drag.started = true; send({type:'drag-start', x:state.drag.x, y:state.drag.y}); } send({type:'drag-move', x:e.clientX, y:e.clientY}); });
+    pet.addEventListener('pointerdown', e => { if (e.button !== 0) return; state.drag = { x:e.screenX, y:e.screenY, clientX:e.clientX, clientY:e.clientY, started:false }; state.moved = false; pet.setPointerCapture(e.pointerId); });
+    pet.addEventListener('pointermove', e => { if (!state.drag) return; const dx=e.clientX-state.drag.clientX, dy=e.clientY-state.drag.clientY; if (!state.moved && !global.__PET_CORE__.dragMoved(dx, dy, 4)) return; state.moved=true; pet.classList.add('dragging'); if (!state.drag.started) { state.drag.started = true; send({type:'drag-start', x:state.drag.x, y:state.drag.y}); } send({type:'drag-move', x:e.screenX, y:e.screenY}); });
     pet.addEventListener('pointerup', e => { if (!state.drag) return; state.drag=null; pet.classList.remove('dragging'); if (pet.hasPointerCapture(e.pointerId)) pet.releasePointerCapture(e.pointerId); if (state.moved) send({type:'drag-end'}); });
     pet.addEventListener('pointercancel', () => { const started = !!(state.drag && state.drag.started); state.drag=null; state.moved=true; pet.classList.remove('dragging'); if (started) send({type:'drag-end'}); });
     doc.addEventListener('pointerdown', e => { if (state.panelOpen && !panel.contains(e.target) && !pet.contains(e.target)) { setPanel(false); send({type:'dismiss'}); } });
