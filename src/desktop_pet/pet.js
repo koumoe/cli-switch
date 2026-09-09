@@ -57,18 +57,9 @@
       row.append(copy, dot); list.appendChild(row);
     }
   }
-  function updateMask() {
-    if (surface !== 'pet' || !canvas || typeof global.petHitRegions !== 'function') return;
-    const total = runningCount(state.entries, state.omitted_running);
-    const badgeWidth = total > 0 ? (total > 99 ? 22 : total > 9 ? 17 : 14) : 0;
-    let mask = global.petHitRegions(canvas, state.dock !== 'none', badgeWidth);
-    if (state.dock !== 'none') mask = mask.map(r => ({...r, width: Math.max(0, Math.min(28, r.x + r.width) - r.x)})).filter(r => r.width > 0);
-    mask = mask.slice(0, 512);
-    const key = JSON.stringify(mask); if (key !== state.lastMask) { state.lastMask = key; send({ type:'hit-regions', rects:mask }); }
-  }
   function draw() {
     if (!canvas || typeof global.drawPetSprite !== 'function') return;
-    global.drawPetSprite(canvas, { dock: state.dock, celebrating: state.celebrating, working: runningCount(state.entries, state.omitted_running) > 0 || state.celebrating, frame: state.frame }); updateMask();
+    global.drawPetSprite(canvas, { dock: state.dock, celebrating: state.celebrating, working: runningCount(state.entries, state.omitted_running) > 0 || state.celebrating, frame: state.frame });
     if (pet) { pet.classList.toggle('docked', state.dock !== 'none'); pet.classList.toggle('celebrating', state.celebrating); pet.setAttribute('aria-label', state.dock !== 'none' ? tr('petDocked') : tr('petWorking')); }
   }
   function setPanel(open) { if (!panel) return; state.panelOpen = !!open; panel.hidden = !state.panelOpen; if (pet) pet.setAttribute('aria-expanded', String(state.panelOpen)); }

@@ -49,34 +49,6 @@ pub(super) enum Command {
     DragStart { x: f64, y: f64 },
     DragMove { x: f64, y: f64 },
     DragEnd,
-    HitRegions { rects: Vec<HitRect> },
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub(super) struct HitRect {
-    x: f64,
-    y: f64,
-    width: f64,
-    height: f64,
-}
-
-impl HitRect {
-    fn valid(&self) -> bool {
-        [self.x, self.y, self.width, self.height]
-            .iter()
-            .all(|v| v.is_finite())
-            && self.x >= 0.0
-            && self.y >= 0.0
-            && self.width > 0.0
-            && self.height > 0.0
-            && self.x + self.width <= 64.0
-            && self.y + self.height <= 64.0
-    }
-
-    #[cfg(test)]
-    fn contains(&self, x: f64, y: f64) -> bool {
-        x >= self.x && x < self.x + self.width && y >= self.y && y < self.y + self.height
-    }
 }
 
 #[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, PartialEq, Eq)]
@@ -597,13 +569,6 @@ impl DesktopPet {
                     self.render();
                 }
             }
-            Command::HitRegions { rects }
-                if surface == Surface::Pet
-                    && rects.len() <= 512
-                    && rects.iter().all(HitRect::valid) =>
-            {
-                let _ = rects;
-            }
             _ => {}
         }
         Action::None
@@ -895,24 +860,5 @@ mod tests {
             height: 100.0,
         };
         assert_eq!(rect.clamp((-50.0, 999.0), (190.0, 136.0)), (100.0, 30.0));
-    }
-    #[test]
-    fn hit_regions_reject_invalid_ipc_coordinates() {
-        let rect = HitRect {
-            x: f64::NAN,
-            y: 0.0,
-            width: 64.0,
-            height: 64.0,
-        };
-        assert!(!rect.valid());
-        let rect = HitRect {
-            x: 0.0,
-            y: 0.0,
-            width: 28.0,
-            height: 40.0,
-        };
-        assert!(rect.valid());
-        assert!(rect.contains(27.0, 39.0));
-        assert!(!rect.contains(28.0, 40.0));
     }
 }

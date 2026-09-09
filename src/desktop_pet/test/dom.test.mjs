@@ -53,8 +53,6 @@ function pointer(window, type, x, y, screenX = x, screenY = y) {
   assert.equal(messages.find(m => m.type === 'drag-start').x, 110, 'drag uses absolute screen coordinates');
   pet.dispatchEvent(pointer(dom.window, 'pointerup', 20, 10, 120, 210));
   renderPetState({ locale: 'zh-CN', dock: 'right', snapshot: { entries: [{ id:'x', status:'running', source:'Codex', title:null, thread_id:'12345678-abcd' }] } });
-  const hit = messages.filter(m => m.type === 'hit-regions').at(-1);
-  assert.ok(hit?.rects.some(r => r.x === 18 && r.width === 10), 'docked badge hit region stays within the 28px dock');
   dom.window.close();
 }
 

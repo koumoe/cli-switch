@@ -1,4 +1,4 @@
-/* Pixel sprite renderer. Kept deterministic so the native surface can build a hit mask. */
+/* Pixel sprite renderer. Kept deterministic for low-cost native redraws. */
 (function (global) {
   'use strict';
   function drawPet(canvas, options) {
@@ -39,15 +39,5 @@
     if (celebrating) { r(46,19,13,18,p.outline); r(48,21,9,14,p.white); r(49,27,2,3,'#27866b'); r(51,29,2,3,'#27866b'); r(53,27,2,3,'#27866b'); r(55,24,2,4,'#27866b'); r(46,35,4,10,p.outline); r(47,36,3,6,p.face); }
     else if (working) { r(16,47,33,8,p.outline); r(18,48,29,4,p.shade); r(19,50,27,2,p.hi); const keyShift = frame % 2; [21 + keyShift,26,31 + keyShift,36,41 + keyShift].forEach(x => r(x,50,2,1,p.outline)); r(21 + keyShift,45,5,4,p.face); r(38 - keyShift,45,5,4,p.face); } else { r(17,45,6,8,p.outline); r(18,46,4,5,p.face); r(40,45,6,8,p.outline); r(40,46,4,5,p.face); }
   }
-  function hitRegions(canvas, dock, badgeWidth) {
-    const w = canvas.width, h = canvas.height, data = canvas.getContext('2d').getImageData(0, 0, w, h).data;
-    const rows = [];
-    for (let y = 0; y < h; y++) { const spans = []; let start = -1; for (let x = 0; x <= w; x++) { const opaque = x < w && data[(y*w+x)*4+3] > 12; if (opaque && start < 0) start = x; if ((!opaque || x === w) && start >= 0) { spans.push([start, x - start]); start = -1; } } rows.push(spans); }
-    const rects = []; let y = 0;
-    while (y < h) { const key = JSON.stringify(rows[y]); let end = y + 1; while (end < h && JSON.stringify(rows[end]) === key) end++; for (const [x, width] of rows[y]) rects.push({x, y, width, height:end-y}); y = end; }
-    if (badgeWidth) { const bw = dock ? 10 : Math.max(14, Math.min(24, badgeWidth)); rects.push({x: Math.max(0, (dock ? 28 : w) - bw), y: 0, width: bw, height: dock ? 10 : 14}); }
-    return rects.filter(r => r.width > 0 && r.height > 0);
-  }
   global.drawPetSprite = drawPet;
-  global.petHitRegions = hitRegions;
 })(typeof window !== 'undefined' ? window : globalThis);
