@@ -48,6 +48,11 @@ jobs:
         working-directory: ui
         run: npm run build
 
+      - name: Test desktop pet surfaces
+        run: |
+          node src/desktop_pet/test/pet.test.mjs
+          node src/desktop_pet/test/dom.test.mjs
+
       - name: Type-check UI
         working-directory: ui
         run: ./node_modules/.bin/tsc --noEmit
@@ -132,6 +137,9 @@ jobs:
 
       - name: Build (release, default features)
         run: ${{ matrix.build_command }}
+
+      - name: Test desktop pet geometry
+        run: cargo test --bin cliswitch desktop::pet::tests
 
   ci:
     runs-on: ubuntu-latest

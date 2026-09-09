@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:;">
+<style>/*__PET_CSS__*/</style>
+</head>
+<body>
+<main id="pet-surface" data-surface="pet" aria-live="polite">
+  <button id="pet" type="button" aria-label="小拨：查看活动" aria-expanded="false">
+    <canvas id="pet-canvas" width="64" height="64" aria-hidden="true"></canvas>
+    <span id="activity-count" hidden aria-hidden="true"></span>
+  </button>
+  <section id="activity-panel" hidden role="dialog" aria-label="活动列表">
+    <header><strong data-i18n="activityTitle">活动</strong><button id="panel-close" type="button" aria-label="关闭">×</button></header>
+    <ul id="activity-list"></ul>
+    <button id="open-activities" type="button" data-i18n="openActivities">在主窗口查看全部活动</button>
+  </section>
+  <div id="toast" role="status" aria-live="polite" hidden><span id="toast-mark" aria-hidden="true">✓</span><span id="toast-text"></span></div>
+</main>
+<script>/*__PET_SPRITE__*/</script>
+<script>/*__PET_JS__*/</script>
+</body>
+</html>

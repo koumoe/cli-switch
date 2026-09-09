@@ -20,8 +20,16 @@ use tao::{
 use tray_icon::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use wry::WebViewBuilder;
 
+#[path = "desktop_pet.rs"]
+mod pet;
+
 #[derive(Debug, Clone)]
 enum UserEvent {
+    Pet {
+        window_id: WindowId,
+        surface: pet::Surface,
+        command: pet::Command,
+    },
     TrayIcon(TrayIconEvent),
     Menu(MenuEvent),
     Ipc(String),
@@ -85,6 +93,7 @@ struct DesktopState {
     locale: AppLocale,
     system_notifications: cliswitch::events::SystemNotificationSettings,
     ui_ready: bool,
+    pending_open_activities: bool,
     pending_remote_group_added: Vec<cliswitch::events::RemoteGroupAddedAlert>,
     pending_managed_channel_missing: Vec<cliswitch::events::RemoteManagedChannelMissingPrompt>,
     pending_managed_channel_multiplier:
@@ -818,6 +827,7 @@ fn handle_user_event(
     db_path: &std::path::Path,
 ) {
     match ev {
+        UserEvent::Pet { .. } => {}
         UserEvent::TrayIcon(e) => {
             if e.id() != tray_id {
                 return;
@@ -976,6 +986,9 @@ fn handle_user_event(
                 }
                 IpcMessage::UiReady => {
                     state.ui_ready = true;
+                    if std::mem::take(&mut state.pending_open_activities) {
+                        dispatch_custom_event(webview, "cliswitch-open-activities", &());
+                    }
                     if let Some(status) = events::last_update_status() {
                         let _ = proxy
                             .send_event(UserEvent::BackendEvent(AppEvent::UpdateStatus(status)));
@@ -1022,26 +1035,24 @@ fn handle_user_event(
             if let AppEvent::SystemNotificationSettingsChanged(ref next) = ev {
                 state.system_notifications = next.clone();
             }
-            if let AppEvent::RemoteLowBalanceAlert(ref alert) = ev {
-                if state.system_notifications.enabled
-                    && state.system_notifications.remote_low_balance_enabled
-                {
-                    let title = low_balance_notification_title(state.locale);
-                    let body = low_balance_notification_body(state.locale, alert);
-                    if let Err(err) = show_system_notification(&title, &body) {
-                        tracing::warn!(err = %err, account_id = %alert.account_id, "show low balance system notification failed");
-                    }
+            if let AppEvent::RemoteLowBalanceAlert(ref alert) = ev
+                && state.system_notifications.enabled
+                && state.system_notifications.remote_low_balance_enabled
+            {
+                let title = low_balance_notification_title(state.locale);
+                let body = low_balance_notification_body(state.locale, alert);
+                if let Err(err) = show_system_notification(&title, &body) {
+                    tracing::warn!(err = %err, account_id = %alert.account_id, "show low balance system notification failed");
                 }
             }
-            if let AppEvent::RemoteGroupAddedAlert(ref alert) = ev {
-                if state.system_notifications.enabled
-                    && state.system_notifications.remote_group_added_enabled
-                {
-                    let title = remote_group_added_notification_title(state.locale);
-                    let body = remote_group_added_body(state.locale, alert);
-                    if let Err(err) = show_system_notification(&title, &body) {
-                        tracing::warn!(err = %err, account_id = %alert.account_id, group_name = %alert.group_name, "show remote group added system notification failed");
-                    }
+            if let AppEvent::RemoteGroupAddedAlert(ref alert) = ev
+                && state.system_notifications.enabled
+                && state.system_notifications.remote_group_added_enabled
+            {
+                let title = remote_group_added_notification_title(state.locale);
+                let body = remote_group_added_body(state.locale, alert);
+                if let Err(err) = show_system_notification(&title, &body) {
+                    tracing::warn!(err = %err, account_id = %alert.account_id, group_name = %alert.group_name, "show remote group added system notification failed");
                 }
             }
             if let AppEvent::RemoteManagedChannelMissingPrompt(ref prompt) = ev {
@@ -1058,17 +1069,16 @@ fn handle_user_event(
                 }
                 apply_window_visible(window, state, tray_show, tray_hide, true, true);
             }
-            if let AppEvent::RemoteManagedChannelMultiplierPrompt(ref prompt) = ev {
-                if state.system_notifications.enabled
-                    && state
-                        .system_notifications
-                        .remote_managed_channel_multiplier_enabled
-                {
-                    let title = managed_channel_notification_title(state.locale);
-                    let body = managed_channel_multiplier_body(state.locale, prompt);
-                    if let Err(err) = show_system_notification(&title, &body) {
-                        tracing::warn!(err = %err, channel_id = %prompt.channel_id, "show managed channel multiplier system notification failed");
-                    }
+            if let AppEvent::RemoteManagedChannelMultiplierPrompt(ref prompt) = ev
+                && state.system_notifications.enabled
+                && state
+                    .system_notifications
+                    .remote_managed_channel_multiplier_enabled
+            {
+                let title = managed_channel_notification_title(state.locale);
+                let body = managed_channel_multiplier_body(state.locale, prompt);
+                if let Err(err) = show_system_notification(&title, &body) {
+                    tracing::warn!(err = %err, channel_id = %prompt.channel_id, "show managed channel multiplier system notification failed");
                 }
             }
 
@@ -1097,6 +1107,11 @@ fn handle_user_event(
                 return;
             }
             match ev {
+                AppEvent::ActivityChanged { revision } => {
+                    dispatch_custom_event(webview, "cliswitch-activities-changed", &revision);
+                }
+                AppEvent::DesktopPetSettingsChanged { .. } => {}
+                AppEvent::ActivityCompleted(_) => {}
                 AppEvent::UpdateStatus(status) => {
                     dispatch_custom_event(webview, "cliswitch-update-status", &status);
                 }
@@ -1304,10 +1319,18 @@ pub async fn run(
         true,
         None,
     );
+    let mut pet_enabled = settings.as_ref().is_some_and(|s| s.desktop_pet_enabled);
+    let tray_pet = MenuItem::with_id(
+        "tray_pet",
+        pet_menu_text(initial_locale, pet_enabled),
+        true,
+        None,
+    );
     tray_menu
         .append_items(&[
             &tray_show,
             &tray_hide,
+            &tray_pet,
             &PredefinedMenuItem::separator(),
             &tray_quit,
         ])
@@ -1372,6 +1395,7 @@ pub async fn run(
             .map(cliswitch::events::SystemNotificationSettings::from_settings)
             .unwrap_or_default(),
         ui_ready: false,
+        pending_open_activities: false,
         pending_remote_group_added: Vec::new(),
         pending_managed_channel_missing: Vec::new(),
         pending_managed_channel_multiplier: Vec::new(),
@@ -1379,9 +1403,90 @@ pub async fn run(
     tray_show.set_enabled(!state.window_visible);
     tray_hide.set_enabled(state.window_visible);
     let mut auth_windows = HashMap::<WindowId, Sub2ApiAuthWindow>::new();
+    let mut pet_menu_locale = initial_locale;
+    let mut desktop_pet = if pet_enabled {
+        match pet::DesktopPet::new(&event_loop, &proxy, &data_dir, initial_locale) {
+            Ok(pet) => Some(pet),
+            Err(err) => {
+                tracing::error!(err = %err, "start desktop pet failed");
+                set_pet_enabled(db_path.clone(), false);
+                None
+            }
+        }
+    } else {
+        None
+    };
 
     event_loop.run(move |event, event_loop_target, control_flow| {
         *control_flow = ControlFlow::Wait;
+
+        if let Some(pet) = desktop_pet.as_mut() {
+            pet.tick();
+            *control_flow = ControlFlow::WaitUntil(pet.next_tick);
+            if let Event::WindowEvent {
+                window_id, event, ..
+            } = &event
+                && pet.window_event(*window_id, event)
+            {
+                return;
+            }
+        }
+
+        match &event {
+            Event::UserEvent(UserEvent::Pet {
+                window_id,
+                surface,
+                command,
+            }) => {
+                if let Some(pet) = desktop_pet.as_mut() {
+                    match pet.command(*window_id, *surface, command.clone()) {
+                        pet::Action::None => {}
+                        pet::Action::Hide => set_pet_enabled(db_path.clone(), false),
+                        pet::Action::OpenActivities => {
+                            apply_window_visible(
+                                &window, &mut state, &tray_show, &tray_hide, true, true,
+                            );
+                            if state.ui_ready {
+                                dispatch_custom_event(&webview, "cliswitch-open-activities", &());
+                            } else {
+                                state.pending_open_activities = true;
+                            }
+                        }
+                    }
+                }
+            }
+            Event::UserEvent(UserEvent::Menu(menu)) if menu.id == *tray_pet.id() => {
+                set_pet_enabled(db_path.clone(), !pet_enabled)
+            }
+            Event::UserEvent(UserEvent::BackendEvent(AppEvent::DesktopPetSettingsChanged {
+                enabled,
+            })) => {
+                pet_enabled = *enabled;
+                tray_pet.set_text(pet_menu_text(state.locale, pet_enabled));
+                if pet_enabled && desktop_pet.is_none() {
+                    match pet::DesktopPet::new(event_loop_target, &proxy, &data_dir, state.locale) {
+                        Ok(pet) => desktop_pet = Some(pet),
+                        Err(err) => {
+                            tracing::error!(err=%err,"start desktop pet failed");
+                            set_pet_enabled(db_path.clone(), false);
+                        }
+                    }
+                } else if !pet_enabled {
+                    desktop_pet = None;
+                }
+            }
+            Event::UserEvent(UserEvent::BackendEvent(AppEvent::ActivityChanged { .. })) => {
+                if let Some(pet) = desktop_pet.as_mut() {
+                    pet.activities_changed();
+                }
+            }
+            Event::UserEvent(UserEvent::BackendEvent(AppEvent::ActivityCompleted(entry))) => {
+                if let Some(pet) = desktop_pet.as_mut() {
+                    pet.completed(entry);
+                }
+            }
+            _ => {}
+        }
 
         if handle_close_requested(
             &event,
@@ -1423,10 +1528,47 @@ pub async fn run(
         #[cfg(target_os = "macos")]
         sync_macos_dock_visibility(event_loop_target, &mut state);
 
+        if let Some(pet) = desktop_pet.as_mut() {
+            pet.set_locale(state.locale);
+            if !matches!(*control_flow, ControlFlow::ExitWithCode(_)) {
+                *control_flow = ControlFlow::WaitUntil(pet.next_tick);
+            }
+        }
+        if pet_menu_locale != state.locale {
+            pet_menu_locale = state.locale;
+            tray_pet.set_text(pet_menu_text(state.locale, pet_enabled));
+        }
+
         let _ = &webview;
         let _ = &menu;
         let _ = &tray_icon;
     })
+}
+
+fn pet_menu_text(locale: AppLocale, enabled: bool) -> &'static str {
+    match (locale.as_str(), enabled) {
+        ("zh-CN", true) => "隐藏桌面宠物",
+        ("zh-CN", false) => "显示桌面宠物",
+        (_, true) => "Hide desktop pet",
+        (_, false) => "Show desktop pet",
+    }
+}
+
+fn set_pet_enabled(db_path: std::path::PathBuf, enabled: bool) {
+    tokio::spawn(async move {
+        match storage::update_app_settings(
+            db_path,
+            storage::AppSettingsPatch {
+                desktop_pet_enabled: Some(enabled),
+                ..Default::default()
+            },
+        )
+        .await
+        {
+            Ok(_) => events::publish(AppEvent::DesktopPetSettingsChanged { enabled }),
+            Err(err) => tracing::warn!(err=%err,"update desktop pet setting failed"),
+        }
+    });
 }
 
 async fn wait_for_health(base_url: &str) -> anyhow::Result<()> {
