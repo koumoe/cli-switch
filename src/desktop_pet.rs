@@ -184,6 +184,7 @@ impl NativeSurface {
                 objc2_app_kit::NSWindowCollectionBehavior::CanJoinAllSpaces
                     | objc2_app_kit::NSWindowCollectionBehavior::FullScreenAuxiliary,
             );
+            ns.setLevel(objc2_app_kit::NSFloatingWindowLevel);
         }
         if surface == Surface::Toast {
             let _ = window.set_ignore_cursor_events(true);
@@ -196,6 +197,7 @@ impl NativeSurface {
             .replace("/*__PET_JS__*/", include_str!("desktop_pet/pet.js"));
         let view = WebViewBuilder::new()
             .with_transparent(true)
+            .with_background_color((0, 0, 0, 0))
             .with_focused(false)
             .with_accept_first_mouse(true)
             .with_initialization_script(format!("window.__PET_SURFACE__ = {:?};", surface.as_str()))
@@ -228,6 +230,9 @@ impl NativeSurface {
         if !self.ready {
             return;
         }
+        // Reapply the level on every show: some platform window managers reset it
+        // after a hidden window is shown again.
+        self.window.set_always_on_top(true);
         // orderFront does not activate another app's background task on macOS.
         #[cfg(target_os = "macos")]
         if !focus {
