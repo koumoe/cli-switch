@@ -154,6 +154,7 @@ pub(crate) fn tokens_for(data_dir: &Path) -> Vec<String> {
             if !path.file_name().is_some_and(|n| {
                 n.to_string_lossy()
                     .starts_with("cliswitch-activity-notify-")
+                    && n.to_string_lossy().ends_with(".json")
             }) {
                 continue;
             }

@@ -441,6 +441,7 @@ impl DesktopPet {
 
     pub(super) fn activities_changed(&mut self) {
         self.render();
+        self.last_activity_revision = activity::status_summary().0;
     }
 
     pub(super) fn completed(&mut self, entry: &activity::ActivityEntry) {
