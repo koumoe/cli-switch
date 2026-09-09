@@ -1096,6 +1096,7 @@ impl ChatBridgeRuntime {
         active_turn: ActiveTurnRegistration,
         locale: AppLocale,
     ) -> anyhow::Result<()> {
+        let mut activity = crate::activity::ActivityGuard::bridge(&session);
         let settings = self.settings_snapshot();
         let active_session_count = storage::count_active_bridge_sessions_for_platform(
             self.db_path.clone(),
@@ -1134,6 +1135,7 @@ impl ChatBridgeRuntime {
             {
                 ValidateResult::Valid => {}
                 ValidateResult::Invalid(reason) => {
+                    activity.finish(crate::activity::ActivityStatus::Failed);
                     self.restore_session_after_turn(session.id, None).await;
                     self.send_text(
                         adapter,
@@ -1163,6 +1165,7 @@ impl ChatBridgeRuntime {
         let execution = self
             .execute_turn_process(
                 TurnProcessContext {
+                    activity: &mut activity,
                     adapter: adapter.clone(),
                     msg,
                     use_streaming,
@@ -1174,6 +1177,9 @@ impl ChatBridgeRuntime {
             )
             .await;
 
+        if execution.is_err() {
+            activity.finish(crate::activity::ActivityStatus::Failed);
+        }
         let maybe_session_ref = match &execution {
             Ok(result) if result.success => {
                 generated_session_ref.or_else(|| cli_adapter.extract_session_ref(&result.stdout))

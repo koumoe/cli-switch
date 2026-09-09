@@ -9,8 +9,8 @@ use crate::storage::Protocol;
 
 use super::sse::{SseLine, SseLineParser};
 
-#[derive(Clone)]
 pub(super) struct StreamRecordContext {
+    pub(super) activity: Option<crate::activity::ActivityGuard>,
     pub(super) db_path: std::path::PathBuf,
     pub(super) protocol: Protocol,
     pub(super) channel_id: String,
@@ -323,10 +323,6 @@ impl InstrumentedStream {
         }
         self.finalized = true;
         self.finish_sse_parser();
-        if !self.ctx.record_usage {
-            return;
-        }
-
         let _guard = self.ctx.span.enter();
 
         let duration_ms = self.ctx.started.elapsed().as_millis() as i64;
@@ -341,6 +337,28 @@ impl InstrumentedStream {
             && self.stream_error.is_none()
             && self.sse_terminal_error_kind.is_none()
             && !missing_required_terminal;
+        if let Some(activity) = &mut self.ctx.activity {
+            let status = if self.end_reason == Some("dropped")
+                && self.sse_terminal_error_kind.is_none()
+                && self.ctx.status_is_success
+            {
+                // A disconnected client may still be running its conversation elsewhere.
+                crate::activity::ActivityStatus::Unknown
+            } else if matches!(
+                self.sse_terminal_error_kind.as_deref(),
+                Some("upstream_sse:response.cancelled" | "upstream_sse:response.canceled")
+            ) {
+                crate::activity::ActivityStatus::Cancelled
+            } else if success {
+                crate::activity::ActivityStatus::ResponseFinished
+            } else {
+                crate::activity::ActivityStatus::Failed
+            };
+            activity.finish(status);
+        }
+        if !self.ctx.record_usage {
+            return;
+        }
         let error_kind = if success {
             None
         } else if !self.ctx.status_is_success {
@@ -499,7 +517,7 @@ impl futures_util::Stream for InstrumentedStream {
 
 impl Drop for InstrumentedStream {
     fn drop(&mut self) {
-        if self.finalized || !self.ctx.record_usage {
+        if self.finalized {
             return;
         }
         if self.end_reason.is_none() {
@@ -519,5 +537,95 @@ impl Drop for InstrumentedStream {
             }
         }
         self.finalize();
+    }
+}
+
+#[cfg(test)]
+mod activity_tests {
+    use super::*;
+    use crate::activity::{self, ActivityGuard, ActivityStatus};
+    use futures_util::StreamExt;
+
+    fn instrument(
+        inner: futures_util::stream::BoxStream<'static, Result<Bytes, reqwest::Error>>,
+    ) -> (String, InstrumentedStream) {
+        let request_id: Arc<str> = Arc::from(uuid::Uuid::new_v4().to_string());
+        let id = format!("request:{request_id}");
+        let stream = InstrumentedStream::new(
+            inner,
+            StreamRecordContext {
+                activity: Some(ActivityGuard::proxy(&request_id, Protocol::Openai, None)),
+                db_path: std::path::PathBuf::new(),
+                protocol: Protocol::Openai,
+                channel_id: "test".into(),
+                model: None,
+                request_id,
+                http_status: 200,
+                status_is_success: true,
+                started: Instant::now(),
+                parse_sse: true,
+                expected_sse: true,
+                require_openai_responses_terminal: true,
+                upstream_content_type: Some("text/event-stream".into()),
+                content_type_corrected: false,
+                record_usage: false,
+                span: tracing::Span::none(),
+            },
+        );
+        (id, stream)
+    }
+
+    fn status(id: &str) -> ActivityStatus {
+        activity::snapshot()
+            .entries
+            .into_iter()
+            .find(|entry| entry.id == id)
+            .unwrap()
+            .status
+    }
+
+    #[tokio::test]
+    async fn simultaneous_streams_only_finish_when_their_own_body_finishes() {
+        let (first_id, mut first) = instrument(
+            futures_util::stream::iter([Ok(Bytes::from_static(
+                b"data: {\"type\":\"response.completed\",\"response\":{\"usage\":{\"input_tokens\":1,\"output_tokens\":1}}}\n\n",
+            ))])
+            .boxed(),
+        );
+        let (second_id, second) = instrument(futures_util::stream::pending().boxed());
+        assert_eq!(status(&first_id), ActivityStatus::Running);
+        assert_eq!(status(&second_id), ActivityStatus::Running);
+        assert!(first.next().await.unwrap().is_ok());
+        assert!(first.next().await.is_none());
+        assert_eq!(status(&first_id), ActivityStatus::ResponseFinished);
+        assert_eq!(status(&second_id), ActivityStatus::Running);
+        drop(second);
+        assert_eq!(status(&second_id), ActivityStatus::Unknown);
+    }
+
+    #[tokio::test]
+    async fn incomplete_upstream_and_explicit_error_fail_without_turn_completion() {
+        let (incomplete_id, mut incomplete) = instrument(futures_util::stream::empty().boxed());
+        assert!(incomplete.next().await.is_none());
+        assert_eq!(status(&incomplete_id), ActivityStatus::Failed);
+        let (failed_id, mut failed) = instrument(futures_util::stream::iter([
+            Ok(Bytes::from_static(b"data: {\"type\":\"response.failed\",\"response\":{\"error\":{\"code\":\"server_error\"}}}\n\n")),
+        ]).boxed());
+        while failed.next().await.is_some() {}
+        assert_eq!(status(&failed_id), ActivityStatus::Failed);
+    }
+
+    #[tokio::test]
+    async fn client_drop_after_terminal_remains_response_finished() {
+        let (id, mut stream) = instrument(
+            futures_util::stream::iter([Ok(Bytes::from_static(
+                b"data: {\"type\":\"response.completed\",\"response\":{\"usage\":{\"input_tokens\":1,\"output_tokens\":1}}}\n\n",
+            ))])
+            .chain(futures_util::stream::pending())
+            .boxed(),
+        );
+        assert!(stream.next().await.unwrap().is_ok());
+        drop(stream);
+        assert_eq!(status(&id), ActivityStatus::ResponseFinished);
     }
 }

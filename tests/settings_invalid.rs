@@ -48,6 +48,7 @@ async fn get_app_settings_keeps_defaults_on_invalid_values() {
         "maybe",
     );
     upsert_setting(&conn, "system_notifications_enabled", "maybe");
+    upsert_setting(&conn, "desktop_pet_enabled", "maybe");
     upsert_setting(
         &conn,
         "remote_low_balance_system_notification_enabled",
@@ -98,6 +99,7 @@ async fn get_app_settings_keeps_defaults_on_invalid_values() {
     assert!(!settings.channel_retry_enabled);
     assert!(settings.openai_responses_reasoning_id_sanitizer_enabled);
     assert!(settings.system_notifications_enabled);
+    assert!(!settings.desktop_pet_enabled);
     assert!(settings.remote_low_balance_system_notification_enabled);
     assert!(settings.remote_managed_channel_missing_system_notification_enabled);
     assert!(settings.remote_managed_channel_multiplier_system_notification_enabled);
@@ -125,6 +127,7 @@ async fn default_chat_bridge_turn_timeout_is_disabled() {
     assert!(!settings.channel_retry_enabled);
     assert!(settings.openai_responses_reasoning_id_sanitizer_enabled);
     assert!(settings.system_notifications_enabled);
+    assert!(!settings.desktop_pet_enabled);
     assert!(settings.remote_low_balance_system_notification_enabled);
     assert!(settings.remote_managed_channel_missing_system_notification_enabled);
     assert!(settings.remote_managed_channel_multiplier_system_notification_enabled);
@@ -149,6 +152,7 @@ async fn update_app_settings_persists_chat_bridge_turn_timeout_settings() {
     let updated = storage::update_app_settings(
         db_path.clone(),
         storage::AppSettingsPatch {
+            desktop_pet_enabled: Some(true),
             channel_retry_enabled: Some(true),
             openai_responses_reasoning_id_sanitizer_enabled: Some(false),
             system_notifications_enabled: Some(false),
@@ -164,6 +168,7 @@ async fn update_app_settings_persists_chat_bridge_turn_timeout_settings() {
     .unwrap();
 
     assert_eq!(updated.chat_bridge_turn_timeout_minutes, 0);
+    assert!(updated.desktop_pet_enabled);
     assert_eq!(updated.chat_bridge_turn_timeout(), None);
     assert!(updated.channel_retry_enabled);
     assert!(!updated.openai_responses_reasoning_id_sanitizer_enabled);
@@ -174,6 +179,7 @@ async fn update_app_settings_persists_chat_bridge_turn_timeout_settings() {
     assert!(!updated.remote_group_added_system_notification_enabled);
 
     let reread = storage::get_app_settings(db_path.clone()).await.unwrap();
+    assert!(reread.desktop_pet_enabled);
     assert_eq!(reread.chat_bridge_turn_timeout_minutes, 0);
     assert_eq!(reread.chat_bridge_turn_timeout(), None);
     assert!(reread.channel_retry_enabled);

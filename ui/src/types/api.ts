@@ -48,6 +48,7 @@ export type AppSettings = {
   chat_bridge_turn_timeout_minutes: number;
   chat_bridge_allow_new_projects: boolean;
   system_notifications_enabled: boolean;
+  desktop_pet_enabled: boolean;
   remote_low_balance_system_notification_enabled: boolean;
   remote_managed_channel_missing_system_notification_enabled: boolean;
   remote_managed_channel_multiplier_system_notification_enabled: boolean;
@@ -55,6 +56,39 @@ export type AppSettings = {
   remote_managed_channel_missing_prompt_enabled: boolean;
   remote_managed_channel_sync_multiplier_enabled: boolean;
   remote_managed_channel_sync_free_multiplier_enabled: boolean;
+};
+
+export type ActivityStatus =
+  | "running"
+  | "response_finished"
+  | "completed"
+  | "failed"
+  | "cancelled"
+  | "unknown";
+
+export type ActivityEntry = {
+  id: string;
+  kind: "proxy_request" | "bridge_turn";
+  status: ActivityStatus;
+  title: string | null;
+  thread_id: string | null;
+  source: string;
+  protocol: string | null;
+  model: string | null;
+  project: string | null;
+  started_at_ms: number;
+  updated_at_ms: number;
+  finished_at_ms: number | null;
+};
+
+export type ActivitySnapshot = {
+  revision: number;
+  entries: ActivityEntry[];
+  omitted_running: number;
+};
+
+export type CodexNotifyCommandResponse = {
+  command: string[];
 };
 
 export type ExchangeRate = {

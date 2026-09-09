@@ -997,11 +997,40 @@
       "description": "Description",
       "descText": "Universal AI CLI configuration manager",
       "intro": "CliSwitch is a local multi-channel CLI proxy to manage and switch between multiple AI API services. It supports Claude, Codex, Gemini, and more, with high availability and automatic failover."
+    },
+    "desktopPet": {
+      "title": "Desktop pet",
+      "label": "Show desktop pet",
+      "hint": "Keep a small desktop pet visible for active activity status and completion hints",
+      "saveFail": "Failed to save desktop pet settings",
+      "codexNotify": {
+        "title": "Codex completion notifications",
+        "hint": "CliSwitch groups Codex activity by thread and confirms a turn when notify is received. Copy the generated notify setting; keep existing notify entries and merge manually instead of overwriting. Restart or start a new Codex session for the change to take effect.",
+        "copy": "Copy config",
+        "copied": "Config copied; merge it into your Codex config manually",
+        "copyFail": "Failed to copy Codex notification config"
+      }
     }
   },
   "update": {
     "readyTitle": "Update Ready",
     "readyDesc": "Version v{{version}} has been downloaded. Restart the app to apply the update.",
     "quitToUpdate": "Restart to update"
+  },
+  "activities": {
+    "title": "Activities",
+    "description": "View current CliSwitch request activity and identified messaging turns. A finished response does not imply a completed conversation.",
+    "empty": "No activity",
+    "unassigned": "Unassigned request activity",
+    "noDetails": "No details",
+    "omitted": "{{count}} running activities are hidden",
+    "status": {
+      "running": "Running",
+      "response_finished": "Response finished",
+      "completed": "Turn completed",
+      "failed": "Failed",
+      "cancelled": "Cancelled",
+      "unknown": "Unknown"
+    }
   }
 }

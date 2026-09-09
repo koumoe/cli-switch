@@ -59,6 +59,7 @@ pub(in crate::chat_bridge) struct TurnExecutionResult {
 }
 
 pub(in crate::chat_bridge) struct TurnProcessContext<'a> {
+    pub activity: &'a mut crate::activity::ActivityGuard,
     pub adapter: Arc<dyn ChatAdapter>,
     pub msg: &'a IncomingMessage,
     pub use_streaming: bool,
@@ -299,6 +300,73 @@ impl StreamingReply {
     }
 }
 
+// Only documented machine-readable terminal output counts as a completed turn.
+// Codex: https://learn.chatgpt.com/docs/non-interactive-mode
+// Claude: anthropics/claude-agent-sdk-python ResultMessage (is_error/terminal_reason)
+// Gemini: https://geminicli.com/docs/cli/headless/ (JSON result and exit codes)
+fn turn_activity_status(
+    tool: crate::cli_tools::CliToolId,
+    success: bool,
+    stdout: &str,
+) -> crate::activity::ActivityStatus {
+    use crate::activity::ActivityStatus;
+    use crate::cli_tools::CliToolId;
+    use serde_json::Value;
+    if !success {
+        return ActivityStatus::Failed;
+    }
+    let classify = |value: &Value| -> Option<ActivityStatus> {
+        let kind = value.get("type").and_then(Value::as_str);
+        match tool {
+            CliToolId::Codex => match kind {
+                Some("turn.completed") => Some(ActivityStatus::Completed),
+                Some("turn.failed") => Some(ActivityStatus::Failed),
+                _ => None,
+            },
+            CliToolId::Claude if kind == Some("result") => {
+                let reason = value.get("terminal_reason").and_then(Value::as_str);
+                if matches!(reason, Some("aborted_streaming" | "aborted_tools")) {
+                    return Some(ActivityStatus::Cancelled);
+                }
+                match value.get("is_error").and_then(Value::as_bool) {
+                    Some(true) => Some(ActivityStatus::Failed),
+                    Some(false)
+                        if value.get("subtype").and_then(Value::as_str) == Some("success")
+                            && matches!(reason, None | Some("completed")) =>
+                    {
+                        Some(ActivityStatus::Completed)
+                    }
+                    _ => Some(ActivityStatus::Unknown),
+                }
+            }
+            CliToolId::Gemini
+                if kind == Some("result")
+                    || (kind.is_none() && value.get("response").is_some_and(Value::is_string)) =>
+            {
+                Some(
+                    if value.get("error").is_some_and(|error| !error.is_null())
+                        || value.get("status").and_then(Value::as_str) == Some("error")
+                    {
+                        ActivityStatus::Failed
+                    } else {
+                        ActivityStatus::Completed
+                    },
+                )
+            }
+            _ => None,
+        }
+    };
+    if let Ok(value) = serde_json::from_str::<Value>(stdout) {
+        return classify(&value).unwrap_or(ActivityStatus::Unknown);
+    }
+    stdout
+        .lines()
+        .filter_map(|line| serde_json::from_str::<Value>(line).ok())
+        .filter_map(|value| classify(&value))
+        .next_back()
+        .unwrap_or(ActivityStatus::Unknown)
+}
+
 impl ChatBridgeRuntime {
     pub(in crate::chat_bridge) async fn execute_turn_process(
         &self,
@@ -308,6 +376,7 @@ impl ChatBridgeRuntime {
         mut active_turn: ActiveTurnRegistration,
     ) -> anyhow::Result<TurnExecutionResult> {
         let TurnProcessContext {
+            activity,
             adapter,
             msg,
             use_streaming,
@@ -345,6 +414,7 @@ impl ChatBridgeRuntime {
         let mut stream_closed = false;
         let mut cancelled = *active_turn.cancel_rx.borrow();
         if cancelled {
+            activity.finish(crate::activity::ActivityStatus::Cancelled);
             terminate_turn_child(&mut child, child_pid);
         }
 
@@ -432,6 +502,7 @@ impl ChatBridgeRuntime {
                 changed = active_turn.cancel_rx.changed(), if exit_status.is_none() && !cancelled => {
                     if changed.is_ok() && *active_turn.cancel_rx.borrow() {
                         cancelled = true;
+                        activity.finish(crate::activity::ActivityStatus::Cancelled);
                         if child_pid != 0 {
                             tracing::info!(session_id = session.id, child_pid, "chat bridge turn cancelled");
                         }
@@ -453,6 +524,7 @@ impl ChatBridgeRuntime {
                             "chat bridge turn timed out; killing child process"
                         );
                     }
+                    activity.finish(crate::activity::ActivityStatus::Failed);
                     terminate_turn_child(&mut child, child_pid);
                     let timeout_text = t(locale, "turn.timeout");
                     if let Some(reply) = live_reply.as_mut() {
@@ -519,6 +591,13 @@ impl ChatBridgeRuntime {
             });
         }
 
+        // The controlled one-turn CLI process has exited; notification delivery cannot
+        // change this execution result. Do not infer completion from its HTTP requests.
+        activity.finish(turn_activity_status(
+            session.cli_type,
+            status.success(),
+            &stdout_buf,
+        ));
         let final_text = compose_final_output(
             status.success(),
             false,
@@ -859,5 +938,99 @@ mod tests {
             AppLocale::ZhCN,
         );
         assert!(preview.chars().count() <= message_char_limit(storage::ChatPlatform::Discord));
+    }
+}
+
+#[cfg(test)]
+mod activity_tests {
+    use super::turn_activity_status;
+    use crate::activity::ActivityStatus;
+    use crate::cli_tools::CliToolId;
+
+    #[test]
+    fn codex_needs_turn_terminal_not_an_item_or_http_result() {
+        assert_eq!(
+            turn_activity_status(CliToolId::Codex, true, "{\"type\":\"item.completed\"}"),
+            ActivityStatus::Unknown
+        );
+        assert_eq!(
+            turn_activity_status(CliToolId::Codex, true, "{\"type\":\"response.completed\"}"),
+            ActivityStatus::Unknown
+        );
+        assert_eq!(
+            turn_activity_status(
+                CliToolId::Codex,
+                true,
+                "{\"type\":\"turn.started\"}\n{\"type\":\"turn.completed\"}"
+            ),
+            ActivityStatus::Completed
+        );
+        assert_eq!(
+            turn_activity_status(CliToolId::Codex, true, "{\"type\":\"turn.failed\"}"),
+            ActivityStatus::Failed
+        );
+        assert_eq!(
+            turn_activity_status(CliToolId::Codex, false, "{\"type\":\"turn.completed\"}"),
+            ActivityStatus::Failed
+        );
+    }
+
+    #[test]
+    fn claude_error_and_cancel_are_not_success_even_after_exit_zero() {
+        for (body, expected) in [
+            (
+                r#"{"type":"result","subtype":"success","is_error":false}"#,
+                ActivityStatus::Completed,
+            ),
+            (
+                r#"{"type":"result","subtype":"success","is_error":true}"#,
+                ActivityStatus::Failed,
+            ),
+            (
+                r#"{"type":"result","subtype":"success","is_error":false,"terminal_reason":"aborted_tools"}"#,
+                ActivityStatus::Cancelled,
+            ),
+            (
+                r#"{"type":"result","result":"text without status"}"#,
+                ActivityStatus::Unknown,
+            ),
+        ] {
+            assert_eq!(
+                turn_activity_status(CliToolId::Claude, true, body),
+                expected
+            );
+        }
+    }
+
+    #[test]
+    fn gemini_final_result_is_distinct_from_intermediate_messages() {
+        assert_eq!(
+            turn_activity_status(CliToolId::Gemini, true, "{\n \"response\": \"done\"\n}"),
+            ActivityStatus::Completed
+        );
+        assert_eq!(
+            turn_activity_status(
+                CliToolId::Gemini,
+                true,
+                r#"{"type":"result","status":"success"}"#
+            ),
+            ActivityStatus::Completed
+        );
+        assert_eq!(
+            turn_activity_status(
+                CliToolId::Gemini,
+                true,
+                r#"{"type":"result","status":"error","error":{"message":"failed"}}"#
+            ),
+            ActivityStatus::Failed
+        );
+        assert_eq!(
+            turn_activity_status(
+                CliToolId::Gemini,
+                true,
+                r#"{"type":"message","content":"partial"}"#
+            ),
+            ActivityStatus::Unknown
+        );
     }
 }

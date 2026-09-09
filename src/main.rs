@@ -35,6 +35,9 @@ fn maybe_disable_macos_debug_system_logs() {
     about = "Local CLI proxy + routing + stats"
 )]
 struct Cli {
+    /// Override the data directory, useful for isolated desktop testing.
+    #[arg(long, hide = true)]
+    data_dir: Option<std::path::PathBuf>,
     #[arg(long, hide = true, default_value_t = false)]
     autostart: bool,
     #[command(subcommand)]
@@ -56,6 +59,8 @@ fn default_command() -> Command {
 
 #[derive(Subcommand, Debug)]
 enum Command {
+    /// Receive a Codex notify payload and forward only its completion identifiers locally.
+    ActivityNotify { payload: String },
     Serve {
         #[arg(long, default_value_t = 3210)]
         port: u16,
@@ -86,7 +91,13 @@ async fn async_main() -> anyhow::Result<()> {
 
     let cmd = cli.command.unwrap_or_else(default_command);
 
-    let data_dir = app::default_data_dir()?;
+    let data_dir = match cli.data_dir {
+        Some(path) => path,
+        None => app::default_data_dir()?,
+    };
+    if let Command::ActivityNotify { payload } = &cmd {
+        return cliswitch::activity_notify::deliver_codex_notification(&data_dir, payload).await;
+    }
     std::fs::create_dir_all(&data_dir)
         .with_context(|| format!("创建数据目录失败：{}", data_dir.display()))?;
     let db_path = app::db_path(&data_dir);
@@ -109,6 +120,7 @@ async fn async_main() -> anyhow::Result<()> {
     cliswitch::shell_env::spawn_refresh_task();
 
     match cmd {
+        Command::ActivityNotify { .. } => unreachable!("notify is handled before database startup"),
         Command::Serve { port, open } => {
             let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), port);
             tracing::event!(
