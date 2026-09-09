@@ -8,6 +8,7 @@ const ROUTE_PREFIXES = [
   "/accounts",
   "/projects",
   "/monitor",
+  "/activities",
   "/logs",
   "/settings",
 ] as const;

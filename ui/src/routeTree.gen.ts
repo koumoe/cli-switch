@@ -14,6 +14,7 @@ import { Route as ProjectsRouteImport } from './routes/projects'
 import { Route as MonitorRouteImport } from './routes/monitor'
 import { Route as LogsRouteImport } from './routes/logs'
 import { Route as ChannelsRouteImport } from './routes/channels'
+import { Route as ActivitiesRouteImport } from './routes/activities'
 import { Route as AccountsRouteImport } from './routes/accounts'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as SettingsChar123TabChar125RouteImport } from './routes/settings.{-$tab}'
@@ -43,6 +44,11 @@ const ChannelsRoute = ChannelsRouteImport.update({
   path: '/channels',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ActivitiesRoute = ActivitiesRouteImport.update({
+  id: '/activities',
+  path: '/activities',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AccountsRoute = AccountsRouteImport.update({
   id: '/accounts',
   path: '/accounts',
@@ -63,6 +69,7 @@ const SettingsChar123TabChar125Route =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/accounts': typeof AccountsRoute
+  '/activities': typeof ActivitiesRoute
   '/channels': typeof ChannelsRoute
   '/logs': typeof LogsRoute
   '/monitor': typeof MonitorRoute
@@ -73,6 +80,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/accounts': typeof AccountsRoute
+  '/activities': typeof ActivitiesRoute
   '/channels': typeof ChannelsRoute
   '/logs': typeof LogsRoute
   '/monitor': typeof MonitorRoute
@@ -84,6 +92,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/accounts': typeof AccountsRoute
+  '/activities': typeof ActivitiesRoute
   '/channels': typeof ChannelsRoute
   '/logs': typeof LogsRoute
   '/monitor': typeof MonitorRoute
@@ -96,6 +105,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/accounts'
+    | '/activities'
     | '/channels'
     | '/logs'
     | '/monitor'
@@ -106,6 +116,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/accounts'
+    | '/activities'
     | '/channels'
     | '/logs'
     | '/monitor'
@@ -116,6 +127,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/accounts'
+    | '/activities'
     | '/channels'
     | '/logs'
     | '/monitor'
@@ -127,6 +139,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AccountsRoute: typeof AccountsRoute
+  ActivitiesRoute: typeof ActivitiesRoute
   ChannelsRoute: typeof ChannelsRoute
   LogsRoute: typeof LogsRoute
   MonitorRoute: typeof MonitorRoute
@@ -171,6 +184,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ChannelsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/activities': {
+      id: '/activities'
+      path: '/activities'
+      fullPath: '/activities'
+      preLoaderRoute: typeof ActivitiesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/accounts': {
       id: '/accounts'
       path: '/accounts'
@@ -210,6 +230,7 @@ const SettingsRouteWithChildren = SettingsRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AccountsRoute: AccountsRoute,
+  ActivitiesRoute: ActivitiesRoute,
   ChannelsRoute: ChannelsRoute,
   LogsRoute: LogsRoute,
   MonitorRoute: MonitorRoute,

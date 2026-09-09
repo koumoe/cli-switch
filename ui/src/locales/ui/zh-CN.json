@@ -997,11 +997,40 @@
       "description": "描述",
       "descText": "通用 AI CLI 配置管理平台",
       "intro": "CliSwitch 是一个本地多渠道 CLI 代理工具，用于管理和切换多个 AI API 服务。支持 Claude、Codex、Gemini 等终端入口，提供高可用性和自动故障转移。"
+    },
+    "desktopPet": {
+      "title": "桌面宠物",
+      "label": "显示桌面宠物",
+      "hint": "在桌面显示常驻宠物，查看正在执行的活动并接收完成提示",
+      "saveFail": "保存桌面宠物设置失败",
+      "codexNotify": {
+        "title": "Codex 完成通知设置",
+        "hint": "CliSwitch 可按 thread 归组 Codex 活动，并在收到 notify 后确认本轮完成。复制命令生成 notify 配置；请保留已有 notify，手动合并，不要直接覆盖。修改后需重启或重新开启 Codex 会话后生效。",
+        "copy": "复制配置",
+        "copied": "配置已复制，请手动合并到 Codex 配置",
+        "copyFail": "复制 Codex 通知配置失败"
+      }
     }
   },
   "update": {
     "readyTitle": "更新已准备好",
     "readyDesc": "新版 v{{version}} 已下载完成，请重启应用以完成更新。",
     "quitToUpdate": "重启以更新"
+  },
+  "activities": {
+    "title": "活动",
+    "description": "查看 CliSwitch 当前请求活动与已识别的消息互联轮次。请求响应结束不代表对话完成。",
+    "empty": "暂无活动",
+    "unassigned": "未归属请求活动",
+    "noDetails": "暂无详细信息",
+    "omitted": "还有 {{count}} 个运行中的活动未显示",
+    "status": {
+      "running": "执行中",
+      "response_finished": "响应已结束",
+      "completed": "本轮已完成",
+      "failed": "失败",
+      "cancelled": "已取消",
+      "unknown": "状态未知"
+    }
   }
 }

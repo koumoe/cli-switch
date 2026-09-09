@@ -16,7 +16,7 @@ function routeFromPath(pathname: string): SidebarRoute {
   if (pathname.startsWith("/channels")) return "channels";
   if (pathname.startsWith("/accounts")) return "accounts";
   if (pathname.startsWith("/projects")) return "projects";
-  if (pathname.startsWith("/monitor")) return "monitor";
+  if (pathname.startsWith("/monitor") || pathname.startsWith("/activities")) return "monitor";
   if (pathname.startsWith("/logs")) return "logs";
   if (pathname.startsWith("/settings")) return "settings";
   return "overview";

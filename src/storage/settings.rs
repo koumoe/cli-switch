@@ -43,6 +43,7 @@ const KEY_CHAT_BRIDGE_WEIXIN_ENABLED: &str = "chat_bridge_weixin_enabled";
 const KEY_CHAT_BRIDGE_TURN_TIMEOUT_MINUTES: &str = "chat_bridge_turn_timeout_minutes";
 const KEY_CHAT_BRIDGE_ALLOW_NEW_PROJECTS: &str = "chat_bridge_allow_new_projects";
 const KEY_SYSTEM_NOTIFICATIONS_ENABLED: &str = "system_notifications_enabled";
+const KEY_DESKTOP_PET_ENABLED: &str = "desktop_pet_enabled";
 const KEY_NEWAPI_LOW_BALANCE_SYSTEM_NOTIFICATION_ENABLED: &str =
     "remote_low_balance_system_notification_enabled";
 const KEY_NEWAPI_MANAGED_CHANNEL_MISSING_SYSTEM_NOTIFICATION_ENABLED: &str =
@@ -131,6 +132,7 @@ pub struct AppSettings {
     pub chat_bridge_turn_timeout_minutes: i64,
     pub chat_bridge_allow_new_projects: bool,
     pub system_notifications_enabled: bool,
+    pub desktop_pet_enabled: bool,
     pub remote_low_balance_system_notification_enabled: bool,
     pub remote_managed_channel_missing_system_notification_enabled: bool,
     pub remote_managed_channel_multiplier_system_notification_enabled: bool,
@@ -179,6 +181,7 @@ impl Default for AppSettings {
             chat_bridge_turn_timeout_minutes: DEFAULT_CHAT_BRIDGE_TURN_TIMEOUT_MINUTES,
             chat_bridge_allow_new_projects: false,
             system_notifications_enabled: true,
+            desktop_pet_enabled: false,
             remote_low_balance_system_notification_enabled: true,
             remote_managed_channel_missing_system_notification_enabled: true,
             remote_managed_channel_multiplier_system_notification_enabled: true,
@@ -261,6 +264,7 @@ pub struct AppSettingsPatch {
     pub chat_bridge_turn_timeout_minutes: Option<i64>,
     pub chat_bridge_allow_new_projects: Option<bool>,
     pub system_notifications_enabled: Option<bool>,
+    pub desktop_pet_enabled: Option<bool>,
     pub remote_low_balance_system_notification_enabled: Option<bool>,
     pub remote_managed_channel_missing_system_notification_enabled: Option<bool>,
     pub remote_managed_channel_multiplier_system_notification_enabled: Option<bool>,
@@ -626,6 +630,14 @@ pub async fn get_app_settings(db_path: PathBuf) -> anyhow::Result<AppSettings> {
                 out.system_notifications_enabled,
             );
         }
+        if let Some(v) = get_setting(conn, KEY_DESKTOP_PET_ENABLED)? {
+            out.desktop_pet_enabled = parse_bool_setting(
+                KEY_DESKTOP_PET_ENABLED,
+                &v,
+                &mut has_invalid_values,
+                out.desktop_pet_enabled,
+            );
+        }
         if let Some(v) = get_setting(conn, KEY_NEWAPI_LOW_BALANCE_SYSTEM_NOTIFICATION_ENABLED)? {
             out.remote_low_balance_system_notification_enabled = parse_bool_setting(
                 KEY_NEWAPI_LOW_BALANCE_SYSTEM_NOTIFICATION_ENABLED,
@@ -922,6 +934,14 @@ pub async fn update_app_settings(
             set_setting(
                 conn,
                 KEY_SYSTEM_NOTIFICATIONS_ENABLED,
+                if v { "true" } else { "false" },
+                updated_at_ms,
+            )?;
+        }
+        if let Some(v) = patch.desktop_pet_enabled {
+            set_setting(
+                conn,
+                KEY_DESKTOP_PET_ENABLED,
                 if v { "true" } else { "false" },
                 updated_at_ms,
             )?;

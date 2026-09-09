@@ -4,6 +4,8 @@ import { getCurrentLocale } from "@/providers/i18n-provider";
 import type {
   ApplyCliToolsProxyConfigRequest,
   AppSettings,
+  ActivitySnapshot,
+  CodexNotifyCommandResponse,
   Channel,
   ChannelCheckinsToday,
   ChannelTestResponse,
@@ -196,6 +198,14 @@ export function updateSettings(
   patch: Partial<AppSettings>
 ): Promise<AppSettings> {
   return http<AppSettings>("PUT", "/api/settings", patch);
+}
+
+export function getActivities(): Promise<ActivitySnapshot> {
+  return http<ActivitySnapshot>("GET", "/api/activities");
+}
+
+export function getCodexNotifyCommand(): Promise<CodexNotifyCommandResponse> {
+  return http<CodexNotifyCommandResponse>("GET", "/api/activities/codex-notify-command");
 }
 
 export function getUsdCnyExchangeRate(): Promise<ExchangeRate> {

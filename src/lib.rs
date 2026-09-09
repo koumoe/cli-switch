@@ -1,3 +1,5 @@
+pub mod activity;
+pub mod activity_notify;
 pub mod app;
 pub mod autostart;
 pub(crate) mod bearer_token;

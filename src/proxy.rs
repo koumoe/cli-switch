@@ -147,9 +147,63 @@ pub async fn forward_with_config(
     req: Request<Body>,
     cfg: ProxyConfigSnapshot,
 ) -> Result<Response<Body>, ProxyError> {
-    let db_path_ref = db_path.as_path();
     let request_id: Arc<str> = Arc::from(Uuid::new_v4().to_string());
+    let mut activity = (req.method() == axum::http::Method::POST
+        && !req
+            .uri()
+            .path()
+            .trim_end_matches('/')
+            .ends_with("/count_tokens"))
+    .then(|| {
+        crate::activity::ActivityGuard::proxy(
+            &request_id,
+            protocol,
+            crate::activity::codex_thread_identity(protocol, req.uri().path(), req.headers()),
+        )
+    });
+    let result = forward_with_activity(
+        client,
+        openai_oauth_client,
+        db_path,
+        protocol,
+        protocol_root,
+        req,
+        ForwardActivityContext {
+            cfg,
+            request_id,
+            activity: &mut activity,
+        },
+    )
+    .await;
+    if result.is_err()
+        && let Some(activity) = &mut activity
+    {
+        activity.finish(crate::activity::ActivityStatus::Failed);
+    }
+    result
+}
 
+struct ForwardActivityContext<'a> {
+    cfg: ProxyConfigSnapshot,
+    request_id: Arc<str>,
+    activity: &'a mut Option<crate::activity::ActivityGuard>,
+}
+
+async fn forward_with_activity(
+    client: &reqwest::Client,
+    openai_oauth_client: Option<&reqwest::Client>,
+    db_path: std::path::PathBuf,
+    protocol: Protocol,
+    protocol_root: &'static str,
+    req: Request<Body>,
+    ctx: ForwardActivityContext<'_>,
+) -> Result<Response<Body>, ProxyError> {
+    let ForwardActivityContext {
+        cfg,
+        request_id,
+        activity,
+    } = ctx;
+    let db_path_ref = db_path.as_path();
     let ProxyConfigSnapshot {
         settings,
         channels: all_channels,
@@ -186,6 +240,9 @@ pub async fn forward_with_config(
         .map_err(|e| ProxyError::ReadBody(e.to_string()))?;
 
     let model = extract_model(protocol, &parts.headers, &parts.uri, &body_bytes);
+    if let Some(activity) = &activity {
+        activity.set_model(model.as_deref());
+    }
     let request_streaming = extract_stream_flag(&parts.headers, &body_bytes);
     let is_openai_responses =
         protocol == Protocol::Openai && parts.uri.path().trim_end_matches('/') == "/v1/responses";
@@ -661,6 +718,7 @@ pub async fn forward_with_config(
             return proxy_upstream_response(
                 prepared_upstream,
                 StreamRecordContext {
+                    activity: activity.take(),
                     db_path: db_path.clone(),
                     protocol,
                     channel_id: channel.id.clone(),
@@ -946,7 +1004,12 @@ async fn proxy_upstream_response(
         let (captured, remainder) =
             read_stream_prefix_or_all(stream, limits::MAX_JSON_CAPTURE_BYTES)
                 .await
-                .map_err(|e| ProxyError::Upstream(e.to_string()))?;
+                .map_err(|e| {
+                    if let Some(activity) = &mut ctx.activity {
+                        activity.finish(crate::activity::ActivityStatus::Failed);
+                    }
+                    ProxyError::Upstream(e.to_string())
+                })?;
 
         let Some(remainder) = remainder else {
             let bytes = captured;
@@ -1041,6 +1104,36 @@ async fn proxy_upstream_response(
                 ctx.db_path.clone(),
             );
 
+            if let Some(activity) = &mut ctx.activity {
+                let semantic_failure = parsed_json.as_ref().is_some_and(|value| {
+                    if ctx.protocol == Protocol::Openai {
+                        crate::proxy::openai_responses::completed_failure(value).is_some()
+                    } else {
+                        value.get("error").is_some_and(|error| !error.is_null())
+                            || matches!(
+                                value.get("status").and_then(serde_json::Value::as_str),
+                                Some("failed")
+                            )
+                    }
+                });
+                let cancelled = parsed_json.as_ref().is_some_and(|value| {
+                    let response = value.get("response").unwrap_or(value);
+                    matches!(
+                        response.get("status").and_then(serde_json::Value::as_str),
+                        Some("cancelled" | "canceled")
+                    ) || matches!(
+                        value.get("status").and_then(serde_json::Value::as_str),
+                        Some("cancelled" | "canceled")
+                    )
+                });
+                activity.finish(if cancelled {
+                    crate::activity::ActivityStatus::Cancelled
+                } else if success && !semantic_failure {
+                    crate::activity::ActivityStatus::ResponseFinished
+                } else {
+                    crate::activity::ActivityStatus::Failed
+                });
+            }
             return resp
                 .body(Body::from(bytes))
                 .map_err(|e| ProxyError::Upstream(e.to_string()));

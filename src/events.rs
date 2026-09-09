@@ -100,6 +100,9 @@ impl SystemNotificationSettings {
 
 #[derive(Debug, Clone)]
 pub enum AppEvent {
+    ActivityChanged { revision: u64 },
+    ActivityCompleted(crate::activity::ActivityEntry),
+    DesktopPetSettingsChanged { enabled: bool },
     UpdateStatus(update::UpdateStatus),
     UsageChanged { at_ms: i64 },
     ChannelsChanged { at_ms: i64 },

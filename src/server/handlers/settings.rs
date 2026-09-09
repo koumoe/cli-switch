@@ -50,6 +50,7 @@ pub(in crate::server) struct UpdateSettingsInput {
     chat_bridge_turn_timeout_minutes: Option<i64>,
     chat_bridge_allow_new_projects: Option<bool>,
     system_notifications_enabled: Option<bool>,
+    desktop_pet_enabled: Option<bool>,
     remote_low_balance_system_notification_enabled: Option<bool>,
     remote_managed_channel_missing_system_notification_enabled: Option<bool>,
     remote_managed_channel_multiplier_system_notification_enabled: Option<bool>,
@@ -65,6 +66,8 @@ pub(in crate::server) async fn update_settings(
 ) -> Result<impl IntoResponse, ApiError> {
     let prev_notification_settings =
         SystemNotificationSettings::from_settings(state.settings_snapshot().as_ref());
+    let previous_settings = storage::get_app_settings(state.db_path()).await?;
+    let prev_desktop_pet_enabled = previous_settings.desktop_pet_enabled;
 
     let changed: Vec<&'static str> = [
         (
@@ -168,6 +171,7 @@ pub(in crate::server) async fn update_settings(
             "system_notifications_enabled",
             input.system_notifications_enabled.is_some(),
         ),
+        ("desktop_pet_enabled", input.desktop_pet_enabled.is_some()),
         (
             "remote_low_balance_system_notification_enabled",
             input
@@ -320,6 +324,7 @@ pub(in crate::server) async fn update_settings(
             chat_bridge_turn_timeout_minutes: input.chat_bridge_turn_timeout_minutes,
             chat_bridge_allow_new_projects: input.chat_bridge_allow_new_projects,
             system_notifications_enabled: input.system_notifications_enabled,
+            desktop_pet_enabled: input.desktop_pet_enabled,
             remote_low_balance_system_notification_enabled: input
                 .remote_low_balance_system_notification_enabled,
             remote_managed_channel_missing_system_notification_enabled: input
@@ -352,6 +357,11 @@ pub(in crate::server) async fn update_settings(
         events::publish(AppEvent::SystemNotificationSettingsChanged(
             next_notification_settings,
         ));
+    }
+    if prev_desktop_pet_enabled != settings.desktop_pet_enabled {
+        events::publish(AppEvent::DesktopPetSettingsChanged {
+            enabled: settings.desktop_pet_enabled,
+        });
     }
     let _ = state.settings_cache.send(Arc::new(settings.clone()));
 

@@ -1,5 +1,7 @@
 use axum::Router;
+use axum::extract::State;
 use axum::middleware::from_fn_with_state;
+use axum::response::IntoResponse;
 use axum::routing::{any, delete, get, post, put};
 use http::Method;
 use std::net::SocketAddr;
@@ -69,6 +71,7 @@ fn build_openai_proxy_http_client() -> anyhow::Result<reqwest::Client> {
 fn request_endpoint_template(method: &Method, path: &str) -> Option<&'static str> {
     match (method.as_str(), path) {
         ("GET", "/api/health") => Some("/api/health"),
+        ("GET", "/api/activities") => Some("/api/activities"),
         ("GET", "/api/settings") => Some("/api/settings"),
         ("PUT", "/api/settings") => Some("/api/settings"),
         ("GET", "/api/currency/usd-cny") => Some("/api/currency/usd-cny"),
@@ -191,6 +194,7 @@ fn request_endpoint_template(method: &Method, path: &str) -> Option<&'static str
 fn request_purpose(method: &Method, path: &str) -> &'static str {
     match (method.as_str(), path) {
         ("GET", "/api/health") => "handlers::health",
+        ("GET", "/api/activities") => "activity::snapshot",
         ("GET", "/api/settings") => "handlers::get_settings",
         ("PUT", "/api/settings") => "handlers::update_settings",
         ("GET", "/api/currency/usd-cny") => "handlers::usd_cny_exchange_rate",
@@ -305,6 +309,74 @@ fn request_purpose(method: &Method, path: &str) -> &'static str {
             }
         }
     }
+}
+
+async fn activity_codex_notify(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    connect: axum::extract::ConnectInfo<SocketAddr>,
+    body: axum::body::Bytes,
+) -> impl axum::response::IntoResponse {
+    use axum::http::StatusCode;
+    let loopback = connect.0.ip().is_loopback();
+    if !loopback {
+        return (StatusCode::FORBIDDEN, "loopback required").into_response();
+    }
+    let Some(auth) = headers
+        .get(axum::http::header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.strip_prefix("Bearer "))
+    else {
+        return (StatusCode::UNAUTHORIZED, "bearer token required").into_response();
+    };
+    let data_dir = state.data_dir();
+    let tokens = crate::activity_notify::tokens_for(&data_dir);
+    if tokens.is_empty() {
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            "activity notify unavailable",
+        )
+            .into_response();
+    }
+    if body.len() > 64 * 1024 {
+        return (StatusCode::PAYLOAD_TOO_LARGE, "body too large").into_response();
+    }
+    let payload = match std::str::from_utf8(&body) {
+        Ok(payload) => payload,
+        Err(_) => return (StatusCode::BAD_REQUEST, "invalid body").into_response(),
+    };
+    let mut saw_not_observed = false;
+    for token in tokens {
+        match crate::activity_notify::accept_codex_notification(&data_dir, &token, auth, payload) {
+            Ok(()) => return StatusCode::NO_CONTENT.into_response(),
+            Err(crate::activity_notify::NotifyHttpError::NotObserved) => {
+                saw_not_observed = true;
+            }
+            Err(crate::activity_notify::NotifyHttpError::InvalidToken) => continue,
+            Err(error) => return (StatusCode::BAD_REQUEST, error.to_string()).into_response(),
+        }
+    }
+    if saw_not_observed {
+        (
+            StatusCode::CONFLICT,
+            "thread was not observed or is still running",
+        )
+            .into_response()
+    } else {
+        (
+            StatusCode::UNAUTHORIZED,
+            "invalid activity notification token",
+        )
+            .into_response()
+    }
+}
+
+async fn activity_codex_notify_command(
+    State(state): State<AppState>,
+) -> impl axum::response::IntoResponse {
+    axum::Json(
+        serde_json::json!({"command": crate::activity_notify::codex_notify_command(&state.data_dir())}),
+    )
 }
 
 fn build_app(state: AppState) -> Router {
@@ -507,6 +579,15 @@ fn build_app(state: AppState) -> Router {
         .route("/api/stats/channels", get(handlers::stats_channels))
         .route("/api/stats/trend", get(handlers::stats_trend))
         .route("/api/usage/list", get(handlers::usage_list))
+        .route(
+            "/api/activities",
+            get(|| async { axum::Json(crate::activity::snapshot()) }),
+        )
+        .route("/api/activities/codex-notify", post(activity_codex_notify))
+        .route(
+            "/api/activities/codex-notify-command",
+            get(activity_codex_notify_command),
+        )
         .route("/v1/messages", any(handlers::proxy_anthropic))
         .route("/v1/messages/{*path}", any(handlers::proxy_anthropic))
         .route("/v1beta/{*path}", any(handlers::proxy_gemini))
@@ -542,6 +623,14 @@ pub async fn serve_with_listener(
     open_browser: bool,
 ) -> anyhow::Result<()> {
     let addr = listener.local_addr()?;
+    let data_dir = state::data_dir_from_db_path(&db_path);
+    let _activity_notify_guard = match crate::activity_notify::register(&data_dir, addr.port()) {
+        Ok(guard) => Some(guard),
+        Err(error) => {
+            tracing::warn!(%error, "activity notify rendezvous unavailable; continuing without external notify");
+            None
+        }
+    };
     let (settings_notify, settings_rx) = watch::channel(0u64);
     let http_client = build_http_client()?;
     let proxy_http_client = build_proxy_http_client()?;
@@ -703,7 +792,12 @@ pub async fn serve_with_listener(
         }
     }
 
-    let res = axum::serve(listener, app).await;
+    let res = axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .await;
+    // The rendezvous guard removes only its own token-matching file.
 
     // Best-effort stop background tasks when the server ends.
     bg.abort_all();

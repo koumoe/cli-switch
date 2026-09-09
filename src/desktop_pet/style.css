@@ -1,0 +1,32 @@
+:root { color-scheme: light dark; --pet-ink: light-dark(#263332,#e6edeb); --pet-muted: light-dark(#6b7774,#9aa8a4); --pet-paper: light-dark(#ffffff,#202927); --pet-line: light-dark(#dbe4e1,#3b4744); --pet-blue: light-dark(#477b9a,#8db8d4); --pet-green: light-dark(#278466,#72c59d); --pet-red: #bd675d; }
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; overflow: hidden; background: transparent; color: var(--pet-ink); font: 13px/1.35 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+button { font: inherit; color: inherit; }
+[hidden] { display: none !important; }
+#pet-surface { position: relative; width: 100%; height: 100%; }
+#pet { position: absolute; inset: 0 auto auto 0; width: 64px; height: 64px; margin: 0; padding: 0; border: 0; background: transparent; cursor: grab; touch-action: none; }
+#pet.dragging { cursor: grabbing; }
+#pet.docked { width: 28px; height: 40px; overflow: hidden; }
+#pet-canvas { display: block; width: 64px; height: 64px; image-rendering: pixelated; }
+#pet.docked #pet-canvas { width: 40px; height: 40px; }
+#activity-count { position: absolute; top: 1px; right: 0; min-width: 14px; height: 14px; padding: 0 3px; border-radius: 8px; background: var(--pet-blue); color: #fff; font-size: 9px; font-weight: 700; line-height: 14px; text-align: center; pointer-events: none; }
+#pet.docked #activity-count { top: 0; right: 0; min-width: 10px; height: 10px; padding: 0 2px; border-radius: 6px; font-size: 7px; line-height: 10px; }
+#activity-panel { position: absolute; z-index: 2; width: 190px; min-height: 72px; padding: 5px 9px 0; border: 1px solid var(--pet-line); border-radius: 10px; background: var(--pet-paper); box-shadow: 0 6px 20px #0003; }
+#activity-panel header { display: flex; align-items: center; justify-content: space-between; height: 22px; color: var(--pet-muted); font-size: 11px; }
+#panel-close { border: 0; background: transparent; padding: 0 2px; color: var(--pet-muted); cursor: pointer; font-size: 18px; line-height: 18px; }
+#activity-list { margin: 0; padding: 0; list-style: none; }
+.activity-row { display: flex; align-items: center; gap: 7px; min-width: 0; height: 40px; padding: 4px 0; }
+.activity-row + .activity-row { border-top: 1px solid var(--pet-line); }
+.activity-copy { min-width: 0; flex: 1; }
+.activity-title { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 12px; font-weight: 600; }
+.activity-meta { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--pet-muted); font-size: 11px; }
+.activity-dot { width: 6px; height: 6px; flex: 0 0 6px; border-radius: 50%; background: var(--pet-blue); }
+.activity-dot.done { background: var(--pet-green); }
+.activity-dot.failed { background: var(--pet-red); }
+#open-activities { width: 100%; padding: 5px 0; border: 0; border-top: 1px solid var(--pet-line); background: transparent; color: var(--pet-muted); text-align: left; cursor: pointer; font-size: 10px; }
+#toast { position: absolute; z-index: 3; width: 190px; height: 34px; padding: 7px 10px; overflow: hidden; border: 1px solid var(--pet-line); border-radius: 8px; background: var(--pet-paper); box-shadow: 0 4px 15px #0002; color: var(--pet-ink); font-size: 11px; white-space: nowrap; text-overflow: ellipsis; pointer-events: none; }
+#toast-mark { padding-right: 5px; color: var(--pet-green); font-weight: 700; }
+#pet-surface[data-surface="panel"] { width: 190px; min-height: 136px; padding: 0; }
+#pet-surface[data-surface="panel"] #activity-panel { position: relative; inset: auto; width: 190px; min-height: 136px; border: 0; border-radius: 0; box-shadow: none; }
+#pet-surface[data-surface="toast"] { width: 190px; height: 34px; }
+#pet-surface[data-surface="toast"] #toast { position: relative; inset: auto; }
