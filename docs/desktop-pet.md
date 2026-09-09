@@ -31,7 +31,7 @@ CliSwitch does not automatically install hooks, overwrite existing Codex configu
 
 ### Platform behavior
 
-The implementation uses the existing tao/wry desktop stack. On macOS, the pet and notification use non-activating presentation. Monitor placement reads the native work area on macOS, Windows and Linux to avoid system bars; conservative margins are a fallback when that information is unavailable. Transparent sprite pixels pass pointer events through on macOS, Windows, and X11 using an alpha hit map. Wayland does not expose global pointer coordinates; there the fallback retains the small rectangular pet hit area. Actual window-manager behavior still requires platform validation.
+The implementation uses the existing tao/wry desktop stack. On macOS, the pet and notification use non-activating presentation. Monitor placement reads the native work area on macOS, Windows and Linux to avoid system bars; conservative margins are a fallback when that information is unavailable. The pet keeps its small rectangular hit area interactive; notifications pass through pointer events. Actual window-manager behavior still requires platform validation.
 
 ### Development checks
 
@@ -75,6 +75,6 @@ CliSwitch 不会自动安装 hook、覆盖现有 Codex 配置、读取会话文�
 
 ### 平台行为
 
-使用项目现有 tao/wry 桌面框架。macOS 使用不激活应用的宠物和通知窗口。macOS、Windows、Linux 读取系统提供的屏幕工作区来避让系统栏，读取失败时使用保守预留边距。macOS、Windows 与 X11 通过像素命中图让透明区域鼠标穿透；Wayland 无法提供全局指针位置，降级为小尺寸矩形命中范围。窗口管理器的实际行为仍需实机验证。
+使用项目现有 tao/wry 桌面框架。macOS 使用不激活应用的宠物和通知窗口。macOS、Windows、Linux 读取系统提供的屏幕工作区来避让系统栏，读取失败时使用保守预留边距。宠物保留小尺寸矩形命中范围以保证点击和拖动可靠；完成通知仍会穿透鼠标事件。窗口管理器的实际行为仍需实机验证。
 
 隐藏的 `--data-dir <路径>` 启动选项用于隔离桌面验证，避免影响已有数据库。

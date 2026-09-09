@@ -73,6 +73,7 @@ impl HitRect {
             && self.y + self.height <= 64.0
     }
 
+    #[cfg(test)]
     fn contains(&self, x: f64, y: f64) -> bool {
         x >= self.x && x < self.x + self.width && y >= self.y && y < self.y + self.height
     }
@@ -180,8 +181,6 @@ impl NativeSurface {
             window.set_has_shadow(false);
             // SAFETY: tao owns the window, and surface creation runs on the main thread.
             let ns = unsafe { &*window.ns_window().cast::<objc2_app_kit::NSWindow>() };
-            ns.setOpaque(false);
-            ns.setBackgroundColor(None);
             ns.setCollectionBehavior(
                 objc2_app_kit::NSWindowCollectionBehavior::CanJoinAllSpaces
                     | objc2_app_kit::NSWindowCollectionBehavior::FullScreenAuxiliary,
@@ -292,8 +291,6 @@ pub(super) struct DesktopPet {
     seen_finished: HashSet<String>,
     finished_order: VecDeque<String>,
     born_at_ms: i64,
-    hit_regions: Vec<HitRect>,
-    ignoring_cursor: bool,
     pub(super) next_tick: Instant,
     last_monitor_check: Instant,
     bounds: Bounds,
@@ -331,13 +328,6 @@ impl DesktopPet {
             seen_finished: snapshot.entries.iter().filter_map(completion_key).collect(),
             finished_order: snapshot.entries.iter().filter_map(completion_key).collect(),
             born_at_ms: cliswitch::storage::now_ms(),
-            hit_regions: vec![HitRect {
-                x: 8.0,
-                y: 8.0,
-                width: 52.0,
-                height: 52.0,
-            }],
-            ignoring_cursor: false,
             next_tick: Instant::now(),
             last_monitor_check: Instant::now(),
             bounds: Bounds {
@@ -612,7 +602,7 @@ impl DesktopPet {
                     && rects.len() <= 512
                     && rects.iter().all(HitRect::valid) =>
             {
-                self.hit_regions = rects;
+                let _ = rects;
             }
             _ => {}
         }
@@ -717,15 +707,9 @@ impl DesktopPet {
             self.toast.window.set_visible(false);
             self.render();
         }
-        // Query only pointer coordinates. No keyboard capture or inspection of other apps.
-        if let Some((x, y)) = cursor_in_window(&self.pet.window) {
-            let ignore = self.drag.is_none() && !self.hit_regions.iter().any(|r| r.contains(x, y));
-            if ignore != self.ignoring_cursor
-                && self.pet.window.set_ignore_cursor_events(ignore).is_ok()
-            {
-                self.ignoring_cursor = ignore;
-            }
-        }
+        // Keep the small 64x64 pet window hit-testable at all times. Toggling
+        // native ignore-mouse-events asynchronously from a global cursor poll
+        // can drop the initial pointer-down and make dragging impossible.
         if self.drag.is_none()
             && now.duration_since(self.last_monitor_check) >= Duration::from_secs(2)
         {
@@ -760,38 +744,6 @@ fn completion_key(entry: &activity::ActivityEntry) -> Option<String> {
     match (&entry.thread_id, &entry.completed_turn_id) {
         (Some(thread), Some(turn)) => Some(format!("codex:{thread}:{turn}")),
         _ => Some(entry.id.clone()),
-    }
-}
-
-fn cursor_in_window(window: &Window) -> Option<(f64, f64)> {
-    #[cfg(target_os = "macos")]
-    {
-        use tao::platform::macos::WindowExtMacOS;
-        // NSScreen points share a coordinate space even across monitors with different DPI.
-        // SAFETY: the borrowed NSWindow is live, and this function is called on the main thread.
-        let frame = unsafe { &*window.ns_window().cast::<objc2_app_kit::NSWindow>() }.frame();
-        let cursor = objc2_app_kit::NSEvent::mouseLocation();
-        Some((
-            cursor.x - frame.origin.x,
-            frame.origin.y + frame.size.height - cursor.y,
-        ))
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        // Wayland intentionally provides no global pointer position; retain the tiny hit area.
-        #[cfg(target_os = "linux")]
-        if std::env::var_os("WAYLAND_DISPLAY").is_some()
-            && std::env::var("GDK_BACKEND").as_deref() != Ok("x11")
-        {
-            return None;
-        }
-        let cursor = window.cursor_position().ok()?;
-        let origin = window.outer_position().ok()?;
-        let scale = window.scale_factor();
-        Some((
-            (cursor.x - f64::from(origin.x)) / scale,
-            (cursor.y - f64::from(origin.y)) / scale,
-        ))
     }
 }
 
