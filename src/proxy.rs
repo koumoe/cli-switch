@@ -12,6 +12,7 @@ use tokio::sync::watch;
 use uuid::Uuid;
 
 pub use crate::codex_upstream::CodexClientIdentity;
+use crate::events::{self, AppEvent};
 use crate::storage::{self, Channel, Protocol};
 
 mod limits;
@@ -879,6 +880,7 @@ async fn record_failure_and_maybe_disable(
             if let Some(channels_cache) = channels_cache.as_ref() {
                 mark_channel_auto_disabled(channels_cache, &channel_id, until_ms, now_ms);
             }
+            events::publish(AppEvent::ChannelsChanged { at_ms: now_ms });
             true
         }
         Ok(None) => false,
@@ -1837,4 +1839,104 @@ fn to_single_line(s: &str) -> String {
         }
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn channel_change_events(rx: &mut tokio::sync::broadcast::Receiver<AppEvent>) -> Vec<i64> {
+        std::iter::from_fn(|| rx.try_recv().ok())
+            .filter_map(|event| match event {
+                AppEvent::ChannelsChanged { at_ms } => Some(at_ms),
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[tokio::test]
+    async fn auto_disable_notifies_ui_after_updating_channel_state() {
+        let dir = std::env::temp_dir().join(format!("cliswitch-channel-events-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let db_path = dir.join("test.sqlite");
+        storage::init_db(&db_path).unwrap();
+        let settings = storage::AppSettings {
+            auto_disable_enabled: true,
+            auto_disable_failure_times: 2,
+            ..Default::default()
+        };
+
+        for with_cache in [true, false] {
+            let channel = storage::create_channel(
+                db_path.clone(),
+                storage::CreateChannel {
+                    name: format!("channel-{with_cache}"),
+                    protocol: Protocol::Openai,
+                    base_url: "https://api.example.com".into(),
+                    auth_type: None,
+                    auth_ref: "test-key".into(),
+                    checkin_url: None,
+                    priority: 1,
+                    retry_times: 1,
+                    ignore_channel_protection: false,
+                    recharge_currency: None,
+                    real_multiplier: None,
+                    enabled: true,
+                    managed_by_remote: None,
+                    managed_remote_provider: None,
+                    managed_remote_account_id: None,
+                    managed_remote_resource_id: None,
+                    managed_remote_resource_name: None,
+                    managed_remote_group_name: None,
+                    managed_remote_group_id: None,
+                },
+            )
+            .await
+            .unwrap();
+            let cache = with_cache.then(|| watch::channel(Arc::new(vec![channel.clone()])).0);
+            let mut rx = events::subscribe();
+
+            assert!(
+                !record_failure_and_maybe_disable(&db_path, &settings, &channel, cache.clone())
+                    .await
+            );
+            assert!(channel_change_events(&mut rx).is_empty());
+
+            assert!(
+                record_failure_and_maybe_disable(&db_path, &settings, &channel, cache.clone())
+                    .await
+            );
+            let changes = channel_change_events(&mut rx);
+            assert_eq!(
+                changes.len(),
+                1,
+                "auto-disable must notify the UI exactly once"
+            );
+            let stored = storage::list_channels(db_path.clone())
+                .await
+                .unwrap()
+                .into_iter()
+                .find(|stored| stored.id == channel.id)
+                .unwrap();
+            assert!(
+                stored.enabled,
+                "auto-disable must preserve the manual enabled flag"
+            );
+            assert_eq!(stored.updated_at_ms, changes[0]);
+            assert_eq!(
+                stored.auto_disabled_until_ms,
+                changes[0] + settings.auto_disable_disable_minutes * 60_000
+            );
+            if let Some(cache) = cache {
+                let cached = cache.borrow();
+                assert_eq!(
+                    cached[0].auto_disabled_until_ms,
+                    stored.auto_disabled_until_ms
+                );
+                assert_eq!(cached[0].updated_at_ms, stored.updated_at_ms);
+            }
+        }
+
+        std::fs::remove_dir_all(dir).unwrap();
+    }
 }
