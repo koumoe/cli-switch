@@ -167,7 +167,7 @@ impl NativeSurface {
             .replace("/*__PET_CSS__*/", include_str!("desktop_pet/style.css"))
             .replace("/*__PET_SPRITE__*/", include_str!("desktop_pet/sprite.js"))
             .replace("/*__PET_JS__*/", include_str!("desktop_pet/pet.js"));
-        let view = WebViewBuilder::new()
+        let view_builder = WebViewBuilder::new()
             .with_transparent(true)
             .with_focused(false)
             .with_accept_first_mouse(true)
@@ -187,7 +187,16 @@ impl NativeSurface {
                         command,
                     });
                 }
-            })
+            });
+        // A hidden macOS top-level WKWebView can be attached with a zero frame
+        // and stay blank forever. A child view receives the native content
+        // bounds immediately and keeps the surface visible after show/hide.
+        #[cfg(target_os = "macos")]
+        let view = view_builder
+            .build_as_child(&window)
+            .context("create desktop pet WebView")?;
+        #[cfg(not(target_os = "macos"))]
+        let view = view_builder
             .build(&window)
             .context("create desktop pet WebView")?;
         Ok(Self {
