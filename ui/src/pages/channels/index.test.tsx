@@ -1,6 +1,7 @@
-import { screen } from "@testing-library/react";
+import { act, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
+import { disableChannel, enableChannel, listChannels } from "@/api";
 import { renderWithProviders } from "@/test/render";
 
 import { ChannelsPage } from "./index";
@@ -74,5 +75,31 @@ describe("ChannelsPage account and channel names", () => {
       screen.getByRole("columnheader", { name: "名称" }),
     ).toBeInTheDocument();
     expect(screen.queryByText("username-should-not-render")).not.toBeInTheDocument();
+  });
+});
+
+describe("ChannelsPage status updates", () => {
+  it("shows auto-disable after a channel event without toggling another channel", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(Date.now());
+    renderWithProviders(<ChannelsPage />);
+    expect(await screen.findByText("启用")).toBeInTheDocument();
+
+    const [channel] = await vi.mocked(listChannels).mock.results[0].value;
+    vi.mocked(listChannels).mockResolvedValueOnce([
+      { ...channel, auto_disabled_until_ms: Date.now() + 30 * 60_000 },
+    ]);
+
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent("cliswitch-channels-changed", {
+          detail: { at_ms: Date.now() },
+        }),
+      );
+    });
+
+    expect(await screen.findByText("自动禁用：30 分")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "启用" })).toBeInTheDocument();
+    expect(disableChannel).not.toHaveBeenCalled();
+    expect(enableChannel).not.toHaveBeenCalled();
   });
 });
