@@ -1,3 +1,7 @@
+## [0.66.2](https://github.com/koumoe/cli-switch/compare/v0.66.1...v0.66.2) (2026-09-10)
+
+### 修复
+* 修复自动禁用后渠道状态不刷新 (#232) ([71bda8c](https://github.com/koumoe/cli-switch/commit/71bda8c18cf2c6662492413a2c18df18609ac436))
 ## [0.66.1](https://github.com/koumoe/cli-switch/compare/v0.66.0...v0.66.1) (2026-09-09)
 
 ### 修复
