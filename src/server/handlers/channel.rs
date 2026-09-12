@@ -194,6 +194,17 @@ pub(in crate::server) async fn create_channel(
             "retry_times must be >= 1",
         ));
     }
+    if let Err(error) = storage::validate_channel_auth_type(
+        input.protocol,
+        input.managed_by_remote.unwrap_or(false),
+        input.managed_remote_provider,
+        input.auth_type.as_deref(),
+    ) {
+        return Err(ApiError::bad_request(
+            "channel_auth_type_invalid",
+            error.to_string(),
+        ));
+    }
 
     let channel = storage::create_channel(state.db_path(), input).await?;
     let channel2 = channel.clone();
@@ -225,6 +236,20 @@ pub(in crate::server) async fn update_channel(
             "retry_times must be >= 1",
         ));
     }
+    let mut input = input;
+    if let Some(auth_type) = input.auth_type.as_deref() {
+        let channel = storage::get_channel(state.db_path(), channel_id.clone())
+            .await?
+            .ok_or_else(|| ApiError::not_found("channel_not_found", "Channel not found"))?;
+        let normalized = storage::validate_channel_auth_type(
+            channel.protocol,
+            channel.managed_by_remote,
+            channel.managed_remote_provider,
+            Some(auth_type),
+        )
+        .map_err(|error| ApiError::bad_request("channel_auth_type_invalid", error.to_string()))?;
+        input.auth_type = Some(normalized);
+    }
     let patch = input.clone();
     let channel_id2 = channel_id.clone();
     let res = storage::update_channel(state.db_path(), channel_id, input).await;
@@ -242,7 +267,7 @@ pub(in crate::server) async fn update_channel(
                 channel.base_url = storage::normalize_base_url(channel.protocol, &v);
             }
             if let Some(v) = patch.auth_type {
-                channel.auth_type = v;
+                channel.auth_type = v.trim().to_ascii_lowercase();
             }
             if let Some(v) = patch.auth_ref {
                 channel.auth_ref = v;

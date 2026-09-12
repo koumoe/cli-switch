@@ -12,6 +12,14 @@ export function createChannelFormSchema(t: Translate) {
   return z.object({
     name: z.string().trim().min(1, t("channels.toast.nameRequired")),
     protocol: z.enum(["openai", "anthropic", "gemini"]),
+    auth_type: z.enum([
+      "auto",
+      "bearer",
+      "x-api-key",
+      "x-goog-api-key",
+      "query-key",
+      "managed_account",
+    ]),
     base_url: requiredHttpUrlSchema(
       t("channels.toast.baseUrlRequired"),
       t("channels.toast.baseUrlInvalid"),

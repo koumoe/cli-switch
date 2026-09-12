@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
   Plus,
@@ -76,6 +76,7 @@ import {
 import type {
   AppSettings,
   Channel,
+  ChannelAuthType,
   CreateChannelInput,
   Protocol,
 } from "@/types/api";
@@ -87,6 +88,7 @@ type ChannelDraft = CreateChannelInput;
 type ChannelFormValues = {
   name: string;
   protocol: Protocol;
+  auth_type: ChannelAuthType;
   base_url: string;
   auth_ref: string;
   checkin_url: string;
@@ -105,6 +107,7 @@ function emptyFormValues(
   return {
     name: "",
     protocol,
+    auth_type: "auto",
     base_url: defaultBaseUrl(protocol),
     auth_ref: "",
     checkin_url: "",
@@ -121,6 +124,7 @@ function channelToFormValues(channel: Channel): ChannelFormValues {
   return {
     name: channel.name,
     protocol: channel.protocol,
+    auth_type: channel.auth_type,
     base_url: channel.base_url,
     auth_ref: channel.auth_ref,
     checkin_url: channel.checkin_url ?? "",
@@ -187,6 +191,17 @@ function defaultBaseUrl(protocol: Protocol): string {
   }
 }
 
+function authTypeAllowed(protocol: Protocol, authType: string): boolean {
+  if (authType === "auto") return true;
+  if (authType === "managed_account") return protocol === "openai";
+  if (authType === "bearer") return protocol === "openai";
+  if (authType === "x-api-key") return protocol === "anthropic";
+  return (
+    protocol === "gemini" &&
+    (authType === "x-goog-api-key" || authType === "query-key")
+  );
+}
+
 export function ChannelsPage() {
   const { t } = useI18n();
   const { currency, usdToCnyRate } = useCurrency();
@@ -215,6 +230,10 @@ export function ChannelsPage() {
   const channelForm = useForm<ChannelFormValues>({
     resolver: zodResolver(channelFormSchema),
     defaultValues: emptyFormValues(),
+  });
+  const selectedProtocol = useWatch({
+    control: channelForm.control,
+    name: "protocol",
   });
 
   async function refresh() {
@@ -346,7 +365,7 @@ export function ChannelsPage() {
       name: values.name.trim(),
       protocol: values.protocol,
       base_url: values.base_url.trim(),
-      auth_type: "auto",
+      auth_type: values.auth_type,
       auth_ref: values.auth_ref,
       checkin_url: values.checkin_url,
       priority: Number.parseInt(values.priority, 10),
@@ -367,7 +386,7 @@ export function ChannelsPage() {
         await updateChannel(editId, {
           name: payload.name,
           base_url: payload.base_url,
-          auth_type: "auto",
+          auth_type: payload.auth_type,
           auth_ref: payload.auth_ref,
           checkin_url: payload.checkin_url,
           priority: payload.priority,
@@ -914,6 +933,17 @@ export function ChannelsPage() {
                                 !currentBaseUrl || currentBaseUrl === prevDefault;
 
                               field.onChange(nextProtocol);
+                              if (
+                                !authTypeAllowed(
+                                  nextProtocol,
+                                  channelForm.getValues("auth_type"),
+                                )
+                              ) {
+                                channelForm.setValue("auth_type", "auto", {
+                                  shouldDirty: true,
+                                  shouldValidate: true,
+                                });
+                              }
                               if (shouldUpdateBase) {
                                 channelForm.setValue("base_url", nextDefault, {
                                   shouldDirty: true,
@@ -945,6 +975,106 @@ export function ChannelsPage() {
                       )}
                     />
                   </div>
+
+                  <FormField
+                    control={channelForm.control}
+                    name="auth_type"
+                    render={({ field }) => {
+                      const options = [
+                        {
+                          value: "auto",
+                          label: t("channels.modal.authTypeOptions.auto"),
+                        },
+                        ...(field.value === "managed_account"
+                          ? [
+                              {
+                                value: "managed_account",
+                                label: t(
+                                  "channels.modal.authTypeOptions.managedAccount",
+                                ),
+                              },
+                            ]
+                          : []),
+                        ...(field.value === "bearer" ||
+                        selectedProtocol === "openai"
+                          ? [
+                              {
+                                value: "bearer",
+                                label: t(
+                                  "channels.modal.authTypeOptions.bearer",
+                                ),
+                              },
+                            ]
+                          : []),
+                        ...(field.value === "x-api-key" ||
+                        selectedProtocol === "anthropic"
+                          ? [
+                              {
+                                value: "x-api-key",
+                                label: t(
+                                  "channels.modal.authTypeOptions.xApiKey",
+                                ),
+                              },
+                            ]
+                          : []),
+                        ...(field.value === "x-goog-api-key" ||
+                        selectedProtocol === "gemini"
+                          ? [
+                              {
+                                value: "x-goog-api-key",
+                                label: t(
+                                  "channels.modal.authTypeOptions.xGoogApiKey",
+                                ),
+                              },
+                            ]
+                          : []),
+                        ...(field.value === "query-key" ||
+                        selectedProtocol === "gemini"
+                          ? [
+                              {
+                                value: "query-key",
+                                label: t(
+                                  "channels.modal.authTypeOptions.queryKey",
+                                ),
+                              },
+                            ]
+                          : []),
+                      ];
+                      return (
+                        <FormItem>
+                          <FormLabel>{t("channels.modal.authType")}</FormLabel>
+                          <Select
+                            value={field.value}
+                            onValueChange={field.onChange}
+                            disabled={
+                              modalMode === "edit" &&
+                              field.value === "managed_account"
+                            }
+                          >
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {options.map((option) => (
+                                <SelectItem
+                                  key={option.value}
+                                  value={option.value}
+                                >
+                                  {option.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormDescription>
+                            {t("channels.modal.authTypeHint")}
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      );
+                    }}
+                  />
 
                   <FormField
                     control={channelForm.control}

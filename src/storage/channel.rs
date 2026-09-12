@@ -222,6 +222,41 @@ fn normalize_optional_text(raw: Option<String>) -> Option<String> {
         .filter(|value| !value.is_empty())
 }
 
+pub fn normalize_auth_type(protocol: Protocol, raw: Option<&str>) -> anyhow::Result<String> {
+    let value = raw.unwrap_or("auto").trim().to_ascii_lowercase();
+    let valid = match value.as_str() {
+        "" | "auto" => true,
+        "bearer" => protocol == Protocol::Openai,
+        "x-api-key" => protocol == Protocol::Anthropic,
+        "x-goog-api-key" | "query-key" => protocol == Protocol::Gemini,
+        "managed_account" => protocol == Protocol::Openai,
+        _ => false,
+    };
+    if !valid {
+        anyhow::bail!("auth_type {value:?} is not valid for {}", protocol.as_str());
+    }
+    Ok(if value.is_empty() {
+        "auto".to_string()
+    } else {
+        value
+    })
+}
+
+pub fn validate_channel_auth_type(
+    protocol: Protocol,
+    managed_by_remote: bool,
+    managed_remote_provider: Option<ManagedRemoteProvider>,
+    raw: Option<&str>,
+) -> anyhow::Result<String> {
+    let auth_type = normalize_auth_type(protocol, raw)?;
+    if auth_type == "managed_account"
+        && !(managed_by_remote && managed_remote_provider == Some(ManagedRemoteProvider::Openai))
+    {
+        anyhow::bail!("managed_account requires a managed OpenAI channel");
+    }
+    Ok(auth_type)
+}
+
 fn default_retry_times() -> i64 {
     DEFAULT_CHANNEL_RETRY_TIMES
 }
@@ -437,11 +472,6 @@ pub async fn create_channel(db_path: PathBuf, input: CreateChannel) -> anyhow::R
     with_conn(db_path, move |conn| {
         let ts = now_ms();
         let id = Uuid::new_v4().to_string();
-        let auth_type = input
-            .auth_type
-            .unwrap_or_else(|| "auto".to_string())
-            .trim()
-            .to_string();
         let base_url = normalize_base_url(input.protocol, &input.base_url);
         let checkin_url = input
             .checkin_url
@@ -481,6 +511,12 @@ pub async fn create_channel(db_path: PathBuf, input: CreateChannel) -> anyhow::R
         } else {
             None
         };
+        let auth_type = validate_channel_auth_type(
+            input.protocol,
+            managed_by_remote,
+            managed_remote_provider,
+            input.auth_type.as_deref(),
+        )?;
         conn.execute(
             r#"
             INSERT INTO channels (
@@ -601,7 +637,12 @@ pub async fn update_channel(
             channel.base_url = normalize_base_url(channel.protocol, &v);
         }
         if let Some(v) = input.auth_type {
-            channel.auth_type = v;
+            channel.auth_type = validate_channel_auth_type(
+                channel.protocol,
+                channel.managed_by_remote,
+                channel.managed_remote_provider,
+                Some(&v),
+            )?;
         }
         if let Some(v) = input.auth_ref {
             channel.auth_ref = v;
@@ -959,6 +1000,31 @@ mod tests {
     fn managed_remote_provider_serializes_sub2api_without_extra_underscore() {
         let json = serde_json::to_string(&ManagedRemoteProvider::Sub2Api).expect("serialize");
         assert_eq!(json, "\"sub2api\"");
+    }
+
+    #[test]
+    fn auth_type_validation_preserves_auto_and_protocol_specific_modes() {
+        assert_eq!(normalize_auth_type(Protocol::Openai, None).unwrap(), "auto");
+        assert_eq!(
+            normalize_auth_type(Protocol::Gemini, Some(" X-GOOG-API-KEY ")).unwrap(),
+            "x-goog-api-key"
+        );
+        assert!(normalize_auth_type(Protocol::Anthropic, Some("bearer")).is_err());
+        assert!(normalize_auth_type(Protocol::Openai, Some("unknown")).is_err());
+        assert!(
+            validate_channel_auth_type(Protocol::Openai, false, None, Some("managed_account"))
+                .is_err()
+        );
+        assert_eq!(
+            validate_channel_auth_type(
+                Protocol::Openai,
+                true,
+                Some(ManagedRemoteProvider::Openai),
+                Some("managed_account")
+            )
+            .unwrap(),
+            "managed_account"
+        );
     }
 
     fn remove_sqlite_artifacts(path: &Path) {

@@ -189,6 +189,16 @@
       "description": "配置 API 渠道的连接信息",
       "name": "名称",
       "terminal": "终端",
+      "authType": "认证方式",
+      "authTypeHint": "auto 保持按入站请求推断；显式方式会强制使用对应认证字段",
+      "authTypeOptions": {
+        "auto": "自动（兼容现有配置）",
+        "bearer": "Authorization: Bearer",
+        "xApiKey": "x-api-key",
+        "xGoogApiKey": "x-goog-api-key",
+        "queryKey": "URL query: key",
+        "managedAccount": "托管 OpenAI OAuth"
+      },
       "priority": "优先级（数值越大越优先）",
       "retryTimes": "重试次数",
       "retryTimesHint": "仅在设置中开启“渠道级重试”后生效，最小为 1",
