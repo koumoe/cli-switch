@@ -30,8 +30,8 @@ pub use channel::{
     Channel, CreateChannel, ManagedRemoteProvider, RechargeCurrency, UpdateChannel,
     channel_is_auto_disabled, clear_channel_failures, create_channel, delete_channel,
     detach_channels_from_managed_account, get_channel, list_channel_ids_by_managed_account,
-    list_channels, record_channel_failure_and_maybe_disable, reorder_channels, set_channel_enabled,
-    update_channel,
+    list_channels, normalize_auth_type, record_channel_failure_and_maybe_disable, reorder_channels,
+    set_channel_enabled, update_channel, validate_channel_auth_type,
 };
 pub use chat_bridge::{
     BridgeKnownProject, BridgePermissionMode, BridgeSession, BridgeSessionStatus,

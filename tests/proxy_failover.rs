@@ -301,7 +301,6 @@ async fn openai_responses_reasoning_id_sanitizer_respects_setting() {
                 settings: Arc::new(settings),
                 channels: channels.clone(),
                 channels_cache: None,
-                codex_identity: Arc::new(proxy::CodexClientIdentity::for_version(None)),
             },
         )
         .await
@@ -331,6 +330,7 @@ async fn managed_openai_account_forwards_responses_with_dynamic_oauth_credential
         originator: String,
         user_agent: String,
         version: String,
+        cookie: String,
         responses_lite: String,
         path: String,
         body: serde_json::Value,
@@ -373,6 +373,12 @@ async fn managed_openai_account_forwards_responses_with_dynamic_oauth_credential
                     .and_then(|value| value.to_str().ok())
                     .unwrap_or_default()
                     .to_string();
+                let cookie = request
+                    .headers()
+                    .get(axum::http::header::COOKIE)
+                    .and_then(|value| value.to_str().ok())
+                    .unwrap_or_default()
+                    .to_string();
                 let responses_lite = request
                     .headers()
                     .get("X-OpenAI-Internal-Codex-Responses-Lite")
@@ -388,6 +394,7 @@ async fn managed_openai_account_forwards_responses_with_dynamic_oauth_credential
                     originator,
                     user_agent,
                     version,
+                    cookie,
                     responses_lite,
                     path,
                     body,
@@ -472,6 +479,9 @@ async fn managed_openai_account_forwards_responses_with_dynamic_oauth_credential
             .header(axum::http::header::USER_AGENT, "codex_cli_rs/0.21.0")
             .header("originator", "codex_cli_rs")
             .header("version", "0.21.0");
+        request = request
+            .header(axum::http::header::COOKIE, "session=wrong-account")
+            .header("chatgpt-account-id", "wrong-account");
         if responses_lite {
             request = request.header("X-OpenAI-Internal-Codex-Responses-Lite", "true");
         }
@@ -491,7 +501,6 @@ async fn managed_openai_account_forwards_responses_with_dynamic_oauth_credential
                 settings: settings.clone(),
                 channels: channels.clone(),
                 channels_cache: None,
-                codex_identity: Arc::new(proxy::CodexClientIdentity::for_version(Some("0.149.1"))),
             },
         )
         .await
@@ -505,9 +514,10 @@ async fn managed_openai_account_forwards_responses_with_dynamic_oauth_credential
     for request in &captured {
         assert_eq!(request.authorization, "Bearer oauth-access-token");
         assert_eq!(request.account_id, "chatgpt-account-1");
-        assert_eq!(request.originator, "codex-tui");
-        assert_eq!(request.version, "0.149.1");
-        assert!(request.user_agent.starts_with("codex-tui/0.149.1 "));
+        assert_eq!(request.originator, "codex_cli_rs");
+        assert_eq!(request.version, "0.21.0");
+        assert_eq!(request.user_agent, "codex_cli_rs/0.21.0");
+        assert!(request.cookie.is_empty());
         assert_eq!(request.path, "/codex/responses");
         assert_eq!(request.body["model"], "gpt-5.6-sol");
         assert_eq!(request.body["stream"], true);
@@ -880,7 +890,7 @@ async fn wait_for_usage_event(db_path: std::path::PathBuf) -> storage::UsageEven
 }
 
 #[tokio::test]
-async fn openai_responses_detects_sse_with_wrong_content_type() {
+async fn openai_responses_detects_sse_without_rewriting_content_type() {
     let base = spawn_upstream_typed(
         StatusCode::OK,
         "application/json",
@@ -904,7 +914,7 @@ async fn openai_responses_detects_sse_with_wrong_content_type() {
             .headers()
             .get(axum::http::header::CONTENT_TYPE)
             .and_then(|value| value.to_str().ok()),
-        Some("text/event-stream")
+        Some("application/json")
     );
     let body = to_bytes(response.into_body(), 1024 * 1024)
         .await
@@ -934,7 +944,7 @@ async fn openai_responses_preserves_complete_json_when_upstream_ignores_stream()
                 .headers()
                 .get(axum::http::header::CONTENT_TYPE)
                 .and_then(|value| value.to_str().ok()),
-            Some("application/json")
+            Some(content_type)
         );
         let body = to_bytes(response.into_body(), 1024 * 1024)
             .await
@@ -964,14 +974,13 @@ async fn openai_responses_rejects_non_sse_invalid_json_body() {
             .headers()
             .get(axum::http::header::CONTENT_TYPE)
             .and_then(|value| value.to_str().ok()),
-        Some("text/event-stream")
+        Some("application/json")
     );
     let body = to_bytes(response.into_body(), 1024 * 1024)
         .await
         .expect("read body");
     let body = String::from_utf8_lossy(&body);
-    assert!(body.contains("event: response.failed"));
-    assert!(body.contains("openai_responses_incomplete_stream"));
+    assert_eq!(body, "not valid JSON");
 
     let event = wait_for_usage_event(db_path).await;
     assert!(!event.success);
@@ -1169,8 +1178,8 @@ async fn openai_responses_records_empty_completed_as_silent_refusal() {
         .await
         .expect("read body");
     let body = String::from_utf8_lossy(&body);
-    assert!(body.contains("event: response.failed"));
-    assert!(body.contains("openai_silent_refusal"));
+    assert!(body.contains("event: response.completed"));
+    assert!(!body.contains("openai_silent_refusal"));
 
     let event = wait_for_usage_event(db_path).await;
     assert!(!event.success);

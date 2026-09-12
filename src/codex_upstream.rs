@@ -1,59 +1,9 @@
 use axum::http::{HeaderMap, HeaderValue, header};
-use semver::Version;
 use serde_json::{Value, json};
-use uuid::Uuid;
 
 pub const DEFAULT_BASE_URL: &str = "https://chatgpt.com/backend-api/codex";
 pub const RESPONSES_PATH: &str = "/responses";
-pub const DEFAULT_VERSION: &str = "0.150.1";
-pub const DEFAULT_ORIGINATOR: &str = "codex-tui";
-pub const DEFAULT_USER_AGENT: &str =
-    "codex-tui/0.150.1 (Mac OS 26.5.0; arm64) iTerm.app/3.6.10 (codex-tui; 0.150.1)";
-pub const MIN_SUPPORTED_VERSION: &str = "0.144.0";
 const RESPONSES_LITE_HEADER: &str = "x-openai-internal-codex-responses-lite";
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CodexClientIdentity {
-    pub version: String,
-    pub originator: String,
-    pub user_agent: String,
-}
-
-impl CodexClientIdentity {
-    pub fn for_version(version: Option<&str>) -> Self {
-        identity_for_version(version)
-    }
-}
-
-pub fn identity_for_version(version: Option<&str>) -> CodexClientIdentity {
-    let version = normalize_client_version(version).unwrap_or_else(|| DEFAULT_VERSION.to_string());
-    let user_agent = if version == DEFAULT_VERSION {
-        DEFAULT_USER_AGENT.to_string()
-    } else {
-        format!(
-            "{DEFAULT_ORIGINATOR}/{version} (Mac OS 26.5.0; arm64) iTerm.app/3.6.10 (codex-tui; {version})"
-        )
-    };
-    CodexClientIdentity {
-        version: version.clone(),
-        originator: DEFAULT_ORIGINATOR.to_string(),
-        user_agent,
-    }
-}
-
-fn normalize_client_version(version: Option<&str>) -> Option<String> {
-    let version = version?.trim().trim_start_matches('v');
-    if version.is_empty() {
-        return None;
-    }
-    let parsed = Version::parse(version).ok()?;
-    let minimum = Version::parse(MIN_SUPPORTED_VERSION).expect("valid Codex minimum version");
-    (parsed >= minimum).then(|| version.to_string())
-}
-
-pub fn default_identity() -> CodexClientIdentity {
-    identity_for_version(Some(DEFAULT_VERSION))
-}
 
 pub fn is_responses_lite(headers: &HeaderMap) -> bool {
     headers
@@ -113,47 +63,24 @@ pub fn sanitize_responses_reasoning_item_ids(body: &[u8]) -> Option<Vec<u8>> {
     serde_json::to_vec(&value).ok()
 }
 
-/// Apply a self-consistent current Codex identity for OAuth accounts.
-/// ChatGPT validates that `originator`, the User-Agent client name/version,
-/// and the `version` header agree. Stale or mixed identities can be rejected
-/// as an outdated Codex client even when the OAuth token is valid.
-pub fn apply_headers_with_identity(
+/// Apply only account credentials for a managed OpenAI OAuth request.
+/// Client identity and request context headers come from the real client and
+/// must pass through unchanged.
+pub fn apply_oauth_credentials(
     headers: &mut HeaderMap,
     credentials: CodexCredentials<'_>,
-    identity: &CodexClientIdentity,
 ) -> anyhow::Result<()> {
     let bearer = HeaderValue::from_str(&format!("Bearer {}", credentials.access_token))?;
     let account_id = HeaderValue::from_str(credentials.account_id)?;
-    let originator = HeaderValue::from_str(&identity.originator)?;
-    let version = HeaderValue::from_str(&identity.version)?;
-    let user_agent = HeaderValue::from_str(&identity.user_agent)?;
 
     headers.insert(header::AUTHORIZATION, bearer);
-    headers.insert(
-        header::CONTENT_TYPE,
-        HeaderValue::from_static("application/json"),
-    );
-    headers.insert(
-        header::ACCEPT,
-        HeaderValue::from_static("text/event-stream"),
-    );
-    headers.insert(
-        "openai-beta",
-        HeaderValue::from_static("responses=experimental"),
-    );
-    headers.insert("originator", originator);
     headers.insert("chatgpt-account-id", account_id);
-    headers.insert("version", version);
-    headers.insert(header::USER_AGENT, user_agent);
-    headers
-        .entry("session_id")
-        .or_insert(HeaderValue::from_str(&Uuid::new_v4().to_string())?);
     Ok(())
 }
 
-/// Normalize an OpenAI Responses payload to the subset accepted by the Codex
-/// ChatGPT backend. This intentionally does not translate Chat Completions,
-/// Anthropic, or Gemini payloads; those require protocol-aware translators.
+/// Apply only the compatibility fields currently required by the Codex ChatGPT
+/// backend. A compliant payload is returned byte-for-byte unchanged. This does
+/// not translate Chat Completions, Anthropic, or Gemini payloads.
 pub fn normalize_responses_body(
     body: &[u8],
     model: Option<&str>,
@@ -163,26 +90,57 @@ pub fn normalize_responses_body(
     let object = value
         .as_object_mut()
         .ok_or_else(|| anyhow::anyhow!("Codex Responses 请求体必须是 JSON 对象"))?;
+    let mut changed = false;
 
-    if let Some(model) = model.map(str::trim).filter(|value| !value.is_empty()) {
+    if let Some(model) = model.map(str::trim).filter(|value| !value.is_empty())
+        && !object.contains_key("model")
+    {
         object.insert("model".to_string(), Value::String(model.to_string()));
+        changed = true;
     }
-    object.insert("stream".to_string(), Value::Bool(true));
-    object.insert("store".to_string(), Value::Bool(false));
+    if object.get("stream").and_then(Value::as_bool) != Some(true) {
+        object.insert("stream".to_string(), Value::Bool(true));
+        changed = true;
+    }
+    if object.get("store").and_then(Value::as_bool) != Some(false) {
+        object.insert("store".to_string(), Value::Bool(false));
+        changed = true;
+    }
     if responses_lite {
-        object.insert("parallel_tool_calls".to_string(), Value::Bool(false));
-    } else {
+        if object.get("parallel_tool_calls").and_then(Value::as_bool) != Some(false) {
+            object.insert("parallel_tool_calls".to_string(), Value::Bool(false));
+            changed = true;
+        }
+    } else if !object.contains_key("parallel_tool_calls") {
         object
             .entry("parallel_tool_calls".to_string())
             .or_insert(Value::Bool(true));
+        changed = true;
     }
-    object.insert(
-        "include".to_string(),
-        json!(["reasoning.encrypted_content"]),
-    );
-    object
-        .entry("instructions".to_string())
-        .or_insert_with(|| Value::String(String::new()));
+    let includes_encrypted_reasoning =
+        object
+            .get("include")
+            .and_then(Value::as_array)
+            .is_some_and(|items| {
+                items
+                    .iter()
+                    .any(|item| item.as_str() == Some("reasoning.encrypted_content"))
+            });
+    if !includes_encrypted_reasoning {
+        let include = match object.remove("include") {
+            Some(Value::Array(mut items)) => {
+                items.push(Value::String("reasoning.encrypted_content".to_string()));
+                Value::Array(items)
+            }
+            _ => json!(["reasoning.encrypted_content"]),
+        };
+        object.insert("include".to_string(), include);
+        changed = true;
+    }
+    if !object.contains_key("instructions") {
+        object.insert("instructions".to_string(), Value::String(String::new()));
+        changed = true;
+    }
 
     for unsupported in [
         "max_output_tokens",
@@ -194,9 +152,12 @@ pub fn normalize_responses_body(
         "prompt_cache_retention",
         "safety_identifier",
     ] {
-        object.remove(unsupported);
+        changed |= object.remove(unsupported).is_some();
     }
 
+    if !changed {
+        return Ok(body.to_vec());
+    }
     Ok(serde_json::to_vec(&value)?)
 }
 
@@ -217,7 +178,7 @@ mod tests {
     }
 
     #[test]
-    fn applies_current_self_consistent_oauth_identity() {
+    fn applies_oauth_credentials_without_overwriting_client_headers() {
         let mut headers = HeaderMap::new();
         headers.insert(
             header::USER_AGENT,
@@ -225,40 +186,32 @@ mod tests {
         );
         headers.insert("version", HeaderValue::from_static("0.21.0"));
         headers.insert("originator", HeaderValue::from_static("codex_cli_rs"));
-        apply_headers_with_identity(
+        headers.insert("session-id", HeaderValue::from_static("session-1"));
+        headers.insert(header::ACCEPT, HeaderValue::from_static("application/json"));
+        headers.insert(
+            header::CONTENT_TYPE,
+            HeaderValue::from_static("application/json"),
+        );
+        headers.insert("openai-beta", HeaderValue::from_static("client-beta"));
+        apply_oauth_credentials(
             &mut headers,
             CodexCredentials {
                 access_token: "access-token",
                 account_id: "account-id",
             },
-            &default_identity(),
         )
         .unwrap();
 
         assert_eq!(headers[header::AUTHORIZATION], "Bearer access-token");
         assert_eq!(headers["chatgpt-account-id"], "account-id");
-        assert_eq!(headers["originator"], DEFAULT_ORIGINATOR);
-        assert_eq!(headers["openai-beta"], "responses=experimental");
-        assert_eq!(headers[header::ACCEPT], "text/event-stream");
-        assert_eq!(headers["version"], DEFAULT_VERSION);
-        assert_eq!(headers[header::USER_AGENT], DEFAULT_USER_AGENT);
-        assert!(headers.contains_key("session_id"));
-    }
-
-    #[test]
-    fn normalizes_detected_versions_to_the_supported_codex_floor() {
-        let detected = identity_for_version(Some("v0.149.1"));
-        assert_eq!(detected.version, "0.149.1");
-        assert_eq!(detected.originator, "codex-tui");
-        assert!(detected.user_agent.starts_with("codex-tui/0.149.1 "));
-        assert_eq!(
-            identity_for_version(Some("0.140.0")).version,
-            DEFAULT_VERSION
-        );
-        assert_eq!(
-            identity_for_version(Some("not-a-version")).version,
-            DEFAULT_VERSION
-        );
+        assert_eq!(headers["originator"], "codex_cli_rs");
+        assert_eq!(headers["openai-beta"], "client-beta");
+        assert_eq!(headers[header::ACCEPT], "application/json");
+        assert_eq!(headers[header::CONTENT_TYPE], "application/json");
+        assert_eq!(headers["version"], "0.21.0");
+        assert_eq!(headers[header::USER_AGENT], "codex_cli_rs/0.21.0");
+        assert_eq!(headers["session-id"], "session-1");
+        assert!(!headers.contains_key("session_id"));
     }
 
     #[test]
@@ -326,7 +279,7 @@ mod tests {
         .unwrap();
         let value: Value = serde_json::from_slice(&normalized).unwrap();
 
-        assert_eq!(value["model"], "gpt-5-codex");
+        assert_eq!(value["model"], "old");
         assert_eq!(value["stream"], true);
         assert_eq!(value["store"], false);
         assert_eq!(value["parallel_tool_calls"], true);
@@ -334,6 +287,27 @@ mod tests {
         assert_eq!(value["include"], json!(["reasoning.encrypted_content"]));
         assert!(value.get("temperature").is_none());
         assert!(value.get("previous_response_id").is_none());
+    }
+
+    #[test]
+    fn keeps_compliant_responses_body_byte_for_byte() {
+        let body = br#"{"model":"gpt-5.6-sol","input":"hello","stream":true,"store":false,"parallel_tool_calls":false,"include":["reasoning.encrypted_content"],"instructions":""}"#;
+        assert_eq!(
+            normalize_responses_body(body, Some("gpt-5.6-sol"), false).unwrap(),
+            body
+        );
+    }
+
+    #[test]
+    fn adds_required_include_without_dropping_existing_includes() {
+        let normalized =
+            normalize_responses_body(br#"{"input":"hello","include":["foo"]}"#, None, false)
+                .unwrap();
+        let value: Value = serde_json::from_slice(&normalized).unwrap();
+        assert_eq!(
+            value["include"],
+            json!(["foo", "reasoning.encrypted_content"])
+        );
     }
 
     #[test]

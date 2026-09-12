@@ -43,6 +43,7 @@ describe("schema validation", () => {
     const result = createChannelFormSchema(t).safeParse({
       name: "Demo channel",
       protocol: "openai",
+      auth_type: "auto",
       base_url: "https://api.example.com",
       auth_ref: "secret",
       checkin_url: "",
