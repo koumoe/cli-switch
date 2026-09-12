@@ -1385,11 +1385,7 @@ fn resolve_auth_kind(
                 "managed_account authentication requires an OpenAI OAuth channel".to_string(),
             ));
         }
-        other => {
-            return Err(ProxyError::Upstream(format!(
-                "unsupported channel auth_type: {other}"
-            )));
-        }
+        _ => unreachable!("normalize_auth_type returned an unknown auth_type"),
     };
     Ok(kind)
 }
