@@ -1362,17 +1362,20 @@ fn resolve_auth_kind(
     configured: &str,
     detected: Option<AuthKind>,
 ) -> Result<AuthKind, ProxyError> {
-    let configured = configured.trim();
-    if configured.is_empty() || configured.eq_ignore_ascii_case("auto") {
-        if let Some(kind) = detected
-            && auth_kind_allowed_for_protocol(protocol, kind)
-        {
-            return Ok(kind);
+    let configured = storage::normalize_auth_type(protocol, Some(configured))
+        .map_err(|error| ProxyError::Upstream(error.to_string()))?;
+    if configured == "auto" {
+        if let Some(kind) = detected {
+            // Reuse the storage validator so protocol-specific auth rules have
+            // one source of truth, including for legacy DB values.
+            if storage::normalize_auth_type(protocol, Some(kind.as_configured_str())).is_ok() {
+                return Ok(kind);
+            }
         }
         return Ok(default_auth_kind_for_protocol(protocol));
     }
 
-    let kind = match configured.to_ascii_lowercase().as_str() {
+    let kind = match configured.as_str() {
         "bearer" => AuthKind::Bearer,
         "x-api-key" => AuthKind::XApiKey,
         "x-goog-api-key" => AuthKind::XGoogApiKey,
@@ -1388,12 +1391,6 @@ fn resolve_auth_kind(
             )));
         }
     };
-    if !auth_kind_allowed_for_protocol(protocol, kind) {
-        return Err(ProxyError::Upstream(format!(
-            "auth_type {configured} is not valid for {}",
-            protocol.as_str()
-        )));
-    }
     Ok(kind)
 }
 
@@ -1405,11 +1402,14 @@ fn default_auth_kind_for_protocol(protocol: Protocol) -> AuthKind {
     }
 }
 
-fn auth_kind_allowed_for_protocol(protocol: Protocol, kind: AuthKind) -> bool {
-    match protocol {
-        Protocol::Openai => kind == AuthKind::Bearer,
-        Protocol::Anthropic => kind == AuthKind::XApiKey,
-        Protocol::Gemini => matches!(kind, AuthKind::QueryKey | AuthKind::XGoogApiKey),
+impl AuthKind {
+    fn as_configured_str(self) -> &'static str {
+        match self {
+            Self::Bearer => "bearer",
+            Self::XApiKey => "x-api-key",
+            Self::XGoogApiKey => "x-goog-api-key",
+            Self::QueryKey => "query-key",
+        }
     }
 }
 

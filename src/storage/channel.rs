@@ -224,8 +224,13 @@ fn normalize_optional_text(raw: Option<String>) -> Option<String> {
 
 pub fn normalize_auth_type(protocol: Protocol, raw: Option<&str>) -> anyhow::Result<String> {
     let value = raw.unwrap_or("auto").trim().to_ascii_lowercase();
+    let value = if value.is_empty() {
+        "auto".to_string()
+    } else {
+        value
+    };
     let valid = match value.as_str() {
-        "" | "auto" => true,
+        "auto" => true,
         "bearer" => protocol == Protocol::Openai,
         "x-api-key" => protocol == Protocol::Anthropic,
         "x-goog-api-key" | "query-key" => protocol == Protocol::Gemini,
@@ -235,11 +240,7 @@ pub fn normalize_auth_type(protocol: Protocol, raw: Option<&str>) -> anyhow::Res
     if !valid {
         anyhow::bail!("auth_type {value:?} is not valid for {}", protocol.as_str());
     }
-    Ok(if value.is_empty() {
-        "auto".to_string()
-    } else {
-        value
-    })
+    Ok(value)
 }
 
 pub fn validate_channel_auth_type(
@@ -1005,6 +1006,10 @@ mod tests {
     #[test]
     fn auth_type_validation_preserves_auto_and_protocol_specific_modes() {
         assert_eq!(normalize_auth_type(Protocol::Openai, None).unwrap(), "auto");
+        assert_eq!(
+            normalize_auth_type(Protocol::Openai, Some("  ")).unwrap(),
+            "auto"
+        );
         assert_eq!(
             normalize_auth_type(Protocol::Gemini, Some(" X-GOOG-API-KEY ")).unwrap(),
             "x-goog-api-key"
