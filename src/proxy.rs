@@ -5,13 +5,13 @@ use futures_util::StreamExt as _;
 use futures_util::TryStreamExt as _;
 use futures_util::stream::BoxStream;
 use reqwest::Url;
+use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::watch;
 use uuid::Uuid;
 
-pub use crate::codex_upstream::CodexClientIdentity;
 use crate::events::{self, AppEvent};
 use crate::storage::{self, Channel, Protocol};
 
@@ -21,10 +21,25 @@ mod sse;
 mod stream;
 mod usage_writer;
 
-use openai_responses::{
-    OpenAiResponsesBootstrap, inspect_openai_responses_bootstrap,
-    synthetic_openai_responses_failure,
-};
+/// Keeps the ChatGPT edge cookie jar isolated per managed account.
+#[derive(Clone, Default)]
+pub struct OpenAiOAuthClientPool {
+    clients: Arc<tokio::sync::Mutex<HashMap<String, reqwest::Client>>>,
+}
+
+impl OpenAiOAuthClientPool {
+    async fn client_for_account(&self, account_id: &str) -> anyhow::Result<reqwest::Client> {
+        let mut clients = self.clients.lock().await;
+        if let Some(client) = clients.get(account_id) {
+            return Ok(client.clone());
+        }
+        let client = crate::server::build_openai_proxy_http_client()?;
+        clients.insert(account_id.to_string(), client.clone());
+        Ok(client)
+    }
+}
+
+use openai_responses::{OpenAiResponsesBootstrap, inspect_openai_responses_bootstrap};
 use stream::{InstrumentedStream, StreamRecordContext};
 
 #[derive(Clone)]
@@ -33,7 +48,6 @@ pub struct ProxyConfigSnapshot {
     pub channels: Arc<Vec<Channel>>,
     /// Optional: allows proxy to best-effort update in-memory channel state (e.g. auto-disable).
     pub channels_cache: Option<watch::Sender<Arc<Vec<Channel>>>>,
-    pub codex_identity: Arc<CodexClientIdentity>,
 }
 
 struct AttemptCtx<'a> {
@@ -121,10 +135,11 @@ pub async fn forward(
 ) -> Result<Response<Body>, ProxyError> {
     let settings = Arc::new(storage::get_app_settings(db_path.clone()).await?);
     let channels = Arc::new(storage::list_channels(db_path.clone()).await?);
+    let openai_oauth_pool = OpenAiOAuthClientPool::default();
 
     forward_with_config(
         client,
-        None,
+        Some(&openai_oauth_pool),
         db_path,
         protocol,
         protocol_root,
@@ -133,7 +148,6 @@ pub async fn forward(
             settings,
             channels,
             channels_cache: None,
-            codex_identity: Arc::new(crate::codex_upstream::default_identity()),
         },
     )
     .await
@@ -141,7 +155,7 @@ pub async fn forward(
 
 pub async fn forward_with_config(
     client: &reqwest::Client,
-    openai_oauth_client: Option<&reqwest::Client>,
+    openai_oauth_pool: Option<&OpenAiOAuthClientPool>,
     db_path: std::path::PathBuf,
     protocol: Protocol,
     protocol_root: &'static str,
@@ -164,7 +178,7 @@ pub async fn forward_with_config(
     });
     let result = forward_with_activity(
         client,
-        openai_oauth_client,
+        openai_oauth_pool,
         db_path,
         protocol,
         protocol_root,
@@ -192,7 +206,7 @@ struct ForwardActivityContext<'a> {
 
 async fn forward_with_activity(
     client: &reqwest::Client,
-    openai_oauth_client: Option<&reqwest::Client>,
+    openai_oauth_pool: Option<&OpenAiOAuthClientPool>,
     db_path: std::path::PathBuf,
     protocol: Protocol,
     protocol_root: &'static str,
@@ -209,7 +223,6 @@ async fn forward_with_activity(
         settings,
         channels: all_channels,
         channels_cache,
-        codex_identity,
     } = cfg;
 
     let (parts, body) = req.into_parts();
@@ -299,11 +312,7 @@ async fn forward_with_activity(
 
             let is_openai_oauth_channel =
                 channel.managed_provider() == Some(storage::ManagedRemoteProvider::Openai);
-            let upstream_client = if is_openai_oauth_channel {
-                openai_oauth_client.unwrap_or(client)
-            } else {
-                client
-            };
+            let mut upstream_client = client.clone();
             let mut attempt_body = body_bytes.clone();
             let mut openai_account = None;
             if is_openai_oauth_channel {
@@ -373,6 +382,15 @@ async fn forward_with_activity(
                     }
                 };
                 openai_account = Some(account);
+                if let Some(pool) = openai_oauth_pool {
+                    upstream_client = match pool.client_for_account(account_id).await {
+                        Ok(client) => client,
+                        Err(error) => {
+                            last_err = Some(ProxyError::Upstream(error.to_string()));
+                            continue 'channel_loop;
+                        }
+                    };
+                }
             }
 
             let mut url = if is_openai_oauth_channel {
@@ -409,15 +427,15 @@ async fn forward_with_activity(
             };
 
             let mut out_headers = filtered_headers(&parts.headers);
+            clear_channel_scoped_headers(&mut out_headers);
             let auth_result = if let Some(account) = openai_account.as_ref() {
                 let access_token = account.access_token.as_deref().unwrap_or_default();
-                crate::codex_upstream::apply_headers_with_identity(
+                crate::codex_upstream::apply_oauth_credentials(
                     &mut out_headers,
                     crate::codex_upstream::CodexCredentials {
                         access_token,
                         account_id: &account.remote_user_id,
                     },
-                    &codex_identity,
                 )
                 .map_err(|error| ProxyError::Upstream(error.to_string()))
             } else {
@@ -534,13 +552,13 @@ async fn forward_with_activity(
                     }
                 };
                 let mut retry_headers = filtered_headers(&parts.headers);
-                if let Err(error) = crate::codex_upstream::apply_headers_with_identity(
+                clear_channel_scoped_headers(&mut retry_headers);
+                if let Err(error) = crate::codex_upstream::apply_oauth_credentials(
                     &mut retry_headers,
                     crate::codex_upstream::CodexCredentials {
                         access_token: refreshed.access_token.as_deref().unwrap_or_default(),
                         account_id: &refreshed.remote_user_id,
                     },
-                    &codex_identity,
                 ) {
                     last_err = Some(ProxyError::Upstream(error.to_string()));
                     continue 'channel_loop;
@@ -647,6 +665,7 @@ async fn forward_with_activity(
                 && status.is_success();
             let mut prepared_upstream = PreparedUpstreamResponse::from_response(upstream);
             let mut final_semantic_failure = None;
+            let mut final_semantic_failure_detail = None;
             if expected_openai_responses_sse {
                 match inspect_openai_responses_bootstrap(prepared_upstream).await {
                     OpenAiResponsesBootstrap::Ready(response) => {
@@ -697,16 +716,14 @@ async fn forward_with_activity(
                             continue 'channel_loop;
                         }
 
-                        let response = if failure.synthetic_on_exhaustion {
-                            synthetic_openai_responses_failure(
-                                failure.response,
-                                &failure.error_kind,
-                                &failure.error_detail,
-                            )
-                        } else {
-                            failure.response
-                        };
+                        if failure.error_kind == "openai_responses_bootstrap_limit" {
+                            last_err = Some(ProxyError::Upstream(failure.error_detail));
+                            break 'channel_loop;
+                        }
+
+                        let response = failure.response;
                         final_semantic_failure = Some(failure.error_kind);
+                        final_semantic_failure_detail = Some(failure.error_detail);
                         prepared_upstream = response;
                     }
                 }
@@ -731,8 +748,9 @@ async fn forward_with_activity(
                     parse_sse: false, // 将在内部按 Content-Type 决定
                     expected_sse: expected_openai_responses_sse,
                     require_openai_responses_terminal: expected_openai_responses_sse,
+                    semantic_failure: final_semantic_failure,
+                    semantic_failure_detail: final_semantic_failure_detail,
                     upstream_content_type: None,
-                    content_type_corrected: false,
                     record_usage: !is_count_tokens,
                     span: tracing::Span::current(),
                 },
@@ -949,7 +967,7 @@ async fn proxy_upstream_response(
         ctx.require_openai_responses_terminal = detected_sse;
     }
 
-    let mut headers = filtered_headers(&upstream_headers);
+    let headers = filtered_headers(&upstream_headers);
     let content_type = upstream_headers
         .get(axum::http::header::CONTENT_TYPE)
         .and_then(|v| v.to_str().ok())
@@ -963,27 +981,6 @@ async fn proxy_upstream_response(
 
     ctx.parse_sse = is_sse;
     ctx.upstream_content_type = (!content_type.is_empty()).then_some(content_type.clone());
-    ctx.content_type_corrected = status.is_success()
-        && ((detected_sse == Some(true) && !header_is_sse)
-            || (detected_sse == Some(false) && !header_is_json));
-
-    if ctx.content_type_corrected {
-        headers.insert(
-            axum::http::header::CONTENT_TYPE,
-            if detected_sse == Some(false) {
-                HeaderValue::from_static("application/json")
-            } else {
-                HeaderValue::from_static("text/event-stream")
-            },
-        );
-        if detected_sse != Some(false) {
-            headers.insert(
-                axum::http::header::CACHE_CONTROL,
-                HeaderValue::from_static("no-cache"),
-            );
-        }
-    }
-
     let mut resp = Response::builder().status(status);
     if let Some(h) = resp.headers_mut() {
         for (k, v) in headers.iter() {
@@ -1044,13 +1041,19 @@ async fn proxy_upstream_response(
             ) = usage.as_event_fields();
 
             let http_status = Some(status.as_u16() as i64);
-            let success = status.is_success();
-            let error_kind = (!success).then(|| format!("upstream_http:{}", status.as_u16()));
+            let success = status.is_success() && ctx.semantic_failure.is_none();
+            let error_kind = (!success).then(|| {
+                ctx.semantic_failure
+                    .clone()
+                    .unwrap_or_else(|| format!("upstream_http:{}", status.as_u16()))
+            });
             let error_detail = (!success).then(|| {
-                let msg = parsed_json
-                    .as_ref()
-                    .and_then(|v| parse_error_message_from_value(ctx.protocol, v))
-                    .unwrap_or_else(|| String::from_utf8_lossy(&bytes).to_string());
+                let msg = ctx.semantic_failure_detail.clone().unwrap_or_else(|| {
+                    parsed_json
+                        .as_ref()
+                        .and_then(|v| parse_error_message_from_value(ctx.protocol, v))
+                        .unwrap_or_else(|| String::from_utf8_lossy(&bytes).to_string())
+                });
                 truncate(&msg, 2000)
             });
 
@@ -1108,7 +1111,9 @@ async fn proxy_upstream_response(
 
             if let Some(activity) = &mut ctx.activity {
                 let semantic_failure = parsed_json.as_ref().is_some_and(|value| {
-                    if ctx.protocol == Protocol::Openai {
+                    if ctx.semantic_failure.is_some() {
+                        true
+                    } else if ctx.protocol == Protocol::Openai {
                         crate::proxy::openai_responses::completed_failure(value).is_some()
                     } else {
                         value.get("error").is_some_and(|error| !error.is_null())
@@ -1221,6 +1226,14 @@ fn filtered_headers(src: &HeaderMap) -> HeaderMap {
     out
 }
 
+fn clear_channel_scoped_headers(headers: &mut HeaderMap) {
+    // These values are scoped to the original provider/account. They must not
+    // cross a channel boundary; OAuth cookies are supplied by the dedicated
+    // upstream client when appropriate.
+    headers.remove(HeaderName::from_static("chatgpt-account-id"));
+    headers.remove(axum::http::header::COOKIE);
+}
+
 async fn read_error_detail(protocol: Protocol, upstream: reqwest::Response) -> Option<String> {
     let bytes = read_response_prefix_bytes(upstream, limits::MAX_ERROR_DETAIL_BYTES).await?;
     let msg = parse_error_message(protocol, &bytes)
@@ -1293,7 +1306,7 @@ pub(crate) fn apply_auth(
     let token = channel.auth_ref.trim();
 
     let detected = detect_request_auth_kind(protocol, headers, url);
-    let auth_kind = resolve_auth_kind(protocol, detected);
+    let auth_kind = resolve_auth_kind(protocol, &channel.auth_type, detected)?;
 
     clear_auth(protocol, headers, url);
     apply_auth_kind(auth_kind, token, headers, url)?;
@@ -1344,13 +1357,44 @@ fn detect_request_auth_kind(
     }
 }
 
-fn resolve_auth_kind(protocol: Protocol, detected: Option<AuthKind>) -> AuthKind {
-    if let Some(kind) = detected
-        && auth_kind_allowed_for_protocol(protocol, kind)
-    {
-        return kind;
+fn resolve_auth_kind(
+    protocol: Protocol,
+    configured: &str,
+    detected: Option<AuthKind>,
+) -> Result<AuthKind, ProxyError> {
+    let configured = configured.trim();
+    if configured.is_empty() || configured.eq_ignore_ascii_case("auto") {
+        if let Some(kind) = detected
+            && auth_kind_allowed_for_protocol(protocol, kind)
+        {
+            return Ok(kind);
+        }
+        return Ok(default_auth_kind_for_protocol(protocol));
     }
-    default_auth_kind_for_protocol(protocol)
+
+    let kind = match configured.to_ascii_lowercase().as_str() {
+        "bearer" => AuthKind::Bearer,
+        "x-api-key" => AuthKind::XApiKey,
+        "x-goog-api-key" => AuthKind::XGoogApiKey,
+        "query-key" => AuthKind::QueryKey,
+        "managed_account" => {
+            return Err(ProxyError::Upstream(
+                "managed_account authentication requires an OpenAI OAuth channel".to_string(),
+            ));
+        }
+        other => {
+            return Err(ProxyError::Upstream(format!(
+                "unsupported channel auth_type: {other}"
+            )));
+        }
+    };
+    if !auth_kind_allowed_for_protocol(protocol, kind) {
+        return Err(ProxyError::Upstream(format!(
+            "auth_type {configured} is not valid for {}",
+            protocol.as_str()
+        )));
+    }
+    Ok(kind)
 }
 
 fn default_auth_kind_for_protocol(protocol: Protocol) -> AuthKind {
@@ -1373,6 +1417,8 @@ fn clear_auth(protocol: Protocol, headers: &mut HeaderMap, url: &mut Url) {
     headers.remove(axum::http::header::AUTHORIZATION);
     headers.remove(HeaderName::from_static("x-api-key"));
     headers.remove(HeaderName::from_static("x-goog-api-key"));
+    headers.remove(HeaderName::from_static("chatgpt-account-id"));
+    headers.remove(axum::http::header::COOKIE);
     if protocol == Protocol::Gemini {
         remove_query_param(url, "key");
     }
@@ -1844,6 +1890,9 @@ fn to_single_line(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axum::Router;
+    use axum::http::header::{COOKIE, SET_COOKIE};
+    use axum::routing::get;
 
     fn channel_change_events(rx: &mut tokio::sync::broadcast::Receiver<AppEvent>) -> Vec<i64> {
         std::iter::from_fn(|| rx.try_recv().ok())
@@ -1852,6 +1901,112 @@ mod tests {
                 _ => None,
             })
             .collect()
+    }
+
+    #[test]
+    fn explicit_auth_types_override_auto_inference() {
+        assert_eq!(
+            resolve_auth_kind(Protocol::Openai, "bearer", None).unwrap(),
+            AuthKind::Bearer
+        );
+        assert_eq!(
+            resolve_auth_kind(Protocol::Anthropic, "x-api-key", None).unwrap(),
+            AuthKind::XApiKey
+        );
+        assert_eq!(
+            resolve_auth_kind(Protocol::Gemini, "query-key", None).unwrap(),
+            AuthKind::QueryKey
+        );
+        assert!(resolve_auth_kind(Protocol::Openai, "x-api-key", None).is_err());
+    }
+
+    #[test]
+    fn auto_auth_type_keeps_inbound_inference() {
+        assert_eq!(
+            resolve_auth_kind(Protocol::Gemini, "auto", Some(AuthKind::XGoogApiKey)).unwrap(),
+            AuthKind::XGoogApiKey
+        );
+        assert_eq!(
+            resolve_auth_kind(Protocol::Gemini, "auto", None).unwrap(),
+            AuthKind::QueryKey
+        );
+    }
+
+    #[test]
+    fn provider_scoped_headers_are_removed_before_forwarding() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            HeaderName::from_static("chatgpt-account-id"),
+            HeaderValue::from_static("account-a"),
+        );
+        headers.insert(
+            axum::http::header::COOKIE,
+            HeaderValue::from_static("session=secret"),
+        );
+        let mut filtered = filtered_headers(&headers);
+        assert!(filtered.contains_key("chatgpt-account-id"));
+        assert!(filtered.contains_key(axum::http::header::COOKIE));
+        clear_channel_scoped_headers(&mut filtered);
+        assert!(!filtered.contains_key("chatgpt-account-id"));
+        assert!(!filtered.contains_key(axum::http::header::COOKIE));
+    }
+
+    #[tokio::test]
+    async fn oauth_cookie_pool_isolated_by_account() {
+        async fn set_cookie() -> (HeaderMap, &'static str) {
+            let mut headers = HeaderMap::new();
+            headers.insert(SET_COOKIE, "edge-route=account-a; Path=/".parse().unwrap());
+            (headers, "ok")
+        }
+
+        async fn read_cookie(headers: HeaderMap) -> String {
+            headers
+                .get(COOKIE)
+                .and_then(|value| value.to_str().ok())
+                .unwrap_or_default()
+                .to_string()
+        }
+
+        let app = Router::new()
+            .route("/set", get(set_cookie))
+            .route("/read", get(read_cookie));
+        let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+            .await
+            .expect("bind cookie test server");
+        let addr = listener.local_addr().expect("cookie test server addr");
+        tokio::spawn(async move {
+            let _ = axum::serve(listener, app).await;
+        });
+
+        let pool = OpenAiOAuthClientPool::default();
+        let account_a = pool.client_for_account("account-a").await.unwrap();
+        let account_b = pool.client_for_account("account-b").await.unwrap();
+        let base = format!("http://127.0.0.1:{}", addr.port());
+
+        account_a
+            .get(format!("{base}/set"))
+            .send()
+            .await
+            .expect("set account A cookie");
+        let cookie_b = account_b
+            .get(format!("{base}/read"))
+            .send()
+            .await
+            .expect("read account B cookie")
+            .text()
+            .await
+            .expect("read account B response");
+        let cookie_a = account_a
+            .get(format!("{base}/read"))
+            .send()
+            .await
+            .expect("read account A cookie")
+            .text()
+            .await
+            .expect("read account A response");
+
+        assert!(cookie_b.is_empty());
+        assert_eq!(cookie_a, "edge-route=account-a");
     }
 
     #[tokio::test]
