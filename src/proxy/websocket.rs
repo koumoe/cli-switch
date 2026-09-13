@@ -55,6 +55,30 @@ pub(crate) async fn record_local_failure(state: &AppState, path: String, reason:
 
 type UpstreamSocket = WebSocketStream<MaybeTlsStream<TcpStream>>;
 
+struct HandshakeFailure {
+    error: ProxyError,
+    retry_same_channel: bool,
+    record_channel_failure: bool,
+}
+
+impl HandshakeFailure {
+    fn retry(error: ProxyError) -> Self {
+        Self {
+            error,
+            retry_same_channel: true,
+            record_channel_failure: true,
+        }
+    }
+
+    fn skip_channel(error: ProxyError) -> Self {
+        Self {
+            error,
+            retry_same_channel: false,
+            record_channel_failure: false,
+        }
+    }
+}
+
 pub(crate) async fn upgrade(
     state: &AppState,
     ws: WebSocketUpgrade,
@@ -69,184 +93,43 @@ pub(crate) async fn upgrade(
         settings.as_ref(),
     )?;
     let mut last_error = None;
-    let total_channels = channels.len();
+    let total_attempts = channels
+        .iter()
+        .map(|channel| super::channel_attempt_budget(channel, settings.as_ref(), false))
+        .sum::<usize>();
+    let mut overall_attempt = 0usize;
 
-    for (channel_index, channel) in channels.into_iter().enumerate() {
+    for channel in channels {
         let channel_total = super::channel_attempt_budget(&channel, settings.as_ref(), false);
         for channel_attempt in 1..=channel_total {
-            let attempt = channel_index + channel_attempt;
+            overall_attempt += 1;
             let has_more_attempts = channel_attempt < channel_total;
-            let has_more_channels = channel_index + 1 < total_channels;
-            let is_openai_oauth =
-                channel.managed_provider() == Some(storage::ManagedRemoteProvider::Openai);
-
-            let mut url = if is_openai_oauth {
-                match Url::parse(&crate::codex_upstream::responses_url(Some(
-                    &channel.base_url,
-                ))) {
-                    Ok(url) => url,
-                    Err(error) => {
-                        let error = ProxyError::InvalidBaseUrl(error.to_string());
-                        let auto_disabled = record_handshake_failure(
-                            state,
-                            settings.as_ref(),
-                            &channel,
-                            &error,
-                            attempt,
-                            total_channels,
-                        )
-                        .await;
-                        last_error = Some(error);
-                        if auto_disabled || !has_more_attempts {
-                            break;
-                        }
-                        continue;
-                    }
-                }
-            } else {
-                match build_upstream_url(&channel.base_url, &uri, "/v1") {
-                    Ok(url) => url,
-                    Err(error) => {
-                        let auto_disabled = record_handshake_failure(
-                            state,
-                            settings.as_ref(),
-                            &channel,
-                            &error,
-                            attempt,
-                            total_channels,
-                        )
-                        .await;
-                        last_error = Some(error);
-                        if auto_disabled || !has_more_attempts {
-                            break;
-                        }
-                        continue;
-                    }
-                }
-            };
-
-            let scheme = match url.scheme() {
-                "http" => "ws".to_string(),
-                "https" => "wss".to_string(),
-                "ws" | "wss" => url.scheme().to_string(),
-                other => {
-                    let error = ProxyError::InvalidBaseUrl(format!(
-                        "unsupported websocket scheme: {other}"
-                    ));
-                    let auto_disabled = record_handshake_failure(
-                        state,
-                        settings.as_ref(),
-                        &channel,
-                        &error,
-                        attempt,
-                        total_channels,
-                    )
-                    .await;
-                    last_error = Some(error);
-                    if auto_disabled || !has_more_attempts {
-                        break;
-                    }
-                    continue;
-                }
-            };
-            if url.set_scheme(&scheme).is_err() {
-                let error = ProxyError::InvalidBaseUrl(url.to_string());
-                let auto_disabled = record_handshake_failure(
-                    state,
-                    settings.as_ref(),
-                    &channel,
-                    &error,
-                    attempt,
-                    total_channels,
-                )
-                .await;
-                last_error = Some(error);
-                if auto_disabled || !has_more_attempts {
-                    break;
-                }
-                continue;
-            }
-
-            let mut forwarded = filtered_headers(&headers);
-            clear_channel_scoped_headers(&mut forwarded);
-            if is_openai_oauth {
-                let Some(account_id) = channel.managed_account_id() else {
-                    last_error = Some(ProxyError::Upstream(
-                        "OpenAI managed channel is missing account id".into(),
-                    ));
-                    break;
-                };
-                let account = match storage::get_openai_account_with_secret(
-                    state.db_path(),
-                    account_id.to_string(),
-                )
-                .await
+            let request =
+                match build_websocket_request(state, settings.as_ref(), &channel, &headers, &uri)
+                    .await
                 {
-                    Ok(account) => account,
-                    Err(error) => {
-                        last_error = Some(ProxyError::Storage(error));
-                        break;
+                    Ok(request) => request,
+                    Err(failure) => {
+                        let auto_disabled = if failure.record_channel_failure {
+                            record_handshake_failure(
+                                state,
+                                settings.as_ref(),
+                                &channel,
+                                &failure.error,
+                                overall_attempt,
+                                total_attempts,
+                            )
+                            .await
+                        } else {
+                            false
+                        };
+                        last_error = Some(failure.error);
+                        if !failure.retry_same_channel || auto_disabled || !has_more_attempts {
+                            break;
+                        }
+                        continue;
                     }
                 };
-                if account.reauth_required {
-                    last_error = Some(ProxyError::Upstream("OpenAI account requires login".into()));
-                    break;
-                }
-                if let Err(error) = crate::codex_upstream::apply_oauth_credentials(
-                    &mut forwarded,
-                    crate::codex_upstream::CodexCredentials {
-                        access_token: account.access_token.as_deref().unwrap_or_default(),
-                        account_id: &account.remote_user_id,
-                    },
-                ) {
-                    last_error = Some(ProxyError::Upstream(error.to_string()));
-                    break;
-                }
-            } else if let Err(error) =
-                apply_auth(&channel, Protocol::Openai, &mut url, &mut forwarded)
-            {
-                let auto_disabled = record_handshake_failure(
-                    state,
-                    settings.as_ref(),
-                    &channel,
-                    &error,
-                    attempt,
-                    total_channels,
-                )
-                .await;
-                last_error = Some(error);
-                if auto_disabled || !has_more_attempts {
-                    break;
-                }
-                continue;
-            }
-
-            let mut request = match url.as_str().into_client_request() {
-                Ok(request) => request,
-                Err(error) => {
-                    let error =
-                        ProxyError::Upstream(format!("build websocket request failed: {error}"));
-                    let auto_disabled = record_handshake_failure(
-                        state,
-                        settings.as_ref(),
-                        &channel,
-                        &error,
-                        attempt,
-                        total_channels,
-                    )
-                    .await;
-                    last_error = Some(error);
-                    if auto_disabled || !has_more_attempts {
-                        break;
-                    }
-                    continue;
-                }
-            };
-            for (name, value) in forwarded {
-                if let Some(name) = name {
-                    request.headers_mut().insert(name, value);
-                }
-            }
 
             match tokio_tungstenite::connect_async(request).await {
                 Ok((upstream, _response)) => {
@@ -265,8 +148,8 @@ pub(crate) async fn upgrade(
                         settings.as_ref(),
                         &channel,
                         &error,
-                        attempt,
-                        total_channels,
+                        overall_attempt,
+                        total_attempts,
                     )
                     .await;
                     last_error = Some(error);
@@ -275,13 +158,84 @@ pub(crate) async fn upgrade(
                     }
                 }
             }
-            if !has_more_attempts && !has_more_channels {
-                break;
-            }
         }
     }
 
     Err(last_error.unwrap_or_else(|| ProxyError::Upstream("websocket handshake failed".into())))
+}
+
+async fn build_websocket_request(
+    state: &AppState,
+    _settings: &storage::AppSettings,
+    channel: &storage::Channel,
+    headers: &HeaderMap,
+    uri: &axum::http::Uri,
+) -> Result<http::Request<()>, HandshakeFailure> {
+    let is_openai_oauth =
+        channel.managed_provider() == Some(storage::ManagedRemoteProvider::Openai);
+    let mut url = if is_openai_oauth {
+        Url::parse(&crate::codex_upstream::responses_url(Some(
+            &channel.base_url,
+        )))
+        .map_err(|error| HandshakeFailure::retry(ProxyError::InvalidBaseUrl(error.to_string())))?
+    } else {
+        build_upstream_url(&channel.base_url, uri, "/v1").map_err(HandshakeFailure::retry)?
+    };
+    let scheme = match url.scheme() {
+        "http" => "ws",
+        "https" => "wss",
+        "ws" | "wss" => url.scheme(),
+        other => {
+            return Err(HandshakeFailure::retry(ProxyError::InvalidBaseUrl(
+                format!("unsupported websocket scheme: {other}"),
+            )));
+        }
+    };
+    let scheme = scheme.to_string();
+    url.set_scheme(&scheme)
+        .map_err(|_| HandshakeFailure::retry(ProxyError::InvalidBaseUrl(url.to_string())))?;
+
+    let mut forwarded = filtered_headers(headers);
+    clear_channel_scoped_headers(&mut forwarded);
+    if is_openai_oauth {
+        let Some(account_id) = channel.managed_account_id() else {
+            return Err(HandshakeFailure::skip_channel(ProxyError::Upstream(
+                "OpenAI managed channel is missing account id".into(),
+            )));
+        };
+        let account =
+            storage::get_openai_account_with_secret(state.db_path(), account_id.to_string())
+                .await
+                .map_err(|error| HandshakeFailure::skip_channel(ProxyError::Storage(error)))?;
+        if account.reauth_required {
+            return Err(HandshakeFailure::skip_channel(ProxyError::Upstream(
+                "OpenAI account requires login".into(),
+            )));
+        }
+        crate::codex_upstream::apply_oauth_credentials(
+            &mut forwarded,
+            crate::codex_upstream::CodexCredentials {
+                access_token: account.access_token.as_deref().unwrap_or_default(),
+                account_id: &account.remote_user_id,
+            },
+        )
+        .map_err(|error| HandshakeFailure::retry(ProxyError::Upstream(error.to_string())))?;
+    } else {
+        apply_auth(channel, Protocol::Openai, &mut url, &mut forwarded)
+            .map_err(HandshakeFailure::retry)?;
+    }
+
+    let mut request = url.as_str().into_client_request().map_err(|error| {
+        HandshakeFailure::retry(ProxyError::Upstream(format!(
+            "build websocket request failed: {error}"
+        )))
+    })?;
+    for (name, value) in forwarded {
+        if let Some(name) = name {
+            request.headers_mut().insert(name, value);
+        }
+    }
+    Ok(request)
 }
 
 async fn record_handshake_failure(
