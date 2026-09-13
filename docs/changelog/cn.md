@@ -1,3 +1,7 @@
+## [0.68.0](https://github.com/koumoe/cli-switch/compare/v0.67.0...v0.68.0) (2026-09-13)
+
+### 功能
+* 增加入站 WebSocket 代理和端点失败统计 (#234) ([aa774b8](https://github.com/koumoe/cli-switch/commit/aa774b8378bd47e390917b6fb977afb5103e0102))
 ## [0.67.0](https://github.com/koumoe/cli-switch/compare/v0.66.2...v0.67.0) (2026-09-13)
 
 ### 功能
