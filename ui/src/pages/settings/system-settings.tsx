@@ -1,6 +1,6 @@
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
-import { Badge } from "@/components/ui";
+import { Badge, Button } from "@/components/ui";
 import { useI18n } from "@/hooks/use-i18n";
 import {
   AppUpdateSettingsCard,
@@ -8,6 +8,8 @@ import {
   ServiceInfoSettingsCard,
 } from "@/pages/settings/form-sections";
 import type { AppSettings, Health } from "@/types/api";
+import type { EndpointFailure } from "@/types/api";
+import { clearEndpointFailures, listEndpointFailures } from "@/api";
 
 type SystemSettingsProps = {
   settings: AppSettings | null;
@@ -39,6 +41,22 @@ export function SystemSettings({
   onAutoUpdateChange,
 }: SystemSettingsProps) {
   const { t } = useI18n();
+  const [endpointFailures, setEndpointFailures] = useState<EndpointFailure[]>([]);
+
+  const refreshEndpointFailures = () => {
+    listEndpointFailures(5).then((result) => setEndpointFailures(result.items)).catch(() => undefined);
+  };
+
+  useEffect(() => {
+    refreshEndpointFailures();
+    const timer = window.setInterval(refreshEndpointFailures, 10000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  async function clearFailures() {
+    await clearEndpointFailures();
+    setEndpointFailures([]);
+  }
 
   return (
     <div className="pb-4">
@@ -48,6 +66,34 @@ export function SystemSettings({
         apiPort={apiPort}
         onSaved={onSaved}
       />
+      <div className="border-t border-border px-5 pb-1 pt-2.5 text-[10px] font-bold uppercase tracking-[0.06em] text-muted-foreground">
+        {t("settings.endpointFailures.title")}
+      </div>
+      <div className="border-t border-border px-5 py-3">
+        <div className="mb-2 text-[10.5px] text-muted-foreground">
+          {t("settings.endpointFailures.hint")}
+        </div>
+        {endpointFailures.length === 0 ? (
+          <div className="text-[11px] text-muted-foreground">{t("settings.endpointFailures.empty")}</div>
+        ) : (
+          <div className="space-y-1.5">
+            {endpointFailures.map((item) => (
+              <div key={`${item.endpoint}:${item.reason}`} className="flex items-center justify-between gap-3 text-[11px]">
+                <div className="min-w-0">
+                  <div className="truncate font-mono">{item.endpoint}</div>
+                  <div className="text-[10px] text-muted-foreground">{t(`settings.endpointFailures.reason.${item.reason}`)}</div>
+                </div>
+                <span className="shrink-0 font-mono font-semibold">{item.count}</span>
+              </div>
+            ))}
+            <div className="pt-1">
+              <Button size="sm" variant="outline" onClick={() => void clearFailures()}>
+                {t("settings.endpointFailures.clear")}
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
 
       <CompatibilitySettingsCard settings={settings} onSaved={onSaved} />
 

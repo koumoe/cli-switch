@@ -857,6 +857,16 @@
       "saved": "已保存",
       "saveFail": "保存失败"
     },
+    "endpointFailures": {
+      "title": "本地端点失败",
+      "hint": "只统计本地端点不存在或 WebSocket 握手被本地拒绝的请求，不包含上游 HTTP 错误。",
+      "empty": "暂无本地端点失败",
+      "clear": "清除统计",
+      "reason": {
+        "local_endpoint_not_supported": "本地端点不支持",
+        "local_handshake_rejected": "本地 WebSocket 握手被拒绝"
+      }
+    },
     "chatBridge": {
       "configTitle": "基础配置",
       "platformConfigTitle": "平台配置",
