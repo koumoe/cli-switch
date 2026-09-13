@@ -11,12 +11,10 @@ use crate::storage;
 
 async fn reject_unsupported_websocket_if_needed(
     state: &AppState,
-    is_websocket: bool,
+    should_reject: bool,
     path: String,
-    supported_path: Option<&str>,
 ) -> Option<axum::response::Response> {
-    let unsupported = is_websocket && supported_path.is_none_or(|supported| path != supported);
-    if unsupported {
+    if should_reject {
         Some(proxy::websocket::reject_unsupported(state, path).await)
     } else {
         None
@@ -27,17 +25,18 @@ pub(in crate::server) async fn proxy_openai(
     State(state): State<AppState>,
     req: Request<Body>,
 ) -> Result<axum::response::Response, ApiError> {
-    if proxy::websocket::is_websocket_request(&req) {
-        if let Some(response) = reject_unsupported_websocket_if_needed(
-            &state,
-            true,
-            req.uri().path().trim_end_matches('/').to_string(),
-            Some(proxy::websocket::CODEX_RESPONSES_PATH),
-        )
-        .await
-        {
-            return Ok(response);
-        }
+    let is_websocket = proxy::websocket::is_websocket_request(&req);
+    let path = req.uri().path().trim_end_matches('/').to_string();
+    if let Some(response) = reject_unsupported_websocket_if_needed(
+        &state,
+        is_websocket && path != proxy::websocket::CODEX_RESPONSES_PATH,
+        path,
+    )
+    .await
+    {
+        return Ok(response);
+    }
+    if is_websocket {
         let (mut parts, _body) = req.into_parts();
         let ws = match WebSocketUpgrade::from_request_parts(&mut parts, &state).await {
             Ok(ws) => ws,
@@ -79,13 +78,9 @@ pub(in crate::server) async fn proxy_anthropic(
     State(state): State<AppState>,
     req: Request<Body>,
 ) -> Result<axum::response::Response, ApiError> {
-    if let Some(response) = reject_unsupported_websocket_if_needed(
-        &state,
-        proxy::websocket::is_websocket_request(&req),
-        req.uri().path().trim_end_matches('/').to_string(),
-        None,
-    )
-    .await
+    let is_websocket = proxy::websocket::is_websocket_request(&req);
+    let path = req.uri().path().trim_end_matches('/').to_string();
+    if let Some(response) = reject_unsupported_websocket_if_needed(&state, is_websocket, path).await
     {
         return Ok(response);
     }
@@ -110,13 +105,9 @@ pub(in crate::server) async fn proxy_gemini(
     State(state): State<AppState>,
     req: Request<Body>,
 ) -> Result<axum::response::Response, ApiError> {
-    if let Some(response) = reject_unsupported_websocket_if_needed(
-        &state,
-        proxy::websocket::is_websocket_request(&req),
-        req.uri().path().trim_end_matches('/').to_string(),
-        None,
-    )
-    .await
+    let is_websocket = proxy::websocket::is_websocket_request(&req);
+    let path = req.uri().path().trim_end_matches('/').to_string();
+    if let Some(response) = reject_unsupported_websocket_if_needed(&state, is_websocket, path).await
     {
         return Ok(response);
     }
