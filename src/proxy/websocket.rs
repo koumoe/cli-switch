@@ -104,32 +104,29 @@ pub(crate) async fn upgrade(
         for channel_attempt in 1..=channel_total {
             overall_attempt += 1;
             let has_more_attempts = channel_attempt < channel_total;
-            let request =
-                match build_websocket_request(state, settings.as_ref(), &channel, &headers, &uri)
-                    .await
-                {
-                    Ok(request) => request,
-                    Err(failure) => {
-                        let auto_disabled = if failure.record_channel_failure {
-                            record_handshake_failure(
-                                state,
-                                settings.as_ref(),
-                                &channel,
-                                &failure.error,
-                                overall_attempt,
-                                total_attempts,
-                            )
-                            .await
-                        } else {
-                            false
-                        };
-                        last_error = Some(failure.error);
-                        if !failure.retry_same_channel || auto_disabled || !has_more_attempts {
-                            break;
-                        }
-                        continue;
+            let request = match build_websocket_request(state, &channel, &headers, &uri).await {
+                Ok(request) => request,
+                Err(failure) => {
+                    let auto_disabled = if failure.record_channel_failure {
+                        record_handshake_failure(
+                            state,
+                            settings.as_ref(),
+                            &channel,
+                            &failure.error,
+                            overall_attempt,
+                            total_attempts,
+                        )
+                        .await
+                    } else {
+                        false
+                    };
+                    last_error = Some(failure.error);
+                    if !failure.retry_same_channel || auto_disabled || !has_more_attempts {
+                        break;
                     }
-                };
+                    continue;
+                }
+            };
 
             match tokio_tungstenite::connect_async(request).await {
                 Ok((upstream, _response)) => {
@@ -166,7 +163,6 @@ pub(crate) async fn upgrade(
 
 async fn build_websocket_request(
     state: &AppState,
-    _settings: &storage::AppSettings,
     channel: &storage::Channel,
     headers: &HeaderMap,
     uri: &axum::http::Uri,
