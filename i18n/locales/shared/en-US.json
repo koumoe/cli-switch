@@ -48,6 +48,7 @@
     "channel_retry_times_invalid": "retry_times must be >= 1",
     "channel_real_multiplier_invalid": "Invalid multiplier value",
     "channel_base_url_invalid": "Invalid base_url",
+    "channel_auth_type_invalid": "Channel authentication mode is invalid for this protocol",
     "channel_auth_apply_failed": "Invalid channel auth config",
     "channel_not_found": "Channel not found",
     "channel_test_request_failed": "Channel connectivity test failed",

@@ -43,17 +43,26 @@ pub async fn locale_context_middleware(
     req: Request,
     next: Next,
 ) -> Response {
+    let is_proxy_request = is_proxy_path(req.uri().path());
     let ctx = resolve_request_context(&state, &req);
     REQUEST_CONTEXT
         .scope(ctx, async move {
             let mut response = next.run(req).await;
-            response.headers_mut().insert(
-                http::header::CONTENT_LANGUAGE,
-                HeaderValue::from_static(ctx.locale.as_str()),
-            );
+            if !is_proxy_request {
+                response.headers_mut().insert(
+                    http::header::CONTENT_LANGUAGE,
+                    HeaderValue::from_static(ctx.locale.as_str()),
+                );
+            }
             response
         })
         .await
+}
+
+fn is_proxy_path(path: &str) -> bool {
+    matches!(path, "/v1" | "/v1beta" | "/v1/" | "/v1beta/")
+        || path.starts_with("/v1/")
+        || path.starts_with("/v1beta/")
 }
 
 fn resolve_request_context(state: &AppState, req: &Request) -> RequestContext {
@@ -120,4 +129,23 @@ fn query_locale_value(query: &str) -> Option<&str> {
         return parts.next();
     }
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_proxy_path;
+
+    #[test]
+    fn proxy_paths_do_not_receive_management_content_language() {
+        for path in ["/v1/responses", "/v1/messages", "/v1beta/models/gemini"] {
+            assert!(is_proxy_path(path));
+        }
+    }
+
+    #[test]
+    fn management_paths_keep_content_language_behavior() {
+        for path in ["/api/settings", "/", "/assets/app.js"] {
+            assert!(!is_proxy_path(path));
+        }
+    }
 }

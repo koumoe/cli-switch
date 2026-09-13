@@ -1,4 +1,4 @@
-use axum::http::{HeaderMap, HeaderValue, StatusCode};
+use axum::http::{HeaderMap, StatusCode};
 use bytes::{Bytes, BytesMut};
 use futures_util::StreamExt as _;
 use futures_util::stream::BoxStream;
@@ -19,7 +19,6 @@ pub(super) struct OpenAiResponsesBootstrapFailure {
     pub(super) error_detail: String,
     pub(super) usage: TokenUsage,
     pub(super) retryable: bool,
-    pub(super) synthetic_on_exhaustion: bool,
 }
 
 enum BootstrapTerminal {
@@ -28,7 +27,6 @@ enum BootstrapTerminal {
         error_kind: String,
         error_detail: String,
         retryable: bool,
-        synthetic_on_exhaustion: bool,
     },
 }
 
@@ -102,7 +100,6 @@ impl BootstrapState {
                         error_detail: "OpenAI Responses stream ended without output or usage"
                             .to_string(),
                         retryable: true,
-                        synthetic_on_exhaustion: true,
                     }
                 },
             );
@@ -133,7 +130,6 @@ impl BootstrapState {
                         error_kind,
                         error_detail,
                         retryable: terminal_failure_is_retryable(&value),
-                        synthetic_on_exhaustion: false,
                     });
                 } else if self.usage.has_any_fields() || completed_has_output(&value) {
                     self.terminal = Some(BootstrapTerminal::Success);
@@ -143,7 +139,6 @@ impl BootstrapState {
                         error_detail: "OpenAI Responses stream completed without output or usage"
                             .to_string(),
                         retryable: true,
-                        synthetic_on_exhaustion: true,
                     });
                 }
             }
@@ -153,7 +148,6 @@ impl BootstrapState {
                     error_detail: terminal_error_detail(&value)
                         .unwrap_or_else(|| format!("OpenAI Responses stream ended with {marker}")),
                     retryable: terminal_failure_is_retryable(&value),
-                    synthetic_on_exhaustion: false,
                 });
             }
             "response.error" | "error" => {
@@ -244,20 +238,26 @@ pub(super) async fn inspect_openai_responses_bootstrap(
                                 error_detail: pending_error.error_detail,
                                 usage: state.usage,
                                 retryable: pending_error.retryable,
-                                synthetic_on_exhaustion: true,
                             },
                         );
                     }
-                    return OpenAiResponsesBootstrap::Ready(set_detected_sse(
-                        prepared_response_with_prefix(
-                            status,
-                            headers,
-                            content_length,
-                            prefix.freeze(),
-                            stream,
-                        ),
-                        saw_sse_structure,
-                    ));
+                    return OpenAiResponsesBootstrap::Failure(
+                        OpenAiResponsesBootstrapFailure {
+                            response: prepared_response_with_prefix(
+                                status,
+                                headers,
+                                content_length,
+                                prefix.freeze(),
+                                stream,
+                            ),
+                            error_kind: "openai_responses_bootstrap_limit".to_string(),
+                            error_detail:
+                                "OpenAI Responses stream exceeded the bootstrap buffer before a semantic output"
+                                    .to_string(),
+                            usage: state.usage,
+                            retryable: true,
+                        },
+                    );
                 }
             }
             Some(Err(error)) => {
@@ -287,7 +287,6 @@ pub(super) async fn inspect_openai_responses_bootstrap(
                     error_detail: super::truncate(&error.to_string(), 2000),
                     usage: state.usage,
                     retryable: true,
-                    synthetic_on_exhaustion: true,
                 });
             }
             None => {
@@ -341,7 +340,6 @@ pub(super) async fn inspect_openai_responses_bootstrap(
                                 .to_string(),
                         usage: state.usage,
                         retryable: true,
-                        synthetic_on_exhaustion: true,
                     });
                 }
                 if let Some(pending_error) = state.pending_error.take() {
@@ -358,7 +356,6 @@ pub(super) async fn inspect_openai_responses_bootstrap(
                         error_detail: pending_error.error_detail,
                         usage: state.usage,
                         retryable: pending_error.retryable,
-                        synthetic_on_exhaustion: true,
                     });
                 }
                 let response = prepared_response_with_prefix(
@@ -375,7 +372,6 @@ pub(super) async fn inspect_openai_responses_bootstrap(
                         .to_string(),
                     usage: state.usage,
                     retryable: true,
-                    synthetic_on_exhaustion: true,
                 });
             }
         }
@@ -395,14 +391,12 @@ fn bootstrap_terminal_result(
             error_kind,
             error_detail,
             retryable,
-            synthetic_on_exhaustion,
         } => OpenAiResponsesBootstrap::Failure(OpenAiResponsesBootstrapFailure {
             response,
             error_kind,
             error_detail,
             usage,
             retryable,
-            synthetic_on_exhaustion,
         }),
     }
 }
@@ -432,49 +426,6 @@ fn set_detected_sse(
 ) -> PreparedUpstreamResponse {
     response.detected_sse = Some(detected_sse);
     response
-}
-
-pub(super) fn synthetic_openai_responses_failure(
-    response: PreparedUpstreamResponse,
-    error_kind: &str,
-    error_detail: &str,
-) -> PreparedUpstreamResponse {
-    let PreparedUpstreamResponse {
-        status,
-        mut headers,
-        content_length: _,
-        detected_sse: _,
-        stream: _,
-    } = response;
-    let payload = serde_json::json!({
-        "type": "response.failed",
-        "response": {
-            "status": "failed",
-            "error": {
-                "code": error_kind,
-                "message": error_detail,
-            }
-        }
-    });
-    let body = Bytes::from(format!("event: response.failed\ndata: {}\n\n", payload));
-    headers.insert(
-        axum::http::header::CONTENT_TYPE,
-        HeaderValue::from_static("text/event-stream"),
-    );
-    headers.insert(
-        axum::http::header::CACHE_CONTROL,
-        HeaderValue::from_static("no-cache"),
-    );
-    let content_length = Some(body.len() as u64);
-    let stream =
-        futures_util::stream::once(async move { Ok::<Bytes, reqwest::Error>(body) }).boxed();
-    PreparedUpstreamResponse {
-        status,
-        headers,
-        content_length,
-        detected_sse: Some(true),
-        stream,
-    }
 }
 
 pub(super) fn event_has_semantic_output(marker: &str, value: &serde_json::Value) -> bool {

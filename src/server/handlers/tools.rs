@@ -336,11 +336,6 @@ pub(crate) async fn run_cli_tool_install(
     match res {
         Ok(Ok(mut v)) => {
             runtime.record_install(&mut v.tool).await;
-            if requested_tool == CliToolId::Codex && v.ok {
-                let identity =
-                    crate::codex_upstream::identity_for_version(v.tool.version.as_deref());
-                let _ = state.codex_identity_cache.send(Arc::new(identity));
-            }
             Ok(v)
         }
         Ok(Err(e)) => {

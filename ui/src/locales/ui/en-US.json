@@ -189,6 +189,16 @@
       "description": "Configure API channel connection details",
       "name": "Name",
       "terminal": "Terminal",
+      "authType": "Authentication mode",
+      "authTypeHint": "auto keeps inbound request inference; an explicit mode forces its authentication field",
+      "authTypeOptions": {
+        "auto": "Auto (existing behavior)",
+        "bearer": "Authorization: Bearer",
+        "xApiKey": "x-api-key",
+        "xGoogApiKey": "x-goog-api-key",
+        "queryKey": "URL query: key",
+        "managedAccount": "Managed OpenAI OAuth"
+      },
       "priority": "Priority (higher wins)",
       "retryTimes": "Retry count",
       "retryTimesHint": "Only applies when per-channel retry is enabled in Settings; minimum is 1",

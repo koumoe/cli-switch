@@ -22,8 +22,9 @@ pub(super) struct StreamRecordContext {
     pub(super) parse_sse: bool,
     pub(super) expected_sse: bool,
     pub(super) require_openai_responses_terminal: bool,
+    pub(super) semantic_failure: Option<String>,
+    pub(super) semantic_failure_detail: Option<String>,
     pub(super) upstream_content_type: Option<String>,
-    pub(super) content_type_corrected: bool,
     pub(super) record_usage: bool,
     /// Captured from the request handler so stream logs emitted from `Drop` can still be
     /// correlated with the request span (method/uri/endpoint/etc).
@@ -336,6 +337,7 @@ impl InstrumentedStream {
         let success = self.ctx.status_is_success
             && self.stream_error.is_none()
             && self.sse_terminal_error_kind.is_none()
+            && self.ctx.semantic_failure.is_none()
             && !missing_required_terminal;
         if let Some(activity) = &mut self.ctx.activity {
             let status = if self.end_reason == Some("dropped")
@@ -365,6 +367,8 @@ impl InstrumentedStream {
             Some(format!("upstream_http:{}", self.ctx.http_status))
         } else if let Some(kind) = self.sse_terminal_error_kind.as_deref() {
             Some(kind.to_string())
+        } else if let Some(kind) = self.ctx.semantic_failure.as_deref() {
+            Some(kind.to_string())
         } else if let Some(err) = self.stream_error.as_deref() {
             Some(format!("stream_error:{}", super::truncate(err, 240)))
         } else if missing_required_terminal {
@@ -375,6 +379,8 @@ impl InstrumentedStream {
         let error_detail = if success {
             None
         } else if let Some(detail) = self.sse_terminal_error_detail.as_deref() {
+            Some(detail.to_string())
+        } else if let Some(detail) = self.ctx.semantic_failure_detail.as_deref() {
             Some(detail.to_string())
         } else if let Some(detail) = self.stream_error_detail.as_deref() {
             Some(super::truncate(detail, 2000))
@@ -406,7 +412,6 @@ impl InstrumentedStream {
             stream_end = self.end_reason.unwrap_or("-"),
             upstream_content_type = self.ctx.upstream_content_type.as_deref().unwrap_or("-"),
             sse_expected = self.ctx.expected_sse,
-            content_type_corrected = self.ctx.content_type_corrected,
             sse_terminal = self.sse_seen_terminal,
             sse_success_terminal = self.sse_seen_success_terminal,
             sse_semantic_output = self.sse_semantic_output_seen,
@@ -435,7 +440,6 @@ impl InstrumentedStream {
                 stream_end = self.end_reason.unwrap_or("-"),
                 upstream_content_type = self.ctx.upstream_content_type.as_deref().unwrap_or("-"),
                 sse_expected = self.ctx.expected_sse,
-                content_type_corrected = self.ctx.content_type_corrected,
                 sse_terminal = self.sse_seen_terminal,
                 sse_success_terminal = self.sse_seen_success_terminal,
                 sse_semantic_output = self.sse_semantic_output_seen,
@@ -566,8 +570,9 @@ mod activity_tests {
                 parse_sse: true,
                 expected_sse: true,
                 require_openai_responses_terminal: true,
+                semantic_failure: None,
+                semantic_failure_detail: None,
                 upstream_content_type: Some("text/event-stream".into()),
-                content_type_corrected: false,
                 record_usage: false,
                 span: tracing::Span::none(),
             },

@@ -50,6 +50,7 @@
     "channel_retry_times_invalid": "重试次数必须大于等于 1",
     "channel_real_multiplier_invalid": "倍率参数无效",
     "channel_base_url_invalid": "base_url 无效",
+    "channel_auth_type_invalid": "渠道认证方式与协议不匹配",
     "channel_auth_apply_failed": "渠道鉴权配置无效",
     "channel_not_found": "渠道不存在",
     "channel_test_request_failed": "渠道连通性测试失败",

@@ -272,12 +272,20 @@ export type PickFolderResponse = {
   path: string | null;
 };
 
+export type ChannelAuthType =
+  | "auto"
+  | "bearer"
+  | "x-api-key"
+  | "x-goog-api-key"
+  | "query-key"
+  | "managed_account";
+
 export type Channel = {
   id: string;
   name: string;
   protocol: Protocol;
   base_url: string;
-  auth_type: string;
+  auth_type: ChannelAuthType;
   auth_ref: string;
   checkin_url: string | null;
   priority: number;
@@ -302,7 +310,7 @@ export type CreateChannelInput = {
   name: string;
   protocol: Protocol;
   base_url: string;
-  auth_type: string;
+  auth_type: ChannelAuthType;
   auth_ref: string;
   checkin_url: string;
   priority: number;
@@ -316,7 +324,7 @@ export type CreateChannelInput = {
 export type UpdateChannelInput = Partial<{
   name: string;
   base_url: string;
-  auth_type: string;
+  auth_type: ChannelAuthType;
   auth_ref: string;
   checkin_url: string;
   priority: number;

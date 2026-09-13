@@ -16,9 +16,9 @@ use tower_http::trace::{DefaultOnFailure, DefaultOnResponse};
 
 use crate::chat_bridge::weixin::WeixinStatus;
 use crate::chat_bridge::whatsapp_web::WhatsAppWebStatus;
-use crate::codex_upstream;
 use crate::events::AppEvent;
 use crate::i18n::locale_context_middleware;
+use crate::proxy;
 use crate::update;
 use crate::{chat_bridge, events, storage};
 
@@ -55,10 +55,10 @@ fn build_proxy_http_client() -> anyhow::Result<reqwest::Client> {
         .map_err(Into::into)
 }
 
-fn build_openai_proxy_http_client() -> anyhow::Result<reqwest::Client> {
+pub(crate) fn build_openai_proxy_http_client() -> anyhow::Result<reqwest::Client> {
     // ChatGPT's Cloudflare edge can issue load-balancing cookies while
-    // establishing an API route. This is one shared host-scoped cookie jar for
-    // all managed OpenAI requests; cookies are routing state, not credentials.
+    // establishing an API route. The proxy creates one client (and cookie jar)
+    // per managed account; cookies are routing state, not credentials.
     reqwest::Client::builder()
         .cookie_store(true)
         .no_gzip()
@@ -634,35 +634,11 @@ pub async fn serve_with_listener(
     let (settings_notify, settings_rx) = watch::channel(0u64);
     let http_client = build_http_client()?;
     let proxy_http_client = build_proxy_http_client()?;
-    let openai_proxy_http_client = build_openai_proxy_http_client()?;
     let db_path = Arc::new(db_path);
 
     let settings0 = storage::get_app_settings((*db_path).clone()).await?;
     let initial_update_locale = settings0.ui_locale;
     let channels0 = storage::list_channels((*db_path).clone()).await?;
-    let codex_version = {
-        let npm_path = settings0.cli_tools_npm_path.clone();
-        let node_path = settings0.cli_tools_node_path.clone();
-        let data_dir = state::data_dir_from_db_path(db_path.as_path());
-        tokio::task::spawn_blocking(move || {
-            crate::cli_tools::detect_codex_version(
-                npm_path.as_deref(),
-                node_path.as_deref(),
-                &data_dir,
-            )
-        })
-        .await
-        .unwrap_or(None)
-    };
-    let codex_identity = Arc::new(codex_upstream::identity_for_version(
-        codex_version.as_deref(),
-    ));
-    tracing::info!(
-        version = %codex_identity.version,
-        detected_version = ?codex_version,
-        "cached Codex client identity"
-    );
-    let (codex_identity_cache, codex_identity_cache_rx) = watch::channel(codex_identity);
     let (settings_cache, settings_cache_rx) = watch::channel(Arc::new(settings0));
     let (channels_cache, channels_cache_rx) = watch::channel(Arc::new(channels0));
     let (whatsapp_control_tx, whatsapp_control_rx) = mpsc::channel(32);
@@ -679,9 +655,7 @@ pub async fn serve_with_listener(
         db_path: db_path.clone(),
         http_client: http_client.clone(),
         proxy_http_client,
-        openai_proxy_http_client,
-        codex_identity_cache,
-        codex_identity_cache_rx,
+        openai_oauth_client_pool: proxy::OpenAiOAuthClientPool::default(),
         settings_notify,
         settings_cache,
         settings_cache_rx,
