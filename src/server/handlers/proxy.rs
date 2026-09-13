@@ -1,5 +1,7 @@
 use axum::body::Body;
+use axum::extract::FromRequestParts;
 use axum::extract::State;
+use axum::extract::ws::WebSocketUpgrade;
 use axum::http::Request;
 
 use crate::proxy;
@@ -7,10 +9,54 @@ use crate::server::AppState;
 use crate::server::error::{ApiError, map_proxy_error};
 use crate::storage;
 
+async fn reject_unsupported_websocket_if_needed(
+    state: &AppState,
+    should_reject: bool,
+    path: String,
+) -> Option<axum::response::Response> {
+    if should_reject {
+        Some(proxy::websocket::reject_unsupported(state, path).await)
+    } else {
+        None
+    }
+}
+
 pub(in crate::server) async fn proxy_openai(
     State(state): State<AppState>,
     req: Request<Body>,
 ) -> Result<axum::response::Response, ApiError> {
+    let is_websocket = proxy::websocket::is_websocket_request(&req);
+    let path = req.uri().path().trim_end_matches('/').to_string();
+    if let Some(response) = reject_unsupported_websocket_if_needed(
+        &state,
+        is_websocket && path != proxy::websocket::CODEX_RESPONSES_PATH,
+        path,
+    )
+    .await
+    {
+        return Ok(response);
+    }
+    if is_websocket {
+        let (mut parts, _body) = req.into_parts();
+        let ws = match WebSocketUpgrade::from_request_parts(&mut parts, &state).await {
+            Ok(ws) => ws,
+            Err(_) => {
+                proxy::websocket::record_local_failure(
+                    &state,
+                    parts.uri.path().to_string(),
+                    "local_handshake_rejected",
+                )
+                .await;
+                return Err(ApiError::bad_request(
+                    "proxy_websocket_handshake_invalid",
+                    "Invalid WebSocket handshake",
+                ));
+            }
+        };
+        return proxy::websocket::upgrade(&state, ws, parts.headers, parts.uri)
+            .await
+            .map_err(map_proxy_error);
+    }
     proxy::forward_with_config(
         &state.proxy_http_client,
         Some(&state.openai_oauth_client_pool),
@@ -32,6 +78,12 @@ pub(in crate::server) async fn proxy_anthropic(
     State(state): State<AppState>,
     req: Request<Body>,
 ) -> Result<axum::response::Response, ApiError> {
+    let is_websocket = proxy::websocket::is_websocket_request(&req);
+    let path = req.uri().path().trim_end_matches('/').to_string();
+    if let Some(response) = reject_unsupported_websocket_if_needed(&state, is_websocket, path).await
+    {
+        return Ok(response);
+    }
     proxy::forward_with_config(
         &state.proxy_http_client,
         None,
@@ -53,6 +105,12 @@ pub(in crate::server) async fn proxy_gemini(
     State(state): State<AppState>,
     req: Request<Body>,
 ) -> Result<axum::response::Response, ApiError> {
+    let is_websocket = proxy::websocket::is_websocket_request(&req);
+    let path = req.uri().path().trim_end_matches('/').to_string();
+    if let Some(response) = reject_unsupported_websocket_if_needed(&state, is_websocket, path).await
+    {
+        return Ok(response);
+    }
     proxy::forward_with_config(
         &state.proxy_http_client,
         None,

@@ -857,6 +857,16 @@
       "saved": "Saved",
       "saveFail": "Save failed"
     },
+    "endpointFailures": {
+      "title": "Local endpoint failures",
+      "hint": "Only local endpoint or WebSocket handshake rejections are counted; upstream HTTP errors are excluded.",
+      "empty": "No local endpoint failures",
+      "clear": "Clear statistics",
+      "reason": {
+        "local_endpoint_not_supported": "Local endpoint not supported",
+        "local_handshake_rejected": "Local WebSocket handshake rejected"
+      }
+    },
     "chatBridge": {
       "configTitle": "Base Config",
       "platformConfigTitle": "Platform Config",

@@ -183,6 +183,19 @@ CREATE TABLE IF NOT EXISTS app_settings (
   updated_at_ms INTEGER NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS endpoint_failures (
+  endpoint TEXT NOT NULL,
+  transport TEXT NOT NULL,
+  reason TEXT NOT NULL,
+  count INTEGER NOT NULL DEFAULT 0,
+  first_seen_at_ms INTEGER NOT NULL,
+  last_seen_at_ms INTEGER NOT NULL,
+  PRIMARY KEY (endpoint, transport, reason)
+);
+
+CREATE INDEX IF NOT EXISTS idx_endpoint_failures_last_seen
+ON endpoint_failures(last_seen_at_ms DESC);
+
 CREATE TABLE IF NOT EXISTS exchange_rates (
   base_currency TEXT NOT NULL,
   quote_currency TEXT NOT NULL,

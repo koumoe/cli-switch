@@ -11,6 +11,19 @@ export type Health = {
   db_path?: string;
 };
 
+export type EndpointFailure = {
+  endpoint: string;
+  transport: string;
+  reason: string;
+  count: number;
+  first_seen_at_ms: number;
+  last_seen_at_ms: number;
+};
+
+export type EndpointFailuresResponse = {
+  items: EndpointFailure[];
+};
+
 export type CloseBehavior = "ask" | "minimize_to_tray" | "quit";
 
 export type AutoStartLaunchMode = "show_window" | "minimize_to_tray";

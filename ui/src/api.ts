@@ -33,6 +33,7 @@ import type {
   DeleteProjectDocumentInput,
   DeleteRemoteAccountInput,
   ExchangeRate,
+  EndpointFailuresResponse,
   GetProjectDocumentQuery,
   Health,
   InstallCliToolResponse,
@@ -188,6 +189,14 @@ function isTopLevelIssuePayload(payload: Record<string, unknown>): boolean {
 
 export function getHealth(): Promise<Health> {
   return http<Health>("GET", "/api/health");
+}
+
+export function listEndpointFailures(limit = 5): Promise<EndpointFailuresResponse> {
+  return http<EndpointFailuresResponse>("GET", `/api/endpoint-failures?limit=${limit}`);
+}
+
+export function clearEndpointFailures(): Promise<void> {
+  return http<void>("DELETE", "/api/endpoint-failures");
 }
 
 export function getSettings(): Promise<AppSettings> {

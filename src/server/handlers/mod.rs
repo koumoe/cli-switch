@@ -3,6 +3,7 @@ pub(super) mod chat_bridge;
 pub(super) mod chat_bridge_weixin;
 pub(super) mod chat_bridge_whatsapp;
 pub(super) mod currency;
+pub(super) mod endpoint_failures;
 pub(super) mod health;
 pub(super) mod maintenance;
 pub(super) mod newapi;
@@ -32,6 +33,7 @@ pub(super) use chat_bridge_whatsapp::{
     get_chat_bridge_whatsapp_status, logout_chat_bridge_whatsapp, start_chat_bridge_whatsapp_login,
 };
 pub(super) use currency::usd_cny_exchange_rate;
+pub(super) use endpoint_failures::{clear_endpoint_failures, endpoint_failures};
 pub(super) use health::health;
 pub(super) use maintenance::{db_size, frontend_log_ingest, logs_clear, logs_size, records_clear};
 pub(super) use openai::{

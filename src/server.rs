@@ -71,6 +71,8 @@ pub(crate) fn build_openai_proxy_http_client() -> anyhow::Result<reqwest::Client
 fn request_endpoint_template(method: &Method, path: &str) -> Option<&'static str> {
     match (method.as_str(), path) {
         ("GET", "/api/health") => Some("/api/health"),
+        ("GET", "/api/endpoint-failures") => Some("/api/endpoint-failures"),
+        ("DELETE", "/api/endpoint-failures") => Some("/api/endpoint-failures"),
         ("GET", "/api/activities") => Some("/api/activities"),
         ("GET", "/api/settings") => Some("/api/settings"),
         ("PUT", "/api/settings") => Some("/api/settings"),
@@ -194,6 +196,8 @@ fn request_endpoint_template(method: &Method, path: &str) -> Option<&'static str
 fn request_purpose(method: &Method, path: &str) -> &'static str {
     match (method.as_str(), path) {
         ("GET", "/api/health") => "handlers::health",
+        ("GET", "/api/endpoint-failures") => "handlers::endpoint_failures",
+        ("DELETE", "/api/endpoint-failures") => "handlers::clear_endpoint_failures",
         ("GET", "/api/activities") => "activity::snapshot",
         ("GET", "/api/settings") => "handlers::get_settings",
         ("PUT", "/api/settings") => "handlers::update_settings",
@@ -409,6 +413,10 @@ fn build_app(state: AppState) -> Router {
 
     let traced_api = Router::new()
         .route("/api/health", get(handlers::health))
+        .route(
+            "/api/endpoint-failures",
+            get(handlers::endpoint_failures).delete(handlers::clear_endpoint_failures),
+        )
         .route(
             "/api/settings",
             get(handlers::get_settings).put(handlers::update_settings),
