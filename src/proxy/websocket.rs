@@ -186,3 +186,37 @@ fn to_axum(message: Message) -> Option<AxumMessage> {
         Message::Frame(_) => None,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::is_websocket_request;
+    use axum::body::Body;
+    use axum::http::Request;
+
+    fn request(upgrade: Option<&str>, connection: Option<&str>) -> Request<Body> {
+        let mut builder = Request::builder();
+        if let Some(value) = upgrade {
+            builder = builder.header("upgrade", value);
+        }
+        if let Some(value) = connection {
+            builder = builder.header("connection", value);
+        }
+        builder.body(Body::empty()).unwrap()
+    }
+
+    #[test]
+    fn recognizes_case_insensitive_websocket_upgrade() {
+        let req = request(Some("WebSocket"), Some("keep-alive, Upgrade"));
+        assert!(is_websocket_request(&req));
+    }
+
+    #[test]
+    fn requires_both_upgrade_and_connection_tokens() {
+        assert!(!is_websocket_request(&request(Some("websocket"), None)));
+        assert!(!is_websocket_request(&request(None, Some("Upgrade"))));
+        assert!(!is_websocket_request(&request(
+            Some("websocket"),
+            Some("keep-alive")
+        )));
+    }
+}
