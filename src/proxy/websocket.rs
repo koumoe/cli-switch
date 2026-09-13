@@ -158,10 +158,10 @@ async fn proxy_socket(mut downstream: WebSocket, mut upstream: UpstreamSocket) {
 
 fn to_tungstenite(message: AxumMessage) -> Option<Message> {
     match message {
-        AxumMessage::Text(text) => Some(Message::Text(text.to_string().into())),
-        AxumMessage::Binary(bytes) => Some(Message::Binary(bytes.to_vec().into())),
-        AxumMessage::Ping(bytes) => Some(Message::Ping(bytes.to_vec().into())),
-        AxumMessage::Pong(bytes) => Some(Message::Pong(bytes.to_vec().into())),
+        AxumMessage::Text(text) => Some(Message::Text(text.to_string())),
+        AxumMessage::Binary(bytes) => Some(Message::Binary(bytes.to_vec())),
+        AxumMessage::Ping(bytes) => Some(Message::Ping(bytes.to_vec())),
+        AxumMessage::Pong(bytes) => Some(Message::Pong(bytes.to_vec())),
         AxumMessage::Close(frame) => Some(Message::Close(frame.map(|frame| {
             tokio_tungstenite::tungstenite::protocol::CloseFrame {
                 code: frame.code.into(),
