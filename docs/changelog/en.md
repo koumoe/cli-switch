@@ -1,3 +1,8 @@
+## [0.67.0](https://github.com/koumoe/cli-switch/compare/v0.66.2...v0.67.0) (2026-09-13)
+
+### Features
+
+* align proxy forwarding with transparency contract (#233) ([90e2876](https://github.com/koumoe/cli-switch/commit/90e2876a80a2fe9c51b202960e810185f5a32524))
 ## [0.66.2](https://github.com/koumoe/cli-switch/compare/v0.66.1...v0.66.2) (2026-09-10)
 
 ### Bug Fixes
