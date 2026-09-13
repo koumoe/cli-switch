@@ -9,6 +9,7 @@ const SQLITE_BUSY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(
 mod channel;
 mod chat_bridge;
 mod checkin;
+mod endpoint_failures;
 mod error;
 mod exchange_rate;
 mod newapi;
@@ -23,6 +24,9 @@ mod stats;
 mod update_ignore;
 mod usage;
 
+pub use endpoint_failures::{
+    EndpointFailure, clear_endpoint_failures, list_endpoint_failures, record_endpoint_failure,
+};
 pub use error::StorageError;
 pub use exchange_rate::{ExchangeRate, get_exchange_rate, upsert_exchange_rate};
 

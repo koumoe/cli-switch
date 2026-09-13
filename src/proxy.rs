@@ -20,6 +20,7 @@ mod openai_responses;
 mod sse;
 mod stream;
 mod usage_writer;
+pub(crate) mod websocket;
 
 /// Keeps the ChatGPT edge cookie jar isolated per managed account.
 #[derive(Clone, Default)]
