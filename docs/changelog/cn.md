@@ -1,3 +1,7 @@
+## [0.69.0](https://github.com/koumoe/cli-switch/compare/v0.68.0...v0.69.0) (2026-09-14)
+
+### 功能
+* 隔离 Codex CLI 与 ChatGPT 桌面端配置目录 (#235) ([77a9ed4](https://github.com/koumoe/cli-switch/commit/77a9ed4a42c7dfdc1c6a62a4fd2ff5214f5c5be1))
 ## [0.68.0](https://github.com/koumoe/cli-switch/compare/v0.67.0...v0.68.0) (2026-09-13)
 
 ### 功能
