@@ -1,3 +1,7 @@
+## [0.69.1](https://github.com/koumoe/cli-switch/compare/v0.69.0...v0.69.1) (2026-09-14)
+
+### 修复
+* 修复 Codex 配置缺少 provider name (#236) ([88fa5cc](https://github.com/koumoe/cli-switch/commit/88fa5ccc31c99a783d9c5c29ceaba7da2d14eca5))
 ## [0.69.0](https://github.com/koumoe/cli-switch/compare/v0.68.0...v0.69.0) (2026-09-14)
 
 ### 功能
