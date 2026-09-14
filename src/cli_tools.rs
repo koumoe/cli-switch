@@ -1117,6 +1117,51 @@ pub fn detect_cli_tool_with_terminal_shim(
     detected
 }
 
+/// Rewrite the Codex terminal shim so its exported `CODEX_HOME` matches the
+/// current isolation setting.
+///
+/// The shim is otherwise only written while installing or updating the CLI, so
+/// flipping the setting would leave a stale wrapper behind. When isolation is
+/// off we refresh an existing shim but never create one: a user who never had a
+/// shim gains nothing from it.
+pub fn refresh_codex_shim(
+    npm_path: Option<&str>,
+    node_path: Option<&str>,
+    data_dir: &Path,
+) -> anyhow::Result<()> {
+    let Some(def) = CLI_TOOLS.iter().find(|def| def.id == CliToolId::Codex) else {
+        return Ok(());
+    };
+    let shim_path = crate::terminal::cli_tool_shim_path(def.bin)?;
+    if !shim_path.is_file() && !crate::codex_home::is_isolated() {
+        return Ok(());
+    }
+
+    let env = CliExecEnv::new(npm_path, node_path);
+    let detected = detect_cli_tool(&env, data_dir, def);
+    // `detect_cli_tool` already ignores our own shim, so an empty path means we
+    // have no real executable to point at; the equality check only guards
+    // against a shim that would exec itself.
+    let Some(tool_path) = detected.install_path.filter(|p| p != &shim_path) else {
+        return Ok(());
+    };
+
+    let npm_global_bin_dir = if detected.install_method == CliToolInstallMethod::ManagedNpmPrefix {
+        Some(cli_tools_npm_prefix_bin_dir(&cli_tools_npm_prefix_dir(
+            data_dir,
+        )))
+    } else {
+        None
+    };
+    crate::terminal::ensure_cli_tool_shim(
+        def.bin,
+        &tool_path,
+        env.node_bin_dir().as_deref(),
+        npm_global_bin_dir.as_deref(),
+    )?;
+    Ok(())
+}
+
 pub fn detect_codex_version(
     npm_path: Option<&str>,
     node_path: Option<&str>,

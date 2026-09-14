@@ -164,6 +164,15 @@ fn base_std_command(program_path: &Path, settings: &AppSettings) -> std::process
     cmd
 }
 
+/// The isolated `CODEX_HOME` to hand a spawned Codex CLI, mirroring what the
+/// generated shim exports. Other tools get `None`.
+fn tool_codex_home(bin: &str) -> anyhow::Result<Option<PathBuf>> {
+    if bin != "codex" {
+        return Ok(None);
+    }
+    crate::codex_home::env_override()
+}
+
 pub fn build_command(bin: &str, settings: &AppSettings) -> anyhow::Result<TokioCommand> {
     let exec_env = CliExecEnv::new(
         settings.cli_tools_npm_path.as_deref(),
@@ -173,6 +182,9 @@ pub fn build_command(bin: &str, settings: &AppSettings) -> anyhow::Result<TokioC
         .find_executable(bin)
         .unwrap_or_else(|| PathBuf::from(bin));
     let mut cmd = base_async_command(&program_path, settings);
+    if let Some(dir) = tool_codex_home(bin)? {
+        cmd.env("CODEX_HOME", dir);
+    }
     cmd.stdin(Stdio::null());
     cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::piped());
@@ -192,6 +204,9 @@ pub fn build_std_command(
         .find_executable(bin)
         .unwrap_or_else(|| PathBuf::from(bin));
     let mut cmd = base_std_command(&program_path, settings);
+    if let Some(dir) = tool_codex_home(bin)? {
+        cmd.env("CODEX_HOME", dir);
+    }
     cmd.stdin(Stdio::null());
     cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::piped());

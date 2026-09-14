@@ -27,6 +27,7 @@ type CliToolsSettingsProps = {
     toolId: CliToolId,
     enabled: boolean,
   ) => void | Promise<void>;
+  onCodexIsolatedHomeChange: (enabled: boolean) => void | Promise<void>;
 };
 
 export function CliToolsSettings({
@@ -43,6 +44,7 @@ export function CliToolsSettings({
   onRefreshCliToolsStatus,
   onInstallCliTool,
   onCliToolAutoUpdateChange,
+  onCodexIsolatedHomeChange,
 }: CliToolsSettingsProps) {
   const { locale, t } = useI18n();
 
@@ -96,6 +98,24 @@ export function CliToolsSettings({
           </div>
         );
       })}
+
+      <div className="flex min-h-[50px] items-center justify-between gap-4 border-t border-border px-5 py-3 transition-colors hover:bg-secondary/35">
+        <div className="min-w-0 flex-1">
+          <div className="text-[12.5px] font-semibold">
+            {t("settings.codexIsolatedHome.title")}
+          </div>
+          <div className="mt-0.5 text-[10.5px] text-muted-foreground">
+            {t("settings.codexIsolatedHome.desc")}
+          </div>
+        </div>
+        <Switch
+          checked={appSettings?.codex_isolated_home_enabled ?? false}
+          onCheckedChange={(value) => {
+            void onCodexIsolatedHomeChange(value);
+          }}
+          disabled={!appSettings}
+        />
+      </div>
 
       <div className="flex items-center justify-between gap-3 border-t border-border px-5 py-2.5">
         <div className="min-w-0 space-y-0.5 text-muted-foreground">

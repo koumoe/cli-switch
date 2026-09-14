@@ -31,6 +31,7 @@ pub(in crate::server) struct UpdateSettingsInput {
     gemini_cli_auto_update_enabled: Option<bool>,
     claude_code_auto_update_enabled: Option<bool>,
     codex_auto_update_enabled: Option<bool>,
+    codex_isolated_home_enabled: Option<bool>,
     auto_disable_enabled: Option<bool>,
     auto_disable_window_minutes: Option<i64>,
     auto_disable_failure_times: Option<i64>,
@@ -104,6 +105,10 @@ pub(in crate::server) async fn update_settings(
         (
             "codex_auto_update_enabled",
             input.codex_auto_update_enabled.is_some(),
+        ),
+        (
+            "codex_isolated_home_enabled",
+            input.codex_isolated_home_enabled.is_some(),
         ),
         ("auto_disable_enabled", input.auto_disable_enabled.is_some()),
         (
@@ -304,6 +309,7 @@ pub(in crate::server) async fn update_settings(
             gemini_cli_auto_update_enabled: input.gemini_cli_auto_update_enabled,
             claude_code_auto_update_enabled: input.claude_code_auto_update_enabled,
             codex_auto_update_enabled: input.codex_auto_update_enabled,
+            codex_isolated_home_enabled: input.codex_isolated_home_enabled,
             auto_disable_enabled: input.auto_disable_enabled,
             auto_disable_window_minutes: input.auto_disable_window_minutes,
             auto_disable_failure_times: input.auto_disable_failure_times,
@@ -348,6 +354,10 @@ pub(in crate::server) async fn update_settings(
         let _ = logging::set_level(settings.log_level);
     }
 
+    if previous_settings.codex_isolated_home_enabled != settings.codex_isolated_home_enabled {
+        apply_codex_isolated_home(&state, &settings).await;
+    }
+
     if !changed.is_empty() {
         tracing::info!(changed = ?changed, "settings updated");
     }
@@ -369,4 +379,48 @@ pub(in crate::server) async fn update_settings(
     let _ = state.settings_notify.send(next);
 
     Ok(Json(settings))
+}
+
+/// React to `codex_isolated_home_enabled` flipping.
+///
+/// The stored setting alone changes nothing: the terminal shim carries the
+/// `CODEX_HOME` export and is otherwise only written while installing the CLI,
+/// so it has to be rewritten here. Turning isolation on additionally releases the
+/// shared `~/.codex/config.toml`, which the ChatGPT desktop app reads and which
+/// would otherwise stay pointed at our proxy.
+///
+/// Failures are logged, not returned: the setting is already persisted, and a
+/// missing shim or an unreadable config file must not fail the whole request.
+async fn apply_codex_isolated_home(state: &AppState, settings: &storage::AppSettings) {
+    crate::codex_home::set_isolated(settings.codex_isolated_home_enabled);
+
+    if settings.codex_isolated_home_enabled {
+        let listen_addr = state.listen_addr;
+        match tokio::task::spawn_blocking(move || {
+            crate::cli_tool_proxy_config::release_shared_codex_config(listen_addr)
+        })
+        .await
+        {
+            Ok(Ok(changed)) => {
+                if changed {
+                    tracing::info!("released shared codex config for the desktop app");
+                }
+            }
+            Ok(Err(e)) => tracing::warn!(err = %e, "release shared codex config failed"),
+            Err(e) => tracing::warn!(err = %e, "release shared codex config task join failed"),
+        }
+    }
+
+    let npm_path = settings.cli_tools_npm_path.clone();
+    let node_path = settings.cli_tools_node_path.clone();
+    let data_dir = state.data_dir();
+    match tokio::task::spawn_blocking(move || {
+        crate::cli_tools::refresh_codex_shim(npm_path.as_deref(), node_path.as_deref(), &data_dir)
+    })
+    .await
+    {
+        Ok(Ok(())) => {}
+        Ok(Err(e)) => tracing::warn!(err = %e, "refresh codex shim failed"),
+        Err(e) => tracing::warn!(err = %e, "refresh codex shim task join failed"),
+    }
 }

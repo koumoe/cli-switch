@@ -110,6 +110,7 @@ async fn async_main() -> anyhow::Result<()> {
     match storage::get_app_settings(db_path.clone()).await {
         Ok(settings) => {
             let _ = logging::set_level(settings.log_level);
+            cliswitch::codex_home::set_isolated(settings.codex_isolated_home_enabled);
         }
         Err(e) => {
             tracing::warn!(err = %e, "load app settings failed; keep default log level");

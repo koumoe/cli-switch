@@ -1660,6 +1660,30 @@ export function SettingsPage() {
                       });
                     }
                   }}
+                  onCodexIsolatedHomeChange={async (enabled) => {
+                    if (!appSettings) return;
+                    const previous =
+                      appSettings.codex_isolated_home_enabled ?? false;
+                    setAppSettings({
+                      ...appSettings,
+                      codex_isolated_home_enabled: enabled,
+                    });
+                    try {
+                      const next = await updateSettings({
+                        codex_isolated_home_enabled: enabled,
+                      });
+                      setAppSettings(next);
+                      toast.success(t("settings.cliTools.saved"));
+                    } catch (e) {
+                      setAppSettings({
+                        ...appSettings,
+                        codex_isolated_home_enabled: previous,
+                      });
+                      toast.error(t("settings.cliTools.saveFail"), {
+                        description: humanizeApiError(e, t),
+                      });
+                    }
+                  }}
                 />
               </TabsContent>
 

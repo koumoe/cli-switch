@@ -21,6 +21,7 @@ const KEY_APP_AUTO_UPDATE_ENABLED: &str = "app_auto_update_enabled";
 const KEY_GEMINI_CLI_AUTO_UPDATE_ENABLED: &str = "gemini_cli_auto_update_enabled";
 const KEY_CLAUDE_CODE_AUTO_UPDATE_ENABLED: &str = "claude_code_auto_update_enabled";
 const KEY_CODEX_AUTO_UPDATE_ENABLED: &str = "codex_auto_update_enabled";
+const KEY_CODEX_ISOLATED_HOME_ENABLED: &str = "codex_isolated_home_enabled";
 const KEY_CLI_TOOLS_NPM_PATH: &str = "cli_tools_npm_path";
 const KEY_CLI_TOOLS_NODE_PATH: &str = "cli_tools_node_path";
 const KEY_AUTO_DISABLE_ENABLED: &str = "auto_disable_enabled";
@@ -107,6 +108,7 @@ pub struct AppSettings {
     pub gemini_cli_auto_update_enabled: bool,
     pub claude_code_auto_update_enabled: bool,
     pub codex_auto_update_enabled: bool,
+    pub codex_isolated_home_enabled: bool,
     pub cli_tools_npm_path: Option<String>,
     pub cli_tools_node_path: Option<String>,
     pub auto_disable_enabled: bool,
@@ -158,6 +160,7 @@ impl Default for AppSettings {
             gemini_cli_auto_update_enabled: false,
             claude_code_auto_update_enabled: false,
             codex_auto_update_enabled: false,
+            codex_isolated_home_enabled: false,
             cli_tools_npm_path: None,
             cli_tools_node_path: None,
             auto_disable_enabled: false,
@@ -243,6 +246,7 @@ pub struct AppSettingsPatch {
     pub gemini_cli_auto_update_enabled: Option<bool>,
     pub claude_code_auto_update_enabled: Option<bool>,
     pub codex_auto_update_enabled: Option<bool>,
+    pub codex_isolated_home_enabled: Option<bool>,
     pub cli_tools_npm_path: Option<String>,
     pub cli_tools_node_path: Option<String>,
     pub auto_disable_enabled: Option<bool>,
@@ -449,6 +453,14 @@ pub async fn get_app_settings(db_path: PathBuf) -> anyhow::Result<AppSettings> {
                 &v,
                 &mut has_invalid_values,
                 out.codex_auto_update_enabled,
+            );
+        }
+        if let Some(v) = get_setting(conn, KEY_CODEX_ISOLATED_HOME_ENABLED)? {
+            out.codex_isolated_home_enabled = parse_bool_setting(
+                KEY_CODEX_ISOLATED_HOME_ENABLED,
+                &v,
+                &mut has_invalid_values,
+                out.codex_isolated_home_enabled,
             );
         }
         if let Some(v) = get_setting(conn, KEY_CLI_TOOLS_NPM_PATH)? {
@@ -786,6 +798,14 @@ pub async fn update_app_settings(
             set_setting(
                 conn,
                 KEY_CODEX_AUTO_UPDATE_ENABLED,
+                if v { "true" } else { "false" },
+                updated_at_ms,
+            )?;
+        }
+        if let Some(v) = patch.codex_isolated_home_enabled {
+            set_setting(
+                conn,
+                KEY_CODEX_ISOLATED_HOME_ENABLED,
                 if v { "true" } else { "false" },
                 updated_at_ms,
             )?;
