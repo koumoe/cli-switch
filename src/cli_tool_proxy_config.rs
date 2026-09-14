@@ -28,6 +28,9 @@ impl ProxyUrls {
 /// Provider id we create in `config.toml` when Codex has none selected yet.
 const CODEX_GENERATED_PROVIDER_ID: &str = "cliswitch";
 
+/// Display name for that generated provider; Codex rejects a provider without one.
+const CODEX_GENERATED_PROVIDER_NAME: &str = "CliSwitch";
+
 fn normalize_url(s: &str) -> String {
     s.trim().trim_end_matches('/').to_string()
 }
@@ -362,13 +365,34 @@ fn check_codex(urls: &ProxyUrls) -> anyhow::Result<CliToolProxyConfigToolStatus>
         .as_deref()
         .map(|s| s.trim())
         .filter(|s| !s.is_empty());
-    let current_base_url = provider_id.and_then(|pid| {
-        doc.get("model_providers")
-            .and_then(|v| v.get(pid))
-            .and_then(|v| v.get("base_url"))
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string())
+    let provider_table =
+        provider_id.and_then(|pid| doc.get("model_providers").and_then(|v| v.get(pid)));
+
+    // Codex refuses to load the whole file when the provider has no `name`, so a
+    // matching `base_url` alone is not enough to call the tool configured.
+    let current_name = provider_table
+        .and_then(|v| v.get("name"))
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+    let name_ok = current_name
+        .as_deref()
+        .is_some_and(|v| !v.trim().is_empty());
+    checks.push(CliToolProxyConfigCheck {
+        id: "codex_selected_provider_name".to_string(),
+        ok: name_ok,
+        file: cfg_display.clone(),
+        key: provider_id
+            .map(|pid| format!("model_providers.{pid}.name"))
+            .unwrap_or_else(|| "model_providers.<model_provider>.name".to_string()),
+        expected: "(non-empty)".to_string(),
+        current: current_name,
+        message: None,
     });
+
+    let current_base_url = provider_table
+        .and_then(|v| v.get("base_url"))
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
     let base_ok = current_base_url
         .as_deref()
         .map(normalize_url)
@@ -547,6 +571,18 @@ fn apply_codex(urls: &ProxyUrls) -> anyhow::Result<()> {
         None => toml_edit::DocumentMut::new(),
     };
 
+    patch_codex_doc(&mut doc, &urls.openai);
+
+    let mut out = doc.to_string();
+    if !out.ends_with('\n') {
+        out.push('\n');
+    }
+    write_text(&path, &out)?;
+    Ok(())
+}
+
+/// Point Codex's selected provider at our proxy, creating it when there is none.
+fn patch_codex_doc(doc: &mut toml_edit::DocumentMut, base_url: &str) {
     // Prefer updating the currently selected provider to avoid overriding user setups.
     // If unset, create a default provider id.
     let provider_id = doc
@@ -557,15 +593,24 @@ fn apply_codex(urls: &ProxyUrls) -> anyhow::Result<()> {
         .unwrap_or_else(|| CODEX_GENERATED_PROVIDER_ID.to_string());
 
     doc["model_provider"] = toml_edit::value(provider_id.as_str());
-    doc["model_providers"][provider_id.as_str()]["base_url"] =
-        toml_edit::value(urls.openai.clone());
 
-    let mut out = doc.to_string();
-    if !out.ends_with('\n') {
-        out.push('\n');
+    let provider = &mut doc["model_providers"][provider_id.as_str()];
+    // Codex refuses to load `config.toml` at all when a provider has no `name`,
+    // so fill one in for the table we just created. An existing name is the
+    // user's own label and stays untouched.
+    let named = provider
+        .get("name")
+        .and_then(|v| v.as_str())
+        .is_some_and(|s| !s.trim().is_empty());
+    if !named {
+        let name = if provider_id == CODEX_GENERATED_PROVIDER_ID {
+            CODEX_GENERATED_PROVIDER_NAME
+        } else {
+            provider_id.as_str()
+        };
+        provider["name"] = toml_edit::value(name);
     }
-    write_text(&path, &out)?;
-    Ok(())
+    provider["base_url"] = toml_edit::value(base_url.to_string());
 }
 
 /// Drop the proxy pointers CliSwitch wrote into the shared `~/.codex/config.toml`.
@@ -722,6 +767,61 @@ GOOGLE_GEMINI_BASE_URL=https://example.com
         assert!(next.contains("GOOGLE_GEMINI_BASE_URL=http://127.0.0.1:3210"));
         assert!(next.contains("GEMINI_API_KEY=cliswitch"));
         assert!(next.ends_with('\n'));
+    }
+
+    /// Round-trip through the serializer so assertions see what Codex would read.
+    fn reparse(doc: &toml_edit::DocumentMut) -> toml_edit::DocumentMut {
+        doc.to_string()
+            .parse::<toml_edit::DocumentMut>()
+            .expect("valid TOML")
+    }
+
+    #[test]
+    fn patch_codex_doc_names_the_provider_it_creates() {
+        let mut doc = toml_edit::DocumentMut::new();
+        patch_codex_doc(&mut doc, "http://127.0.0.1:3210/v1");
+        let parsed = reparse(&doc);
+        let provider = &parsed["model_providers"][CODEX_GENERATED_PROVIDER_ID];
+        assert_eq!(parsed["model_provider"].as_str(), Some("cliswitch"));
+        assert_eq!(provider["name"].as_str(), Some("CliSwitch"));
+        assert_eq!(
+            provider["base_url"].as_str(),
+            Some("http://127.0.0.1:3210/v1")
+        );
+    }
+
+    #[test]
+    fn patch_codex_doc_keeps_existing_provider_name() {
+        let prev = r#"model_provider = "mine"
+
+[model_providers.mine]
+name = "My Gateway"
+base_url = "https://example.com/v1"
+wire_api = "responses"
+"#;
+        let mut doc = prev.parse::<toml_edit::DocumentMut>().expect("valid TOML");
+        patch_codex_doc(&mut doc, "http://127.0.0.1:3210/v1");
+        let text = doc.to_string();
+        assert!(text.contains(r#"name = "My Gateway""#));
+        assert!(text.contains(r#"wire_api = "responses""#));
+        assert!(text.contains(r#"base_url = "http://127.0.0.1:3210/v1""#));
+        assert!(!text.contains("example.com"));
+    }
+
+    #[test]
+    fn patch_codex_doc_repairs_a_provider_left_without_a_name() {
+        let prev = r#"model_provider = "cliswitch"
+model_providers = { cliswitch = { base_url = "http://127.0.0.1:1/v1" } }
+"#;
+        let mut doc = prev.parse::<toml_edit::DocumentMut>().expect("valid TOML");
+        patch_codex_doc(&mut doc, "http://127.0.0.1:3210/v1");
+        let parsed = reparse(&doc);
+        let provider = &parsed["model_providers"]["cliswitch"];
+        assert_eq!(provider["name"].as_str(), Some("CliSwitch"));
+        assert_eq!(
+            provider["base_url"].as_str(),
+            Some("http://127.0.0.1:3210/v1")
+        );
     }
 
     #[test]
