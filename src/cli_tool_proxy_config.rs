@@ -25,6 +25,9 @@ impl ProxyUrls {
     }
 }
 
+/// Provider id we create in `config.toml` when Codex has none selected yet.
+const CODEX_GENERATED_PROVIDER_ID: &str = "cliswitch";
+
 fn normalize_url(s: &str) -> String {
     s.trim().trim_end_matches('/').to_string()
 }
@@ -51,7 +54,7 @@ fn claude_user_state_path() -> anyhow::Result<PathBuf> {
 }
 
 fn codex_config_path() -> anyhow::Result<PathBuf> {
-    Ok(home_dir()?.join(".codex").join("config.toml"))
+    Ok(crate::codex_home::resolve()?.join("config.toml"))
 }
 
 fn gemini_env_path() -> anyhow::Result<PathBuf> {
@@ -551,7 +554,7 @@ fn apply_codex(urls: &ProxyUrls) -> anyhow::Result<()> {
         .and_then(|v| v.as_str())
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| "cliswitch".to_string());
+        .unwrap_or_else(|| CODEX_GENERATED_PROVIDER_ID.to_string());
 
     doc["model_provider"] = toml_edit::value(provider_id.as_str());
     doc["model_providers"][provider_id.as_str()]["base_url"] =
@@ -563,6 +566,73 @@ fn apply_codex(urls: &ProxyUrls) -> anyhow::Result<()> {
     }
     write_text(&path, &out)?;
     Ok(())
+}
+
+/// Drop the proxy pointers CliSwitch wrote into the shared `~/.codex/config.toml`.
+///
+/// Enabling isolation moves the CLI to its own `CODEX_HOME`, but the shared file
+/// stays where the ChatGPT desktop app reads it, still aimed at our local proxy —
+/// exactly what isolation is meant to undo. Only entries whose `base_url` is our
+/// proxy are touched, so a provider the user wrote by hand keeps its own setup.
+///
+/// Returns whether the file changed.
+pub fn release_shared_codex_config(listen_addr: SocketAddr) -> anyhow::Result<bool> {
+    let path = crate::codex_home::default_dir()?.join("config.toml");
+    let Some(prev) = read_text_if_exists(&path)? else {
+        return Ok(false);
+    };
+    let mut doc = prev
+        .parse::<toml_edit::DocumentMut>()
+        .with_context(|| format!("解析 TOML 失败：{}", path.display()))?;
+
+    let expected = normalize_url(&ProxyUrls::from_listen_addr(listen_addr).openai);
+    let mut released: HashSet<String> = HashSet::new();
+
+    if let Some(providers) = doc
+        .get_mut("model_providers")
+        .and_then(|v| v.as_table_mut())
+    {
+        let ours: Vec<String> = providers
+            .iter()
+            .filter(|(_, item)| {
+                item.get("base_url")
+                    .and_then(|v| v.as_str())
+                    .is_some_and(|url| normalize_url(url) == expected)
+            })
+            .map(|(key, _)| key.to_string())
+            .collect();
+        for id in ours {
+            // The provider we generate ourselves holds nothing else worth keeping;
+            // one the user named keeps its remaining keys and only loses base_url.
+            if id == CODEX_GENERATED_PROVIDER_ID {
+                providers.remove(&id);
+            } else if let Some(table) = providers.get_mut(&id).and_then(|v| v.as_table_mut()) {
+                table.remove("base_url");
+            }
+            released.insert(id);
+        }
+        if providers.is_empty() {
+            doc.remove("model_providers");
+        }
+    }
+
+    let selected_is_ours = doc
+        .get("model_provider")
+        .and_then(|v| v.as_str())
+        .is_some_and(|id| released.contains(id.trim()));
+    if selected_is_ours {
+        doc.remove("model_provider");
+    }
+
+    let mut out = doc.to_string();
+    if !out.ends_with('\n') {
+        out.push('\n');
+    }
+    if out == prev {
+        return Ok(false);
+    }
+    write_text(&path, &out)?;
+    Ok(true)
 }
 
 fn apply_gemini(urls: &ProxyUrls) -> anyhow::Result<()> {

@@ -40,6 +40,7 @@ export type AppSettings = {
   gemini_cli_auto_update_enabled: boolean;
   claude_code_auto_update_enabled: boolean;
   codex_auto_update_enabled: boolean;
+  codex_isolated_home_enabled: boolean;
   auto_disable_enabled: boolean;
   auto_disable_window_minutes: number;
   auto_disable_failure_times: number;

@@ -750,6 +750,10 @@
       "ok": "Configured",
       "needsFix": "Not configured"
     },
+    "codexIsolatedHome": {
+      "title": "Isolate Codex config directory",
+      "desc": "Point Codex CLI at ~/.cliswitch/codex so the ChatGPT desktop app keeps its account login in ~/.codex. The CLI needs to sign in again after enabling."
+    },
     "update": {
       "title": "CliSwitch Update",
       "autoEnable": "Enable auto update",

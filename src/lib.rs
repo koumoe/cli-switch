@@ -7,6 +7,7 @@ pub mod changelog;
 pub mod chat_bridge;
 pub mod cli_tool_proxy_config;
 pub mod cli_tools;
+pub mod codex_home;
 pub(crate) mod codex_upstream;
 pub mod events;
 pub mod i18n;

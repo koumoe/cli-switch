@@ -750,6 +750,10 @@
       "ok": "已配置",
       "needsFix": "未配置"
     },
+    "codexIsolatedHome": {
+      "title": "Codex 配置目录隔离",
+      "desc": "让 Codex CLI 使用 ~/.cliswitch/codex，ChatGPT 桌面端继续使用 ~/.codex 登录账号。开启后 CLI 需要重新登录。"
+    },
     "update": {
       "title": "CliSwitch 更新",
       "autoEnable": "开启自动更新",

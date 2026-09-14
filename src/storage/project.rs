@@ -89,10 +89,7 @@ fn claude_home_dir() -> anyhow::Result<PathBuf> {
 }
 
 fn codex_home_dir() -> anyhow::Result<PathBuf> {
-    if let Some(path) = std::env::var_os("CODEX_HOME") {
-        return Ok(PathBuf::from(path));
-    }
-    Ok(user_home_dir()?.join(".codex"))
+    crate::codex_home::resolve()
 }
 
 fn gemini_home_dir() -> anyhow::Result<PathBuf> {

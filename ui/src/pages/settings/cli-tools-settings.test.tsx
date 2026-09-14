@@ -24,6 +24,7 @@ function props(
     onRefreshCliToolsStatus: vi.fn(),
     onInstallCliTool: vi.fn(),
     onCliToolAutoUpdateChange: vi.fn(),
+    onCodexIsolatedHomeChange: vi.fn(),
     ...overrides,
   };
 }
