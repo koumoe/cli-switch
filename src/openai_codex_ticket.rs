@@ -4,19 +4,18 @@ use uuid::Uuid;
 use crate::storage::OpenAiAccount;
 
 pub const TICKET_LENGTH: usize = 292;
-pub const CURRENT_TICKET_LENGTH: usize = 312;
 pub const TICKET_TTL_MS: i64 = 55 * 60 * 1000;
-pub const MIN_CODEX_VERSION: &str = "0.153.4";
 const TICKET_ENDPOINT: &str = "https://chatgpt.com/backend-api/codex/responses";
 
 pub fn is_valid_ticket_state(state: &str) -> bool {
-    state.starts_with("gAAAAA") && matches!(state.len(), TICKET_LENGTH | CURRENT_TICKET_LENGTH)
+    state.len() == TICKET_LENGTH && state.starts_with("gAAAAA")
 }
 
 pub async fn harvest_ticket(
     account: &OpenAiAccount,
     model: &str,
     proxy_url: &str,
+    codex_version: &str,
 ) -> anyhow::Result<String> {
     let access_token = account
         .access_token
@@ -37,8 +36,8 @@ pub async fn harvest_ticket(
         .header("chatgpt-account-id", &account.remote_user_id)
         .header("openai-beta", "responses=experimental")
         .header("originator", "codex_cli_rs")
-        .header("version", MIN_CODEX_VERSION)
-        .header("user-agent", format!("codex_cli_rs/{MIN_CODEX_VERSION}"))
+        .header("version", codex_version)
+        .header("user-agent", format!("codex_cli_rs/{codex_version}"))
         .header("session_id", session_id)
         .header("accept", "text/event-stream")
         .header("content-type", "application/json")

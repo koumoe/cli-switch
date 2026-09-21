@@ -5,6 +5,7 @@ use std::sync::Arc;
 use tokio::sync::watch;
 use tokio::time::Duration;
 
+use crate::cli_tools;
 use crate::events::{
     self, AppEvent, RemoteGroupAddedAlert, RemoteLowBalanceAlert,
     RemoteManagedChannelMissingPrompt, RemoteManagedChannelMultiplierPrompt,
@@ -316,6 +317,40 @@ pub(crate) async fn openai_codex_ticket_harvesting_loop(
             && let Some(proxy_url) = settings.openai_codex_ticket_harvest_proxy_url.as_deref()
             && !proxy_url.trim().is_empty()
         {
+            let npm_path = settings.cli_tools_npm_path.clone();
+            let node_path = settings.cli_tools_node_path.clone();
+            let data_dir = data_dir_from_db_path(db_path.as_path());
+            let codex_version = match tokio::task::spawn_blocking(move || {
+                cli_tools::detect_codex_version(
+                    npm_path.as_deref(),
+                    node_path.as_deref(),
+                    data_dir.as_path(),
+                )
+            })
+            .await
+            {
+                Ok(Some(version)) if !version.trim().is_empty() => version,
+                Ok(Some(_)) | Ok(None) => {
+                    tracing::warn!(
+                        "unable to detect a real Codex CLI version; skip ticket harvest"
+                    );
+                    if !wait_for_interval_or_shutdown(CODEX_TICKET_CHECK_INTERVAL, &mut notify)
+                        .await
+                    {
+                        break;
+                    }
+                    continue;
+                }
+                Err(error) => {
+                    tracing::warn!(%error, "detect Codex CLI version failed; skip ticket harvest");
+                    if !wait_for_interval_or_shutdown(CODEX_TICKET_CHECK_INTERVAL, &mut notify)
+                        .await
+                    {
+                        break;
+                    }
+                    continue;
+                }
+            };
             match storage::list_openai_accounts_with_secret(db_path.clone()).await {
                 Ok(accounts) => {
                     let now = storage::now_ms();
@@ -342,8 +377,13 @@ pub(crate) async fn openai_codex_ticket_harvesting_loop(
                             if !needs_refresh {
                                 continue;
                             }
-                            match openai_codex_ticket::harvest_ticket(&account, model, proxy_url)
-                                .await
+                            match openai_codex_ticket::harvest_ticket(
+                                &account,
+                                model,
+                                proxy_url,
+                                &codex_version,
+                            )
+                            .await
                             {
                                 Ok(state) => {
                                     let captured = storage::now_ms();
