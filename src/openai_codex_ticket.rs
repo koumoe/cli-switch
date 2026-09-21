@@ -4,8 +4,14 @@ use uuid::Uuid;
 use crate::storage::OpenAiAccount;
 
 pub const TICKET_LENGTH: usize = 292;
+pub const CURRENT_TICKET_LENGTH: usize = 312;
 pub const TICKET_TTL_MS: i64 = 55 * 60 * 1000;
+pub const MIN_CODEX_VERSION: &str = "0.153.4";
 const TICKET_ENDPOINT: &str = "https://chatgpt.com/backend-api/codex/responses";
+
+pub fn is_valid_ticket_state(state: &str) -> bool {
+    state.starts_with("gAAAAA") && matches!(state.len(), TICKET_LENGTH | CURRENT_TICKET_LENGTH)
+}
 
 pub async fn harvest_ticket(
     account: &OpenAiAccount,
@@ -31,7 +37,8 @@ pub async fn harvest_ticket(
         .header("chatgpt-account-id", &account.remote_user_id)
         .header("openai-beta", "responses=experimental")
         .header("originator", "codex_cli_rs")
-        .header("version", env!("CARGO_PKG_VERSION"))
+        .header("version", MIN_CODEX_VERSION)
+        .header("user-agent", format!("codex_cli_rs/{MIN_CODEX_VERSION}"))
         .header("session_id", session_id)
         .header("accept", "text/event-stream")
         .header("content-type", "application/json")
@@ -57,7 +64,7 @@ pub async fn harvest_ticket(
         .map_err(|_| anyhow::anyhow!("ticket response header is not valid UTF-8"))?
         .trim()
         .to_string();
-    if state.len() != TICKET_LENGTH || !state.starts_with("gAAAAA") {
+    if !is_valid_ticket_state(&state) {
         return Err(anyhow::anyhow!("ticket response header has invalid shape"));
     }
     Ok(state)

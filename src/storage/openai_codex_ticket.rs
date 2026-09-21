@@ -138,7 +138,7 @@ pub async fn delete_openai_codex_tickets_for_account(
 }
 
 pub fn ticket_is_valid(ticket: &OpenAiCodexTicket, now_ms: i64, target_length: usize) -> bool {
-    ticket.state.len() == target_length
+    (ticket.state.len() == target_length || (target_length == 292 && ticket.state.len() == 312))
         && ticket.state.starts_with("gAAAAA")
         && ticket.expires_at_ms > now_ms
 }
@@ -196,6 +196,11 @@ mod tests {
         ));
         assert!(!ticket_is_valid(
             &ticket(now + 1_000, &format!("bad!!!{}", "x".repeat(286))),
+            now,
+            292
+        ));
+        assert!(ticket_is_valid(
+            &ticket(now + 1_000, &format!("gAAAAA{}", "x".repeat(306))),
             now,
             292
         ));
