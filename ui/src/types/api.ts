@@ -51,6 +51,7 @@ export type AppSettings = {
   openai_codex_ticket_enabled: boolean;
   openai_codex_ticket_fail_closed: boolean;
   openai_codex_ticket_models: string[];
+  openai_codex_ticket_version_override?: string | null;
   openai_codex_ticket_harvest_proxy_configured: boolean;
   log_level: LogLevel;
   log_retention_days: number;
@@ -81,6 +82,31 @@ export type UpdateSettingsInput = Partial<
 > & {
   openai_codex_ticket_harvest_proxy_url?: string;
   openai_codex_ticket_clear_harvest_proxy?: boolean;
+};
+
+export type CodexTicketStatusIssue =
+  | "disabled"
+  | "missing_proxy"
+  | "checking_version"
+  | "missing_version";
+
+export type CodexTicketStatusItem = {
+  account_id: string;
+  account_name: string;
+  model: string;
+  ready: boolean;
+  length: number | null;
+  remaining_seconds: number | null;
+  expires_at_ms: number | null;
+  last_attempt_at_ms: number | null;
+  last_error: string | null;
+};
+
+export type CodexTicketStatus = {
+  version: string | null;
+  version_source: "local" | "configured" | null;
+  issue: CodexTicketStatusIssue | null;
+  tickets: CodexTicketStatusItem[];
 };
 
 export type ActivityStatus =

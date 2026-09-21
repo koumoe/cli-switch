@@ -5,7 +5,6 @@ use std::sync::Arc;
 use tokio::sync::watch;
 use tokio::time::Duration;
 
-use crate::cli_tools;
 use crate::events::{
     self, AppEvent, RemoteGroupAddedAlert, RemoteLowBalanceAlert,
     RemoteManagedChannelMissingPrompt, RemoteManagedChannelMultiplierPrompt,
@@ -299,9 +298,10 @@ pub(crate) async fn apply_autostart_setting(db_path: PathBuf) {
 }
 
 pub(crate) async fn openai_codex_ticket_harvesting_loop(
-    db_path: PathBuf,
+    state: super::AppState,
     mut notify: watch::Receiver<u64>,
 ) {
+    let db_path = state.db_path();
     loop {
         let settings = match storage::get_app_settings(db_path.clone()).await {
             Ok(settings) => settings,
@@ -317,43 +317,10 @@ pub(crate) async fn openai_codex_ticket_harvesting_loop(
             && let Some(proxy_url) = settings.openai_codex_ticket_harvest_proxy_url.as_deref()
             && !proxy_url.trim().is_empty()
         {
-            let npm_path = settings.cli_tools_npm_path.clone();
-            let node_path = settings.cli_tools_node_path.clone();
-            let data_dir = data_dir_from_db_path(db_path.as_path());
-            let codex_version = match tokio::task::spawn_blocking(move || {
-                cli_tools::detect_codex_version(
-                    npm_path.as_deref(),
-                    node_path.as_deref(),
-                    data_dir.as_path(),
-                )
-            })
-            .await
-            {
-                Ok(Some(version)) if !version.trim().is_empty() => version,
-                Ok(Some(_)) | Ok(None) => {
-                    tracing::warn!(
-                        "unable to detect a real Codex CLI version; skip ticket harvest"
-                    );
-                    if !wait_for_interval_or_shutdown(CODEX_TICKET_CHECK_INTERVAL, &mut notify)
-                        .await
-                    {
-                        break;
-                    }
-                    continue;
-                }
-                Err(error) => {
-                    tracing::warn!(%error, "detect Codex CLI version failed; skip ticket harvest");
-                    if !wait_for_interval_or_shutdown(CODEX_TICKET_CHECK_INTERVAL, &mut notify)
-                        .await
-                    {
-                        break;
-                    }
-                    continue;
-                }
-            };
             match storage::list_openai_accounts_with_secret(db_path.clone()).await {
                 Ok(accounts) => {
                     let now = storage::now_ms();
+                    let mut pending = Vec::new();
                     for account in accounts {
                         if account.reauth_required || account.access_token.is_none() {
                             continue;
@@ -368,47 +335,51 @@ pub(crate) async fn openai_codex_ticket_harvesting_loop(
                             .ok()
                             .flatten();
                             let needs_refresh = current.as_ref().is_none_or(|ticket| {
-                                !storage::ticket_is_valid(
-                                    ticket,
-                                    now + 5 * 60 * 1000,
-                                    openai_codex_ticket::TICKET_LENGTH,
-                                )
+                                !storage::ticket_is_valid(ticket, now + 5 * 60 * 1000)
                             });
                             if !needs_refresh {
                                 continue;
                             }
-                            match openai_codex_ticket::harvest_ticket(
-                                &account,
-                                model,
-                                proxy_url,
-                                &codex_version,
-                            )
-                            .await
-                            {
-                                Ok(state) => {
-                                    let captured = storage::now_ms();
-                                    if let Err(error) = storage::upsert_openai_codex_ticket(
-                                        db_path.clone(),
-                                        account.id.clone(),
-                                        model.clone(),
-                                        state,
-                                        captured,
-                                        captured + openai_codex_ticket::TICKET_TTL_MS,
-                                    )
-                                    .await
-                                    {
-                                        tracing::warn!(%error, account_id = %account.id, model, "persist Codex ticket failed");
+                            pending.push((account.clone(), model.clone()));
+                        }
+                    }
+                    if !pending.is_empty() {
+                        let codex_version = resolve_codex_ticket_version(&state, &settings).await;
+                        if let Some(codex_version) = codex_version {
+                            for (account, model) in pending {
+                                match openai_codex_ticket::harvest_ticket(
+                                    &account,
+                                    &model,
+                                    proxy_url,
+                                    &codex_version,
+                                )
+                                .await
+                                {
+                                    Ok(state) => {
+                                        let captured = storage::now_ms();
+                                        if let Err(error) = storage::upsert_openai_codex_ticket(
+                                            db_path.clone(),
+                                            account.id.clone(),
+                                            model.clone(),
+                                            state,
+                                            captured,
+                                            captured + openai_codex_ticket::TICKET_TTL_MS,
+                                        )
+                                        .await
+                                        {
+                                            tracing::warn!(%error, account_id = %account.id, model, "persist Codex ticket failed");
+                                        }
                                     }
-                                }
-                                Err(error) => {
-                                    tracing::warn!(%error, account_id = %account.id, model, "harvest Codex ticket failed");
-                                    let _ = storage::record_openai_codex_ticket_attempt(
-                                        db_path.clone(),
-                                        account.id.clone(),
-                                        model.clone(),
-                                        Some(error.to_string()),
-                                    )
-                                    .await;
+                                    Err(error) => {
+                                        tracing::warn!(%error, account_id = %account.id, model, "harvest Codex ticket failed");
+                                        let _ = storage::record_openai_codex_ticket_attempt(
+                                            db_path.clone(),
+                                            account.id.clone(),
+                                            model.clone(),
+                                            Some(error.to_string()),
+                                        )
+                                        .await;
+                                    }
                                 }
                             }
                         }
@@ -423,6 +394,33 @@ pub(crate) async fn openai_codex_ticket_harvesting_loop(
             break;
         }
     }
+}
+
+async fn resolve_codex_ticket_version(
+    state: &super::AppState,
+    settings: &storage::AppSettings,
+) -> Option<String> {
+    let local_version = state.cli_tools_runtime.snapshot().await.and_then(|status| {
+        status
+            .tools
+            .into_iter()
+            .find(|tool| tool.id == crate::cli_tools::CliToolId::Codex)
+            .and_then(|tool| tool.version)
+            .filter(|version| openai_codex_ticket::is_supported_codex_version(version))
+    });
+    local_version
+        .or_else(|| {
+            settings
+                .openai_codex_ticket_version_override
+                .clone()
+                .filter(|version| openai_codex_ticket::is_supported_codex_version(version))
+        })
+        .or_else(|| {
+            tracing::warn!(
+                "Codex ticket harvesting requires an installed Codex CLI or a configured version override"
+            );
+            None
+        })
 }
 
 pub(crate) async fn logs_retention_cleanup_loop(

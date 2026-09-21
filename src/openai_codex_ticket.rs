@@ -5,7 +5,14 @@ use crate::storage::OpenAiAccount;
 
 pub const TICKET_LENGTH: usize = 292;
 pub const TICKET_TTL_MS: i64 = 55 * 60 * 1000;
+pub const MIN_CODEX_VERSION: &str = "0.153.4";
 const TICKET_ENDPOINT: &str = "https://chatgpt.com/backend-api/codex/responses";
+
+pub fn is_supported_codex_version(version: &str) -> bool {
+    let minimum = semver::Version::parse(MIN_CODEX_VERSION)
+        .expect("MIN_CODEX_VERSION must be a valid semantic version");
+    semver::Version::parse(version).is_ok_and(|version| version >= minimum)
+}
 
 pub fn is_valid_ticket_state(state: &str) -> bool {
     state.len() == TICKET_LENGTH && state.starts_with("gAAAAA")
@@ -67,4 +74,17 @@ pub async fn harvest_ticket(
         return Err(anyhow::anyhow!("ticket response header has invalid shape"));
     }
     Ok(state)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_supported_codex_version;
+
+    #[test]
+    fn requires_supported_semver() {
+        assert!(is_supported_codex_version("0.153.4"));
+        assert!(is_supported_codex_version("0.155.1"));
+        assert!(!is_supported_codex_version("0.153.3"));
+        assert!(!is_supported_codex_version("0.155"));
+    }
 }

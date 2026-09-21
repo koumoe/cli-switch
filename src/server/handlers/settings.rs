@@ -42,6 +42,7 @@ pub(in crate::server) struct UpdateSettingsInput {
     openai_codex_ticket_enabled: Option<bool>,
     openai_codex_ticket_fail_closed: Option<bool>,
     openai_codex_ticket_models: Option<Vec<String>>,
+    openai_codex_ticket_version_override: Option<String>,
     openai_codex_ticket_harvest_proxy_url: Option<String>,
     openai_codex_ticket_clear_harvest_proxy: Option<bool>,
     log_level: Option<logging::LogLevel>,
@@ -153,6 +154,10 @@ pub(in crate::server) async fn update_settings(
         (
             "openai_codex_ticket_models",
             input.openai_codex_ticket_models.is_some(),
+        ),
+        (
+            "openai_codex_ticket_version_override",
+            input.openai_codex_ticket_version_override.is_some(),
         ),
         (
             "openai_codex_ticket_harvest_proxy_url",
@@ -310,6 +315,25 @@ pub(in crate::server) async fn update_settings(
             "openai_codex_ticket_models must contain at least one model",
         ));
     }
+    if let Some(version) = input.openai_codex_ticket_version_override.as_deref() {
+        let version = version.trim();
+        if !version.is_empty() {
+            let parsed = semver::Version::parse(version).map_err(|_| {
+                ApiError::bad_request(
+                    "settings_openai_codex_ticket_version_invalid",
+                    "openai_codex_ticket_version_override must be a complete semantic version",
+                )
+            })?;
+            let minimum = semver::Version::parse(crate::openai_codex_ticket::MIN_CODEX_VERSION)
+                .expect("MIN_CODEX_VERSION must be a valid semantic version");
+            if parsed < minimum {
+                return Err(ApiError::bad_request(
+                    "settings_openai_codex_ticket_version_too_old",
+                    "openai_codex_ticket_version_override must be at least 0.153.4",
+                ));
+            }
+        }
+    }
     if let Some(proxy) = input.openai_codex_ticket_harvest_proxy_url.as_deref()
         && let Err(reason) = validate_codex_ticket_proxy_url(proxy)
     {
@@ -367,6 +391,7 @@ pub(in crate::server) async fn update_settings(
             openai_codex_ticket_enabled: input.openai_codex_ticket_enabled,
             openai_codex_ticket_fail_closed: input.openai_codex_ticket_fail_closed,
             openai_codex_ticket_models: input.openai_codex_ticket_models,
+            openai_codex_ticket_version_override: input.openai_codex_ticket_version_override,
             openai_codex_ticket_harvest_proxy_url: input.openai_codex_ticket_harvest_proxy_url,
             openai_codex_ticket_clear_harvest_proxy: input
                 .openai_codex_ticket_clear_harvest_proxy

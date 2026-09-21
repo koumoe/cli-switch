@@ -137,18 +137,13 @@ pub async fn delete_openai_codex_tickets_for_account(
     .await
 }
 
-pub fn ticket_is_valid(ticket: &OpenAiCodexTicket, now_ms: i64, target_length: usize) -> bool {
-    ticket.state.len() == target_length
-        && ticket.state.starts_with("gAAAAA")
+pub fn ticket_is_valid(ticket: &OpenAiCodexTicket, now_ms: i64) -> bool {
+    crate::openai_codex_ticket::is_valid_ticket_state(&ticket.state)
         && ticket.expires_at_ms > now_ms
 }
 
-pub fn ticket_status(
-    ticket: OpenAiCodexTicket,
-    now_ms: i64,
-    target_length: usize,
-) -> OpenAiCodexTicketStatus {
-    let ready = ticket_is_valid(&ticket, now_ms, target_length);
+pub fn ticket_status(ticket: OpenAiCodexTicket, now_ms: i64) -> OpenAiCodexTicketStatus {
+    let ready = ticket_is_valid(&ticket, now_ms);
     OpenAiCodexTicketStatus {
         account_id: ticket.account_id,
         model: ticket.model,
@@ -186,23 +181,19 @@ mod tests {
         let now = 1_000;
         assert!(ticket_is_valid(
             &ticket(now + 1_000, &format!("gAAAAA{}", "x".repeat(286))),
-            now,
-            292
+            now
         ));
         assert!(!ticket_is_valid(
             &ticket(now - 1, &format!("gAAAAA{}", "x".repeat(286))),
-            now,
-            292
+            now
         ));
         assert!(!ticket_is_valid(
             &ticket(now + 1_000, &format!("bad!!!{}", "x".repeat(286))),
-            now,
-            292
+            now
         ));
         assert!(!ticket_is_valid(
             &ticket(now + 1_000, &format!("gAAAAA{}", "x".repeat(306))),
-            now,
-            292
+            now
         ));
     }
 }

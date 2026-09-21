@@ -154,6 +154,9 @@ fn request_endpoint_template(method: &Method, path: &str) -> Option<&'static str
                 ["api", "openai", "oauth", "sessions", _] if method == Method::GET => {
                     Some("/api/openai/oauth/sessions/{request_id}")
                 }
+                ["api", "openai", "codex-tickets", "status"] if method == Method::GET => {
+                    Some("/api/openai/codex-tickets/status")
+                }
                 ["api", "openai", "accounts", _, "refresh"] if method == Method::POST => {
                     Some("/api/openai/accounts/{id}/refresh")
                 }
@@ -236,6 +239,7 @@ fn request_purpose(method: &Method, path: &str) -> &'static str {
         ("POST", "/api/remote/accounts/detect") => "handlers::detect_remote_account",
         ("POST", "/api/remote/accounts/reorder") => "handlers::reorder_remote_accounts",
         ("POST", "/api/openai/oauth/start") => "handlers::start_openai_oauth",
+        ("GET", "/api/openai/codex-tickets/status") => "handlers::openai_codex_ticket_status",
         ("GET", "/api/remote/accounts/checkins/today") => "handlers::remote_account_checkins_today",
         ("POST", "/api/remote/accounts/{id}/managed_channel") => {
             "handlers::create_remote_managed_channel"
@@ -520,6 +524,10 @@ fn build_app(state: AppState) -> Router {
             post(handlers::start_openai_oauth),
         )
         .route(
+            "/api/openai/codex-tickets/status",
+            get(handlers::openai_codex_ticket_status),
+        )
+        .route(
             "/api/openai/oauth/sessions/{request_id}",
             get(handlers::get_openai_oauth_status),
         )
@@ -682,7 +690,7 @@ pub async fn serve_with_listener(
     let chat_bridge_settings_rx = state.settings_cache_rx.clone();
     let chat_bridge_channels_cache = state.channels_cache.clone();
     let cli_tools_state = state.clone();
-    let app = build_app(state);
+    let app = build_app(state.clone());
 
     let mut bg = tokio::task::JoinSet::<()>::new();
 
@@ -755,7 +763,7 @@ pub async fn serve_with_listener(
     ));
 
     bg.spawn(tasks::openai_codex_ticket_harvesting_loop(
-        (*db_path).clone(),
+        state.clone(),
         settings_rx7,
     ));
 

@@ -8,6 +8,7 @@ pub(super) mod health;
 pub(super) mod maintenance;
 pub(super) mod newapi;
 pub(super) mod openai;
+pub(super) mod openai_codex_tickets;
 pub(super) mod pricing;
 pub(super) mod project;
 pub(super) mod proxy;
@@ -39,6 +40,7 @@ pub(super) use maintenance::{db_size, frontend_log_ingest, logs_clear, logs_size
 pub(super) use openai::{
     get_openai_oauth_status, refresh_openai_account, reset_openai_account_quota, start_openai_oauth,
 };
+pub(super) use openai_codex_tickets::openai_codex_ticket_status;
 pub(super) use pricing::{pricing_models, pricing_status, pricing_sync};
 pub(super) use project::{
     delete_project, delete_project_document, get_project_document, list_projects,

@@ -401,13 +401,9 @@ async fn forward_with_activity(
                     .await
                     .ok()
                     .flatten();
-                    if let Some(ticket) = ticket.filter(|ticket| {
-                        storage::ticket_is_valid(
-                            ticket,
-                            storage::now_ms(),
-                            crate::openai_codex_ticket::TICKET_LENGTH,
-                        )
-                    }) {
+                    if let Some(ticket) =
+                        ticket.filter(|ticket| storage::ticket_is_valid(ticket, storage::now_ms()))
+                    {
                         codex_ticket_header = HeaderValue::from_str(&ticket.state).ok();
                     } else if settings.openai_codex_ticket_fail_closed {
                         last_err = Some(ProxyError::CodexTicketUnavailable(

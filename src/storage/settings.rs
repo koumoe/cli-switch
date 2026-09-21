@@ -36,6 +36,7 @@ const KEY_OPENAI_CODEX_TICKET_ENABLED: &str = "openai_codex_ticket_enabled";
 const KEY_OPENAI_CODEX_TICKET_FAIL_CLOSED: &str = "openai_codex_ticket_fail_closed";
 const KEY_OPENAI_CODEX_TICKET_HARVEST_PROXY_URL: &str = "openai_codex_ticket_harvest_proxy_url";
 const KEY_OPENAI_CODEX_TICKET_MODELS: &str = "openai_codex_ticket_models";
+const KEY_OPENAI_CODEX_TICKET_VERSION_OVERRIDE: &str = "openai_codex_ticket_version_override";
 pub const DEFAULT_OPENAI_CODEX_TICKET_MODELS: &[&str] = &["gpt-6-astra", "gpt-5.6-sol"];
 const KEY_LOG_LEVEL: &str = "log_level";
 const KEY_LOG_RETENTION_DAYS: &str = "log_retention_days";
@@ -126,6 +127,8 @@ pub struct AppSettings {
     pub openai_codex_ticket_enabled: bool,
     pub openai_codex_ticket_fail_closed: bool,
     pub openai_codex_ticket_models: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub openai_codex_ticket_version_override: Option<String>,
     #[serde(skip_serializing)]
     pub openai_codex_ticket_harvest_proxy_url: Option<String>,
     pub openai_codex_ticket_harvest_proxy_configured: bool,
@@ -187,6 +190,7 @@ impl Default for AppSettings {
                 .iter()
                 .map(|model| (*model).to_string())
                 .collect(),
+            openai_codex_ticket_version_override: None,
             openai_codex_ticket_harvest_proxy_url: None,
             openai_codex_ticket_harvest_proxy_configured: false,
             log_level: LogLevel::Warning,
@@ -278,6 +282,7 @@ pub struct AppSettingsPatch {
     pub openai_codex_ticket_enabled: Option<bool>,
     pub openai_codex_ticket_fail_closed: Option<bool>,
     pub openai_codex_ticket_models: Option<Vec<String>>,
+    pub openai_codex_ticket_version_override: Option<String>,
     pub openai_codex_ticket_harvest_proxy_url: Option<String>,
     pub openai_codex_ticket_clear_harvest_proxy: bool,
     pub log_level: Option<LogLevel>,
@@ -592,6 +597,12 @@ pub async fn get_app_settings(db_path: PathBuf) -> anyhow::Result<AppSettings> {
                 warn_invalid_setting_once(KEY_OPENAI_CODEX_TICKET_MODELS, &v, || {
                     "invalid JSON model list".to_string()
                 });
+            }
+        }
+        if let Some(v) = get_setting(conn, KEY_OPENAI_CODEX_TICKET_VERSION_OVERRIDE)? {
+            let value = v.trim();
+            if !value.is_empty() {
+                out.openai_codex_ticket_version_override = Some(value.to_string());
             }
         }
         if let Some(v) = get_setting(conn, KEY_OPENAI_CODEX_TICKET_HARVEST_PROXY_URL)? {
@@ -976,6 +987,14 @@ pub async fn update_app_settings(
                     updated_at_ms,
                 )?;
             }
+        }
+        if let Some(value) = patch.openai_codex_ticket_version_override {
+            set_setting(
+                conn,
+                KEY_OPENAI_CODEX_TICKET_VERSION_OVERRIDE,
+                value.trim(),
+                updated_at_ms,
+            )?;
         }
         if patch.openai_codex_ticket_clear_harvest_proxy {
             set_setting(

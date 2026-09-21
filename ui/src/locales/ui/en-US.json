@@ -1031,7 +1031,35 @@
       "clearProxy": "Clear saved harvest proxy",
       "clearProxyHint": "Clearing stops use of the dedicated harvest proxy. Enter a proxy URL again to restore it.",
       "saved": "Codex ticket settings saved",
-      "saveFail": "Failed to save Codex ticket settings"
+      "saveFail": "Failed to save Codex ticket settings",
+      "versionOverride": "Codex version fallback",
+      "versionOverrideHint": "Used only when the local Codex CLI version cannot be detected; leave blank for automatic detection. Enter a complete version such as 0.155.1.",
+      "versionOverridePlaceholder": "e.g. 0.155.1",
+      "statusTitle": "Ticket status",
+      "statusReady": "Ready",
+      "versionSource": "Codex version: {{version}} ({{source}})",
+      "versionMissing": "not detected",
+      "sourceNone": "none",
+      "sources": {
+        "local": "detected locally",
+        "configured": "configured manually"
+      },
+      "statusIssue": {
+        "disabled": "Feature is disabled",
+        "missing_proxy": "Harvest proxy is not configured",
+        "checking_version": "Checking Codex version",
+        "missing_version": "Codex version was not detected"
+      },
+      "missingVersionAction": "Install or refresh the CLI tool, or enter a version fallback above.",
+      "ticketReady": "Valid ({{length}} chars)",
+      "ticketMissing": "No valid ticket",
+      "ticketErrors": {
+        "invalid_shape": "Upstream ticket shape rejected",
+        "missing_header": "Upstream response has no ticket",
+        "upstream_http": "Upstream HTTP error",
+        "missing_access_token": "OpenAI account has no access token",
+        "harvest_failed": "Ticket harvest failed"
+      }
     },
     "about": {
       "title": "About",
