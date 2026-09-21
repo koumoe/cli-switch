@@ -984,15 +984,15 @@ pub async fn update_app_settings(
                 "",
                 updated_at_ms,
             )?;
-        } else if let Some(value) = patch.openai_codex_ticket_harvest_proxy_url {
-            if !value.trim().is_empty() {
-                set_setting(
-                    conn,
-                    KEY_OPENAI_CODEX_TICKET_HARVEST_PROXY_URL,
-                    value.trim(),
-                    updated_at_ms,
-                )?;
-            }
+        } else if let Some(value) = patch.openai_codex_ticket_harvest_proxy_url
+            && !value.trim().is_empty()
+        {
+            set_setting(
+                conn,
+                KEY_OPENAI_CODEX_TICKET_HARVEST_PROXY_URL,
+                value.trim(),
+                updated_at_ms,
+            )?;
         }
         if let Some(v) = patch.log_level {
             set_setting(conn, KEY_LOG_LEVEL, v.as_str(), updated_at_ms)?;

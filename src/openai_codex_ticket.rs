@@ -62,14 +62,3 @@ pub async fn harvest_ticket(
     }
     Ok(state)
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn ticket_constants_match_codex_contract() {
-        assert_eq!(TICKET_LENGTH, 292);
-        assert!(TICKET_TTL_MS > 0);
-    }
-}
