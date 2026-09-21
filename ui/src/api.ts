@@ -65,6 +65,7 @@ import type {
   UpdateCheck,
   UpdateDownloadResponse,
   UpdateStatus,
+  UpdateSettingsInput,
   UsageListQuery,
   UsageListResult,
   UserFacingIssuePayload,
@@ -204,7 +205,7 @@ export function getSettings(): Promise<AppSettings> {
 }
 
 export function updateSettings(
-  patch: Partial<AppSettings>
+  patch: UpdateSettingsInput
 ): Promise<AppSettings> {
   return http<AppSettings>("PUT", "/api/settings", patch);
 }

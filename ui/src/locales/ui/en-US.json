@@ -1013,6 +1013,26 @@
       "saved": "Saved",
       "saveFail": "Save failed"
     },
+    "codexTicket": {
+      "title": "Codex 292 ticket",
+      "hint": "Fetch and cache Codex tickets for OpenAI OAuth requests. Ticket harvesting uses the dedicated proxy configured here; regular business requests keep using their existing proxy.",
+      "enabled": "Enable Codex ticket",
+      "enabledHint": "When enabled, CliSwitch fetches tickets for the configured models in the background and injects them into requests. Disabled by default.",
+      "failClosed": "Block requests without a ticket",
+      "failClosedHint": "Block the matching OAuth request and allow channel failover when no valid ticket is available. When off, send the request without a ticket.",
+      "models": "Harvest models",
+      "modelsHint": "Separate model names with commas, for example gpt-6-astra, gpt-5.6-sol.",
+      "modelsRequired": "Configure at least one model",
+      "proxy": "Harvest proxy",
+      "proxyHint": "Supports http, https, socks5, and socks5h. Proxy credentials are used only in this input and are never echoed or returned by settings.",
+      "proxyPlaceholder": "http://user:password@proxy.example:8080",
+      "proxyConfigured": "Configured. Leave blank to keep the current proxy",
+      "proxyInvalid": "Invalid proxy URL. Check the scheme, host, port, and query parameters.",
+      "clearProxy": "Clear saved harvest proxy",
+      "clearProxyHint": "Clearing stops use of the dedicated harvest proxy. Enter a proxy URL again to restore it.",
+      "saved": "Codex ticket settings saved",
+      "saveFail": "Failed to save Codex ticket settings"
+    },
     "about": {
       "title": "About",
       "appName": "App name",
