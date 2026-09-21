@@ -9,6 +9,7 @@ use crate::events::{
     self, AppEvent, RemoteGroupAddedAlert, RemoteLowBalanceAlert,
     RemoteManagedChannelMissingPrompt, RemoteManagedChannelMultiplierPrompt,
 };
+use crate::openai_codex_ticket;
 use crate::{autostart, log_files, newapi, storage, sub2api, update};
 
 use super::handlers::pricing::run_pricing_sync;
@@ -17,6 +18,7 @@ use super::state::data_dir_from_db_path;
 use super::sub2api_auth;
 
 const RETRY_INTERVAL: Duration = Duration::from_secs(30);
+const CODEX_TICKET_CHECK_INTERVAL: Duration = Duration::from_secs(6);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum LowBalanceAlertAction {
@@ -293,6 +295,94 @@ pub(crate) async fn apply_autostart_setting(db_path: PathBuf) {
         }
     })
     .await;
+}
+
+pub(crate) async fn openai_codex_ticket_harvesting_loop(
+    db_path: PathBuf,
+    mut notify: watch::Receiver<u64>,
+) {
+    loop {
+        let settings = match storage::get_app_settings(db_path.clone()).await {
+            Ok(settings) => settings,
+            Err(error) => {
+                tracing::warn!(%error, "load Codex ticket settings failed");
+                if !wait_for_retry_or_shutdown(&mut notify).await {
+                    break;
+                }
+                continue;
+            }
+        };
+        if settings.openai_codex_ticket_enabled
+            && let Some(proxy_url) = settings.openai_codex_ticket_harvest_proxy_url.as_deref()
+            && !proxy_url.trim().is_empty()
+        {
+            match storage::list_openai_accounts_with_secret(db_path.clone()).await {
+                Ok(accounts) => {
+                    let now = storage::now_ms();
+                    for account in accounts {
+                        if account.reauth_required || account.access_token.is_none() {
+                            continue;
+                        }
+                        for model in &settings.openai_codex_ticket_models {
+                            let current = storage::get_openai_codex_ticket(
+                                db_path.clone(),
+                                account.id.clone(),
+                                model.clone(),
+                            )
+                            .await
+                            .ok()
+                            .flatten();
+                            let needs_refresh = current.as_ref().is_none_or(|ticket| {
+                                !storage::ticket_is_valid(
+                                    ticket,
+                                    now + 5 * 60 * 1000,
+                                    openai_codex_ticket::TICKET_LENGTH,
+                                )
+                            });
+                            if !needs_refresh {
+                                continue;
+                            }
+                            match openai_codex_ticket::harvest_ticket(&account, model, proxy_url)
+                                .await
+                            {
+                                Ok(state) => {
+                                    let captured = storage::now_ms();
+                                    if let Err(error) = storage::upsert_openai_codex_ticket(
+                                        db_path.clone(),
+                                        account.id.clone(),
+                                        model.clone(),
+                                        state,
+                                        captured,
+                                        captured + openai_codex_ticket::TICKET_TTL_MS,
+                                    )
+                                    .await
+                                    {
+                                        tracing::warn!(%error, account_id = %account.id, model, "persist Codex ticket failed");
+                                    }
+                                }
+                                Err(error) => {
+                                    tracing::warn!(%error, account_id = %account.id, model, "harvest Codex ticket failed");
+                                    let _ = storage::record_openai_codex_ticket_attempt(
+                                        db_path.clone(),
+                                        account.id.clone(),
+                                        model.clone(),
+                                        Some(error.to_string()),
+                                    )
+                                    .await;
+                                }
+                            }
+                        }
+                    }
+                }
+                Err(error) => {
+                    tracing::warn!(%error, "list OpenAI accounts for Codex ticket failed")
+                }
+            }
+        }
+        if !wait_for_interval_or_shutdown(CODEX_TICKET_CHECK_INTERVAL, &mut notify).await {
+            break;
+        }
+    }
 }
 
 pub(crate) async fn logs_retention_cleanup_loop(

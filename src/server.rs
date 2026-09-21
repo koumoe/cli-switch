@@ -718,6 +718,7 @@ pub async fn serve_with_listener(
     let settings_rx4 = settings_rx.clone();
     let settings_rx5 = settings_rx.clone();
     let settings_rx6 = settings_rx.clone();
+    let settings_rx7 = settings_rx.clone();
     bg.spawn(tasks::pricing_auto_update_loop(
         (*db_path).clone(),
         http_client.clone(),
@@ -751,6 +752,11 @@ pub async fn serve_with_listener(
         (*db_path).clone(),
         http_client.clone(),
         settings_rx6,
+    ));
+
+    bg.spawn(tasks::openai_codex_ticket_harvesting_loop(
+        (*db_path).clone(),
+        settings_rx7,
     ));
 
     bg.spawn(tasks::apply_autostart_setting((*db_path).clone()));

@@ -14,6 +14,7 @@ mod error;
 mod exchange_rate;
 mod newapi;
 mod openai_account;
+mod openai_codex_ticket;
 mod pricing;
 mod project;
 mod protocol;
@@ -72,6 +73,11 @@ pub use openai_account::{
     list_openai_accounts, list_openai_accounts_with_secret, mark_openai_account_auth_failure,
     update_openai_account_name, update_openai_account_quota,
     update_openai_account_quota_from_headers, upsert_openai_account_tokens,
+};
+pub use openai_codex_ticket::{
+    OpenAiCodexTicket, OpenAiCodexTicketStatus, delete_openai_codex_tickets_for_account,
+    get_openai_codex_ticket, list_openai_codex_tickets, record_openai_codex_ticket_attempt,
+    ticket_is_valid, ticket_status, upsert_openai_codex_ticket,
 };
 pub use pricing::{
     PricingModel, PricingStatus, UpsertPricingModel, pricing_status, search_pricing_models,
