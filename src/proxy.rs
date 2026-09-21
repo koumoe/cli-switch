@@ -123,6 +123,8 @@ pub enum ProxyError {
     ReadBody(String),
     #[error("发送上游请求失败：{0}")]
     Upstream(String),
+    #[error("Codex ticket unavailable for model: {0}")]
+    CodexTicketUnavailable(String),
     #[error(transparent)]
     Storage(#[from] anyhow::Error),
 }
@@ -316,6 +318,7 @@ async fn forward_with_activity(
             let mut upstream_client = client.clone();
             let mut attempt_body = body_bytes.clone();
             let mut openai_account = None;
+            let mut codex_ticket_header = None;
             if is_openai_oauth_channel {
                 if protocol != Protocol::Openai
                     || parts.uri.path().trim_end_matches('/') != "/v1/responses"
@@ -382,6 +385,37 @@ async fn forward_with_activity(
                         continue 'channel_loop;
                     }
                 };
+                if settings.openai_codex_ticket_enabled
+                    && model.as_deref().is_some_and(|requested| {
+                        settings
+                            .openai_codex_ticket_models
+                            .iter()
+                            .any(|configured| configured == requested)
+                    })
+                {
+                    let ticket = storage::get_openai_codex_ticket(
+                        db_path.clone(),
+                        account.id.clone(),
+                        model.clone().unwrap_or_default(),
+                    )
+                    .await
+                    .ok()
+                    .flatten();
+                    if let Some(ticket) = ticket.filter(|ticket| {
+                        storage::ticket_is_valid(
+                            ticket,
+                            storage::now_ms(),
+                            crate::openai_codex_ticket::TICKET_LENGTH,
+                        )
+                    }) {
+                        codex_ticket_header = HeaderValue::from_str(&ticket.state).ok();
+                    } else if settings.openai_codex_ticket_fail_closed {
+                        last_err = Some(ProxyError::CodexTicketUnavailable(
+                            model.clone().unwrap_or_else(|| "unknown".to_string()),
+                        ));
+                        continue 'channel_loop;
+                    }
+                }
                 openai_account = Some(account);
                 if let Some(pool) = openai_oauth_pool {
                     upstream_client = match pool.client_for_account(account_id).await {
@@ -429,6 +463,9 @@ async fn forward_with_activity(
 
             let mut out_headers = filtered_headers(&parts.headers);
             clear_channel_scoped_headers(&mut out_headers);
+            if is_openai_oauth_channel {
+                out_headers.remove(HeaderName::from_static("x-codex-turn-state"));
+            }
             let auth_result = if let Some(account) = openai_account.as_ref() {
                 let access_token = account.access_token.as_deref().unwrap_or_default();
                 crate::codex_upstream::apply_oauth_credentials(
@@ -458,6 +495,9 @@ async fn forward_with_activity(
                     break 'channel_loop;
                 }
                 continue;
+            }
+            if let Some(ticket) = codex_ticket_header.clone() {
+                out_headers.insert(HeaderName::from_static("x-codex-turn-state"), ticket);
             }
 
             let retry_url = is_openai_oauth_channel.then(|| url.clone());
@@ -554,6 +594,7 @@ async fn forward_with_activity(
                 };
                 let mut retry_headers = filtered_headers(&parts.headers);
                 clear_channel_scoped_headers(&mut retry_headers);
+                retry_headers.remove(HeaderName::from_static("x-codex-turn-state"));
                 if let Err(error) = crate::codex_upstream::apply_oauth_credentials(
                     &mut retry_headers,
                     crate::codex_upstream::CodexCredentials {
@@ -563,6 +604,9 @@ async fn forward_with_activity(
                 ) {
                     last_err = Some(ProxyError::Upstream(error.to_string()));
                     continue 'channel_loop;
+                }
+                if let Some(ticket) = codex_ticket_header.clone() {
+                    retry_headers.insert(HeaderName::from_static("x-codex-turn-state"), ticket);
                 }
                 upstream = match upstream_client
                     .request(
