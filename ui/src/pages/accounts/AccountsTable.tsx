@@ -387,7 +387,7 @@ function CodexTicketStatusCell({
   const complete = readyCount === eligibleItems.length;
   const variant = complete ? "success" : "warning";
   return (
-    <details className="relative" defaultOpen={!complete}>
+    <details className="relative" open={!complete}>
       <summary className="cursor-pointer list-none">
         <Badge variant={variant}>
           {t("accounts.codexTicket.summary", { ready: readyCount, total: eligibleItems.length })}
