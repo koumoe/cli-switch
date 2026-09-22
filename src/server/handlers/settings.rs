@@ -39,10 +39,6 @@ pub(in crate::server) struct UpdateSettingsInput {
     channel_retry_enabled: Option<bool>,
     anthropic_count_tokens_mock_enabled: Option<bool>,
     openai_responses_reasoning_id_sanitizer_enabled: Option<bool>,
-    openai_codex_ticket_enabled: Option<bool>,
-    openai_codex_ticket_fail_closed: Option<bool>,
-    openai_codex_ticket_models: Option<Vec<String>>,
-    openai_codex_ticket_version_override: Option<String>,
     log_level: Option<logging::LogLevel>,
     log_retention_days: Option<i64>,
     chat_bridge_enabled: Option<bool>,
@@ -140,22 +136,6 @@ pub(in crate::server) async fn update_settings(
             input
                 .openai_responses_reasoning_id_sanitizer_enabled
                 .is_some(),
-        ),
-        (
-            "openai_codex_ticket_enabled",
-            input.openai_codex_ticket_enabled.is_some(),
-        ),
-        (
-            "openai_codex_ticket_fail_closed",
-            input.openai_codex_ticket_fail_closed.is_some(),
-        ),
-        (
-            "openai_codex_ticket_models",
-            input.openai_codex_ticket_models.is_some(),
-        ),
-        (
-            "openai_codex_ticket_version_override",
-            input.openai_codex_ticket_version_override.is_some(),
         ),
         ("log_level", input.log_level.is_some()),
         ("log_retention_days", input.log_retention_days.is_some()),
@@ -292,38 +272,6 @@ pub(in crate::server) async fn update_settings(
             "chat_bridge_turn_timeout_minutes must be >= 0",
         ));
     }
-    if let Some(models) = input.openai_codex_ticket_models.as_ref()
-        && models
-            .iter()
-            .map(|m| m.trim())
-            .filter(|m| !m.is_empty())
-            .count()
-            == 0
-    {
-        return Err(ApiError::bad_request(
-            "settings_openai_codex_ticket_models_invalid",
-            "openai_codex_ticket_models must contain at least one model",
-        ));
-    }
-    if let Some(version) = input.openai_codex_ticket_version_override.as_deref() {
-        let version = version.trim();
-        if !version.is_empty() {
-            let parsed = semver::Version::parse(version).map_err(|_| {
-                ApiError::bad_request(
-                    "settings_openai_codex_ticket_version_invalid",
-                    "openai_codex_ticket_version_override must be a complete semantic version",
-                )
-            })?;
-            let minimum = semver::Version::parse(crate::openai_codex_ticket::MIN_CODEX_VERSION)
-                .expect("MIN_CODEX_VERSION must be a valid semantic version");
-            if parsed < minimum {
-                return Err(ApiError::bad_request(
-                    "settings_openai_codex_ticket_version_too_old",
-                    "openai_codex_ticket_version_override must be at least 0.153.4",
-                ));
-            }
-        }
-    }
     let auto_start_enabled = input.auto_start_enabled;
     if let Some(enabled) = auto_start_enabled {
         let res = tokio::task::spawn_blocking(move || autostart::set_enabled(enabled)).await;
@@ -369,10 +317,6 @@ pub(in crate::server) async fn update_settings(
             anthropic_count_tokens_mock_enabled: input.anthropic_count_tokens_mock_enabled,
             openai_responses_reasoning_id_sanitizer_enabled: input
                 .openai_responses_reasoning_id_sanitizer_enabled,
-            openai_codex_ticket_enabled: input.openai_codex_ticket_enabled,
-            openai_codex_ticket_fail_closed: input.openai_codex_ticket_fail_closed,
-            openai_codex_ticket_models: input.openai_codex_ticket_models,
-            openai_codex_ticket_version_override: input.openai_codex_ticket_version_override,
             log_level: input.log_level,
             log_retention_days: input.log_retention_days,
             chat_bridge_enabled: input.chat_bridge_enabled,

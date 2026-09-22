@@ -303,7 +303,6 @@
       "baseUrl": "Base URL",
       "provider": "账号体系",
       "quota": "额度",
-      "codexTicket": "打票",
       "reauthRequired": "登录状态已失效，请重新登录",
       "empty": "暂无账号，点击「新增账号」添加",
       "checkinOrReset": "签到 / 重置"
@@ -384,12 +383,6 @@
       "reauthRequiredHint": "登录状态已失效，请重新登录",
       "openaiIdentity": "OpenAI 账号：{{value}}",
       "openaiPlan": "套餐：{{value}}",
-      "codexTicketProxy": "Codex 打票代理",
-      "codexTicketProxyHint": "配置后仅该账号参与 Codex 打票。代理地址支持 http、https、socks5、socks5h；凭据仅用于本机请求，不会回显。",
-      "codexTicketProxyPlaceholder": "socks5://user:password@proxy.example:1080",
-      "codexTicketProxyKeepHint": "已配置，留空表示保持当前代理",
-      "codexTicketClearProxy": "清除代理",
-      "codexTicketKeepProxy": "保留代理",
       "openLoginPage": "登录并获取授权",
       "openLoginPageOpening": "正在打开登录窗口...",
       "rechargeCurrency": "默认充值货币",
@@ -465,12 +458,6 @@
       "createManagedFail": "创建渠道失败",
       "reorderOk": "排序已保存",
       "reorderFail": "保存排序失败"
-    },
-    "codexTicket": {
-      "disabled": "总开关已关闭",
-      "proxyMissing": "未配置代理",
-      "channelMissing": "未绑定通道",
-      "summary": "{{ready}}/{{total}} 可用"
     },
     "quota": {
       "unavailable": "暂不可用",
@@ -1025,29 +1012,6 @@
       "mockCountTokensHint": "拦截 /v1/messages/count_tokens 并在本地估算 input_tokens",
       "saved": "已保存",
       "saveFail": "保存失败"
-    },
-    "codexTicket": {
-      "title": "Codex 292 Ticket",
-      "hint": "为已配置打票代理的 OpenAI 账号获取并缓存 Codex ticket。代理地址请在账号编辑页单独配置。",
-      "enabled": "启用 Codex ticket",
-      "enabledHint": "开启后，已配置代理且绑定启用通道的 OpenAI 账号会后台获取 ticket，并在请求中自动注入。默认关闭。",
-      "saved": "Codex ticket 设置已保存",
-      "saveFail": "保存 Codex ticket 设置失败",
-      "statusIssue": {
-        "disabled": "功能已关闭",
-        "checking_version": "正在检测 Codex 版本",
-        "missing_version": "未检测到 Codex 版本"
-      },
-      "ticketReady": "有效（{{length}} 字符）",
-      "ticketMissing": "暂无有效 ticket",
-      "ticketErrors": {
-        "invalid_shape": "上游 ticket 格式不符合 292 字符要求",
-        "missing_header": "上游响应没有 ticket",
-        "upstream_http": "上游 HTTP 错误",
-        "missing_access_token": "OpenAI 账号没有 access token",
-        "network": "代理连接失败，请检查代理或改用 socks5h",
-        "harvest_failed": "打票失败"
-      }
     },
     "about": {
       "title": "关于",

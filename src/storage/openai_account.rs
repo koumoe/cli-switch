@@ -39,9 +39,6 @@ pub struct OpenAiAccount {
     pub name: String,
     pub base_url: String,
     #[serde(skip_serializing)]
-    pub codex_ticket_proxy_url: Option<String>,
-    pub codex_ticket_proxy_configured: bool,
-    #[serde(skip_serializing)]
     pub access_token: Option<String>,
     #[serde(skip_serializing)]
     pub refresh_token: Option<String>,
@@ -83,7 +80,7 @@ const SELECT_COLUMNS: &str = r#"
     primary_quota_resets_at_ms, secondary_quota_used_percent,
     secondary_quota_window_minutes, secondary_quota_resets_at_ms,
     quota_windows_json, last_sync_error, reauth_required, last_synced_at_ms, sort_order,
-    created_at_ms, updated_at_ms, quota_reset_available_count, codex_ticket_proxy_url
+    created_at_ms, updated_at_ms, quota_reset_available_count
 "#;
 
 fn normalize_optional_text(value: Option<String>) -> Option<String> {
@@ -117,15 +114,10 @@ fn from_row(row: &rusqlite::Row<'_>, include_secret: bool) -> rusqlite::Result<O
         .and_then(|value| serde_json::from_str(&value).ok())
         .unwrap_or_default();
     additional.retain(OpenAiQuotaWindow::is_valid);
-    let codex_ticket_proxy_url = row
-        .get::<_, Option<String>>(26)?
-        .filter(|value| !value.trim().is_empty());
     Ok(OpenAiAccount {
         id: row.get(0)?,
         name: row.get(1)?,
         base_url: row.get(2)?,
-        codex_ticket_proxy_configured: codex_ticket_proxy_url.is_some(),
-        codex_ticket_proxy_url,
         access_token: include_secret
             .then_some(access_token_raw.clone())
             .filter(|value| configured(value)),
@@ -373,45 +365,6 @@ pub async fn update_openai_account_name(
     get_openai_account_without_secret(db_path, account_id).await
 }
 
-pub async fn update_openai_account_codex_ticket_proxy(
-    db_path: PathBuf,
-    account_id: String,
-    proxy_url: Option<String>,
-    clear_proxy: bool,
-) -> anyhow::Result<OpenAiAccount> {
-    let proxy_url = proxy_url.and_then(|value| normalize_optional_text(Some(value)));
-    with_conn(db_path.clone(), {
-        let account_id = account_id.clone();
-        move |conn| {
-            let changed = if clear_proxy {
-                conn.execute(
-                    "UPDATE remote_accounts SET codex_ticket_proxy_url = NULL, updated_at_ms = ?2 WHERE provider = 'openai' AND id = ?1",
-                    params![account_id, now_ms()],
-                )?
-            } else if let Some(proxy_url) = proxy_url {
-                conn.execute(
-                    "UPDATE remote_accounts SET codex_ticket_proxy_url = ?2, updated_at_ms = ?3 WHERE provider = 'openai' AND id = ?1",
-                    params![account_id, proxy_url, now_ms()],
-                )?
-            } else {
-                conn.query_row(
-                    "SELECT 1 FROM remote_accounts WHERE provider = 'openai' AND id = ?1",
-                    params![account_id],
-                    |_| Ok(1),
-                )
-                .optional()?
-                .unwrap_or(0)
-            };
-            if changed == 0 {
-                return Err(StorageError::RemoteAccountNotFound { account_id }.into());
-            }
-            Ok(())
-        }
-    })
-    .await?;
-    get_openai_account_without_secret(db_path, account_id).await
-}
-
 pub async fn update_openai_account_quota(
     db_path: PathBuf,
     account_id: String,
@@ -539,19 +492,13 @@ pub async fn mark_openai_account_auth_failure(
 
 pub async fn delete_openai_account(db_path: PathBuf, account_id: String) -> anyhow::Result<()> {
     with_conn(db_path, move |conn| {
-        let tx = conn.unchecked_transaction()?;
-        let changed = tx.execute(
+        let changed = conn.execute(
             "DELETE FROM remote_accounts WHERE provider = 'openai' AND id = ?1",
             [&account_id],
         )?;
         if changed == 0 {
             return Err(StorageError::RemoteAccountNotFound { account_id }.into());
         }
-        tx.execute(
-            "DELETE FROM openai_codex_tickets WHERE account_id = ?1",
-            [&account_id],
-        )?;
-        tx.commit()?;
         Ok(())
     })
     .await
@@ -809,40 +756,6 @@ mod tests {
         assert_eq!(
             list_openai_accounts(db_path.clone()).await.unwrap().len(),
             2
-        );
-        let _ = std::fs::remove_file(db_path);
-    }
-
-    #[tokio::test]
-    async fn codex_proxy_noop_checks_account_existence() {
-        let db_path = temp_db();
-        super::super::init_db(&db_path).unwrap();
-        let created = upsert_openai_account_tokens(
-            db_path.clone(),
-            None,
-            tokens("acct-1", "access-1", Some("refresh-1")),
-        )
-        .await
-        .unwrap();
-
-        let unchanged = update_openai_account_codex_ticket_proxy(
-            db_path.clone(),
-            created.id.clone(),
-            None,
-            false,
-        )
-        .await
-        .unwrap();
-        assert_eq!(unchanged.id, created.id);
-        assert!(
-            update_openai_account_codex_ticket_proxy(
-                db_path.clone(),
-                "missing-account".to_string(),
-                None,
-                false,
-            )
-            .await
-            .is_err()
         );
         let _ = std::fs::remove_file(db_path);
     }

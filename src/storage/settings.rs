@@ -32,34 +32,6 @@ const KEY_CHANNEL_RETRY_ENABLED: &str = "channel_retry_enabled";
 const KEY_ANTHROPIC_COUNT_TOKENS_MOCK_ENABLED: &str = "anthropic_count_tokens_mock_enabled";
 const KEY_OPENAI_RESPONSES_REASONING_ID_SANITIZER_ENABLED: &str =
     "openai_responses_reasoning_id_sanitizer_enabled";
-const KEY_OPENAI_CODEX_TICKET_ENABLED: &str = "openai_codex_ticket_enabled";
-const KEY_OPENAI_CODEX_TICKET_FAIL_CLOSED: &str = "openai_codex_ticket_fail_closed";
-const KEY_OPENAI_CODEX_TICKET_HARVEST_PROXY_URL: &str = "openai_codex_ticket_harvest_proxy_url";
-const KEY_OPENAI_CODEX_TICKET_MODELS: &str = "openai_codex_ticket_models";
-const KEY_OPENAI_CODEX_TICKET_VERSION_OVERRIDE: &str = "openai_codex_ticket_version_override";
-pub const DEFAULT_OPENAI_CODEX_TICKET_MODELS: &[&str] = &["gpt-6-astra", "gpt-5.6-sol"];
-
-pub(crate) fn migrate_openai_codex_ticket_proxy(conn: &Connection) -> anyhow::Result<()> {
-    let Some(proxy) = get_setting(conn, KEY_OPENAI_CODEX_TICKET_HARVEST_PROXY_URL)? else {
-        return Ok(());
-    };
-    let proxy = proxy.trim();
-    if proxy.is_empty() {
-        return Ok(());
-    }
-
-    let tx = conn.unchecked_transaction()?;
-    tx.execute(
-        "UPDATE remote_accounts SET codex_ticket_proxy_url = ?1 WHERE provider = 'openai' AND (codex_ticket_proxy_url IS NULL OR TRIM(codex_ticket_proxy_url) = '')",
-        [proxy],
-    )?;
-    tx.execute(
-        "UPDATE app_settings SET value = '', updated_at_ms = ?2 WHERE key = ?1",
-        rusqlite::params![KEY_OPENAI_CODEX_TICKET_HARVEST_PROXY_URL, now_ms()],
-    )?;
-    tx.commit()?;
-    Ok(())
-}
 const KEY_LOG_LEVEL: &str = "log_level";
 const KEY_LOG_RETENTION_DAYS: &str = "log_retention_days";
 const KEY_CHAT_BRIDGE_ENABLED: &str = "chat_bridge_enabled";
@@ -146,11 +118,6 @@ pub struct AppSettings {
     pub channel_retry_enabled: bool,
     pub anthropic_count_tokens_mock_enabled: bool,
     pub openai_responses_reasoning_id_sanitizer_enabled: bool,
-    pub openai_codex_ticket_enabled: bool,
-    pub openai_codex_ticket_fail_closed: bool,
-    pub openai_codex_ticket_models: Vec<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub openai_codex_ticket_version_override: Option<String>,
     pub log_level: LogLevel,
     pub log_retention_days: i64,
     pub chat_bridge_enabled: bool,
@@ -203,13 +170,6 @@ impl Default for AppSettings {
             channel_retry_enabled: false,
             anthropic_count_tokens_mock_enabled: false,
             openai_responses_reasoning_id_sanitizer_enabled: true,
-            openai_codex_ticket_enabled: false,
-            openai_codex_ticket_fail_closed: true,
-            openai_codex_ticket_models: DEFAULT_OPENAI_CODEX_TICKET_MODELS
-                .iter()
-                .map(|model| (*model).to_string())
-                .collect(),
-            openai_codex_ticket_version_override: None,
             log_level: LogLevel::Warning,
             log_retention_days: 30,
             chat_bridge_enabled: false,
@@ -296,10 +256,6 @@ pub struct AppSettingsPatch {
     pub channel_retry_enabled: Option<bool>,
     pub anthropic_count_tokens_mock_enabled: Option<bool>,
     pub openai_responses_reasoning_id_sanitizer_enabled: Option<bool>,
-    pub openai_codex_ticket_enabled: Option<bool>,
-    pub openai_codex_ticket_fail_closed: Option<bool>,
-    pub openai_codex_ticket_models: Option<Vec<String>>,
-    pub openai_codex_ticket_version_override: Option<String>,
     pub log_level: Option<LogLevel>,
     pub log_retention_days: Option<i64>,
     pub chat_bridge_enabled: Option<bool>,
@@ -385,17 +341,6 @@ fn parse_bool_setting(
     *invalid = true;
     warn_invalid_setting_once(key, raw_value, || "invalid bool".to_string());
     default
-}
-
-fn normalize_openai_codex_ticket_models(values: Vec<String>) -> Vec<String> {
-    let mut out = Vec::new();
-    for value in values {
-        let value = value.trim().to_string();
-        if !value.is_empty() && !out.iter().any(|item| item == &value) {
-            out.push(value);
-        }
-    }
-    out
 }
 
 fn parse_i64_setting(key: &'static str, raw_value: &str, invalid: &mut bool) -> Option<i64> {
@@ -582,43 +527,6 @@ pub async fn get_app_settings(db_path: PathBuf) -> anyhow::Result<AppSettings> {
                 &mut has_invalid_values,
                 out.openai_responses_reasoning_id_sanitizer_enabled,
             );
-        }
-        if let Some(v) = get_setting(conn, KEY_OPENAI_CODEX_TICKET_ENABLED)? {
-            out.openai_codex_ticket_enabled = parse_bool_setting(
-                KEY_OPENAI_CODEX_TICKET_ENABLED,
-                &v,
-                &mut has_invalid_values,
-                out.openai_codex_ticket_enabled,
-            );
-        }
-        if let Some(v) = get_setting(conn, KEY_OPENAI_CODEX_TICKET_FAIL_CLOSED)? {
-            out.openai_codex_ticket_fail_closed = parse_bool_setting(
-                KEY_OPENAI_CODEX_TICKET_FAIL_CLOSED,
-                &v,
-                &mut has_invalid_values,
-                out.openai_codex_ticket_fail_closed,
-            );
-        }
-        if let Some(v) = get_setting(conn, KEY_OPENAI_CODEX_TICKET_MODELS)? {
-            if let Ok(values) = serde_json::from_str::<Vec<String>>(&v) {
-                let values = normalize_openai_codex_ticket_models(values);
-                if !values.is_empty() {
-                    out.openai_codex_ticket_models = values;
-                } else {
-                    has_invalid_values = true;
-                }
-            } else {
-                has_invalid_values = true;
-                warn_invalid_setting_once(KEY_OPENAI_CODEX_TICKET_MODELS, &v, || {
-                    "invalid JSON model list".to_string()
-                });
-            }
-        }
-        if let Some(v) = get_setting(conn, KEY_OPENAI_CODEX_TICKET_VERSION_OVERRIDE)? {
-            let value = v.trim();
-            if !value.is_empty() {
-                out.openai_codex_ticket_version_override = Some(value.to_string());
-            }
         }
         if let Some(v) = get_setting(conn, KEY_LOG_LEVEL)? {
             match v.trim() {
@@ -961,43 +869,6 @@ pub async fn update_app_settings(
                 conn,
                 KEY_OPENAI_RESPONSES_REASONING_ID_SANITIZER_ENABLED,
                 if v { "true" } else { "false" },
-                updated_at_ms,
-            )?;
-        }
-        if let Some(v) = patch.openai_codex_ticket_enabled {
-            set_setting(
-                conn,
-                KEY_OPENAI_CODEX_TICKET_ENABLED,
-                if v { "true" } else { "false" },
-                updated_at_ms,
-            )?;
-        }
-        if let Some(v) = patch.openai_codex_ticket_fail_closed {
-            set_setting(
-                conn,
-                KEY_OPENAI_CODEX_TICKET_FAIL_CLOSED,
-                if v { "true" } else { "false" },
-                updated_at_ms,
-            )?;
-        }
-        if let Some(values) = patch.openai_codex_ticket_models {
-            let values = normalize_openai_codex_ticket_models(values);
-            if !values.is_empty() {
-                let encoded = serde_json::to_string(&values)
-                    .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
-                set_setting(
-                    conn,
-                    KEY_OPENAI_CODEX_TICKET_MODELS,
-                    &encoded,
-                    updated_at_ms,
-                )?;
-            }
-        }
-        if let Some(value) = patch.openai_codex_ticket_version_override {
-            set_setting(
-                conn,
-                KEY_OPENAI_CODEX_TICKET_VERSION_OVERRIDE,
-                value.trim(),
                 updated_at_ms,
             )?;
         }
