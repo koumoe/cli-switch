@@ -1013,6 +1013,54 @@
       "saved": "已保存",
       "saveFail": "保存失败"
     },
+    "codexTicket": {
+      "title": "Codex 292 Ticket",
+      "hint": "为 OpenAI OAuth 请求获取并缓存 Codex ticket。打票请求使用这里配置的独立代理，正常业务请求继续使用原有代理。",
+      "enabled": "启用 Codex ticket",
+      "enabledHint": "开启后，CliSwitch 会为配置的模型后台获取 ticket，并在请求中自动注入。默认关闭。",
+      "failClosed": "缺少 ticket 时阻止请求",
+      "failClosedHint": "没有有效 ticket 时阻止对应 OAuth 请求，并允许渠道故障转移。关闭后会继续发送但不注入 ticket。",
+      "models": "打票模型",
+      "modelsHint": "使用英文逗号分隔模型名，例如 gpt-6-astra, gpt-5.6-sol。",
+      "modelsRequired": "至少需要配置一个模型",
+      "proxy": "打票代理",
+      "proxyHint": "支持 http、https、socks5、socks5h。代理凭据仅在输入框中使用，不会回显或随设置返回。",
+      "proxyPlaceholder": "http://user:password@proxy.example:8080",
+      "proxyConfigured": "已配置，留空表示保持当前代理",
+      "proxyInvalid": "代理地址无效，请检查协议、主机、端口和查询参数",
+      "clearProxy": "清除已保存的打票代理",
+      "clearProxyHint": "清除后将停止使用独立打票代理；如需恢复，请重新输入代理地址。",
+      "saved": "Codex ticket 设置已保存",
+      "saveFail": "保存 Codex ticket 设置失败",
+      "versionOverride": "Codex 版本备用值",
+      "versionOverrideHint": "仅当本机找不到 Codex CLI 版本时使用；留空表示自动检测。请填写完整版本号，例如 0.155.1。",
+      "versionOverridePlaceholder": "例如 0.155.1",
+      "statusTitle": "Ticket 状态",
+      "statusReady": "正常",
+      "versionSource": "Codex 版本：{{version}}（{{source}}）",
+      "versionMissing": "未检测到",
+      "sourceNone": "无",
+      "sources": {
+        "local": "本机检测",
+        "configured": "手动配置"
+      },
+      "statusIssue": {
+        "disabled": "功能已关闭",
+        "missing_proxy": "未配置打票代理",
+        "checking_version": "正在检测 Codex 版本",
+        "missing_version": "未检测到 Codex 版本"
+      },
+      "missingVersionAction": "请安装或刷新 CLI 工具，或填写上方版本 fallback。",
+      "ticketReady": "有效（{{length}} 字符）",
+      "ticketMissing": "暂无有效 ticket",
+      "ticketErrors": {
+        "invalid_shape": "上游 ticket 格式不符合 292 字符要求",
+        "missing_header": "上游响应没有 ticket",
+        "upstream_http": "上游 HTTP 错误",
+        "missing_access_token": "OpenAI 账号没有 access token",
+        "harvest_failed": "打票失败"
+      }
+    },
     "about": {
       "title": "关于",
       "appName": "应用名称",

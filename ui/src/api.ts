@@ -9,6 +9,7 @@ import type {
   Channel,
   ChannelCheckinsToday,
   ChannelTestResponse,
+  CodexTicketStatus,
   ChangelogOverview,
   ChatBridgeBinding,
   ChatBridgePairingToken,
@@ -65,6 +66,7 @@ import type {
   UpdateCheck,
   UpdateDownloadResponse,
   UpdateStatus,
+  UpdateSettingsInput,
   UsageListQuery,
   UsageListResult,
   UserFacingIssuePayload,
@@ -204,9 +206,13 @@ export function getSettings(): Promise<AppSettings> {
 }
 
 export function updateSettings(
-  patch: Partial<AppSettings>
+  patch: UpdateSettingsInput
 ): Promise<AppSettings> {
   return http<AppSettings>("PUT", "/api/settings", patch);
+}
+
+export function getCodexTicketStatus(): Promise<CodexTicketStatus> {
+  return http<CodexTicketStatus>("GET", "/api/openai/codex-tickets/status");
 }
 
 export function getActivities(): Promise<ActivitySnapshot> {

@@ -48,6 +48,11 @@ export type AppSettings = {
   channel_retry_enabled: boolean;
   anthropic_count_tokens_mock_enabled: boolean;
   openai_responses_reasoning_id_sanitizer_enabled: boolean;
+  openai_codex_ticket_enabled: boolean;
+  openai_codex_ticket_fail_closed: boolean;
+  openai_codex_ticket_models: string[];
+  openai_codex_ticket_version_override?: string | null;
+  openai_codex_ticket_harvest_proxy_configured: boolean;
   log_level: LogLevel;
   log_retention_days: number;
   chat_bridge_enabled: boolean;
@@ -70,6 +75,38 @@ export type AppSettings = {
   remote_managed_channel_missing_prompt_enabled: boolean;
   remote_managed_channel_sync_multiplier_enabled: boolean;
   remote_managed_channel_sync_free_multiplier_enabled: boolean;
+};
+
+export type UpdateSettingsInput = Partial<
+  Omit<AppSettings, "openai_codex_ticket_harvest_proxy_configured">
+> & {
+  openai_codex_ticket_harvest_proxy_url?: string;
+  openai_codex_ticket_clear_harvest_proxy?: boolean;
+};
+
+export type CodexTicketStatusIssue =
+  | "disabled"
+  | "missing_proxy"
+  | "checking_version"
+  | "missing_version";
+
+export type CodexTicketStatusItem = {
+  account_id: string;
+  account_name: string;
+  model: string;
+  ready: boolean;
+  length: number | null;
+  remaining_seconds: number | null;
+  expires_at_ms: number | null;
+  last_attempt_at_ms: number | null;
+  last_error: string | null;
+};
+
+export type CodexTicketStatus = {
+  version: string | null;
+  version_source: "local" | "configured" | null;
+  issue: CodexTicketStatusIssue | null;
+  tickets: CodexTicketStatusItem[];
 };
 
 export type ActivityStatus =

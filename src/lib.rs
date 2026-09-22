@@ -15,6 +15,7 @@ pub mod log_files;
 pub mod logging;
 pub(crate) mod newapi;
 pub mod nodejs;
+pub(crate) mod openai_codex_ticket;
 pub(crate) mod openai_quota;
 pub(crate) mod process;
 pub mod proxy;
