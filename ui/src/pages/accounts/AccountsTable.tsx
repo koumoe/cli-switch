@@ -7,6 +7,9 @@ import {
   Badge,
   Card,
   CardContent,
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
 } from "@/components/ui";
 import {
   SortableDataTable,
@@ -367,6 +370,18 @@ function CodexTicketStatusCell({
   status: CodexTicketStatus | null;
 }) {
   const { t } = useI18n();
+  const [open, setOpen] = React.useState(false);
+  const items = status?.tickets.filter((ticket) => ticket.account_id === account.id) ?? [];
+  const eligibleItems = items.filter((ticket) => ticket.eligible);
+  const readyCount = eligibleItems.filter((ticket) => ticket.ready).length;
+  const complete = eligibleItems.length > 0 && readyCount === eligibleItems.length;
+
+  React.useEffect(() => {
+    if (eligibleItems.length > 0 && !complete) {
+      setOpen(true);
+    }
+  }, [account.id, complete, eligibleItems.length]);
+
   if (!status) {
     return <span className="text-muted-foreground">-</span>;
   }
@@ -377,23 +392,21 @@ function CodexTicketStatusCell({
     return <Badge variant="secondary">{t("accounts.codexTicket.proxyMissing")}</Badge>;
   }
 
-  const items = status.tickets.filter((ticket) => ticket.account_id === account.id);
-  const eligibleItems = items.filter((ticket) => ticket.eligible);
   if (eligibleItems.length === 0) {
     return <Badge variant="secondary">{t("accounts.codexTicket.channelMissing")}</Badge>;
   }
 
-  const readyCount = eligibleItems.filter((ticket) => ticket.ready).length;
-  const complete = readyCount === eligibleItems.length;
   const variant = complete ? "success" : "warning";
   return (
-    <details className="relative" open={!complete}>
-      <summary className="cursor-pointer list-none">
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button type="button" className="inline-flex" aria-label={t("accounts.codexTicket.summary", { ready: readyCount, total: eligibleItems.length })}>
         <Badge variant={variant}>
           {t("accounts.codexTicket.summary", { ready: readyCount, total: eligibleItems.length })}
         </Badge>
-      </summary>
-      <div className="absolute right-0 z-10 mt-1 min-w-56 rounded-md border border-border bg-background p-2 text-left text-xs shadow-lg">
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="min-w-56 p-2 text-left text-xs">
         {status.issue ? (
           <div className="pb-1 text-amber-600 dark:text-amber-400">
             {t(`settings.codexTicket.statusIssue.${status.issue}`)}
@@ -411,7 +424,7 @@ function CodexTicketStatusCell({
             </span>
           </div>
         ))}
-      </div>
-    </details>
+      </PopoverContent>
+    </Popover>
   );
 }

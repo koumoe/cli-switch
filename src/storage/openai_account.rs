@@ -394,7 +394,13 @@ pub async fn update_openai_account_codex_ticket_proxy(
                     params![account_id, proxy_url, now_ms()],
                 )?
             } else {
-                1
+                conn.query_row(
+                    "SELECT 1 FROM remote_accounts WHERE provider = 'openai' AND id = ?1",
+                    params![account_id],
+                    |_| Ok(1),
+                )
+                .optional()?
+                .unwrap_or(0)
             };
             if changed == 0 {
                 return Err(StorageError::RemoteAccountNotFound { account_id }.into());
@@ -803,6 +809,40 @@ mod tests {
         assert_eq!(
             list_openai_accounts(db_path.clone()).await.unwrap().len(),
             2
+        );
+        let _ = std::fs::remove_file(db_path);
+    }
+
+    #[tokio::test]
+    async fn codex_proxy_noop_checks_account_existence() {
+        let db_path = temp_db();
+        super::super::init_db(&db_path).unwrap();
+        let created = upsert_openai_account_tokens(
+            db_path.clone(),
+            None,
+            tokens("acct-1", "access-1", Some("refresh-1")),
+        )
+        .await
+        .unwrap();
+
+        let unchanged = update_openai_account_codex_ticket_proxy(
+            db_path.clone(),
+            created.id.clone(),
+            None,
+            false,
+        )
+        .await
+        .unwrap();
+        assert_eq!(unchanged.id, created.id);
+        assert!(
+            update_openai_account_codex_ticket_proxy(
+                db_path.clone(),
+                "missing-account".to_string(),
+                None,
+                false,
+            )
+            .await
+            .is_err()
         );
         let _ = std::fs::remove_file(db_path);
     }

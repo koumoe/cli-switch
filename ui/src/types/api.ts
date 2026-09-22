@@ -52,7 +52,6 @@ export type AppSettings = {
   openai_codex_ticket_fail_closed: boolean;
   openai_codex_ticket_models: string[];
   openai_codex_ticket_version_override?: string | null;
-  openai_codex_ticket_harvest_proxy_configured: boolean;
   log_level: LogLevel;
   log_retention_days: number;
   chat_bridge_enabled: boolean;
@@ -77,12 +76,7 @@ export type AppSettings = {
   remote_managed_channel_sync_free_multiplier_enabled: boolean;
 };
 
-export type UpdateSettingsInput = Partial<
-  Omit<AppSettings, "openai_codex_ticket_harvest_proxy_configured">
-> & {
-  openai_codex_ticket_harvest_proxy_url?: string;
-  openai_codex_ticket_clear_harvest_proxy?: boolean;
-};
+export type UpdateSettingsInput = Partial<AppSettings>;
 
 export type CodexTicketStatusIssue =
   | "disabled"

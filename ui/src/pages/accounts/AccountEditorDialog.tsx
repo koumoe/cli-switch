@@ -204,7 +204,13 @@ export function AccountEditorDialog({
                                 type="button"
                                 variant="outline"
                                 size="sm"
-                                onClick={() => form.setValue("codex_ticket_clear_proxy", !clearCodexTicketProxy, { shouldDirty: true })}
+                                onClick={() => {
+                                  const nextClear = !clearCodexTicketProxy;
+                                  form.setValue("codex_ticket_clear_proxy", nextClear, { shouldDirty: true });
+                                  if (nextClear) {
+                                    form.setValue("codex_ticket_proxy_url", "", { shouldDirty: true });
+                                  }
+                                }}
                               >
                                 {clearCodexTicketProxy
                                   ? t("accounts.editor.codexTicketKeepProxy")

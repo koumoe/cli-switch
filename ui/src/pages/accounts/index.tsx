@@ -136,19 +136,29 @@ export function AccountsPage() {
 
   useEffect(() => {
     let disposed = false;
-    const refreshTicketStatus = () => {
+    const refreshTicketStatus = (force = false) => {
+      if (!force && (document.visibilityState !== "visible" || codexTicketStatus?.issue === "disabled")) {
+        return;
+      }
       void getCodexTicketStatus()
         .then((status) => {
           if (!disposed) setCodexTicketStatus(status);
         })
         .catch(() => undefined);
     };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        refreshTicketStatus(true);
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
     const timer = window.setInterval(refreshTicketStatus, 10_000);
     return () => {
       disposed = true;
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.clearInterval(timer);
     };
-  }, []);
+  }, [codexTicketStatus?.issue]);
 
   useEffect(() => {
     if (!checkinsDate) return;
@@ -202,7 +212,9 @@ export function AccountsPage() {
       if (values.provider === "openai") {
         await updateRemoteAccount(editingId, {
           name: values.name.trim(),
-          codex_ticket_proxy_url: values.codex_ticket_proxy_url.trim() || undefined,
+          codex_ticket_proxy_url: values.codex_ticket_clear_proxy
+            ? undefined
+            : values.codex_ticket_proxy_url.trim() || undefined,
           codex_ticket_clear_proxy: values.codex_ticket_clear_proxy,
         });
       } else if (values.provider === "newapi") {
