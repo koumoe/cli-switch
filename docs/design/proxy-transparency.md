@@ -28,7 +28,8 @@ Ordinary API-key channels must preserve the client's semantics. ChatGPT OAuth ch
 | OAuth 身份 header | 当前首发请求和 401 刷新重试都只替换 OAuth 凭证与 `chatgpt-account-id`；`originator`、`version`、`User-Agent`、session/thread header 直接透传。 |
 | OAuth 其他 header | 当前不再由 OAuth 账号逻辑无条件覆盖 `Content-Type`、`Accept` 和 `openai-beta`；它们随客户端请求转发。 |
 | 普通认证 | 当前按 `Channel.auth_type` 选择显式认证方式；`auto` 保留入站 header/URL 推断语义。 |
-| 跨渠道身份残留 | 请求转发前会清理 `chatgpt-account-id` 和 `Cookie`，避免它们从 Codex/OAuth 请求进入其他渠道。 |
+| 跨渠道身份残留 | 请求转发前会清理 `chatgpt-account-id`、`Cookie` 和 `x-codex-turn-state`，避免它们从其他账号或渠道进入当前上游。 |
+| Codex ticket | 启用 ticket 且命中配置模型时，OAuth 请求会先清理客户端的 `x-codex-turn-state`，再注入当前账号的有效 ticket；普通渠道不转发该字段。 |
 | OAuth Cookie 路由 | OpenAI OAuth 使用按账号缓存的独立 host-scoped cookie client；账号 A 的边缘路由 Cookie 不会进入账号 B 的 client。 |
 | Anthropic 兼容 header | 如果入站没有 `anthropic-version`，当前会补 `2023-06-01`。 |
 | OAuth 路径 | OpenAI managed channel 只接受 `/v1/responses`；其他 OpenAI 路径会跳过该渠道。 |
@@ -62,7 +63,7 @@ This document records both the current implementation and the target behavior. T
 | `version` | 客户端版本字段（如果客户端发送）。代理不应凭空生成或覆盖。 |
 | `session-id` / `session_id` | Codex 会话身份。不得随机生成替代值。 |
 | `thread-id` / `thread_id` | Codex 线程身份。不得因账号切换而改变。 |
-| `x-codex-*` | Codex 请求上下文和路由信息。 |
+| `x-codex-*`（不含 `x-codex-turn-state`） | Codex 请求上下文和路由信息。 |
 | `Accept`、`Content-Type`、`openai-beta` | 客户端声明的协议和能力。已有值时不覆盖。 |
 | 请求正文 | 默认按原始字节发送，不解析后重新序列化。为支持账号重试，请求可以先整体缓冲；缓冲不等于改写。 |
 
@@ -74,6 +75,7 @@ This document records both the current implementation and the target behavior. T
 | --- | --- |
 | `chatgpt-account-id` | OAuth 渠道替换为所选账号的值；发送到普通 API Key 渠道时删除，避免把 ChatGPT 账号身份带给其他提供商。 |
 | `Cookie` | Cookie 可能包含提供商会话和账号路由状态。支持的 API Key 渠道默认不需要它，应避免把 OAuth/ChatGPT Cookie 带到其他提供商；OAuth 渠道的入站 Cookie 会被清理，随后使用当前账号专属的 cookie client。若未来支持 Cookie 认证提供商，必须改为按渠道显式允许。 |
+| `x-codex-turn-state` | 该值属于账号/turn 路由状态。代理先清理客户端带来的值；启用 ticket 且模型命中时，仅注入当前 OAuth 账号的有效 ticket，不能跨普通渠道或账号透传。 |
 | 与目标提供商专属的认证字段 | 清理客户端或其他渠道的认证字段，再写入当前渠道配置的认证字段。 |
 
 `Cookie` 的清理是跨账号隔离规则，不是对所有未来 HTTP 用例的通用删除规则。当前支持的 Codex、Claude CLI 和 Gemini CLI 使用 API Key 或 OAuth 账号路径，因此可以按上述默认策略处理。
