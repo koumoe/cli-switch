@@ -137,7 +137,7 @@ export function AccountsPage() {
   useEffect(() => {
     let disposed = false;
     const refreshTicketStatus = (force = false) => {
-      if (!force && (document.visibilityState !== "visible" || codexTicketStatus?.issue === "disabled")) {
+      if (!force && document.visibilityState !== "visible") {
         return;
       }
       void getCodexTicketStatus()
@@ -152,7 +152,8 @@ export function AccountsPage() {
       }
     };
     document.addEventListener("visibilitychange", handleVisibilityChange);
-    const timer = window.setInterval(refreshTicketStatus, 10_000);
+    const refreshInterval = codexTicketStatus?.issue === "disabled" ? 60_000 : 10_000;
+    const timer = window.setInterval(refreshTicketStatus, refreshInterval);
     return () => {
       disposed = true;
       document.removeEventListener("visibilitychange", handleVisibilityChange);
