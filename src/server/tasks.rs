@@ -319,12 +319,22 @@ pub(crate) async fn openai_codex_ticket_harvesting_loop(
             && let Some(proxy_url) = settings.openai_codex_ticket_harvest_proxy_url.as_deref()
             && !proxy_url.trim().is_empty()
         {
+            let oauth_account_ids = match storage::list_channels(db_path.clone()).await {
+                Ok(channels) => openai_oauth_ticket_account_ids(&channels),
+                Err(error) => {
+                    tracing::warn!(%error, "list OpenAI OAuth channels for Codex ticket failed");
+                    HashSet::new()
+                }
+            };
             match storage::list_openai_accounts_with_secret(db_path.clone()).await {
                 Ok(accounts) => {
                     let now = storage::now_ms();
                     let mut pending: Vec<(Arc<storage::OpenAiAccount>, String)> = Vec::new();
                     for account in accounts {
-                        if account.reauth_required || account.access_token.is_none() {
+                        if !oauth_account_ids.contains(&account.id)
+                            || account.reauth_required
+                            || account.access_token.is_none()
+                        {
                             continue;
                         }
 
@@ -495,6 +505,17 @@ fn should_harvest_codex_ticket(ticket: Option<&storage::OpenAiCodexTicket>, now_
     !ticket.last_attempt_at_ms.is_some_and(|attempted_at_ms| {
         now_ms.saturating_sub(attempted_at_ms) < CODEX_TICKET_FAILURE_BACKOFF_MS
     })
+}
+
+fn openai_oauth_ticket_account_ids(channels: &[storage::Channel]) -> HashSet<String> {
+    channels
+        .iter()
+        .filter(|channel| {
+            channel.enabled
+                && channel.managed_provider() == Some(storage::ManagedRemoteProvider::Openai)
+        })
+        .filter_map(|channel| channel.managed_account_id().map(str::to_string))
+        .collect()
 }
 
 async fn resolve_codex_ticket_version(
@@ -1614,7 +1635,8 @@ pub(crate) async fn remote_accounts_maintenance_loop(
 #[cfg(test)]
 mod tests {
     use super::{
-        LowBalanceAlertAction, decide_low_balance_alert_action, should_harvest_codex_ticket,
+        LowBalanceAlertAction, decide_low_balance_alert_action, openai_oauth_ticket_account_ids,
+        should_harvest_codex_ticket,
     };
     use crate::storage;
 
@@ -1649,6 +1671,62 @@ mod tests {
         let mut failed = ticket(now, Some(now - 5 * 60 * 1000));
         failed.expires_at_ms = 0;
         assert!(should_harvest_codex_ticket(Some(&failed), now));
+    }
+
+    #[test]
+    fn ticket_harvest_targets_enabled_openai_oauth_channels_only() {
+        let channel = |id: &str,
+                       enabled: bool,
+                       provider: Option<storage::ManagedRemoteProvider>,
+                       account_id: Option<&str>| storage::Channel {
+            id: id.to_string(),
+            name: id.to_string(),
+            protocol: storage::Protocol::Openai,
+            base_url: "https://example.com".to_string(),
+            auth_type: "managed_account".to_string(),
+            auth_ref: String::new(),
+            checkin_url: None,
+            priority: 1,
+            retry_times: 1,
+            ignore_channel_protection: false,
+            recharge_currency: storage::RechargeCurrency::Usd,
+            real_multiplier: 1.0,
+            managed_by_remote: provider.is_some(),
+            managed_remote_provider: provider,
+            managed_remote_account_id: account_id.map(str::to_string),
+            managed_remote_resource_id: None,
+            managed_remote_resource_name: None,
+            managed_remote_group_name: None,
+            managed_remote_group_id: None,
+            enabled,
+            auto_disabled_until_ms: 0,
+            created_at_ms: 0,
+            updated_at_ms: 0,
+        };
+        let channels = vec![
+            channel(
+                "enabled-oauth",
+                true,
+                Some(storage::ManagedRemoteProvider::Openai),
+                Some("oauth-account"),
+            ),
+            channel(
+                "disabled-oauth",
+                false,
+                Some(storage::ManagedRemoteProvider::Openai),
+                Some("disabled-account"),
+            ),
+            channel(
+                "enabled-sub2api",
+                true,
+                Some(storage::ManagedRemoteProvider::Sub2Api),
+                Some("sub2api-account"),
+            ),
+        ];
+
+        let account_ids = openai_oauth_ticket_account_ids(&channels);
+        assert_eq!(account_ids.len(), 1);
+        assert!(account_ids.contains("oauth-account"));
     }
 
     #[test]
