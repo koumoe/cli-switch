@@ -1,3 +1,8 @@
+## [0.71.0](https://github.com/koumoe/cli-switch/compare/v0.70.0...v0.71.0) (2026-09-22)
+
+### Features
+
+* move Codex ticket proxy to accounts (#238) ([416c320](https://github.com/koumoe/cli-switch/commit/416c3202329cc24ce79d0bcec65aab56323f0fde))
 ## [0.70.0](https://github.com/koumoe/cli-switch/compare/v0.69.1...v0.70.0) (2026-09-22)
 
 ### Features
