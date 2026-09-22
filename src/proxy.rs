@@ -123,8 +123,6 @@ pub enum ProxyError {
     ReadBody(String),
     #[error("发送上游请求失败：{0}")]
     Upstream(String),
-    #[error("Codex ticket unavailable for model: {0}")]
-    CodexTicketUnavailable(String),
     #[error(transparent)]
     Storage(#[from] anyhow::Error),
 }
@@ -318,8 +316,6 @@ async fn forward_with_activity(
             let mut upstream_client = client.clone();
             let mut attempt_body = body_bytes.clone();
             let mut openai_account = None;
-            let mut codex_ticket_header = None;
-            let mut codex_ticket_rejected = false;
             if is_openai_oauth_channel {
                 if protocol != Protocol::Openai
                     || parts.uri.path().trim_end_matches('/') != "/v1/responses"
@@ -386,34 +382,6 @@ async fn forward_with_activity(
                         continue 'channel_loop;
                     }
                 };
-                if settings.openai_codex_ticket_enabled
-                    && account.codex_ticket_proxy_configured
-                    && model.as_deref().is_some_and(|requested| {
-                        settings
-                            .openai_codex_ticket_models
-                            .iter()
-                            .any(|configured| configured == requested)
-                    })
-                {
-                    let ticket = storage::get_openai_codex_ticket(
-                        db_path.clone(),
-                        account.id.clone(),
-                        model.clone().unwrap_or_default(),
-                    )
-                    .await
-                    .ok()
-                    .flatten();
-                    if let Some(ticket) =
-                        ticket.filter(|ticket| storage::ticket_is_valid(ticket, storage::now_ms()))
-                    {
-                        codex_ticket_header = HeaderValue::from_str(&ticket.state).ok();
-                    } else if settings.openai_codex_ticket_fail_closed {
-                        last_err = Some(ProxyError::CodexTicketUnavailable(
-                            model.clone().unwrap_or_else(|| "unknown".to_string()),
-                        ));
-                        continue 'channel_loop;
-                    }
-                }
                 openai_account = Some(account);
                 if let Some(pool) = openai_oauth_pool {
                     upstream_client = match pool.client_for_account(account_id).await {
@@ -491,10 +459,6 @@ async fn forward_with_activity(
                 }
                 continue;
             }
-            if let Some(ticket) = codex_ticket_header.clone() {
-                out_headers.insert(HeaderName::from_static("x-codex-turn-state"), ticket);
-            }
-
             let retry_url = is_openai_oauth_channel.then(|| url.clone());
             let first_upstream = upstream_client
                 .request(method.clone(), url)
@@ -599,9 +563,6 @@ async fn forward_with_activity(
                     last_err = Some(ProxyError::Upstream(error.to_string()));
                     continue 'channel_loop;
                 }
-                if let Some(ticket) = codex_ticket_header.clone() {
-                    retry_headers.insert(HeaderName::from_static("x-codex-turn-state"), ticket);
-                }
                 upstream = match upstream_client
                     .request(
                         method.clone(),
@@ -631,17 +592,6 @@ async fn forward_with_activity(
             }
 
             let status = upstream.status();
-            if codex_ticket_header.is_some() && is_codex_ticket_rejection_status(status) {
-                codex_ticket_rejected = true;
-                codex_ticket_header = None;
-                invalidate_codex_ticket_if_present(
-                    db_path.clone(),
-                    openai_account.as_ref(),
-                    model.as_deref(),
-                    format!("Codex ticket rejected by upstream with HTTP {status}"),
-                )
-                .await;
-            }
             if let Some(account) = openai_account.as_ref()
                 && let Some(quota) =
                     crate::openai_quota::from_headers(upstream.headers(), storage::now_ms())
@@ -671,8 +621,7 @@ async fn forward_with_activity(
             };
 
             if !is_count_tokens && !status.is_success() {
-                let retry_same_channel =
-                    has_more_attempts_on_channel && !auto_disabled && !codex_ticket_rejected;
+                let retry_same_channel = has_more_attempts_on_channel && !auto_disabled;
                 let retry_next_channel = !retry_same_channel && has_more_channels;
 
                 if retry_same_channel || retry_next_channel {
@@ -723,30 +672,13 @@ async fn forward_with_activity(
                         prepared_upstream = response;
                     }
                     OpenAiResponsesBootstrap::Failure(failure) => {
-                        if codex_ticket_header.is_some()
-                            && is_codex_ticket_rejection_detail(
-                                &failure.error_kind,
-                                &failure.error_detail,
-                            )
-                        {
-                            codex_ticket_rejected = true;
-                            invalidate_codex_ticket_if_present(
-                                db_path.clone(),
-                                openai_account.as_ref(),
-                                model.as_deref(),
-                                failure.error_detail.clone(),
-                            )
-                            .await;
-                        }
                         let auto_disabled = if failure.retryable {
                             attempt_ctx.record_failure().await
                         } else {
                             false
                         };
-                        let retry_same_channel = failure.retryable
-                            && has_more_attempts_on_channel
-                            && !auto_disabled
-                            && !codex_ticket_rejected;
+                        let retry_same_channel =
+                            failure.retryable && has_more_attempts_on_channel && !auto_disabled;
                         let retry_next_channel =
                             failure.retryable && !retry_same_channel && has_more_channels;
 
@@ -837,51 +769,6 @@ fn should_retry_openai_connection(error: &reqwest::Error) -> bool {
         && !error.is_decode()
         && !error.is_redirect()
         && !error.is_status()
-}
-
-fn is_codex_ticket_rejection_status(status: StatusCode) -> bool {
-    matches!(
-        status,
-        StatusCode::BAD_REQUEST | StatusCode::FORBIDDEN | StatusCode::UNPROCESSABLE_ENTITY
-    )
-}
-
-fn is_codex_ticket_rejection_detail(error_kind: &str, detail: &str) -> bool {
-    let detail = format!("{error_kind} {detail}").to_ascii_lowercase();
-    [
-        "turn-state",
-        "turn state",
-        "codex ticket",
-        "ticket rejected",
-    ]
-    .iter()
-    .any(|marker| detail.contains(marker))
-}
-
-async fn invalidate_codex_ticket_if_present(
-    db_path: std::path::PathBuf,
-    account: Option<&storage::OpenAiAccount>,
-    model: Option<&str>,
-    error: String,
-) {
-    let (Some(account), Some(model)) = (account, model) else {
-        return;
-    };
-    if let Err(storage_error) = storage::invalidate_openai_codex_ticket(
-        db_path,
-        account.id.clone(),
-        model.to_string(),
-        error,
-    )
-    .await
-    {
-        tracing::warn!(
-            %storage_error,
-            account_id = %account.id,
-            model,
-            "invalidate rejected Codex ticket failed"
-        );
-    }
 }
 
 fn build_anthropic_count_tokens_response(input_tokens: i64) -> Response<Body> {

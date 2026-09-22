@@ -25,8 +25,6 @@ describe("schema validation", () => {
       auto_checkin_time: "08:00:00",
       low_balance_alert_threshold: "10",
       recharge_currency: "CNY",
-      codex_ticket_proxy_url: "",
-      codex_ticket_clear_proxy: false,
       stored_token_configured: false,
     });
 

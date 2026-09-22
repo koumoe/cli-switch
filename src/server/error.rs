@@ -157,10 +157,6 @@ pub(crate) fn map_proxy_error(e: ProxyError) -> ApiError {
         ProxyError::Upstream(_) => {
             ApiError::bad_gateway("proxy_upstream_failed", "Upstream request failed")
         }
-        ProxyError::CodexTicketUnavailable(_) => ApiError::unavailable(
-            "proxy_codex_ticket_unavailable",
-            "Codex ticket is unavailable for the requested model",
-        ),
         ProxyError::Storage(e) => ApiError::Internal(e),
     }
 }

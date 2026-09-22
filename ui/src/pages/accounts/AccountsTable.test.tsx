@@ -12,7 +12,6 @@ function renderTable() {
   return renderWithProviders(
     <AccountsTable
       accounts={[openAiAccount]}
-      codexTicketStatus={null}
       loading={false}
       reordering={false}
       today="2026-09-08"

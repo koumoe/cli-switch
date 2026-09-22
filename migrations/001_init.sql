@@ -90,7 +90,6 @@ CREATE TABLE IF NOT EXISTS remote_accounts (
   provider TEXT NOT NULL CHECK(provider IN ('newapi','sub2api','openai')),
   base_url TEXT NOT NULL,
   api_url TEXT NULL,
-  codex_ticket_proxy_url TEXT NULL,
   user_id TEXT NOT NULL DEFAULT '',
   user_token TEXT NOT NULL DEFAULT '',
   access_token TEXT NOT NULL DEFAULT '',
@@ -183,20 +182,6 @@ CREATE TABLE IF NOT EXISTS app_settings (
   value TEXT NOT NULL,
   updated_at_ms INTEGER NOT NULL
 );
-
-CREATE TABLE IF NOT EXISTS openai_codex_tickets (
-  account_id TEXT NOT NULL,
-  model TEXT NOT NULL,
-  state TEXT NOT NULL DEFAULT '',
-  captured_at_ms INTEGER NOT NULL DEFAULT 0,
-  expires_at_ms INTEGER NOT NULL DEFAULT 0,
-  last_attempt_at_ms INTEGER NULL,
-  last_error TEXT NULL,
-  PRIMARY KEY (account_id, model)
-);
-
-CREATE INDEX IF NOT EXISTS idx_openai_codex_tickets_expiry
-ON openai_codex_tickets(expires_at_ms);
 
 CREATE TABLE IF NOT EXISTS endpoint_failures (
   endpoint TEXT NOT NULL,

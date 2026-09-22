@@ -2,12 +2,10 @@
 
 ### Features
 
-* move Codex ticket proxy to accounts (#238) ([416c320](https://github.com/koumoe/cli-switch/commit/416c3202329cc24ce79d0bcec65aab56323f0fde))
 ## [0.70.0](https://github.com/koumoe/cli-switch/compare/v0.69.1...v0.70.0) (2026-09-22)
 
 ### Features
 
-* add configurable Codex 292 ticket support (#237) ([f5b83a2](https://github.com/koumoe/cli-switch/commit/f5b83a275e341c281b82f6056c05a1aa6bddc9b8))
 ## [0.69.1](https://github.com/koumoe/cli-switch/compare/v0.69.0...v0.69.1) (2026-09-14)
 
 ### Bug Fixes

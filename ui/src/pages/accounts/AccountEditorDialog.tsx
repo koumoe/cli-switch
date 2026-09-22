@@ -80,7 +80,6 @@ export function AccountEditorDialog({
   const checkinMode = form.watch("checkin_mode");
   const storedTokenConfigured = form.watch("stored_token_configured");
   const bearerToken = form.watch("bearer_token");
-  const clearCodexTicketProxy = form.watch("codex_ticket_clear_proxy");
   const modeOptions = supportedCheckinModes(provider);
   const showSystemTime = providerSupportsSystemCheckin(provider) && checkinMode === "system_api";
 
@@ -192,51 +191,6 @@ export function AccountEditorDialog({
                         {t("accounts.editor.openaiPlan", { value: account.plan_type || "-" })}
                       </div>
                     </div>
-                    <FormField
-                      control={form.control}
-                      name="codex_ticket_proxy_url"
-                      render={({ field }) => (
-                        <FormItem>
-                          <div className="flex items-center justify-between gap-3">
-                            <FormLabel>{t("accounts.editor.codexTicketProxy")}</FormLabel>
-                            {account.codex_ticket_proxy_configured ? (
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={() => {
-                                  const nextClear = !clearCodexTicketProxy;
-                                  form.setValue("codex_ticket_clear_proxy", nextClear, { shouldDirty: true });
-                                  if (nextClear) {
-                                    form.setValue("codex_ticket_proxy_url", "", { shouldDirty: true });
-                                  }
-                                }}
-                              >
-                                {clearCodexTicketProxy
-                                  ? t("accounts.editor.codexTicketKeepProxy")
-                                  : t("accounts.editor.codexTicketClearProxy")}
-                              </Button>
-                            ) : null}
-                          </div>
-                          <FormControl>
-                            <Input
-                              {...field}
-                              type="password"
-                              autoComplete="new-password"
-                              spellCheck={false}
-                              disabled={clearCodexTicketProxy}
-                              placeholder={t(
-                                account.codex_ticket_proxy_configured
-                                  ? "accounts.editor.codexTicketProxyKeepHint"
-                                  : "accounts.editor.codexTicketProxyPlaceholder",
-                              )}
-                            />
-                          </FormControl>
-                          <FormDescription>{t("accounts.editor.codexTicketProxyHint")}</FormDescription>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
                   </>
                 ) : null}
                 {provider !== "openai" ? (

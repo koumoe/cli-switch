@@ -10,7 +10,6 @@ import {
 import type { AppSettings, Health } from "@/types/api";
 import type { EndpointFailure } from "@/types/api";
 import { clearEndpointFailures, listEndpointFailures } from "@/api";
-import { CodexTicketSettingsCard } from "./codex-ticket-settings";
 
 type SystemSettingsProps = {
   settings: AppSettings | null;
@@ -97,8 +96,6 @@ export function SystemSettings({
       </div>
 
       <CompatibilitySettingsCard settings={settings} onSaved={onSaved} />
-
-      <CodexTicketSettingsCard settings={settings} onSaved={onSaved} />
 
       <AppUpdateSettingsCard
         settings={settings}

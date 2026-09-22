@@ -93,7 +93,6 @@ pub(in crate::server) struct OpenAiRemoteAccountResponse {
     pub plan_type: Option<String>,
     pub token_expires_at_ms: Option<i64>,
     pub refresh_token_configured: bool,
-    pub codex_ticket_proxy_configured: bool,
     pub quota_windows: Vec<OpenAiQuotaWindowResponse>,
     pub quota_reset_available_count: Option<i64>,
 }
@@ -187,35 +186,11 @@ pub(in crate::server) struct UpdateRemoteAccountInput {
     user_token: Option<String>,
     bearer_token: Option<String>,
     refresh_token: Option<String>,
-    codex_ticket_proxy_url: Option<String>,
-    codex_ticket_clear_proxy: Option<bool>,
     page_checkin_url: Option<String>,
     checkin_mode: Option<RemoteAccountCheckinMode>,
     auto_checkin_time: Option<String>,
     low_balance_alert_threshold: Option<f64>,
     recharge_currency: Option<RechargeCurrency>,
-}
-
-fn validate_codex_ticket_proxy_url(raw: &str) -> Result<String, ApiError> {
-    let value = raw.trim();
-    let url = reqwest::Url::parse(value).map_err(|error| {
-        ApiError::bad_request(
-            "codex_ticket_proxy_invalid",
-            format!("Invalid Codex ticket proxy URL: {error}"),
-        )
-    })?;
-    if !matches!(url.scheme(), "http" | "https" | "socks5" | "socks5h")
-        || url.host_str().is_none()
-        || url.query().is_some()
-        || url.fragment().is_some()
-        || url.port() == Some(0)
-    {
-        return Err(ApiError::bad_request(
-            "codex_ticket_proxy_invalid",
-            "Codex ticket proxy must use http, https, socks5, or socks5h without query parameters",
-        ));
-    }
-    Ok(value.to_string())
 }
 
 #[derive(Debug, Deserialize)]
@@ -777,7 +752,6 @@ impl From<storage::OpenAiAccount> for RemoteAccountResponse {
                 plan_type: account.plan_type,
                 token_expires_at_ms: account.token_expires_at_ms,
                 refresh_token_configured: account.refresh_token_configured,
-                codex_ticket_proxy_configured: account.codex_ticket_proxy_configured,
                 quota_windows,
                 quota_reset_available_count: account.quota.reset_available_count,
             },
@@ -2074,36 +2048,14 @@ pub(in crate::server) async fn update_remote_account(
             {
                 return Err(remote_provider_mismatch_error());
             }
-            let clear_proxy = input.codex_ticket_clear_proxy.unwrap_or(false);
-            let proxy_url = input
-                .codex_ticket_proxy_url
-                .as_deref()
-                .filter(|value| !value.trim().is_empty())
-                .map(validate_codex_ticket_proxy_url)
-                .transpose()?;
-            if clear_proxy && proxy_url.is_some() {
-                return Err(ApiError::bad_request(
-                    "codex_ticket_proxy_conflict",
-                    "Choose either a proxy URL or clear the saved proxy",
-                ));
-            }
             storage::update_openai_account_name(
                 state.db_path(),
                 account_id.clone(),
                 input.name.unwrap_or(current.name),
             )
             .await?;
-            let account = if clear_proxy || proxy_url.is_some() {
-                storage::update_openai_account_codex_ticket_proxy(
-                    state.db_path(),
-                    account_id,
-                    proxy_url,
-                    clear_proxy,
-                )
-                .await?
-            } else {
-                storage::get_openai_account_without_secret(state.db_path(), account_id).await?
-            };
+            let account =
+                storage::get_openai_account_without_secret(state.db_path(), account_id).await?;
             newapi_handlers::notify_background_tasks(&state);
             account.into()
         }

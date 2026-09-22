@@ -303,7 +303,6 @@
       "baseUrl": "Base URL",
       "provider": "Provider",
       "quota": "Quota",
-      "codexTicket": "Ticket",
       "reauthRequired": "Session expired. Sign in again.",
       "empty": "No accounts yet. Click 'New Account' to add one.",
       "checkinOrReset": "Check-in / Reset"
@@ -384,12 +383,6 @@
       "reauthRequiredHint": "The login session has expired. Please sign in again.",
       "openaiIdentity": "OpenAI account: {{value}}",
       "openaiPlan": "Plan: {{value}}",
-      "codexTicketProxy": "Codex ticket proxy",
-      "codexTicketProxyHint": "Only this account uses the proxy for Codex ticket harvesting. Supports http, https, socks5, and socks5h. Credentials are used locally and never shown again.",
-      "codexTicketProxyPlaceholder": "socks5://user:password@proxy.example:1080",
-      "codexTicketProxyKeepHint": "Configured. Leave blank to keep the current proxy",
-      "codexTicketClearProxy": "Clear proxy",
-      "codexTicketKeepProxy": "Keep proxy",
       "openLoginPage": "Sign in and capture auth",
       "openLoginPageOpening": "Opening login window...",
       "rechargeCurrency": "Default recharge currency",
@@ -465,12 +458,6 @@
       "createManagedFail": "Failed to create channel",
       "reorderOk": "Order saved",
       "reorderFail": "Failed to save order"
-    },
-    "codexTicket": {
-      "disabled": "Disabled globally",
-      "proxyMissing": "No proxy",
-      "channelMissing": "No linked channel",
-      "summary": "{{ready}}/{{total}} ready"
     },
     "quota": {
       "unavailable": "Unavailable",
@@ -1025,29 +1012,6 @@
       "mockCountTokensHint": "Intercept /v1/messages/count_tokens and estimate input_tokens locally",
       "saved": "Saved",
       "saveFail": "Save failed"
-    },
-    "codexTicket": {
-      "title": "Codex 292 ticket",
-      "hint": "Fetch and cache Codex tickets for OpenAI accounts with a ticket proxy. Configure each proxy in the account editor.",
-      "enabled": "Enable Codex ticket",
-      "enabledHint": "When enabled, OpenAI accounts with a proxy and an active linked channel fetch tickets in the background and inject them into requests. Disabled by default.",
-      "saved": "Codex ticket settings saved",
-      "saveFail": "Failed to save Codex ticket settings",
-      "statusIssue": {
-        "disabled": "Feature is disabled",
-        "checking_version": "Checking Codex version",
-        "missing_version": "Codex version was not detected"
-      },
-      "ticketReady": "Valid ({{length}} chars)",
-      "ticketMissing": "No valid ticket",
-      "ticketErrors": {
-        "invalid_shape": "Upstream ticket shape rejected",
-        "missing_header": "Upstream response has no ticket",
-        "upstream_http": "Upstream HTTP error",
-        "missing_access_token": "OpenAI account has no access token",
-        "network": "Proxy connection failed; check the proxy or use socks5h",
-        "harvest_failed": "Ticket harvest failed"
-      }
     },
     "about": {
       "title": "About",
