@@ -123,6 +123,28 @@ pub async fn record_openai_codex_ticket_attempt(
     .await
 }
 
+pub async fn invalidate_openai_codex_ticket(
+    db_path: PathBuf,
+    account_id: String,
+    model: String,
+    error: String,
+) -> anyhow::Result<()> {
+    let invalidated_at_ms = now_ms();
+    with_conn(db_path, move |conn| {
+        conn.execute(
+            r#"
+            UPDATE openai_codex_tickets
+            SET state = '', captured_at_ms = 0, expires_at_ms = 0,
+                last_attempt_at_ms = ?3, last_error = ?4
+            WHERE account_id = ?1 AND model = ?2
+            "#,
+            params![account_id, model, invalidated_at_ms, error],
+        )?;
+        Ok(())
+    })
+    .await
+}
+
 pub async fn delete_openai_codex_tickets_for_account(
     db_path: PathBuf,
     account_id: String,

@@ -1,4 +1,5 @@
 use serde_json::json;
+use std::sync::LazyLock;
 use uuid::Uuid;
 
 use crate::storage::OpenAiAccount;
@@ -8,10 +9,11 @@ pub const TICKET_TTL_MS: i64 = 55 * 60 * 1000;
 pub const MIN_CODEX_VERSION: &str = "0.153.4";
 const TICKET_ENDPOINT: &str = "https://chatgpt.com/backend-api/codex/responses";
 
+static MIN_CODEX_SEMVER: LazyLock<semver::Version> =
+    LazyLock::new(|| semver::Version::parse(MIN_CODEX_VERSION).expect("valid Codex version"));
+
 pub fn is_supported_codex_version(version: &str) -> bool {
-    let minimum = semver::Version::parse(MIN_CODEX_VERSION)
-        .expect("MIN_CODEX_VERSION must be a valid semantic version");
-    semver::Version::parse(version).is_ok_and(|version| version >= minimum)
+    semver::Version::parse(version).is_ok_and(|version| version >= *MIN_CODEX_SEMVER)
 }
 
 pub fn is_valid_ticket_state(state: &str) -> bool {

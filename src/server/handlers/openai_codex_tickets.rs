@@ -2,6 +2,7 @@ use axum::Json;
 use axum::extract::State;
 use axum::response::IntoResponse;
 use serde::Serialize;
+use std::collections::HashMap;
 
 use crate::cli_tools::CliToolId;
 use crate::server::AppState;
@@ -80,14 +81,17 @@ pub(in crate::server) async fn openai_codex_ticket_status(
     let accounts = storage::list_openai_accounts(state.db_path()).await?;
     let mut tickets = Vec::new();
     for account in accounts {
+        let tickets_by_model =
+            storage::list_openai_codex_tickets(state.db_path(), account.id.clone())
+                .await?
+                .into_iter()
+                .map(|ticket| (ticket.model.clone(), ticket))
+                .collect::<HashMap<_, _>>();
         for model in &settings.openai_codex_ticket_models {
-            let ticket = storage::get_openai_codex_ticket(
-                state.db_path(),
-                account.id.clone(),
-                model.clone(),
-            )
-            .await?;
-            let status = ticket.map(|ticket| storage::ticket_status(ticket, now));
+            let status = tickets_by_model
+                .get(model)
+                .cloned()
+                .map(|ticket| storage::ticket_status(ticket, now));
             tickets.push(OpenAiCodexTicketStatusItem {
                 account_id: account.id.clone(),
                 account_name: account.name.clone(),

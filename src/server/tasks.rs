@@ -19,6 +19,8 @@ use super::sub2api_auth;
 
 const RETRY_INTERVAL: Duration = Duration::from_secs(30);
 const CODEX_TICKET_CHECK_INTERVAL: Duration = Duration::from_secs(6);
+const CODEX_TICKET_FAILURE_BACKOFF_MS: i64 = 5 * 60 * 1000;
+const CODEX_TICKET_REFRESH_LEEWAY_MS: i64 = 5 * 60 * 1000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum LowBalanceAlertAction {
@@ -320,27 +322,98 @@ pub(crate) async fn openai_codex_ticket_harvesting_loop(
             match storage::list_openai_accounts_with_secret(db_path.clone()).await {
                 Ok(accounts) => {
                     let now = storage::now_ms();
-                    let mut pending = Vec::new();
+                    let mut pending: Vec<(Arc<storage::OpenAiAccount>, String)> = Vec::new();
                     for account in accounts {
                         if account.reauth_required || account.access_token.is_none() {
                             continue;
                         }
-                        for model in &settings.openai_codex_ticket_models {
-                            let current = storage::get_openai_codex_ticket(
-                                db_path.clone(),
-                                account.id.clone(),
-                                model.clone(),
-                            )
-                            .await
-                            .ok()
-                            .flatten();
-                            let needs_refresh = current.as_ref().is_none_or(|ticket| {
-                                !storage::ticket_is_valid(ticket, now + 5 * 60 * 1000)
-                            });
-                            if !needs_refresh {
+
+                        let tickets = match storage::list_openai_codex_tickets(
+                            db_path.clone(),
+                            account.id.clone(),
+                        )
+                        .await
+                        {
+                            Ok(tickets) => tickets,
+                            Err(error) => {
+                                tracing::warn!(
+                                    %error,
+                                    account_id = %account.id,
+                                    "list Codex tickets for account failed"
+                                );
                                 continue;
                             }
-                            pending.push((account.clone(), model.clone()));
+                        };
+                        let tickets = tickets
+                            .into_iter()
+                            .map(|ticket| (ticket.model.clone(), ticket))
+                            .collect::<HashMap<_, _>>();
+                        let mut pending_models = Vec::new();
+                        for model in &settings.openai_codex_ticket_models {
+                            let current = tickets.get(model);
+                            if should_harvest_codex_ticket(current, now) {
+                                pending_models.push(model.clone());
+                            }
+                        }
+                        if pending_models.is_empty() {
+                            continue;
+                        }
+
+                        let account = if account.token_expires_at_ms.is_some_and(|expires_at| {
+                            expires_at <= now.saturating_add(CODEX_TICKET_REFRESH_LEEWAY_MS)
+                        }) {
+                            if account.refresh_token_configured {
+                                let old_access_token = account.access_token.clone();
+                                match crate::server::openai_auth::refresh_persisted_account_if_current(
+                                    &state.http_client,
+                                    db_path.clone(),
+                                    account.id.clone(),
+                                    old_access_token.as_deref(),
+                                )
+                                .await
+                                {
+                                    Ok(account) => account,
+                                    Err(error) => {
+                                        tracing::warn!(
+                                            %error,
+                                            account_id = %account.id,
+                                            "refresh OpenAI account before Codex ticket harvest failed"
+                                        );
+                                        for model in pending_models {
+                                            let _ = storage::record_openai_codex_ticket_attempt(
+                                                db_path.clone(),
+                                                account.id.clone(),
+                                                model,
+                                                Some(error.to_string()),
+                                            )
+                                            .await;
+                                        }
+                                        continue;
+                                    }
+                                }
+                            } else {
+                                let error =
+                                    "OpenAI access token is expired and no refresh token is configured"
+                                        .to_string();
+                                tracing::warn!(account_id = %account.id, "{error}");
+                                for model in pending_models {
+                                    let _ = storage::record_openai_codex_ticket_attempt(
+                                        db_path.clone(),
+                                        account.id.clone(),
+                                        model,
+                                        Some(error.clone()),
+                                    )
+                                    .await;
+                                }
+                                continue;
+                            }
+                        } else {
+                            account
+                        };
+
+                        let account = Arc::new(account);
+                        for model in pending_models {
+                            pending.push((Arc::clone(&account), model));
                         }
                     }
                     if !pending.is_empty() {
@@ -382,6 +455,19 @@ pub(crate) async fn openai_codex_ticket_harvesting_loop(
                                     }
                                 }
                             }
+                        } else {
+                            let error =
+                                "Codex CLI version is unavailable or below the supported minimum"
+                                    .to_string();
+                            for (account, model) in pending {
+                                let _ = storage::record_openai_codex_ticket_attempt(
+                                    db_path.clone(),
+                                    account.id.clone(),
+                                    model,
+                                    Some(error.clone()),
+                                )
+                                .await;
+                            }
                         }
                     }
                 }
@@ -396,6 +482,21 @@ pub(crate) async fn openai_codex_ticket_harvesting_loop(
     }
 }
 
+fn should_harvest_codex_ticket(ticket: Option<&storage::OpenAiCodexTicket>, now_ms: i64) -> bool {
+    let Some(ticket) = ticket else {
+        return true;
+    };
+    if storage::ticket_is_valid(
+        ticket,
+        now_ms.saturating_add(CODEX_TICKET_REFRESH_LEEWAY_MS),
+    ) {
+        return false;
+    }
+    !ticket.last_attempt_at_ms.is_some_and(|attempted_at_ms| {
+        now_ms.saturating_sub(attempted_at_ms) < CODEX_TICKET_FAILURE_BACKOFF_MS
+    })
+}
+
 async fn resolve_codex_ticket_version(
     state: &super::AppState,
     settings: &storage::AppSettings,
@@ -408,19 +509,20 @@ async fn resolve_codex_ticket_version(
             .and_then(|tool| tool.version)
             .filter(|version| openai_codex_ticket::is_supported_codex_version(version))
     });
-    local_version
-        .or_else(|| {
-            settings
-                .openai_codex_ticket_version_override
-                .clone()
-                .filter(|version| openai_codex_ticket::is_supported_codex_version(version))
-        })
-        .or_else(|| {
-            tracing::warn!(
-                "Codex ticket harvesting requires an installed Codex CLI or a configured version override"
-            );
-            None
-        })
+    if let Some(version) = local_version {
+        return Some(version);
+    }
+    if let Some(version) = settings
+        .openai_codex_ticket_version_override
+        .clone()
+        .filter(|version| openai_codex_ticket::is_supported_codex_version(version))
+    {
+        return Some(version);
+    }
+    tracing::warn!(
+        "Codex ticket harvesting requires an installed Codex CLI or a configured version override"
+    );
+    None
 }
 
 pub(crate) async fn logs_retention_cleanup_loop(
@@ -1511,7 +1613,43 @@ pub(crate) async fn remote_accounts_maintenance_loop(
 
 #[cfg(test)]
 mod tests {
-    use super::{LowBalanceAlertAction, decide_low_balance_alert_action};
+    use super::{
+        LowBalanceAlertAction, decide_low_balance_alert_action, should_harvest_codex_ticket,
+    };
+    use crate::storage;
+
+    fn ticket(now_ms: i64, last_attempt_at_ms: Option<i64>) -> storage::OpenAiCodexTicket {
+        storage::OpenAiCodexTicket {
+            account_id: "account".to_string(),
+            model: "gpt-5.6-sol".to_string(),
+            state: format!("gAAAAA{}", "x".repeat(286)),
+            captured_at_ms: now_ms,
+            expires_at_ms: now_ms + 60 * 60 * 1000,
+            last_attempt_at_ms,
+            last_error: None,
+        }
+    }
+
+    #[test]
+    fn ticket_harvest_skips_valid_ticket_and_recent_failure() {
+        let now = 1_000_000;
+        let valid = ticket(now, None);
+        assert!(!should_harvest_codex_ticket(Some(&valid), now));
+
+        let mut failed = ticket(now, Some(now - 1_000));
+        failed.expires_at_ms = 0;
+        assert!(!should_harvest_codex_ticket(Some(&failed), now));
+    }
+
+    #[test]
+    fn ticket_harvest_retries_after_backoff_or_when_missing() {
+        let now = 1_000_000;
+        assert!(should_harvest_codex_ticket(None, now));
+
+        let mut failed = ticket(now, Some(now - 5 * 60 * 1000));
+        failed.expires_at_ms = 0;
+        assert!(should_harvest_codex_ticket(Some(&failed), now));
+    }
 
     #[test]
     fn low_balance_alert_is_silently_consumed_when_notifications_are_disabled() {
