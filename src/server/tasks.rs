@@ -454,7 +454,12 @@ pub(crate) async fn openai_codex_ticket_harvesting_loop(
                                         }
                                     }
                                     Err(error) => {
-                                        tracing::warn!(%error, account_id = %account.id, model, "harvest Codex ticket failed");
+                                        tracing::warn!(
+                                            error = %format_args!("{error:#}"),
+                                            account_id = %account.id,
+                                            model,
+                                            "harvest Codex ticket failed"
+                                        );
                                         let _ = storage::record_openai_codex_ticket_attempt(
                                             db_path.clone(),
                                             account.id.clone(),

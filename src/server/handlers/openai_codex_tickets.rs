@@ -131,6 +131,12 @@ fn safe_ticket_error(error: &str) -> &'static str {
         "upstream_http"
     } else if error.contains("access token") {
         "missing_access_token"
+    } else if error.contains("proxy request failed")
+        || error.contains("error sending request")
+        || error.contains("timed out")
+        || error.contains("connection")
+    {
+        "network"
     } else {
         "harvest_failed"
     }

@@ -20,6 +20,21 @@ pub fn is_valid_ticket_state(state: &str) -> bool {
     state.len() == TICKET_LENGTH && state.starts_with("gAAAAA")
 }
 
+/// Resolve the target hostname on the SOCKS server whenever the user enters
+/// the common `socks5://` form. This matters on systems that use fake-IP DNS
+/// (for example Clash): local resolution produces a `198.18.x.x` address that
+/// is only meaningful to the local proxy and cannot be routed by the upstream
+/// SOCKS server. `socks5h://` keeps the configured URL compatible while asking
+/// the proxy to resolve the OpenAI hostname.
+fn normalize_proxy_url(raw: &str) -> anyhow::Result<reqwest::Url> {
+    let mut url = reqwest::Url::parse(raw.trim())?;
+    if url.scheme() == "socks5" {
+        url.set_scheme("socks5h")
+            .map_err(|_| anyhow::anyhow!("failed to normalize SOCKS proxy scheme"))?;
+    }
+    Ok(url)
+}
+
 pub async fn harvest_ticket(
     account: &OpenAiAccount,
     model: &str,
@@ -31,8 +46,9 @@ pub async fn harvest_ticket(
         .as_deref()
         .filter(|value| !value.trim().is_empty())
         .ok_or_else(|| anyhow::anyhow!("OpenAI account has no access token"))?;
+    let proxy_url = normalize_proxy_url(proxy_url)?;
     let builder = reqwest::Client::builder()
-        .proxy(reqwest::Proxy::all(proxy_url.trim())?)
+        .proxy(reqwest::Proxy::all(proxy_url.as_str())?)
         .timeout(std::time::Duration::from_secs(45))
         .no_gzip()
         .no_brotli()
@@ -57,7 +73,10 @@ pub async fn harvest_ticket(
             "instructions": "Reply with exactly: pong",
             "input": [{"role": "user", "content": [{"type": "input_text", "text": "ping"}]}]
         }));
-    let response = request.send().await?;
+    let response = request
+        .send()
+        .await
+        .map_err(|error| anyhow::anyhow!("proxy request failed: {error:#}"))?;
     if !response.status().is_success() {
         return Err(anyhow::anyhow!(
             "ticket harvest returned HTTP {}",
@@ -80,7 +99,7 @@ pub async fn harvest_ticket(
 
 #[cfg(test)]
 mod tests {
-    use super::is_supported_codex_version;
+    use super::{is_supported_codex_version, normalize_proxy_url};
 
     #[test]
     fn requires_supported_semver() {
@@ -88,5 +107,20 @@ mod tests {
         assert!(is_supported_codex_version("0.155.1"));
         assert!(!is_supported_codex_version("0.153.3"));
         assert!(!is_supported_codex_version("0.155"));
+    }
+
+    #[test]
+    fn uses_remote_dns_for_socks5_proxy_urls() {
+        let url = normalize_proxy_url("socks5://user:pass@example.test:1080")
+            .expect("proxy URL should parse");
+        assert_eq!(url.scheme(), "socks5h");
+        assert_eq!(url.host_str(), Some("example.test"));
+    }
+
+    #[test]
+    fn preserves_other_proxy_schemes() {
+        let url =
+            normalize_proxy_url("https://proxy.example.test:8443").expect("proxy URL should parse");
+        assert_eq!(url.scheme(), "https");
     }
 }

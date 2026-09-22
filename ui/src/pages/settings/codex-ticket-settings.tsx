@@ -137,39 +137,6 @@ export function CodexTicketSettingsCard({
             aria-label={t("settings.codexTicket.enabled")}
           />
         </SettingsRow>
-        <SettingsRow>
-          <SettingsFieldText label={t("settings.codexTicket.failClosed")} hint={t("settings.codexTicket.failClosedHint")} />
-          <Switch
-            checked={form.watch("failClosed")}
-            onCheckedChange={(value) => form.setValue("failClosed", value)}
-            disabled={disabled}
-            aria-label={t("settings.codexTicket.failClosed")}
-          />
-        </SettingsRow>
-        <SettingsRow className="flex-col items-stretch gap-2">
-          <SettingsFieldText
-            label={<label htmlFor="codex-ticket-models">{t("settings.codexTicket.models")}</label>}
-            hint={t("settings.codexTicket.modelsHint")}
-          />
-          <Input id="codex-ticket-models" {...form.register("models")} disabled={disabled} aria-invalid={!!form.formState.errors.models} />
-          {form.formState.errors.models ? <p role="alert" className="text-xs text-destructive">{form.formState.errors.models.message}</p> : null}
-        </SettingsRow>
-        <SettingsRow className="flex-col items-stretch gap-2">
-          <SettingsFieldText
-            label={<label htmlFor="codex-ticket-version">{t("settings.codexTicket.versionOverride")}</label>}
-            hint={t("settings.codexTicket.versionOverrideHint")}
-          />
-          <Input
-            id="codex-ticket-version"
-            inputMode="text"
-            spellCheck={false}
-            {...form.register("versionOverride")}
-            placeholder={t("settings.codexTicket.versionOverridePlaceholder")}
-            disabled={disabled}
-            aria-invalid={!!form.formState.errors.versionOverride}
-          />
-          {form.formState.errors.versionOverride ? <p role="alert" className="text-xs text-destructive">{form.formState.errors.versionOverride.message}</p> : null}
-        </SettingsRow>
         <SettingsRow className="flex-col items-stretch gap-2">
           <SettingsFieldText
             label={<label htmlFor="codex-ticket-proxy">{t("settings.codexTicket.proxy")}</label>}
@@ -187,17 +154,57 @@ export function CodexTicketSettingsCard({
           />
           {form.formState.errors.proxyUrl ? <p role="alert" className="text-xs text-destructive">{form.formState.errors.proxyUrl.message}</p> : null}
         </SettingsRow>
-        {configured ? (
-          <SettingsRow>
-            <SettingsFieldText label={t("settings.codexTicket.clearProxy")} hint={t("settings.codexTicket.clearProxyHint")} />
-            <Switch
-              checked={clearProxy}
-              onCheckedChange={(value) => form.setValue("clearProxy", value)}
-              disabled={disabled}
-              aria-label={t("settings.codexTicket.clearProxy")}
-            />
-          </SettingsRow>
-        ) : null}
+        <details className="border-t border-border px-5 py-3">
+          <summary className="cursor-pointer text-[11px] font-semibold text-muted-foreground">
+            {t("settings.codexTicket.advanced")}
+          </summary>
+          <div className="mt-3 space-y-3">
+            <SettingsRow className="min-h-0 border border-border px-3 py-2">
+              <SettingsFieldText label={t("settings.codexTicket.failClosed")} hint={t("settings.codexTicket.failClosedHint")} />
+              <Switch
+                checked={form.watch("failClosed")}
+                onCheckedChange={(value) => form.setValue("failClosed", value)}
+                disabled={disabled}
+                aria-label={t("settings.codexTicket.failClosed")}
+              />
+            </SettingsRow>
+            <div className="space-y-2">
+              <SettingsFieldText
+                label={<label htmlFor="codex-ticket-models">{t("settings.codexTicket.models")}</label>}
+                hint={t("settings.codexTicket.modelsHint")}
+              />
+              <Input id="codex-ticket-models" {...form.register("models")} disabled={disabled} aria-invalid={!!form.formState.errors.models} />
+              {form.formState.errors.models ? <p role="alert" className="text-xs text-destructive">{form.formState.errors.models.message}</p> : null}
+            </div>
+            <div className="space-y-2">
+              <SettingsFieldText
+                label={<label htmlFor="codex-ticket-version">{t("settings.codexTicket.versionOverride")}</label>}
+                hint={t("settings.codexTicket.versionOverrideHint")}
+              />
+              <Input
+                id="codex-ticket-version"
+                inputMode="text"
+                spellCheck={false}
+                {...form.register("versionOverride")}
+                placeholder={t("settings.codexTicket.versionOverridePlaceholder")}
+                disabled={disabled}
+                aria-invalid={!!form.formState.errors.versionOverride}
+              />
+              {form.formState.errors.versionOverride ? <p role="alert" className="text-xs text-destructive">{form.formState.errors.versionOverride.message}</p> : null}
+            </div>
+            {configured ? (
+              <SettingsRow className="min-h-0 border border-border px-3 py-2">
+                <SettingsFieldText label={t("settings.codexTicket.clearProxy")} hint={t("settings.codexTicket.clearProxyHint")} />
+                <Switch
+                  checked={clearProxy}
+                  onCheckedChange={(value) => form.setValue("clearProxy", value)}
+                  disabled={disabled}
+                  aria-label={t("settings.codexTicket.clearProxy")}
+                />
+              </SettingsRow>
+            ) : null}
+          </div>
+        </details>
         <CodexTicketStatusView status={ticketStatus} />
         <SettingsFooter>
           <Button size="sm" type="submit" disabled={disabled}>{t("common.save")}</Button>
@@ -213,40 +220,46 @@ function CodexTicketStatusView({ status }: { status: CodexTicketStatus | null })
   const issueLabel = status.issue
     ? t(`settings.codexTicket.statusIssue.${status.issue}`)
     : t("settings.codexTicket.statusReady");
+  const readyCount = status.tickets.filter((ticket) => ticket.ready).length;
   return (
-    <div className="space-y-2 border-t border-border px-5 py-3 text-xs">
-      <div className="flex flex-wrap items-center justify-between gap-2">
+    <details className="border-t border-border px-5 py-3 text-xs">
+      <summary className="flex cursor-pointer flex-wrap items-center justify-between gap-2">
         <span className="font-semibold">{t("settings.codexTicket.statusTitle")}</span>
-        <span className="text-muted-foreground">
+        <span className={status.issue ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}>
+          {status.issue ? issueLabel : t("settings.codexTicket.statusSummary", { ready: readyCount, total: status.tickets.length })}
+        </span>
+      </summary>
+      <div className="mt-2 space-y-2">
+        <div className="text-muted-foreground">
           {t("settings.codexTicket.versionSource", {
             version: status.version ?? t("settings.codexTicket.versionMissing"),
             source: status.version_source
               ? t(`settings.codexTicket.sources.${status.version_source}`)
               : t("settings.codexTicket.sourceNone"),
           })}
-        </span>
+        </div>
+        {status.issue ? (
+          <div className="text-amber-600 dark:text-amber-400">
+            {issueLabel} {status.issue === "missing_version" ? t("settings.codexTicket.missingVersionAction") : ""}
+          </div>
+        ) : null}
+        {status.tickets.length > 0 ? (
+          <div className="space-y-1">
+            {status.tickets.map((ticket) => (
+              <div key={`${ticket.account_id}:${ticket.model}`} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded border px-2 py-1.5">
+                <span>{ticket.account_name} · {ticket.model}</span>
+                <span className={ticket.ready ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"}>
+                  {ticket.ready
+                    ? t("settings.codexTicket.ticketReady", { length: ticket.length ?? "?" })
+                    : ticket.last_error
+                      ? t(`settings.codexTicket.ticketErrors.${ticket.last_error}`)
+                      : t("settings.codexTicket.ticketMissing")}
+                </span>
+              </div>
+            ))}
+          </div>
+        ) : null}
       </div>
-      {status.issue ? (
-        <div className="text-amber-600 dark:text-amber-400">
-          {issueLabel} {status.issue === "missing_version" ? t("settings.codexTicket.missingVersionAction") : ""}
-        </div>
-      ) : null}
-      {status.tickets.length > 0 ? (
-        <div className="space-y-1">
-          {status.tickets.map((ticket) => (
-            <div key={`${ticket.account_id}:${ticket.model}`} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded border px-2 py-1.5">
-              <span>{ticket.account_name} · {ticket.model}</span>
-              <span className={ticket.ready ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"}>
-                {ticket.ready
-                  ? t("settings.codexTicket.ticketReady", { length: ticket.length ?? "?" })
-                  : ticket.last_error
-                    ? t(`settings.codexTicket.ticketErrors.${ticket.last_error}`)
-                    : t("settings.codexTicket.ticketMissing")}
-              </span>
-            </div>
-          ))}
-        </div>
-      ) : null}
-    </div>
+    </details>
   );
 }
