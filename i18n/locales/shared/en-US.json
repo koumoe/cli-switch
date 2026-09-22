@@ -95,6 +95,8 @@
     "remote_provider_detect_ambiguous": "The Base URL matches multiple account providers. Please verify it manually",
     "remote_provider_mismatch": "The provider does not match the existing account type",
     "openai_oauth_required": "OpenAI accounts must be added through OAuth",
+    "codex_ticket_proxy_invalid": "The Codex ticket proxy URL is invalid",
+    "codex_ticket_proxy_conflict": "A proxy URL and clear-proxy action cannot be used together",
     "openai_oauth_session_not_found": "The OpenAI OAuth session was not found",
     "openai_quota_fetch_failed": "Failed to fetch the OpenAI quota",
     "openai_refresh_failed": "Failed to refresh the OpenAI login credentials",

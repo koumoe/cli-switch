@@ -315,10 +315,7 @@ pub(crate) async fn openai_codex_ticket_harvesting_loop(
                 continue;
             }
         };
-        if settings.openai_codex_ticket_enabled
-            && let Some(proxy_url) = settings.openai_codex_ticket_harvest_proxy_url.as_deref()
-            && !proxy_url.trim().is_empty()
-        {
+        if settings.openai_codex_ticket_enabled {
             let oauth_account_ids = match storage::list_channels(db_path.clone()).await {
                 Ok(channels) => super::openai_oauth_ticket_account_ids(&channels),
                 Err(error) => {
@@ -329,14 +326,19 @@ pub(crate) async fn openai_codex_ticket_harvesting_loop(
             match storage::list_openai_accounts_with_secret(db_path.clone()).await {
                 Ok(accounts) => {
                     let now = storage::now_ms();
-                    let mut pending: Vec<(Arc<storage::OpenAiAccount>, String)> = Vec::new();
+                    let mut pending: Vec<(Arc<storage::OpenAiAccount>, String, String)> =
+                        Vec::new();
                     for account in accounts {
                         if !oauth_account_ids.contains(&account.id)
                             || account.reauth_required
                             || account.access_token.is_none()
+                            || !account.codex_ticket_proxy_configured
                         {
                             continue;
                         }
+                        let Some(proxy_url) = account.codex_ticket_proxy_url.clone() else {
+                            continue;
+                        };
 
                         let tickets = match storage::list_openai_codex_tickets(
                             db_path.clone(),
@@ -423,17 +425,17 @@ pub(crate) async fn openai_codex_ticket_harvesting_loop(
 
                         let account = Arc::new(account);
                         for model in pending_models {
-                            pending.push((Arc::clone(&account), model));
+                            pending.push((Arc::clone(&account), model, proxy_url.clone()));
                         }
                     }
                     if !pending.is_empty() {
                         let codex_version = resolve_codex_ticket_version(&state, &settings).await;
                         if let Some(codex_version) = codex_version {
-                            for (account, model) in pending {
+                            for (account, model, proxy_url) in pending {
                                 match openai_codex_ticket::harvest_ticket(
                                     &account,
                                     &model,
-                                    proxy_url,
+                                    &proxy_url,
                                     &codex_version,
                                 )
                                 .await
@@ -474,7 +476,7 @@ pub(crate) async fn openai_codex_ticket_harvesting_loop(
                             let error =
                                 "Codex CLI version is unavailable or below the supported minimum"
                                     .to_string();
-                            for (account, model) in pending {
+                            for (account, model, _) in pending {
                                 let _ = storage::record_openai_codex_ticket_attempt(
                                     db_path.clone(),
                                     account.id.clone(),

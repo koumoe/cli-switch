@@ -270,6 +270,8 @@ mod tests {
             id: Uuid::new_v4().to_string(),
             name: "OpenAI".to_string(),
             base_url: "https://chatgpt.com".to_string(),
+            codex_ticket_proxy_url: None,
+            codex_ticket_proxy_configured: false,
             access_token: access_token.map(str::to_string),
             refresh_token: None,
             id_token: None,

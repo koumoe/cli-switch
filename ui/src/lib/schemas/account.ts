@@ -33,6 +33,8 @@ export function createAccountFormSchema(t: Translate) {
         }),
       low_balance_alert_threshold: nonNegativeNumberStringSchema(t("accounts.toast.thresholdInvalid")),
       recharge_currency: rechargeCurrencySchema,
+      codex_ticket_proxy_url: z.string().trim().default(""),
+      codex_ticket_clear_proxy: z.boolean().default(false),
       stored_token_configured: z.boolean(),
     })
     .superRefine((values, ctx) => {

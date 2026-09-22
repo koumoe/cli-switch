@@ -71,8 +71,9 @@ pub use openai_account::{
     get_openai_account_with_secret_optional, get_openai_account_without_secret,
     get_openai_account_without_secret_optional, invalidate_openai_account_quota_reset_count,
     list_openai_accounts, list_openai_accounts_with_secret, mark_openai_account_auth_failure,
-    update_openai_account_name, update_openai_account_quota,
-    update_openai_account_quota_from_headers, upsert_openai_account_tokens,
+    update_openai_account_codex_ticket_proxy, update_openai_account_name,
+    update_openai_account_quota, update_openai_account_quota_from_headers,
+    upsert_openai_account_tokens,
 };
 pub use openai_codex_ticket::{
     OpenAiCodexTicket, OpenAiCodexTicketStatus, get_openai_codex_ticket,
@@ -146,6 +147,7 @@ pub fn init_db(db_path: &Path) -> anyhow::Result<()> {
         )?;
     }
     ensure_remote_accounts_schema(&conn)?;
+    settings::migrate_openai_codex_ticket_proxy(&conn)?;
     channel::ensure_channel_schema(&conn)?;
 
     Ok(())
@@ -179,6 +181,19 @@ fn ensure_remote_accounts_schema(conn: &Connection) -> anyhow::Result<()> {
             [],
         )?;
     }
+    if !columns
+        .iter()
+        .any(|column| column == "codex_ticket_proxy_url")
+    {
+        conn.execute(
+            "ALTER TABLE remote_accounts ADD COLUMN codex_ticket_proxy_url TEXT NULL",
+            [],
+        )?;
+    }
+    let columns = conn
+        .prepare("PRAGMA table_info(remote_accounts)")?
+        .query_map([], |row| row.get::<_, String>(1))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
     let required_columns = [
         "id_token",
         "token_expires_at_ms",
@@ -225,6 +240,7 @@ fn ensure_remote_accounts_schema(conn: &Connection) -> anyhow::Result<()> {
           provider TEXT NOT NULL CHECK(provider IN ('newapi','sub2api','openai')),
           base_url TEXT NOT NULL,
           api_url TEXT NULL,
+          codex_ticket_proxy_url TEXT NULL,
           user_id TEXT NOT NULL DEFAULT '',
           user_token TEXT NOT NULL DEFAULT '',
           access_token TEXT NOT NULL DEFAULT '',
@@ -271,7 +287,7 @@ fn ensure_remote_accounts_schema(conn: &Connection) -> anyhow::Result<()> {
           updated_at_ms INTEGER NOT NULL
         );
         INSERT INTO remote_accounts (
-          id, name, provider, base_url, api_url, user_id, user_token, access_token,
+          id, name, provider, base_url, api_url, codex_ticket_proxy_url, user_id, user_token, access_token,
           refresh_token, page_checkin_url, checkin_mode, auto_checkin_enabled,
           auto_checkin_time, low_balance_alert_threshold, recharge_currency,
           remote_user_id, remote_role, remote_username, remote_display_name, remote_group,
@@ -282,7 +298,7 @@ fn ensure_remote_accounts_schema(conn: &Connection) -> anyhow::Result<()> {
           sort_order, created_at_ms, updated_at_ms
         )
         SELECT
-          id, name, provider, base_url, api_url, user_id, user_token, access_token,
+          id, name, provider, base_url, api_url, NULL, user_id, user_token, access_token,
           refresh_token, page_checkin_url, checkin_mode, auto_checkin_enabled,
           auto_checkin_time, low_balance_alert_threshold, recharge_currency,
           remote_user_id, remote_role, remote_username, remote_display_name, remote_group,
@@ -343,7 +359,7 @@ const UNIFIED_REMOTE_ACCOUNT_SELECT_COLUMNS: &str = r#"
     id_token, token_expires_at_ms, last_refresh_at_ms, primary_quota_used_percent,
     primary_quota_window_minutes, primary_quota_resets_at_ms, secondary_quota_used_percent,
     secondary_quota_window_minutes, secondary_quota_resets_at_ms, quota_windows_json,
-    quota_reset_available_count
+    quota_reset_available_count, codex_ticket_proxy_url
 "#;
 
 #[derive(Debug, Clone)]
@@ -397,6 +413,7 @@ struct UnifiedRemoteAccountRow {
     secondary_quota_resets_at_ms: Option<i64>,
     quota_windows_json: Option<String>,
     quota_reset_available_count: Option<i64>,
+    codex_ticket_proxy_url: Option<String>,
 }
 
 impl UnifiedRemoteAccountRow {
@@ -451,6 +468,7 @@ impl UnifiedRemoteAccountRow {
             secondary_quota_resets_at_ms: row.get(46)?,
             quota_windows_json: row.get(47)?,
             quota_reset_available_count: row.get(48)?,
+            codex_ticket_proxy_url: row.get(49)?,
         })
     }
 
@@ -561,6 +579,13 @@ impl UnifiedRemoteAccountRow {
             id: self.id,
             name: self.name,
             base_url: self.base_url,
+            codex_ticket_proxy_configured: self
+                .codex_ticket_proxy_url
+                .as_deref()
+                .is_some_and(|value| !value.trim().is_empty()),
+            codex_ticket_proxy_url: self
+                .codex_ticket_proxy_url
+                .filter(|value| !value.trim().is_empty()),
             access_token: include_secret
                 .then_some(self.access_token_raw)
                 .filter(|value| token_configured(value)),
@@ -946,6 +971,59 @@ WHERE provider = 'openai' AND remote_user_id IS NOT NULL AND remote_user_id <> '
             [],
         )
         .unwrap();
+        drop(conn);
+        remove_sqlite_artifacts(&db_path);
+    }
+
+    #[test]
+    fn migrates_global_codex_proxy_to_openai_accounts() {
+        let db_path = temp_db_path();
+        remove_sqlite_artifacts(&db_path);
+        init_db(&db_path).unwrap();
+        let conn = Connection::open(&db_path).unwrap();
+        conn.execute(
+            "INSERT INTO app_settings (key, value, updated_at_ms) VALUES ('openai_codex_ticket_harvest_proxy_url', 'socks5://legacy.example:1080', 1)",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO remote_accounts (id, provider, base_url, remote_user_id, created_at_ms, updated_at_ms) VALUES ('openai-legacy', 'openai', 'https://chatgpt.com', 'legacy-account', 1, 1)",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO remote_accounts (id, provider, base_url, codex_ticket_proxy_url, remote_user_id, created_at_ms, updated_at_ms) VALUES ('openai-existing', 'openai', 'https://chatgpt.com', 'socks5://existing.example:1080', 'existing-account', 1, 1)",
+            [],
+        )
+        .unwrap();
+        drop(conn);
+
+        init_db(&db_path).unwrap();
+        let conn = Connection::open(&db_path).unwrap();
+        let migrated: String = conn
+            .query_row(
+                "SELECT codex_ticket_proxy_url FROM remote_accounts WHERE id = 'openai-legacy'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        let existing: String = conn
+            .query_row(
+                "SELECT codex_ticket_proxy_url FROM remote_accounts WHERE id = 'openai-existing'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        let legacy_setting: String = conn
+            .query_row(
+                "SELECT value FROM app_settings WHERE key = 'openai_codex_ticket_harvest_proxy_url'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(migrated, "socks5://legacy.example:1080");
+        assert_eq!(existing, "socks5://existing.example:1080");
+        assert!(legacy_setting.is_empty());
         drop(conn);
         remove_sqlite_artifacts(&db_path);
     }

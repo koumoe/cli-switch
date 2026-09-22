@@ -76,7 +76,7 @@ pub async fn harvest_ticket(
     let response = request
         .send()
         .await
-        .map_err(|error| anyhow::anyhow!("proxy request failed: {error:#}"))?;
+        .map_err(|error| anyhow::Error::new(error).context("proxy request failed"))?;
     if !response.status().is_success() {
         return Err(anyhow::anyhow!(
             "ticket harvest returned HTTP {}",

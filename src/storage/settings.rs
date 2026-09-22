@@ -38,6 +38,28 @@ const KEY_OPENAI_CODEX_TICKET_HARVEST_PROXY_URL: &str = "openai_codex_ticket_har
 const KEY_OPENAI_CODEX_TICKET_MODELS: &str = "openai_codex_ticket_models";
 const KEY_OPENAI_CODEX_TICKET_VERSION_OVERRIDE: &str = "openai_codex_ticket_version_override";
 pub const DEFAULT_OPENAI_CODEX_TICKET_MODELS: &[&str] = &["gpt-6-astra", "gpt-5.6-sol"];
+
+pub(crate) fn migrate_openai_codex_ticket_proxy(conn: &Connection) -> anyhow::Result<()> {
+    let Some(proxy) = get_setting(conn, KEY_OPENAI_CODEX_TICKET_HARVEST_PROXY_URL)? else {
+        return Ok(());
+    };
+    let proxy = proxy.trim();
+    if proxy.is_empty() {
+        return Ok(());
+    }
+
+    let tx = conn.unchecked_transaction()?;
+    tx.execute(
+        "UPDATE remote_accounts SET codex_ticket_proxy_url = ?1 WHERE provider = 'openai' AND (codex_ticket_proxy_url IS NULL OR TRIM(codex_ticket_proxy_url) = '')",
+        [proxy],
+    )?;
+    tx.execute(
+        "UPDATE app_settings SET value = '', updated_at_ms = ?2 WHERE key = ?1",
+        rusqlite::params![KEY_OPENAI_CODEX_TICKET_HARVEST_PROXY_URL, now_ms()],
+    )?;
+    tx.commit()?;
+    Ok(())
+}
 const KEY_LOG_LEVEL: &str = "log_level";
 const KEY_LOG_RETENTION_DAYS: &str = "log_retention_days";
 const KEY_CHAT_BRIDGE_ENABLED: &str = "chat_bridge_enabled";

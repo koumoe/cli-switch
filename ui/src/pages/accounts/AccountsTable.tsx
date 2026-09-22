@@ -2,7 +2,7 @@ import React from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { ExternalLink, GripVertical, Link2, Pencil, RefreshCw, Trash2 } from "lucide-react";
 
-import type { OpenAiRemoteAccount, RemoteAccount } from "@/types/api";
+import type { CodexTicketStatus, OpenAiRemoteAccount, RemoteAccount } from "@/types/api";
 import {
   Badge,
   Card,
@@ -30,6 +30,7 @@ import { accountStatusBadgeClass, ResetQuotaButton } from "./ResetQuotaButton";
 
 type AccountsTableProps = {
   accounts: RemoteAccount[];
+  codexTicketStatus: CodexTicketStatus | null;
   loading: boolean;
   reordering: boolean;
   today: string;
@@ -57,6 +58,7 @@ type AccountsTableProps = {
 
 export function AccountsTable({
   accounts,
+  codexTicketStatus,
   loading,
   reordering,
   today,
@@ -170,6 +172,23 @@ export function AccountsTable({
         },
         meta: {
           skeletonClassName: "w-18 mx-auto",
+        },
+      },
+      {
+        id: "codex_ticket",
+        header: t("accounts.table.codexTicket"),
+        cell: ({ row }) => {
+          const item = row.original;
+          return item.provider === "openai" ? (
+            <CodexTicketStatusCell account={item} status={codexTicketStatus} />
+          ) : (
+            <span className="text-muted-foreground">-</span>
+          );
+        },
+        meta: {
+          headerClassName: "w-28",
+          cellClassName: "text-center align-middle",
+          skeletonClassName: "w-16 mx-auto",
         },
       },
       {
@@ -301,6 +320,7 @@ export function AccountsTable({
     ],
     [
       checkinDoneMap,
+      codexTicketStatus,
       checkinsDate,
       onOpenCreateManagedChannelDialog,
       onOpenDeleteDialog,
@@ -336,5 +356,62 @@ export function AccountsTable({
         />
       </CardContent>
     </Card>
+  );
+}
+
+function CodexTicketStatusCell({
+  account,
+  status,
+}: {
+  account: OpenAiRemoteAccount;
+  status: CodexTicketStatus | null;
+}) {
+  const { t } = useI18n();
+  if (!status) {
+    return <span className="text-muted-foreground">-</span>;
+  }
+  if (status.issue === "disabled") {
+    return <Badge variant="secondary">{t("accounts.codexTicket.disabled")}</Badge>;
+  }
+  if (!account.codex_ticket_proxy_configured) {
+    return <Badge variant="secondary">{t("accounts.codexTicket.proxyMissing")}</Badge>;
+  }
+
+  const items = status.tickets.filter((ticket) => ticket.account_id === account.id);
+  const eligibleItems = items.filter((ticket) => ticket.eligible);
+  if (eligibleItems.length === 0) {
+    return <Badge variant="secondary">{t("accounts.codexTicket.channelMissing")}</Badge>;
+  }
+
+  const readyCount = eligibleItems.filter((ticket) => ticket.ready).length;
+  const complete = readyCount === eligibleItems.length;
+  const variant = complete ? "success" : "warning";
+  return (
+    <details className="relative" defaultOpen={!complete}>
+      <summary className="cursor-pointer list-none">
+        <Badge variant={variant}>
+          {t("accounts.codexTicket.summary", { ready: readyCount, total: eligibleItems.length })}
+        </Badge>
+      </summary>
+      <div className="absolute right-0 z-10 mt-1 min-w-56 rounded-md border border-border bg-background p-2 text-left text-xs shadow-lg">
+        {status.issue ? (
+          <div className="pb-1 text-amber-600 dark:text-amber-400">
+            {t(`settings.codexTicket.statusIssue.${status.issue}`)}
+          </div>
+        ) : null}
+        {eligibleItems.map((ticket) => (
+          <div key={`${ticket.account_id}:${ticket.model}`} className="flex items-center justify-between gap-3 py-1">
+            <span>{ticket.model}</span>
+            <span className={ticket.ready ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"}>
+              {ticket.ready
+                ? t("settings.codexTicket.ticketReady", { length: ticket.length ?? "?" })
+                : ticket.last_error
+                  ? t(`settings.codexTicket.ticketErrors.${ticket.last_error}`)
+                  : t("settings.codexTicket.ticketMissing")}
+            </span>
+          </div>
+        ))}
+      </div>
+    </details>
   );
 }

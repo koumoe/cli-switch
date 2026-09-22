@@ -22,6 +22,8 @@ struct OpenAiCodexTicketStatusItem {
     account_id: String,
     account_name: String,
     model: String,
+    eligible: bool,
+    proxy_configured: bool,
     ready: bool,
     length: Option<usize>,
     remaining_seconds: Option<i64>,
@@ -34,17 +36,7 @@ pub(in crate::server) async fn openai_codex_ticket_status(
     State(state): State<AppState>,
 ) -> Result<impl IntoResponse, ApiError> {
     let settings = storage::get_app_settings(state.db_path()).await?;
-    let issue = if !settings.openai_codex_ticket_enabled {
-        Some("disabled")
-    } else if settings
-        .openai_codex_ticket_harvest_proxy_url
-        .as_deref()
-        .is_none_or(|proxy| proxy.trim().is_empty())
-    {
-        Some("missing_proxy")
-    } else {
-        None
-    };
+    let issue = (!settings.openai_codex_ticket_enabled).then_some("disabled");
 
     let tool_snapshot = if issue.is_none() {
         state.cli_tools_runtime.snapshot().await
@@ -83,9 +75,10 @@ pub(in crate::server) async fn openai_codex_ticket_status(
     let accounts = storage::list_openai_accounts(state.db_path()).await?;
     let mut tickets = Vec::new();
     for account in accounts {
-        if !oauth_account_ids.contains(&account.id) {
-            continue;
-        }
+        let proxy_configured = account.codex_ticket_proxy_configured;
+        let eligible = settings.openai_codex_ticket_enabled
+            && oauth_account_ids.contains(&account.id)
+            && proxy_configured;
         let tickets_by_model =
             storage::list_openai_codex_tickets(state.db_path(), account.id.clone())
                 .await?
@@ -101,15 +94,21 @@ pub(in crate::server) async fn openai_codex_ticket_status(
                 account_id: account.id.clone(),
                 account_name: account.name.clone(),
                 model: model.clone(),
-                ready: status.as_ref().is_some_and(|status| status.ready),
+                eligible,
+                proxy_configured,
+                ready: eligible && status.as_ref().is_some_and(|status| status.ready),
                 length: status.as_ref().map(|status| status.length),
                 remaining_seconds: status.as_ref().map(|status| status.remaining_seconds),
                 expires_at_ms: status.as_ref().and_then(|status| status.expires_at_ms),
                 last_attempt_at_ms: status.as_ref().and_then(|status| status.last_attempt_at_ms),
-                last_error: status
-                    .as_ref()
-                    .and_then(|status| status.last_error.as_deref())
-                    .map(safe_ticket_error),
+                last_error: eligible
+                    .then(|| {
+                        status
+                            .as_ref()
+                            .and_then(|status| status.last_error.as_deref())
+                            .map(safe_ticket_error)
+                    })
+                    .flatten(),
             });
         }
     }
@@ -134,10 +133,31 @@ fn safe_ticket_error(error: &str) -> &'static str {
     } else if error.contains("proxy request failed")
         || error.contains("error sending request")
         || error.contains("timed out")
-        || error.contains("connection")
+        || error.contains("connection refused")
+        || error.contains("connection reset")
+        || error.contains("dns")
     {
         "network"
     } else {
         "harvest_failed"
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::safe_ticket_error;
+
+    #[test]
+    fn classifies_ticket_errors_without_exposing_transport_details() {
+        assert_eq!(safe_ticket_error("proxy request failed"), "network");
+        assert_eq!(
+            safe_ticket_error("proxy request failed: error sending request for url"),
+            "network"
+        );
+        assert_eq!(
+            safe_ticket_error("ticket response has invalid shape"),
+            "invalid_shape"
+        );
+        assert_eq!(safe_ticket_error("unexpected failure"), "harvest_failed");
     }
 }

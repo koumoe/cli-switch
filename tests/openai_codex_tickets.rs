@@ -30,6 +30,23 @@ async fn codex_ticket_status_endpoint_returns_batch_account_snapshot() {
     )
     .await
     .unwrap();
+    storage::update_openai_account_codex_ticket_proxy(
+        db_path.clone(),
+        account.id.clone(),
+        Some("socks5://proxy.example:1080".to_string()),
+        false,
+    )
+    .await
+    .unwrap();
+    storage::update_app_settings(
+        db_path.clone(),
+        storage::AppSettingsPatch {
+            openai_codex_ticket_enabled: Some(true),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
     let ticket = format!("gAAAAA{}", "x".repeat(286));
     storage::upsert_openai_codex_ticket(
         db_path.clone(),
@@ -91,7 +108,7 @@ async fn codex_ticket_status_endpoint_returns_batch_account_snapshot() {
     let response = response.expect("status endpoint did not become ready");
     assert_eq!(response.status(), reqwest::StatusCode::OK);
     let body: Value = response.json().await.unwrap();
-    assert_eq!(body["issue"], "disabled");
+    assert_ne!(body["issue"], "disabled");
     let tickets = body["tickets"].as_array().unwrap();
     assert_eq!(tickets.len(), 2);
     assert!(tickets.iter().any(|item| {
