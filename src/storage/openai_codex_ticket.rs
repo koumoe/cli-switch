@@ -145,20 +145,6 @@ pub async fn invalidate_openai_codex_ticket(
     .await
 }
 
-pub async fn delete_openai_codex_tickets_for_account(
-    db_path: PathBuf,
-    account_id: String,
-) -> anyhow::Result<()> {
-    with_conn(db_path, move |conn| {
-        conn.execute(
-            "DELETE FROM openai_codex_tickets WHERE account_id = ?1",
-            [account_id],
-        )?;
-        Ok(())
-    })
-    .await
-}
-
 pub fn ticket_is_valid(ticket: &OpenAiCodexTicket, now_ms: i64) -> bool {
     crate::openai_codex_ticket::is_valid_ticket_state(&ticket.state)
         && ticket.expires_at_ms > now_ms
