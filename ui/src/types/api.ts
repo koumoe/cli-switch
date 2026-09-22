@@ -72,8 +72,6 @@ export type AppSettings = {
   remote_managed_channel_sync_free_multiplier_enabled: boolean;
 };
 
-export type UpdateSettingsInput = Partial<AppSettings>;
-
 export type ActivityStatus =
   | "running"
   | "response_finished"
