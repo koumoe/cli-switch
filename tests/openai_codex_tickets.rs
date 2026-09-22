@@ -33,11 +33,37 @@ async fn codex_ticket_status_endpoint_returns_batch_account_snapshot() {
     let ticket = format!("gAAAAA{}", "x".repeat(286));
     storage::upsert_openai_codex_ticket(
         db_path.clone(),
-        account.id,
+        account.id.clone(),
         "gpt-6-astra".to_string(),
         ticket,
         storage::now_ms(),
         storage::now_ms() + 300_000,
+    )
+    .await
+    .unwrap();
+    storage::create_channel(
+        db_path.clone(),
+        storage::CreateChannel {
+            name: "Status test OAuth channel".to_string(),
+            protocol: storage::Protocol::Openai,
+            base_url: "https://chatgpt.com/backend-api/codex".to_string(),
+            auth_type: Some("managed_account".to_string()),
+            auth_ref: String::new(),
+            checkin_url: None,
+            priority: 1,
+            retry_times: 1,
+            ignore_channel_protection: false,
+            recharge_currency: None,
+            real_multiplier: None,
+            managed_by_remote: Some(true),
+            managed_remote_provider: Some(storage::ManagedRemoteProvider::Openai),
+            managed_remote_account_id: Some(account.id.clone()),
+            managed_remote_resource_id: None,
+            managed_remote_resource_name: None,
+            managed_remote_group_name: None,
+            managed_remote_group_id: None,
+            enabled: true,
+        },
     )
     .await
     .unwrap();

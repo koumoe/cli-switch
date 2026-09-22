@@ -78,9 +78,14 @@ pub(in crate::server) async fn openai_codex_ticket_status(
     };
 
     let now = storage::now_ms();
+    let channels = storage::list_channels(state.db_path()).await?;
+    let oauth_account_ids = crate::server::openai_oauth_ticket_account_ids(&channels);
     let accounts = storage::list_openai_accounts(state.db_path()).await?;
     let mut tickets = Vec::new();
     for account in accounts {
+        if !oauth_account_ids.contains(&account.id) {
+            continue;
+        }
         let tickets_by_model =
             storage::list_openai_codex_tickets(state.db_path(), account.id.clone())
                 .await?

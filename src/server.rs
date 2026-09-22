@@ -4,6 +4,7 @@ use axum::middleware::from_fn_with_state;
 use axum::response::IntoResponse;
 use axum::routing::{any, delete, get, post, put};
 use http::Method;
+use std::collections::HashSet;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -33,6 +34,17 @@ mod tasks;
 mod ui;
 
 pub use state::AppState;
+
+pub(crate) fn openai_oauth_ticket_account_ids(channels: &[storage::Channel]) -> HashSet<String> {
+    channels
+        .iter()
+        .filter(|channel| {
+            channel.enabled
+                && channel.managed_provider() == Some(storage::ManagedRemoteProvider::Openai)
+        })
+        .filter_map(|channel| channel.managed_account_id().map(str::to_string))
+        .collect()
+}
 
 fn build_http_client() -> anyhow::Result<reqwest::Client> {
     // Some providers front their panel APIs with CloudFront/WAF and reject

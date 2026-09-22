@@ -320,7 +320,7 @@ pub(crate) async fn openai_codex_ticket_harvesting_loop(
             && !proxy_url.trim().is_empty()
         {
             let oauth_account_ids = match storage::list_channels(db_path.clone()).await {
-                Ok(channels) => openai_oauth_ticket_account_ids(&channels),
+                Ok(channels) => super::openai_oauth_ticket_account_ids(&channels),
                 Err(error) => {
                     tracing::warn!(%error, "list OpenAI OAuth channels for Codex ticket failed");
                     HashSet::new()
@@ -505,17 +505,6 @@ fn should_harvest_codex_ticket(ticket: Option<&storage::OpenAiCodexTicket>, now_
     !ticket.last_attempt_at_ms.is_some_and(|attempted_at_ms| {
         now_ms.saturating_sub(attempted_at_ms) < CODEX_TICKET_FAILURE_BACKOFF_MS
     })
-}
-
-fn openai_oauth_ticket_account_ids(channels: &[storage::Channel]) -> HashSet<String> {
-    channels
-        .iter()
-        .filter(|channel| {
-            channel.enabled
-                && channel.managed_provider() == Some(storage::ManagedRemoteProvider::Openai)
-        })
-        .filter_map(|channel| channel.managed_account_id().map(str::to_string))
-        .collect()
 }
 
 async fn resolve_codex_ticket_version(
@@ -1635,8 +1624,7 @@ pub(crate) async fn remote_accounts_maintenance_loop(
 #[cfg(test)]
 mod tests {
     use super::{
-        LowBalanceAlertAction, decide_low_balance_alert_action, openai_oauth_ticket_account_ids,
-        should_harvest_codex_ticket,
+        LowBalanceAlertAction, decide_low_balance_alert_action, should_harvest_codex_ticket,
     };
     use crate::storage;
 
@@ -1724,7 +1712,7 @@ mod tests {
             ),
         ];
 
-        let account_ids = openai_oauth_ticket_account_ids(&channels);
+        let account_ids = crate::server::openai_oauth_ticket_account_ids(&channels);
         assert_eq!(account_ids.len(), 1);
         assert!(account_ids.contains("oauth-account"));
     }
