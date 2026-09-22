@@ -1380,3 +1380,40 @@ pub(crate) async fn remote_accounts_maintenance_loop(
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{LowBalanceAlertAction, decide_low_balance_alert_action};
+
+    #[test]
+    fn low_balance_alert_is_silently_consumed_when_notifications_are_disabled() {
+        assert_eq!(
+            decide_low_balance_alert_action(10.0, Some(8.0), false, false),
+            LowBalanceAlertAction::MarkNotifiedSilently
+        );
+    }
+
+    #[test]
+    fn low_balance_alert_is_published_when_notifications_are_enabled() {
+        assert_eq!(
+            decide_low_balance_alert_action(10.0, Some(8.0), false, true),
+            LowBalanceAlertAction::PublishAndMarkNotified
+        );
+    }
+
+    #[test]
+    fn low_balance_alert_is_cleared_after_balance_recovers_even_if_notifications_are_disabled() {
+        assert_eq!(
+            decide_low_balance_alert_action(10.0, Some(12.0), true, false),
+            LowBalanceAlertAction::ClearNotified
+        );
+    }
+
+    #[test]
+    fn disabled_threshold_clears_existing_low_balance_state() {
+        assert_eq!(
+            decide_low_balance_alert_action(0.0, Some(8.0), true, true),
+            LowBalanceAlertAction::ClearNotified
+        );
+    }
+}

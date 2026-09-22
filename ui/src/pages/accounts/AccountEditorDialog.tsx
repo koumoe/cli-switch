@@ -184,14 +184,12 @@ export function AccountEditorDialog({
               )}
             />
                 {provider === "openai" && account?.provider === "openai" ? (
-                  <>
-                    <div className="rounded-lg border bg-muted/20 px-3 py-2 text-sm">
-                      <div>{t("accounts.editor.openaiIdentity", { value: account.remote_username || account.account_id })}</div>
-                      <div className="mt-1 text-muted-foreground">
-                        {t("accounts.editor.openaiPlan", { value: account.plan_type || "-" })}
-                      </div>
+                  <div className="rounded-lg border bg-muted/20 px-3 py-2 text-sm">
+                    <div>{t("accounts.editor.openaiIdentity", { value: account.remote_username || account.account_id })}</div>
+                    <div className="mt-1 text-muted-foreground">
+                      {t("accounts.editor.openaiPlan", { value: account.plan_type || "-" })}
                     </div>
-                  </>
+                  </div>
                 ) : null}
                 {provider !== "openai" ? (
                   <>

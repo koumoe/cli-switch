@@ -2050,14 +2050,11 @@ pub(in crate::server) async fn update_remote_account(
             }
             storage::update_openai_account_name(
                 state.db_path(),
-                account_id.clone(),
+                account_id,
                 input.name.unwrap_or(current.name),
             )
-            .await?;
-            let account =
-                storage::get_openai_account_without_secret(state.db_path(), account_id).await?;
-            newapi_handlers::notify_background_tasks(&state);
-            account.into()
+            .await?
+            .into()
         }
     };
     Ok(Json(response))

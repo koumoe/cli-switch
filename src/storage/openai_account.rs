@@ -492,15 +492,13 @@ pub async fn mark_openai_account_auth_failure(
 
 pub async fn delete_openai_account(db_path: PathBuf, account_id: String) -> anyhow::Result<()> {
     with_conn(db_path, move |conn| {
-        let tx = conn.unchecked_transaction()?;
-        let changed = tx.execute(
+        let changed = conn.execute(
             "DELETE FROM remote_accounts WHERE provider = 'openai' AND id = ?1",
             [&account_id],
         )?;
         if changed == 0 {
             return Err(StorageError::RemoteAccountNotFound { account_id }.into());
         }
-        tx.commit()?;
         Ok(())
     })
     .await

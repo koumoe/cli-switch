@@ -1232,7 +1232,6 @@ fn clear_channel_scoped_headers(headers: &mut HeaderMap) {
     // upstream client when appropriate.
     headers.remove(HeaderName::from_static("chatgpt-account-id"));
     headers.remove(axum::http::header::COOKIE);
-    headers.remove(HeaderName::from_static("x-codex-turn-state"));
 }
 
 async fn read_error_detail(protocol: Protocol, upstream: reqwest::Response) -> Option<String> {
@@ -1958,7 +1957,7 @@ mod tests {
         clear_channel_scoped_headers(&mut filtered);
         assert!(!filtered.contains_key("chatgpt-account-id"));
         assert!(!filtered.contains_key(axum::http::header::COOKIE));
-        assert!(!filtered.contains_key("x-codex-turn-state"));
+        assert!(filtered.contains_key("x-codex-turn-state"));
     }
 
     #[tokio::test]

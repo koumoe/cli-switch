@@ -682,7 +682,7 @@ pub async fn serve_with_listener(
     let chat_bridge_settings_rx = state.settings_cache_rx.clone();
     let chat_bridge_channels_cache = state.channels_cache.clone();
     let cli_tools_state = state.clone();
-    let app = build_app(state.clone());
+    let app = build_app(state);
 
     let mut bg = tokio::task::JoinSet::<()>::new();
 
