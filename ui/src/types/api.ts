@@ -52,7 +52,6 @@ export type AppSettings = {
   openai_codex_ticket_fail_closed: boolean;
   openai_codex_ticket_models: string[];
   openai_codex_ticket_version_override?: string | null;
-  openai_codex_ticket_harvest_proxy_configured: boolean;
   log_level: LogLevel;
   log_retention_days: number;
   chat_bridge_enabled: boolean;
@@ -77,16 +76,10 @@ export type AppSettings = {
   remote_managed_channel_sync_free_multiplier_enabled: boolean;
 };
 
-export type UpdateSettingsInput = Partial<
-  Omit<AppSettings, "openai_codex_ticket_harvest_proxy_configured">
-> & {
-  openai_codex_ticket_harvest_proxy_url?: string;
-  openai_codex_ticket_clear_harvest_proxy?: boolean;
-};
+export type UpdateSettingsInput = Partial<AppSettings>;
 
 export type CodexTicketStatusIssue =
   | "disabled"
-  | "missing_proxy"
   | "checking_version"
   | "missing_version";
 
@@ -94,6 +87,8 @@ export type CodexTicketStatusItem = {
   account_id: string;
   account_name: string;
   model: string;
+  eligible: boolean;
+  proxy_configured: boolean;
   ready: boolean;
   length: number | null;
   remaining_seconds: number | null;
@@ -460,6 +455,7 @@ export type OpenAiRemoteAccount = RemoteAccountBase & {
   account_id: string;
   plan_type: string | null;
   token_expires_at_ms: number | null;
+  codex_ticket_proxy_configured: boolean;
   quota_windows: OpenAiQuotaWindow[];
   quota_reset_available_count?: number | null;
 };
@@ -505,6 +501,8 @@ export type UpdateRemoteAccountInput = Partial<{
   user_token: string;
   bearer_token: string;
   refresh_token: string | null;
+  codex_ticket_proxy_url: string;
+  codex_ticket_clear_proxy: boolean;
   page_checkin_url: string | null;
   checkin_mode: RemoteAccountCheckinMode;
   auto_checkin_time: string;

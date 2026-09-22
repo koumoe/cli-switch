@@ -38,6 +38,28 @@ const KEY_OPENAI_CODEX_TICKET_HARVEST_PROXY_URL: &str = "openai_codex_ticket_har
 const KEY_OPENAI_CODEX_TICKET_MODELS: &str = "openai_codex_ticket_models";
 const KEY_OPENAI_CODEX_TICKET_VERSION_OVERRIDE: &str = "openai_codex_ticket_version_override";
 pub const DEFAULT_OPENAI_CODEX_TICKET_MODELS: &[&str] = &["gpt-6-astra", "gpt-5.6-sol"];
+
+pub(crate) fn migrate_openai_codex_ticket_proxy(conn: &Connection) -> anyhow::Result<()> {
+    let Some(proxy) = get_setting(conn, KEY_OPENAI_CODEX_TICKET_HARVEST_PROXY_URL)? else {
+        return Ok(());
+    };
+    let proxy = proxy.trim();
+    if proxy.is_empty() {
+        return Ok(());
+    }
+
+    let tx = conn.unchecked_transaction()?;
+    tx.execute(
+        "UPDATE remote_accounts SET codex_ticket_proxy_url = ?1 WHERE provider = 'openai' AND (codex_ticket_proxy_url IS NULL OR TRIM(codex_ticket_proxy_url) = '')",
+        [proxy],
+    )?;
+    tx.execute(
+        "UPDATE app_settings SET value = '', updated_at_ms = ?2 WHERE key = ?1",
+        rusqlite::params![KEY_OPENAI_CODEX_TICKET_HARVEST_PROXY_URL, now_ms()],
+    )?;
+    tx.commit()?;
+    Ok(())
+}
 const KEY_LOG_LEVEL: &str = "log_level";
 const KEY_LOG_RETENTION_DAYS: &str = "log_retention_days";
 const KEY_CHAT_BRIDGE_ENABLED: &str = "chat_bridge_enabled";
@@ -129,9 +151,6 @@ pub struct AppSettings {
     pub openai_codex_ticket_models: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub openai_codex_ticket_version_override: Option<String>,
-    #[serde(skip_serializing)]
-    pub openai_codex_ticket_harvest_proxy_url: Option<String>,
-    pub openai_codex_ticket_harvest_proxy_configured: bool,
     pub log_level: LogLevel,
     pub log_retention_days: i64,
     pub chat_bridge_enabled: bool,
@@ -191,8 +210,6 @@ impl Default for AppSettings {
                 .map(|model| (*model).to_string())
                 .collect(),
             openai_codex_ticket_version_override: None,
-            openai_codex_ticket_harvest_proxy_url: None,
-            openai_codex_ticket_harvest_proxy_configured: false,
             log_level: LogLevel::Warning,
             log_retention_days: 30,
             chat_bridge_enabled: false,
@@ -283,8 +300,6 @@ pub struct AppSettingsPatch {
     pub openai_codex_ticket_fail_closed: Option<bool>,
     pub openai_codex_ticket_models: Option<Vec<String>>,
     pub openai_codex_ticket_version_override: Option<String>,
-    pub openai_codex_ticket_harvest_proxy_url: Option<String>,
-    pub openai_codex_ticket_clear_harvest_proxy: bool,
     pub log_level: Option<LogLevel>,
     pub log_retention_days: Option<i64>,
     pub chat_bridge_enabled: Option<bool>,
@@ -605,16 +620,6 @@ pub async fn get_app_settings(db_path: PathBuf) -> anyhow::Result<AppSettings> {
                 out.openai_codex_ticket_version_override = Some(value.to_string());
             }
         }
-        if let Some(v) = get_setting(conn, KEY_OPENAI_CODEX_TICKET_HARVEST_PROXY_URL)? {
-            let value = v.trim();
-            if !value.is_empty() {
-                out.openai_codex_ticket_harvest_proxy_url = Some(value.to_string());
-            }
-        }
-        out.openai_codex_ticket_harvest_proxy_configured = out
-            .openai_codex_ticket_harvest_proxy_url
-            .as_deref()
-            .is_some_and(|value| !value.trim().is_empty());
         if let Some(v) = get_setting(conn, KEY_LOG_LEVEL)? {
             match v.trim() {
                 "none" | "off" => out.log_level = LogLevel::None,
@@ -992,23 +997,6 @@ pub async fn update_app_settings(
             set_setting(
                 conn,
                 KEY_OPENAI_CODEX_TICKET_VERSION_OVERRIDE,
-                value.trim(),
-                updated_at_ms,
-            )?;
-        }
-        if patch.openai_codex_ticket_clear_harvest_proxy {
-            set_setting(
-                conn,
-                KEY_OPENAI_CODEX_TICKET_HARVEST_PROXY_URL,
-                "",
-                updated_at_ms,
-            )?;
-        } else if let Some(value) = patch.openai_codex_ticket_harvest_proxy_url
-            && !value.trim().is_empty()
-        {
-            set_setting(
-                conn,
-                KEY_OPENAI_CODEX_TICKET_HARVEST_PROXY_URL,
                 value.trim(),
                 updated_at_ms,
             )?;

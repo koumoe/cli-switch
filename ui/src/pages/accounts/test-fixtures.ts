@@ -28,6 +28,7 @@ export const openAiAccount: OpenAiRemoteAccount = {
   account_id: "account-123",
   plan_type: "plus",
   token_expires_at_ms: null,
+  codex_ticket_proxy_configured: false,
   quota_reset_available_count: 2,
   quota_windows: [
     {

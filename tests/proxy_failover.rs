@@ -274,6 +274,17 @@ async fn create_managed_openai_channel(
     .expect("create managed channel");
 }
 
+async fn enable_codex_ticket_for_account(db_path: std::path::PathBuf, account_id: &str) {
+    storage::update_openai_account_codex_ticket_proxy(
+        db_path,
+        account_id.to_string(),
+        Some("http://127.0.0.1:9".to_string()),
+        false,
+    )
+    .await
+    .unwrap();
+}
+
 async fn forward_openai_responses(
     db_path: std::path::PathBuf,
     base_url: String,
@@ -644,6 +655,7 @@ async fn managed_openai_ticket_replaces_client_turn_state() {
     )
     .await
     .unwrap();
+    enable_codex_ticket_for_account(db_path.clone(), &account.id).await;
     create_managed_openai_channel(
         db_path.clone(),
         "OpenAI ticket",
@@ -727,6 +739,7 @@ async fn managed_openai_ticket_fail_closed_avoids_upstream_request() {
     )
     .await
     .unwrap();
+    enable_codex_ticket_for_account(db_path.clone(), &account.id).await;
     create_managed_openai_channel(
         db_path.clone(),
         "OpenAI fail closed",
@@ -792,6 +805,7 @@ async fn managed_openai_ticket_fail_closed_fails_over_to_next_channel() {
     )
     .await
     .unwrap();
+    enable_codex_ticket_for_account(db_path.clone(), &account.id).await;
     create_managed_openai_channel(
         db_path.clone(),
         "OpenAI failover ticket",
@@ -863,6 +877,7 @@ async fn rejected_managed_openai_ticket_is_invalidated() {
     )
     .await
     .unwrap();
+    enable_codex_ticket_for_account(db_path.clone(), &account.id).await;
     create_managed_openai_channel(
         db_path.clone(),
         "OpenAI ticket invalidation",

@@ -43,8 +43,6 @@ pub(in crate::server) struct UpdateSettingsInput {
     openai_codex_ticket_fail_closed: Option<bool>,
     openai_codex_ticket_models: Option<Vec<String>>,
     openai_codex_ticket_version_override: Option<String>,
-    openai_codex_ticket_harvest_proxy_url: Option<String>,
-    openai_codex_ticket_clear_harvest_proxy: Option<bool>,
     log_level: Option<logging::LogLevel>,
     log_retention_days: Option<i64>,
     chat_bridge_enabled: Option<bool>,
@@ -158,14 +156,6 @@ pub(in crate::server) async fn update_settings(
         (
             "openai_codex_ticket_version_override",
             input.openai_codex_ticket_version_override.is_some(),
-        ),
-        (
-            "openai_codex_ticket_harvest_proxy_url",
-            input.openai_codex_ticket_harvest_proxy_url.is_some(),
-        ),
-        (
-            "openai_codex_ticket_clear_harvest_proxy",
-            input.openai_codex_ticket_clear_harvest_proxy.is_some(),
         ),
         ("log_level", input.log_level.is_some()),
         ("log_retention_days", input.log_retention_days.is_some()),
@@ -334,15 +324,6 @@ pub(in crate::server) async fn update_settings(
             }
         }
     }
-    if let Some(proxy) = input.openai_codex_ticket_harvest_proxy_url.as_deref()
-        && let Err(reason) = validate_codex_ticket_proxy_url(proxy)
-    {
-        return Err(ApiError::bad_request(
-            "settings_openai_codex_ticket_proxy_invalid",
-            reason,
-        ));
-    }
-
     let auto_start_enabled = input.auto_start_enabled;
     if let Some(enabled) = auto_start_enabled {
         let res = tokio::task::spawn_blocking(move || autostart::set_enabled(enabled)).await;
@@ -392,10 +373,6 @@ pub(in crate::server) async fn update_settings(
             openai_codex_ticket_fail_closed: input.openai_codex_ticket_fail_closed,
             openai_codex_ticket_models: input.openai_codex_ticket_models,
             openai_codex_ticket_version_override: input.openai_codex_ticket_version_override,
-            openai_codex_ticket_harvest_proxy_url: input.openai_codex_ticket_harvest_proxy_url,
-            openai_codex_ticket_clear_harvest_proxy: input
-                .openai_codex_ticket_clear_harvest_proxy
-                .unwrap_or(false),
             log_level: input.log_level,
             log_retention_days: input.log_retention_days,
             chat_bridge_enabled: input.chat_bridge_enabled,
@@ -457,23 +434,6 @@ pub(in crate::server) async fn update_settings(
     let _ = state.settings_notify.send(next);
 
     Ok(Json(settings))
-}
-
-fn validate_codex_ticket_proxy_url(raw: &str) -> Result<(), String> {
-    let url = reqwest::Url::parse(raw.trim()).map_err(|_| "proxy URL is invalid".to_string())?;
-    if !matches!(url.scheme(), "http" | "https" | "socks5" | "socks5h") {
-        return Err("proxy URL must use http, https, socks5, or socks5h".to_string());
-    }
-    if url.host_str().is_none() {
-        return Err("proxy URL must include a host".to_string());
-    }
-    if url.query().is_some() || url.fragment().is_some() {
-        return Err("proxy URL must not include query or fragment".to_string());
-    }
-    if url.port().is_some_and(|port| port == 0) {
-        return Err("proxy URL port must be between 1 and 65535".to_string());
-    }
-    Ok(())
 }
 
 /// React to `codex_isolated_home_enabled` flipping.

@@ -90,6 +90,7 @@ CREATE TABLE IF NOT EXISTS remote_accounts (
   provider TEXT NOT NULL CHECK(provider IN ('newapi','sub2api','openai')),
   base_url TEXT NOT NULL,
   api_url TEXT NULL,
+  codex_ticket_proxy_url TEXT NULL,
   user_id TEXT NOT NULL DEFAULT '',
   user_token TEXT NOT NULL DEFAULT '',
   access_token TEXT NOT NULL DEFAULT '',

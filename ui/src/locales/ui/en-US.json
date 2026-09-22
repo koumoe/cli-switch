@@ -303,6 +303,7 @@
       "baseUrl": "Base URL",
       "provider": "Provider",
       "quota": "Quota",
+      "codexTicket": "Ticket",
       "reauthRequired": "Session expired. Sign in again.",
       "empty": "No accounts yet. Click 'New Account' to add one.",
       "checkinOrReset": "Check-in / Reset"
@@ -383,6 +384,12 @@
       "reauthRequiredHint": "The login session has expired. Please sign in again.",
       "openaiIdentity": "OpenAI account: {{value}}",
       "openaiPlan": "Plan: {{value}}",
+      "codexTicketProxy": "Codex ticket proxy",
+      "codexTicketProxyHint": "Only this account uses the proxy for Codex ticket harvesting. Supports http, https, socks5, and socks5h. Credentials are used locally and never shown again.",
+      "codexTicketProxyPlaceholder": "socks5://user:password@proxy.example:1080",
+      "codexTicketProxyKeepHint": "Configured. Leave blank to keep the current proxy",
+      "codexTicketClearProxy": "Clear proxy",
+      "codexTicketKeepProxy": "Keep proxy",
       "openLoginPage": "Sign in and capture auth",
       "openLoginPageOpening": "Opening login window...",
       "rechargeCurrency": "Default recharge currency",
@@ -458,6 +465,12 @@
       "createManagedFail": "Failed to create channel",
       "reorderOk": "Order saved",
       "reorderFail": "Failed to save order"
+    },
+    "codexTicket": {
+      "disabled": "Disabled globally",
+      "proxyMissing": "No proxy",
+      "channelMissing": "No linked channel",
+      "summary": "{{ready}}/{{total}} ready"
     },
     "quota": {
       "unavailable": "Unavailable",
@@ -1015,42 +1028,16 @@
     },
     "codexTicket": {
       "title": "Codex 292 ticket",
-      "hint": "Fetch and cache Codex tickets for OpenAI OAuth requests. Ticket harvesting uses the dedicated proxy configured here; regular business requests keep using their existing proxy.",
+      "hint": "Fetch and cache Codex tickets for OpenAI accounts with a ticket proxy. Configure each proxy in the account editor.",
       "enabled": "Enable Codex ticket",
-      "enabledHint": "When enabled, CliSwitch fetches tickets for the configured models in the background and injects them into requests. Disabled by default.",
-      "failClosed": "Block requests without a ticket",
-      "failClosedHint": "Block the matching OAuth request and allow channel failover when no valid ticket is available. When off, send the request without a ticket.",
-      "models": "Harvest models",
-      "modelsHint": "Separate model names with commas, for example gpt-6-astra, gpt-5.6-sol.",
-      "modelsRequired": "Configure at least one model",
-      "proxy": "Harvest proxy",
-      "proxyHint": "Supports http, https, socks5, and socks5h. Proxy credentials are used only in this input and are never echoed or returned by settings.",
-      "proxyPlaceholder": "http://user:password@proxy.example:8080",
-      "proxyConfigured": "Configured. Leave blank to keep the current proxy",
-      "proxyInvalid": "Invalid proxy URL. Check the scheme, host, port, and query parameters.",
-      "clearProxy": "Clear saved harvest proxy",
-      "clearProxyHint": "Clearing stops use of the dedicated harvest proxy. Enter a proxy URL again to restore it.",
+      "enabledHint": "When enabled, OpenAI accounts with a proxy and an active linked channel fetch tickets in the background and inject them into requests. Disabled by default.",
       "saved": "Codex ticket settings saved",
       "saveFail": "Failed to save Codex ticket settings",
-      "versionOverride": "Codex version fallback",
-      "versionOverrideHint": "Used only when the local Codex CLI version cannot be detected; leave blank for automatic detection. Enter a complete version such as 0.155.1.",
-      "versionOverridePlaceholder": "e.g. 0.155.1",
-      "statusTitle": "Ticket status",
-      "statusReady": "Ready",
-      "versionSource": "Codex version: {{version}} ({{source}})",
-      "versionMissing": "not detected",
-      "sourceNone": "none",
-      "sources": {
-        "local": "detected locally",
-        "configured": "configured manually"
-      },
       "statusIssue": {
         "disabled": "Feature is disabled",
-        "missing_proxy": "Harvest proxy is not configured",
         "checking_version": "Checking Codex version",
         "missing_version": "Codex version was not detected"
       },
-      "missingVersionAction": "Install or refresh the CLI tool, or enter a version fallback above.",
       "ticketReady": "Valid ({{length}} chars)",
       "ticketMissing": "No valid ticket",
       "ticketErrors": {
@@ -1058,6 +1045,7 @@
         "missing_header": "Upstream response has no ticket",
         "upstream_http": "Upstream HTTP error",
         "missing_access_token": "OpenAI account has no access token",
+        "network": "Proxy connection failed; check the proxy or use socks5h",
         "harvest_failed": "Ticket harvest failed"
       }
     },

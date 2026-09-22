@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Plus, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
-import type { RemoteAccount, RemoteGroupOption } from "@/types/api";
+import type { CodexTicketStatus, RemoteAccount, RemoteGroupOption } from "@/types/api";
 import {
   createRemoteManagedChannel,
   deleteRemoteAccount,
@@ -15,6 +15,7 @@ import {
   reorderRemoteAccounts,
   updateRemoteAccount,
   completeRemoteAccountCheckinToday,
+  getCodexTicketStatus,
 } from "@/api";
 import { PageHeader } from "@/components/PageHeader";
 import { PageBody } from "@/components/layout/page-body";
@@ -45,6 +46,7 @@ export function AccountsPage() {
   const { t } = useI18n();
   const { currency } = useCurrency();
   const [accounts, setAccounts] = useState<RemoteAccount[]>([]);
+  const [codexTicketStatus, setCodexTicketStatus] = useState<CodexTicketStatus | null>(null);
   const {
     resetting,
     pending: resetPending,
@@ -105,11 +107,13 @@ export function AccountsPage() {
       if (refreshResults.some((result) => result.status === "rejected")) {
         toast.warning(t("accounts.reset.refreshFailed"));
       }
-      const [items, checkins] = await Promise.all([
+      const [items, checkins, ticketStatus] = await Promise.all([
         listRemoteAccounts(),
         remoteAccountCheckinsToday().catch(() => null),
+        getCodexTicketStatus().catch(() => null),
       ]);
       setAccounts(items);
+      setCodexTicketStatus(ticketStatus);
       if (checkins) {
         setCheckinsDate(checkins.date);
         const next: Record<string, boolean> = {};
@@ -129,6 +133,33 @@ export function AccountsPage() {
   useEffect(() => {
     void refreshAll();
   }, []);
+
+  useEffect(() => {
+    let disposed = false;
+    const refreshTicketStatus = (force = false) => {
+      if (!force && document.visibilityState !== "visible") {
+        return;
+      }
+      void getCodexTicketStatus()
+        .then((status) => {
+          if (!disposed) setCodexTicketStatus(status);
+        })
+        .catch(() => undefined);
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        refreshTicketStatus(true);
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    const refreshInterval = codexTicketStatus?.issue === "disabled" ? 60_000 : 10_000;
+    const timer = window.setInterval(refreshTicketStatus, refreshInterval);
+    return () => {
+      disposed = true;
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.clearInterval(timer);
+    };
+  }, [codexTicketStatus?.issue]);
 
   useEffect(() => {
     if (!checkinsDate) return;
@@ -182,6 +213,10 @@ export function AccountsPage() {
       if (values.provider === "openai") {
         await updateRemoteAccount(editingId, {
           name: values.name.trim(),
+          codex_ticket_proxy_url: values.codex_ticket_clear_proxy
+            ? undefined
+            : values.codex_ticket_proxy_url.trim() || undefined,
+          codex_ticket_clear_proxy: values.codex_ticket_clear_proxy,
         });
       } else if (values.provider === "newapi") {
         const userId = values.user_id.trim();
@@ -498,6 +533,7 @@ export function AccountsPage() {
         <PageBody className="flex h-full min-h-0 flex-col gap-3">
           <AccountsTable
             accounts={accounts}
+            codexTicketStatus={codexTicketStatus}
             loading={loading}
             reordering={reordering}
             today={today}

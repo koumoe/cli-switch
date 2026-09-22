@@ -27,6 +27,8 @@ export type AccountDraft = {
   auto_checkin_time: string;
   low_balance_alert_threshold: string;
   recharge_currency: RechargeCurrency;
+  codex_ticket_proxy_url: string;
+  codex_ticket_clear_proxy: boolean;
 };
 
 export type AccountFormValues = AccountDraft & {
@@ -56,6 +58,8 @@ export function emptyAccountDraft(rechargeCurrency: RechargeCurrency = "CNY"): A
     auto_checkin_time: "00:05:00",
     low_balance_alert_threshold: "0",
     recharge_currency: rechargeCurrency,
+    codex_ticket_proxy_url: "",
+    codex_ticket_clear_proxy: false,
   };
 }
 
@@ -83,6 +87,8 @@ export function accountToFormValues(account: RemoteAccount): AccountFormValues {
     auto_checkin_time: account.auto_checkin_time ?? "00:05:00",
     low_balance_alert_threshold: String(account.low_balance_alert_threshold ?? 0),
     recharge_currency: account.recharge_currency,
+    codex_ticket_proxy_url: "",
+    codex_ticket_clear_proxy: false,
     stored_token_configured: account.user_token_configured,
   };
 }

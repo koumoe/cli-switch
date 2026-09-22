@@ -387,6 +387,7 @@ async fn forward_with_activity(
                     }
                 };
                 if settings.openai_codex_ticket_enabled
+                    && account.codex_ticket_proxy_configured
                     && model.as_deref().is_some_and(|requested| {
                         settings
                             .openai_codex_ticket_models
