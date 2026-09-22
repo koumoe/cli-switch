@@ -1,3 +1,8 @@
+## [0.71.1](https://github.com/koumoe/cli-switch/compare/v0.71.0...v0.71.1) (2026-09-22)
+
+### Bug Fixes
+
+* remove obsolete Codex 292 ticket support (#239) ([9fab6c2](https://github.com/koumoe/cli-switch/commit/9fab6c238f3a809bfc9a1d8e1d35dac8fc926c05))
 ## [0.71.0](https://github.com/koumoe/cli-switch/compare/v0.70.0...v0.71.0) (2026-09-22)
 
 ### Features
