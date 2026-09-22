@@ -86,7 +86,6 @@ export type UpdateSettingsInput = Partial<
 
 export type CodexTicketStatusIssue =
   | "disabled"
-  | "missing_proxy"
   | "checking_version"
   | "missing_version";
 
