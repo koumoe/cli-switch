@@ -16,3 +16,6 @@ cliswitch.sqlite
 
 # Local docs
 localDocs/
+
+# Claude Code worktrees
+.claude/worktrees/
