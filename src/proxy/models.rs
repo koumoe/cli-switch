@@ -268,35 +268,21 @@ fn model_id(raw: &Map<String, Value>) -> Option<String> {
 }
 
 fn render_list(protocol: Protocol, models: Vec<ModelEntry>) -> Value {
+    let first_id = models.first().map(|model| model.id.clone());
+    let last_id = models.last().map(|model| model.id.clone());
+    let items: Vec<Value> = models
+        .into_iter()
+        .map(|model| render_model(protocol, model))
+        .collect();
     match protocol {
-        Protocol::Anthropic => {
-            let first_id = models.first().map(|model| model.id.clone());
-            let last_id = models.last().map(|model| model.id.clone());
-            let data: Vec<Value> = models
-                .into_iter()
-                .map(|model| render_model(protocol, model))
-                .collect();
-            json!({
-                "data": data,
-                "has_more": false,
-                "first_id": first_id,
-                "last_id": last_id,
-            })
-        }
-        Protocol::Openai => {
-            let data: Vec<Value> = models
-                .into_iter()
-                .map(|model| render_model(protocol, model))
-                .collect();
-            json!({ "object": "list", "data": data })
-        }
-        Protocol::Gemini => {
-            let models: Vec<Value> = models
-                .into_iter()
-                .map(|model| render_model(protocol, model))
-                .collect();
-            json!({ "models": models })
-        }
+        Protocol::Anthropic => json!({
+            "data": items,
+            "has_more": false,
+            "first_id": first_id,
+            "last_id": last_id,
+        }),
+        Protocol::Openai => json!({ "object": "list", "data": items }),
+        Protocol::Gemini => json!({ "models": items }),
     }
 }
 
