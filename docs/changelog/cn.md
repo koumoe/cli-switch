@@ -1,3 +1,7 @@
+## [0.72.0](https://github.com/koumoe/cli-switch/compare/v0.71.1...v0.72.0) (2026-10-23)
+
+### 功能
+* 按协议汇总各渠道模型列表 (#241) ([dd57ba6](https://github.com/koumoe/cli-switch/commit/dd57ba69bae3062fc617b29af264b2198ab328c8))
 ## [0.71.1](https://github.com/koumoe/cli-switch/compare/v0.71.0...v0.71.1) (2026-09-22)
 
 ### 修复
