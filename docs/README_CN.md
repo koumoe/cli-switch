@@ -143,6 +143,8 @@
 | **Gemini** | `http://127.0.0.1:3210/v1beta` |
 
 > 兼容所有支持自定义 Base URL 的客户端/SDK
+>
+> `GET /v1/models` 和 `GET /v1beta/models` 会用每个渠道自己的 Key 拉取上游模型列表，并汇总请求方协议下所有启用渠道的结果。带 `anthropic-version` 或 `x-api-key` 的请求（Claude Code、Claude Desktop）只汇总 Anthropic 渠道，其他 `/v1/models` 请求只汇总 OpenAI 渠道。
 
 ---
 

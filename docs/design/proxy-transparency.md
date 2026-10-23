@@ -145,6 +145,8 @@ OAuth 的客户端身份 header 必须按整体身份处理。以下三个字段
 
 Anthropic 的 `/v1/messages/count_tokens` 还存在一个独立例外：开启 `anthropic_count_tokens_mock_enabled` 后，请求不会发往上游，而是由本地估算 token 并返回模拟 JSON。这是显式的兼容功能，不能归入透明转发。
 
+模型列表同样不走透明转发：`GET /v1/models` 与 `GET /v1beta/models` 由本地汇总。请求带 `anthropic-version` 或 `x-api-key` 时只读取 Anthropic 渠道，否则 `/v1/models` 只读取 OpenAI 渠道，`/v1beta/models` 只读取 Gemini 渠道。每个启用渠道（包括处于自动禁用保护期的渠道，不包括 OpenAI OAuth 渠道）用自己的认证并发请求上游 models 接口，请求 header 与转发规则一致；结果按渠道优先级去重合并，保留上游字段，只补齐目标协议必需字段。部分渠道失败时返回其余结果，全部失败时返回代理错误。`/v1/models/{id}` 的 GET 从同一汇总结果中查找；这些路径的其他方法仍按 OpenAI 透明转发。
+
 ## 认证方式 / Authentication mode
 
 渠道认证方式由 `Channel.auth_type` 决定。客户端传入的占位 token 不用于推断目标渠道的认证格式。
