@@ -429,25 +429,6 @@ struct ChannelTestResponse {
     issue: Option<UserFacingIssuePayload>,
 }
 
-fn build_models_url(mut url: reqwest::Url, protocol: storage::Protocol) -> reqwest::Url {
-    let base_path = url.path().trim_end_matches('/');
-    let root = match protocol {
-        storage::Protocol::Openai | storage::Protocol::Anthropic => "/v1",
-        storage::Protocol::Gemini => "/v1beta",
-    };
-
-    let path = if base_path.is_empty() {
-        format!("{root}/models")
-    } else if base_path.ends_with(root) {
-        format!("{base_path}/models")
-    } else {
-        format!("{base_path}{root}/models")
-    };
-
-    url.set_path(&path);
-    url
-}
-
 pub(in crate::server) async fn test_channel(
     State(state): State<AppState>,
     axum::extract::Path(channel_id): axum::extract::Path<String>,
@@ -463,7 +444,7 @@ pub(in crate::server) async fn test_channel(
         ApiError::bad_request("channel_base_url_invalid", format!("Invalid base_url: {e}"))
     })?;
 
-    let mut url = build_models_url(base_url, channel.protocol);
+    let mut url = proxy::models::build_models_url(base_url, channel.protocol);
     let mut headers = axum::http::HeaderMap::new();
     proxy::apply_auth(&channel, channel.protocol, &mut url, &mut headers).map_err(|_| {
         ApiError::bad_request("channel_auth_apply_failed", "Failed to apply channel auth")

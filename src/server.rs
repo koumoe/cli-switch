@@ -185,6 +185,9 @@ fn request_endpoint_template(method: &Method, path: &str) -> Option<&'static str
                 ["api", "channels", _] if method == Method::PUT => Some("/api/channels/{id}"),
                 ["api", "channels", _] if method == Method::DELETE => Some("/api/channels/{id}"),
                 ["v1", "messages", ..] => Some("/v1/messages/{*path}"),
+                ["v1", "models"] if method == Method::GET => Some("/v1/models"),
+                ["v1", "models", _, ..] if method == Method::GET => Some("/v1/models/{*model_id}"),
+                ["v1beta", "models"] if method == Method::GET => Some("/v1beta/models"),
                 ["v1beta", ..] => Some("/v1beta/{*path}"),
                 ["v1", ..] => Some("/v1/{*path}"),
                 _ => None,
@@ -305,6 +308,9 @@ fn request_purpose(method: &Method, path: &str) -> &'static str {
                 ["api", "channels", _] if method == Method::PUT => "handlers::update_channel",
                 ["api", "channels", _] if method == Method::DELETE => "handlers::delete_channel",
                 ["v1", "messages", ..] => "handlers::proxy_anthropic",
+                ["v1", "models"] if method == Method::GET => "handlers::list_models",
+                ["v1", "models", _, ..] if method == Method::GET => "handlers::retrieve_model",
+                ["v1beta", "models"] if method == Method::GET => "handlers::list_gemini_models",
                 ["v1beta", ..] => "handlers::proxy_gemini",
                 ["v1", ..] => "handlers::proxy_openai",
                 ["assets", ..] => "ServeDir",
@@ -598,6 +604,18 @@ fn build_app(state: AppState) -> Router {
         )
         .route("/v1/messages", any(handlers::proxy_anthropic))
         .route("/v1/messages/{*path}", any(handlers::proxy_anthropic))
+        .route(
+            "/v1/models",
+            get(handlers::list_models).fallback(handlers::proxy_openai),
+        )
+        .route(
+            "/v1/models/{*model_id}",
+            get(handlers::retrieve_model).fallback(handlers::proxy_openai),
+        )
+        .route(
+            "/v1beta/models",
+            get(handlers::list_gemini_models).fallback(handlers::proxy_gemini),
+        )
         .route("/v1beta/{*path}", any(handlers::proxy_gemini))
         .route("/v1/{*path}", any(handlers::proxy_openai))
         .layer(from_fn_with_state(state.clone(), locale_context_middleware))
