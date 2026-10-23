@@ -44,7 +44,9 @@ pub(super) use project::{
     delete_project, delete_project_document, get_project_document, list_projects,
     save_project_document,
 };
-pub(super) use proxy::{proxy_anthropic, proxy_gemini, proxy_openai};
+pub(super) use proxy::{
+    list_gemini_models, list_models, proxy_anthropic, proxy_gemini, proxy_openai, retrieve_model,
+};
 pub(super) use remote::{
     complete_remote_account_checkin_today, create_remote_account, create_remote_account_key,
     create_remote_managed_channel, delete_remote_account, detect_remote_account,

@@ -1,8 +1,8 @@
 use axum::body::Body;
 use axum::extract::FromRequestParts;
-use axum::extract::State;
 use axum::extract::ws::WebSocketUpgrade;
-use axum::http::Request;
+use axum::extract::{Path, State};
+use axum::http::{HeaderMap, Request};
 
 use crate::proxy;
 use crate::server::AppState;
@@ -99,6 +99,58 @@ pub(in crate::server) async fn proxy_anthropic(
     )
     .await
     .map_err(map_proxy_error)
+}
+
+pub(in crate::server) async fn list_models(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<axum::response::Response, ApiError> {
+    let protocol = proxy::models::protocol_for_headers(&headers);
+    proxy::models::list_models(
+        &state.http_client,
+        protocol,
+        &headers,
+        &state.channels_snapshot(),
+    )
+    .await
+    .map_err(map_proxy_error)
+}
+
+pub(in crate::server) async fn list_gemini_models(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<axum::response::Response, ApiError> {
+    proxy::models::list_models(
+        &state.http_client,
+        storage::Protocol::Gemini,
+        &headers,
+        &state.channels_snapshot(),
+    )
+    .await
+    .map_err(map_proxy_error)
+}
+
+pub(in crate::server) async fn retrieve_model(
+    State(state): State<AppState>,
+    Path(model_id): Path<String>,
+    headers: HeaderMap,
+) -> Result<axum::response::Response, ApiError> {
+    let protocol = proxy::models::protocol_for_headers(&headers);
+    proxy::models::retrieve_model(
+        &state.http_client,
+        protocol,
+        &headers,
+        &state.channels_snapshot(),
+        &model_id,
+    )
+    .await
+    .map_err(map_proxy_error)?
+    .ok_or_else(|| {
+        ApiError::not_found(
+            "proxy_model_not_found",
+            format!("Model not found: {model_id}"),
+        )
+    })
 }
 
 pub(in crate::server) async fn proxy_gemini(

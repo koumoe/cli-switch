@@ -143,6 +143,8 @@ Track every request with latency, token usage, and estimated cost breakdown.
 | **Gemini** | `http://127.0.0.1:3210/v1beta` |
 
 > Compatible with any client/SDK that supports custom Base URL
+>
+> `GET /v1/models` and `GET /v1beta/models` return the merged model lists of all enabled channels of the caller's protocol, fetched with each channel's own key. Requests carrying `anthropic-version` or `x-api-key` (Claude Code, Claude Desktop) only see Anthropic channels; other `/v1/models` requests see OpenAI channels.
 
 ---
 

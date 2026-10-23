@@ -16,6 +16,7 @@ use crate::events::{self, AppEvent};
 use crate::storage::{self, Channel, Protocol};
 
 mod limits;
+pub mod models;
 mod openai_responses;
 mod sse;
 mod stream;
